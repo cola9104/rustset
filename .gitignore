@@ -1,0 +1,10 @@
+/target
+/dist
+**/*.log
+**/*.rlib
+**/*.so
+**/*.dylib
+**/*.dll
+.DS_Store
+.idea
+.vscode
