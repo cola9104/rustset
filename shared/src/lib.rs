@@ -17,6 +17,11 @@ pub struct Asset {
     pub zone: NetworkZone,
     pub ports: Vec<PortInfo>,
     pub last_scanned: Option<DateTime<Utc>>,
+    pub contact_person: Option<String>,
+    pub contact_phone: Option<String>,
+    // New: Track creator/modifier
+    pub created_by: Option<String>, // username
+    pub updated_by: Option<String>, // username
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -25,14 +30,16 @@ pub struct PortInfo {
     pub is_open: bool,
     pub service: Option<String>,
     pub is_bound: bool, // If this port is manually confirmed/bound to a service
-    pub owner: Option<String>,
     pub system_name: Option<String>,
     pub middleware: Option<String>,
+    // New: Track creator/modifier for ports if needed, but usually Asset level is enough or tracked via logs.
+    // User asked to "bind corresponding operation account" when adding ports.
+    pub created_by: Option<String>,
+    pub updated_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PortBindingRequest {
-    pub owner: String,
     pub system_name: String,
     pub middleware: String,
 }
@@ -61,6 +68,7 @@ pub struct Task {
     pub service_detection: bool,
     pub os_detection: bool,
     pub site_identify: bool,
+    pub created_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,10 +106,65 @@ pub struct ScanRequest {
     pub ports: Vec<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZoneConfig {
     pub id: String,
     pub name: String,
     pub cidr: String,
     pub priority: i32,
+}
+
+// --- Auth & Audit ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Role {
+    SysAdmin, // Manage users
+    SecAdmin, // Manage assets, tasks, risks
+    Auditor,  // View logs
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct User {
+    pub id: String,
+    pub username: String,
+    #[serde(skip_serializing, default)] // Don't send password hash to frontend, allow missing on receive
+    pub password: String, // In real app, this is a hash. For demo, we might store plain or simple hash.
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUserRequest {
+    pub username: String,
+    pub password: String,
+    pub role: Role,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateUserRequest {
+    pub password: Option<String>,
+    pub role: Option<Role>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub user: User,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLog {
+    pub id: String,
+    pub user_id: String,
+    pub username: String,
+    pub action: String, // e.g., "CREATE_ASSET", "LOGIN", "DELETE_USER"
+    pub target: String, // e.g., "Asset: 1", "User: admin"
+    pub details: String, // JSON or text description
+    pub timestamp: DateTime<Utc>,
 }

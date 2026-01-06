@@ -17,3 +17,4 @@ serde_json = "1.0"
 shared = { path = "../shared" }
 web-sys = { version = "0.3", features = ["HtmlInputElement"] }
 yew-router = "0.18"
+gloo-console = "0.3.0"
