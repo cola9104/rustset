@@ -6,7 +6,7 @@ use shared::{
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
-use web_sys::HtmlInputElement;
+use web_sys::{HtmlInputElement, HtmlSelectElement};
 use wasm_bindgen_futures::spawn_local;
 
 // Auth Context
@@ -44,6 +44,8 @@ impl Language {
             (Language::En, "role") => "Role".to_string(),
             (Language::Zh, "create_user") => "创建用户".to_string(),
             (Language::En, "create_user") => "Create User".to_string(),
+            (Language::Zh, "search") => "搜索 (名称/IP/联系人/电话)".to_string(),
+            (Language::En, "search") => "Search (Name/IP/Contact/Phone)".to_string(),
 
             (Language::Zh, "timestamp") => "时间戳".to_string(),
             (Language::En, "timestamp") => "Timestamp".to_string(),
@@ -457,14 +459,30 @@ fn sidebar() -> Html {
 #[function_component(Dashboard)]
 fn dashboard() -> Html {
     let lang = use_context::<UseStateHandle<Language>>().expect("Language context missing");
+    let auth = use_context::<AuthContext>().expect("Auth context missing");
     let stats = use_state(|| (0, 0, 0, 0)); // (assets, ports, unbound, tasks)
+
+    let token = auth.token.clone().unwrap_or_default();
+    let update_tick = use_state(|| 0);
+
+    {
+        let update_tick = update_tick.clone();
+        use_effect_with((), move |_| {
+            let interval = gloo_timers::callback::Interval::new(5000, move || {
+                let current = *update_tick;
+                update_tick.set(current + 1);
+            });
+            move || drop(interval)
+        });
+    }
 
     {
         let stats = stats.clone();
-        use_effect_with((), move |_| {
+        let token = token.clone();
+        use_effect_with(update_tick, move |_| {
             wasm_bindgen_futures::spawn_local(async move {
-                let assets_req = Request::get("/api/assets").send().await;
-                let tasks_req = Request::get("/api/tasks").send().await;
+                let assets_req = Request::get("/api/assets").header("Authorization", &token).send().await;
+                let tasks_req = Request::get("/api/tasks").header("Authorization", &token).send().await;
                 
                 let mut asset_count = 0;
                 let mut port_count = 0;
@@ -900,14 +918,18 @@ fn task_center() -> Html {
 #[function_component(RiskCenter)]
 fn risk_center() -> Html {
     let lang = use_context::<UseStateHandle<Language>>().expect("Language context missing");
+    let auth = use_context::<AuthContext>().expect("Auth context missing");
     let risks = use_state(|| vec![]);
+
+    let token = auth.token.clone().unwrap_or_default();
 
     {
         let risks = risks.clone();
+        let token = token.clone();
         use_effect_with((), move |_| {
             let risks = risks.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                if let Ok(resp) = Request::get("/api/risks").send().await {
+                if let Ok(resp) = Request::get("/api/risks").header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<Risk>>().await {
                         risks.set(data);
                     }
@@ -919,14 +941,16 @@ fn risk_center() -> Html {
 
     let on_resolve = {
         let risks = risks.clone();
+        let token = token.clone();
         Callback::from(move |risk_id: String| {
              let risks = risks.clone();
+             let token = token.clone();
              wasm_bindgen_futures::spawn_local(async move {
                  let url = format!("/api/risks/{}/resolve", risk_id);
-                 let _ = Request::post(&url).send().await;
+                 let _ = Request::post(&url).header("Authorization", &token).send().await;
                  
                  // Refresh
-                 if let Ok(resp) = Request::get("/api/risks").send().await {
+                 if let Ok(resp) = Request::get("/api/risks").header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<Risk>>().await {
                         risks.set(data);
                     }
@@ -1027,8 +1051,28 @@ fn asset_center() -> Html {
     let success_msg = use_state(|| None::<String>);
     let error_msg = use_state(|| None::<String>);
     let loading = use_state(|| false);
+    let search_term = use_state(|| "".to_string());
+    let selected_zone = use_state(|| "All".to_string());
 
     let token = auth.token.clone().unwrap_or_default();
+
+    // Search Handler
+    let on_search_input = {
+        let search_term = search_term.clone();
+        Callback::from(move |e: InputEvent| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            search_term.set(input.value());
+        })
+    };
+
+    // Zone Filter Handler
+    let on_zone_select = {
+        let selected_zone = selected_zone.clone();
+        Callback::from(move |e: Event| {
+            let input: HtmlSelectElement = e.target_unchecked_into();
+            selected_zone.set(input.value());
+        })
+    };
 
     // Fetch Assets
     {
@@ -1227,6 +1271,7 @@ fn asset_center() -> Html {
         let pf_system = port_form_system.clone();
         let pf_middleware = port_form_middleware.clone();
         let editing_port_num = editing_port_num.clone();
+        let token = token.clone();
         
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
@@ -1246,6 +1291,7 @@ fn asset_center() -> Html {
                 let form_ports = form_ports.clone();
                 let new_port_clone = new_port.clone();
                 let editing_port = *editing_port_num;
+                let token = token.clone();
 
                 if let Some(id) = *form_id {
                     // Edit Mode: Call API
@@ -1253,7 +1299,7 @@ fn asset_center() -> Html {
                         if let Some(old_port) = editing_port {
                              // Update existing port
                              let url = format!("/api/assets/{}/ports/{}", id, old_port);
-                             if let Ok(req) = Request::put(&url).json(&new_port_clone) {
+                             if let Ok(req) = Request::put(&url).header("Authorization", &token).json(&new_port_clone) {
                                  if let Ok(resp) = req.send().await {
                                      if resp.ok() {
                                          let mut ports = (*form_ports).clone();
@@ -1269,7 +1315,7 @@ fn asset_center() -> Html {
                         } else {
                             // Add new port
                             let url = format!("/api/assets/{}/ports", id);
-                            if let Ok(req) = Request::post(&url).json(&new_port_clone) {
+                            if let Ok(req) = Request::post(&url).header("Authorization", &token).json(&new_port_clone) {
                                 if let Ok(resp) = req.send().await {
                                     if resp.ok() {
                                         // Add to local list
@@ -1335,16 +1381,18 @@ fn asset_center() -> Html {
     let on_delete_port_click = {
         let form_id = form_id.clone();
         let form_ports = form_ports.clone();
+        let token = token.clone();
         
         Callback::from(move |port_num: u16| {
              let form_id = form_id.clone();
              let form_ports = form_ports.clone();
+             let token = token.clone();
              
              if let Some(id) = *form_id {
                  // Edit Mode: Call API
                  wasm_bindgen_futures::spawn_local(async move {
                      let url = format!("/api/assets/{}/ports/{}", id, port_num);
-                     if let Ok(resp) = Request::delete(&url).send().await {
+                     if let Ok(resp) = Request::delete(&url).header("Authorization", &token).send().await {
                          if resp.ok() {
                              let mut ports = (*form_ports).clone();
                              ports.retain(|p| p.port != port_num);
@@ -1366,6 +1414,7 @@ fn asset_center() -> Html {
         let active_port = active_port.clone();
         let bind_system = bind_system.clone();
         let bind_middleware = bind_middleware.clone();
+        let token = token.clone();
 
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
@@ -1375,13 +1424,14 @@ fn asset_center() -> Html {
                 let system_name = (*bind_system).clone();
                 let middleware = (*bind_middleware).clone();
                 let ip = ip.clone();
+                let token = token.clone();
 
                 wasm_bindgen_futures::spawn_local(async move {
                     let req = PortBindingRequest { system_name, middleware };
                     let url = format!("/api/assets/{}/ports/{}/bind", ip, port);
-                    let _ = Request::post(&url).json(&req).unwrap().send().await;
+                    let _ = Request::post(&url).header("Authorization", &token).json(&req).unwrap().send().await;
                     
-                    if let Ok(resp) = Request::get("/api/assets").send().await {
+                    if let Ok(resp) = Request::get("/api/assets").header("Authorization", &token).send().await {
                         if let Ok(data) = resp.json::<Vec<Asset>>().await {
                             assets.set(data);
                         }
@@ -1440,9 +1490,71 @@ fn asset_center() -> Html {
                 </div>
             </div>
 
+            <div class="field is-grouped mb-4">
+                <div class="control has-icons-left is-expanded">
+                    <input class="input" type="text" placeholder={lang.t("search")} value={(*search_term).clone()} oninput={on_search_input} />
+                    <span class="icon is-small is-left">
+                        <i class="fas fa-search"></i>
+                    </span>
+                </div>
+                <div class="control">
+                    <div class="select">
+                        <select onchange={on_zone_select} value={(*selected_zone).clone()}>
+                            <option value="All">{"All Zones"}</option>
+                            <option value="Internet">{"Internet"}</option>
+                            <option value="DMZ">{"DMZ"}</option>
+                            <option value="Intranet">{"Intranet"}</option>
+                            <option value="Custom">{"Custom"}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             <div class="box">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>{lang.t("name")}</th>
+                            <th>{lang.t("ip")}</th>
+                            <th>{lang.t("zone")}</th>
+                            <th>{lang.t("contact_person")}</th>
+                            <th>{lang.t("contact_phone")}</th>
+                            <th>{lang.t("ports")}</th>
+                            <th>{lang.t("action")}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                 {
-                    for assets.iter().map(|asset| {
+                    for assets.iter().filter(|asset| {
+                        let term = search_term.to_lowercase();
+                        let matches_search = if term.is_empty() {
+                            true
+                        } else {
+                            let zone_str = match &asset.zone {
+                                NetworkZone::Internet => "internet",
+                                NetworkZone::DMZ => "dmz",
+                                NetworkZone::Intranet => "intranet",
+                                NetworkZone::Custom(n) => n.as_str(),
+                            };
+
+                            asset.name.to_lowercase().contains(&term) ||
+                            asset.ip.contains(&term) ||
+                            asset.contact_person.as_deref().unwrap_or("").to_lowercase().contains(&term) ||
+                            asset.contact_phone.as_deref().unwrap_or("").contains(&term) ||
+                            zone_str.to_lowercase().contains(&term)
+                        };
+
+                        let matches_zone = match selected_zone.as_str() {
+                            "All" => true,
+                            "Internet" => matches!(asset.zone, NetworkZone::Internet),
+                            "DMZ" => matches!(asset.zone, NetworkZone::DMZ),
+                            "Intranet" => matches!(asset.zone, NetworkZone::Intranet),
+                            "Custom" => matches!(asset.zone, NetworkZone::Custom(_)),
+                            _ => true,
+                        };
+
+                        matches_search && matches_zone
+                    }).map(|asset| {
                         let on_delete = on_delete_asset.clone();
                         let on_edit = on_edit_asset.clone();
                         let a_clone = asset.clone();
@@ -1460,80 +1572,72 @@ fn asset_center() -> Html {
                             on_edit.emit(a_clone.clone());
                         });
 
+                        let zone_display = match &asset.zone {
+                            NetworkZone::Internet => "Internet".to_string(),
+                            NetworkZone::DMZ => "DMZ".to_string(),
+                            NetworkZone::Intranet => "Intranet".to_string(),
+                            NetworkZone::Custom(name) => name.clone(),
+                        };
+
                         html! {
-                            <div class="card mb-4">
-                                <header class="card-header">
-                                    <p class="card-header-title">
-                                        {&asset.name} <span class="tag is-light ml-2">{&asset.ip}</span>
-                                    </p>
-                                    <div class="card-header-icon" aria-label="more options">
-                                        <div class="buttons">
-                                            <button class="button is-small is-info" onclick={on_click_edit}>
-                                                {lang.t("edit")}
-                                            </button>
-                                            <button class="button is-small is-danger" onclick={on_click_delete}>
-                                                {lang.t("delete")}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </header>
-                                <div class="card-content">
-                                    <div class="content">
-                                        <div class="tags has-addons mb-2">
-                                            <span class="tag is-dark">{lang.t("zone")}</span>
-                                            <span class="tag is-info">{format!("{:?}", asset.zone)}</span>
-                                        </div>
-                                        {
-                                            if asset.contact_person.is_some() || asset.contact_phone.is_some() {
-                                                html! {
-                                                    <div class="tags has-addons mb-2">
-                                                        if let Some(person) = &asset.contact_person {
-                                                            <span class="tag is-dark">{lang.t("contact_person")}</span>
-                                                            <span class="tag is-info">{person}</span>
-                                                        }
-                                                        if let Some(phone) = &asset.contact_phone {
-                                                            <span class={classes!("tag", "is-dark", if asset.contact_person.is_some() { "ml-2" } else { "" })}>{lang.t("contact_phone")}</span>
-                                                            <span class="tag is-info">{phone}</span>
-                                                        }
-                                                    </div>
-                                                }
+                            <tr>
+                                <td>{&asset.name}</td>
+                                <td><span class="tag is-light">{&asset.ip}</span></td>
+                                <td><span class="tag is-info">{zone_display}</span></td>
+                                <td>{asset.contact_person.clone().unwrap_or_default()}</td>
+                                <td>{asset.contact_phone.clone().unwrap_or_default()}</td>
+                                <td>
+                                    <div class="tags">
+                                    {
+                                        for asset.ports.iter().map(|port| {
+                                            let color = if port.is_bound { "is-success" } else { "is-danger" };
+                                            let active_port = active_port.clone();
+                                            let bind_system = bind_system.clone();
+                                            let bind_middleware = bind_middleware.clone();
+                                            let asset_ip = asset.ip.clone();
+                                            let port_num = port.port;
+                                            let p_sys = port.system_name.clone().unwrap_or_default();
+                                            let p_mid = port.middleware.clone().unwrap_or_default();
+
+                                            let on_port_click = Callback::from(move |_| {
+                                                bind_system.set(p_sys.clone());
+                                                bind_middleware.set(p_mid.clone());
+                                                active_port.set(Some((asset_ip.clone(), port_num)));
+                                            });
+
+                                            let service_display = port.service.clone().unwrap_or_default();
+                                            let display_text = if service_display.is_empty() {
+                                                format!("{}", port.port)
                                             } else {
-                                                html! {}
-                                            }
-                                        }
-                                        <div class="tags">
-                                            {
-                                                for asset.ports.iter().map(|port| {
-                                                    let color = if port.is_bound { "is-success" } else { "is-danger" };
-                                                    let active_port = active_port.clone();
-                                                    let bind_system = bind_system.clone();
-                                                    let bind_middleware = bind_middleware.clone();
-                                                    let asset_ip = asset.ip.clone();
-                                                    let port_num = port.port;
-                                                    let p_sys = port.system_name.clone().unwrap_or_default();
-                                                    let p_mid = port.middleware.clone().unwrap_or_default();
+                                                format!("{}/{}", port.port, service_display)
+                                            };
 
-                                                    let on_port_click = Callback::from(move |_| {
-                                                        bind_system.set(p_sys.clone());
-                                                        bind_middleware.set(p_mid.clone());
-                                                        active_port.set(Some((asset_ip.clone(), port_num)));
-                                                    });
-
-                                                    html! {
-                                                        <span class={classes!("tag", "is-medium", color, "is-clickable")} onclick={on_port_click}>
-                                                            {format!("{}/{}", port.port, port.service.clone().unwrap_or_default())}
-                                                            if !port.is_bound { <span class="ml-1">{"⚠️"}</span> }
-                                                        </span>
-                                                    }
-                                                })
+                                            html! {
+                                                <span class={classes!("tag", "is-small", color, "is-clickable", "mb-1")} onclick={on_port_click}>
+                                                    {display_text}
+                                                    if !port.is_bound { <span class="ml-1">{"⚠️"}</span> }
+                                                </span>
                                             }
-                                        </div>
+                                        })
+                                    }
                                     </div>
-                                </div>
-                            </div>
+                                </td>
+                                <td>
+                                    <div class="buttons are-small">
+                                        <button class="button is-info" onclick={on_click_edit}>
+                                            {lang.t("edit")}
+                                        </button>
+                                        <button class="button is-danger" onclick={on_click_delete}>
+                                            {lang.t("delete")}
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
                         }
                     })
                 }
+                    </tbody>
+                </table>
             </div>
 
             if *is_add_modal_active {
@@ -2066,20 +2170,24 @@ fn audit_logs() -> Html {
 #[function_component(ZoneManagement)]
 fn zone_management() -> Html {
     let lang = use_context::<UseStateHandle<Language>>().expect("Language context missing");
+    let auth = use_context::<AuthContext>().expect("Auth context missing");
     let zones = use_state(|| vec![]);
     let is_modal_active = use_state(|| false);
     let form_id = use_state(|| "".to_string()); // For Edit
     let form_name = use_state(|| "".to_string());
     let form_cidr = use_state(|| "".to_string());
     let form_priority = use_state(|| "10".to_string());
+    
+    let token = auth.token.clone().unwrap_or_default();
 
     // Fetch Zones
     {
         let zones = zones.clone();
+        let token = token.clone();
         use_effect_with((), move |_| {
             let zones = zones.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                if let Ok(resp) = Request::get("/api/zones").send().await {
+                if let Ok(resp) = Request::get("/api/zones").header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<ZoneConfig>>().await {
                         zones.set(data);
                     }
@@ -2117,6 +2225,7 @@ fn zone_management() -> Html {
         let cidr = form_cidr.clone();
         let priority = form_priority.clone();
         let is_modal_active = is_modal_active.clone();
+        let token = token.clone();
         
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
@@ -2126,6 +2235,7 @@ fn zone_management() -> Html {
             let cidr_val = (*cidr).clone();
             let priority_val = (*priority).parse::<i32>().unwrap_or(10);
             let is_modal_active = is_modal_active.clone();
+            let token = token.clone();
 
             wasm_bindgen_futures::spawn_local(async move {
                 let zone_data = ZoneConfig {
@@ -2137,6 +2247,7 @@ fn zone_management() -> Html {
 
                 let _ = if id_val.is_empty() {
                     Request::post("/api/zones")
+                        .header("Authorization", &token)
                         .json(&zone_data)
                         .unwrap()
                         .send()
@@ -2144,13 +2255,14 @@ fn zone_management() -> Html {
                 } else {
                     let url = format!("/api/zones/{}", id_val);
                     Request::put(&url)
+                        .header("Authorization", &token)
                         .json(&zone_data)
                         .unwrap()
                         .send()
                         .await
                 };
                 
-                if let Ok(resp) = Request::get("/api/zones").send().await {
+                if let Ok(resp) = Request::get("/api/zones").header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<ZoneConfig>>().await {
                         zones.set(data);
                     }
@@ -2162,16 +2274,18 @@ fn zone_management() -> Html {
 
     let on_delete_zone = {
         let zones = zones.clone();
+        let token = token.clone();
         Callback::from(move |id: String| {
             let zones = zones.clone();
+            let token = token.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let url = format!("/api/zones/{}", id);
-                let resp = Request::delete(&url).send().await;
+                let resp = Request::delete(&url).header("Authorization", &token).send().await;
                 
                 match resp {
                     Ok(response) => {
                         if response.ok() {
-                            if let Ok(resp) = Request::get("/api/zones").send().await {
+                            if let Ok(resp) = Request::get("/api/zones").header("Authorization", &token).send().await {
                                 if let Ok(data) = resp.json::<Vec<ZoneConfig>>().await {
                                     zones.set(data);
                                 }
