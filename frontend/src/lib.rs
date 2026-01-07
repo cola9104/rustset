@@ -222,7 +222,6 @@ enum Route {
 
 #[function_component(Login)]
 fn login() -> Html {
-    gloo_console::log!("Login Component Loaded - Version 2.0 (Fixed JSON)");
     let lang = use_context::<UseStateHandle<Language>>().expect("Language context missing");
     let auth = use_context::<AuthContext>().expect("Auth context missing");
     let navigator = use_navigator().unwrap();
@@ -230,6 +229,7 @@ fn login() -> Html {
     let username = use_state(|| "".to_string());
     let password = use_state(|| "".to_string());
     let error_msg = use_state(|| None::<String>);
+    let loading = use_state(|| false);
 
     let on_submit = {
         let username = username.clone();
@@ -238,6 +238,7 @@ fn login() -> Html {
         let navigator = navigator.clone();
         let error_msg = error_msg.clone();
         let lang = lang.clone();
+        let loading = loading.clone();
 
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
@@ -246,7 +247,11 @@ fn login() -> Html {
             let auth = auth.clone();
             let navigator = navigator.clone();
             let error_msg = error_msg.clone();
-            let lang = lang.clone();
+            let _lang = lang.clone();
+            let loading = loading.clone();
+
+            loading.set(true);
+            error_msg.set(None);
 
             spawn_local(async move {
                 let req = LoginRequest {
@@ -274,16 +279,19 @@ fn login() -> Html {
                                                 user: Some(login_resp.user),
                                             });
                                             navigator.push(&Route::Dashboard);
+                                            // No need to set loading false as we navigate away
                                         },
                                         Err(e) => {
                                             gloo_console::error!("JSON Parse Error:", e.to_string());
                                             error_msg.set(Some(format!("JSON Parse Error: {}", e)));
+                                            loading.set(false);
                                         }
                                     }
                                 },
                                 Err(e) => {
                                     gloo_console::error!("Failed to read response text:", e.to_string());
                                     error_msg.set(Some("Failed to read response".to_string()));
+                                    loading.set(false);
                                 }
                             }
                         } else {
@@ -291,11 +299,13 @@ fn login() -> Html {
                             let status_text = response.status_text();
                             gloo_console::error!("Login failed with status:", status, &status_text);
                             error_msg.set(Some(format!("Login failed: {} {}", status, status_text)));
+                            loading.set(false);
                         }
                     },
                     Err(e) => {
                         gloo_console::error!("Network Error:", e.to_string());
                         error_msg.set(Some(format!("Network Error: {}", e)));
+                        loading.set(false);
                     }
                 }
             });
@@ -344,7 +354,9 @@ fn login() -> Html {
                                     }
 
                                     <div class="field">
-                                        <button class="button is-primary is-fullwidth" onclick={on_submit}>
+                                        <button class={classes!("button", "is-primary", "is-fullwidth", if *loading { "is-loading" } else { "" })} 
+                                            onclick={on_submit}
+                                            disabled={*loading}>
                                             {lang.t("login")}
                                         </button>
                                     </div>
@@ -533,6 +545,8 @@ fn task_center() -> Html {
     let form_service_detection = use_state(|| false);
     let form_os_detection = use_state(|| false);
     let form_site_identify = use_state(|| false);
+    let success_msg = use_state(|| None::<String>);
+    let error_msg = use_state(|| None::<String>);
 
     let token = auth.token.clone().unwrap_or_default();
     let user_role = auth.user.as_ref().map(|u| u.role.clone());
@@ -597,6 +611,8 @@ fn task_center() -> Html {
         let site_identify = form_site_identify.clone();
         let is_modal_active = is_modal_active.clone();
         let token = token.clone();
+        let success_msg = success_msg.clone();
+        let error_msg = error_msg.clone();
         
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
@@ -611,6 +627,8 @@ fn task_center() -> Html {
             let site_identify_val = *site_identify;
             let is_modal_active = is_modal_active.clone();
             let token = token.clone();
+            let success_msg = success_msg.clone();
+            let error_msg = error_msg.clone();
 
             spawn_local(async move {
                 let req = CreateTaskRequest {
@@ -623,20 +641,39 @@ fn task_center() -> Html {
                     site_identify: site_identify_val,
                 };
 
-                let _ = if let Some(id) = id_val {
+                let resp_result = if let Some(id) = id_val {
                     let url = format!("/api/tasks/{}", id);
                     Request::put(&url).header("Authorization", &token).json(&req).unwrap().send().await
                 } else {
                     Request::post("/api/tasks").header("Authorization", &token).json(&req).unwrap().send().await
                 };
                 
-                // Refresh
-                if let Ok(resp) = Request::get("/api/tasks").header("Authorization", &token).send().await {
-                    if let Ok(data) = resp.json::<Vec<Task>>().await {
-                        tasks.set(data);
+                match resp_result {
+                    Ok(resp) => {
+                        if resp.ok() {
+                            success_msg.set(Some("Operation successful".to_string()));
+                            let success_msg_clone = success_msg.clone();
+                            gloo_timers::callback::Timeout::new(3000, move || success_msg_clone.set(None)).forget();
+
+                            if let Ok(resp) = Request::get("/api/tasks").header("Authorization", &token).send().await {
+                                if let Ok(data) = resp.json::<Vec<Task>>().await {
+                                    tasks.set(data);
+                                }
+                            }
+                            is_modal_active.set(false);
+                        } else {
+                            let text = resp.text().await.unwrap_or_default();
+                            error_msg.set(Some(format!("Error: {}", text)));
+                            let error_msg_clone = error_msg.clone();
+                            gloo_timers::callback::Timeout::new(3000, move || error_msg_clone.set(None)).forget();
+                        }
+                    },
+                    Err(e) => {
+                         error_msg.set(Some(format!("Network Error: {}", e)));
+                         let error_msg_clone = error_msg.clone();
+                         gloo_timers::callback::Timeout::new(3000, move || error_msg_clone.set(None)).forget();
                     }
                 }
-                is_modal_active.set(false);
             });
         })
     };
@@ -767,6 +804,16 @@ fn task_center() -> Html {
                         </header>
                         <section class="modal-card-body">
                             <form>
+                                if let Some(msg) = (*success_msg).clone() {
+                                    <div class="notification is-success is-light">
+                                        {msg}
+                                    </div>
+                                }
+                                if let Some(msg) = (*error_msg).clone() {
+                                    <div class="notification is-danger is-light">
+                                        {msg}
+                                    </div>
+                                }
                                 <div class="field">
                                     <label class="label">{lang.t("task_name")}</label>
                                     <div class="control">
@@ -977,6 +1024,10 @@ fn asset_center() -> Html {
     let bind_system = use_state(|| "".to_string());
     let bind_middleware = use_state(|| "".to_string());
 
+    let success_msg = use_state(|| None::<String>);
+    let error_msg = use_state(|| None::<String>);
+    let loading = use_state(|| false);
+
     let token = auth.token.clone().unwrap_or_default();
 
     // Fetch Assets
@@ -1046,6 +1097,9 @@ fn asset_center() -> Html {
         let form_ports = form_ports.clone();
         let is_add_modal_active = is_add_modal_active.clone();
         let token = token.clone();
+        let success_msg = success_msg.clone();
+        let error_msg = error_msg.clone();
+        let loading = loading.clone();
         
         Callback::from(move |e: MouseEvent| {
             e.prevent_default();
@@ -1058,6 +1112,11 @@ fn asset_center() -> Html {
             let form_ports_val = (*form_ports).clone();
             let is_add_modal_active = is_add_modal_active.clone();
             let token = token.clone();
+            let success_msg = success_msg.clone();
+            let error_msg = error_msg.clone();
+            let loading = loading.clone();
+
+            loading.set(true);
 
             spawn_local(async move {
                 let asset_data = Asset {
@@ -1073,7 +1132,7 @@ fn asset_center() -> Html {
                     updated_by: None, // Backend handles this
                 };
 
-                let _ = if let Some(id) = id_val {
+                let resp_result = if let Some(id) = id_val {
                     let url = format!("/api/assets/{}", id);
                     Request::put(&url)
                         .header("Authorization", &token)
@@ -1089,13 +1148,34 @@ fn asset_center() -> Html {
                         .send()
                         .await
                 };
-                
-                if let Ok(resp) = Request::get("/api/assets").header("Authorization", &token).send().await {
-                    if let Ok(data) = resp.json::<Vec<Asset>>().await {
-                        assets.set(data);
+
+                match resp_result {
+                    Ok(resp) => {
+                        if resp.ok() {
+                            success_msg.set(Some("Operation successful".to_string()));
+                            let success_msg_clone = success_msg.clone();
+                            gloo_timers::callback::Timeout::new(3000, move || success_msg_clone.set(None)).forget();
+
+                            if let Ok(resp) = Request::get("/api/assets").header("Authorization", &token).send().await {
+                                if let Ok(data) = resp.json::<Vec<Asset>>().await {
+                                    assets.set(data);
+                                }
+                            }
+                            is_add_modal_active.set(false);
+                        } else {
+                            let text = resp.text().await.unwrap_or_default();
+                            error_msg.set(Some(format!("Error: {}", text)));
+                            let error_msg_clone = error_msg.clone();
+                            gloo_timers::callback::Timeout::new(3000, move || error_msg_clone.set(None)).forget();
+                        }
+                    },
+                    Err(e) => {
+                         error_msg.set(Some(format!("Network Error: {}", e)));
+                         let error_msg_clone = error_msg.clone();
+                         gloo_timers::callback::Timeout::new(3000, move || error_msg_clone.set(None)).forget();
                     }
                 }
-                is_add_modal_active.set(false);
+                loading.set(false);
             });
         })
     };
@@ -1468,6 +1548,16 @@ fn asset_center() -> Html {
                         </header>
                         <section class="modal-card-body">
                             <form>
+                                if let Some(msg) = (*success_msg).clone() {
+                                    <div class="notification is-success is-light">
+                                        {msg}
+                                    </div>
+                                }
+                                if let Some(msg) = (*error_msg).clone() {
+                                    <div class="notification is-danger is-light">
+                                        {msg}
+                                    </div>
+                                }
                                 <div class="field">
                                     <label class="label">{lang.t("name")}</label>
                                     <div class="control">
@@ -1630,7 +1720,7 @@ fn asset_center() -> Html {
                             </form>
                         </section>
                         <footer class="modal-card-foot">
-                            <button class="button is-link" onclick={on_submit_asset}>{lang.t("save")}</button>
+                            <button class={classes!("button", "is-link", if *loading { "is-loading" } else { "" })} onclick={on_submit_asset} disabled={*loading}>{lang.t("save")}</button>
                             <button class="button" onclick={close_add_modal}>{lang.t("cancel")}</button>
                         </footer>
                     </div>

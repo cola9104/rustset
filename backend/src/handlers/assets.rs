@@ -2,6 +2,7 @@ use axum::{
     extract::{State, Json, Path},
     http::{StatusCode, HeaderMap},
 };
+use std::net::IpAddr;
 use shared::{Asset, PortInfo, PortBindingRequest, Role};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action, determine_zone};
@@ -16,6 +17,10 @@ pub async fn add_asset(State(state): State<AppState>, headers: HeaderMap, Json(m
     let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     if user.role != Role::SecAdmin {
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
+    }
+
+    if asset.ip.parse::<IpAddr>().is_err() {
+        return Err((StatusCode::BAD_REQUEST, "Invalid IP address format".to_string()));
     }
 
     {
@@ -38,6 +43,10 @@ pub async fn update_asset(State(state): State<AppState>, headers: HeaderMap, Pat
     let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     if user.role != Role::SecAdmin {
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
+    }
+
+    if req.ip.parse::<IpAddr>().is_err() {
+        return Err((StatusCode::BAD_REQUEST, "Invalid IP address format".to_string()));
     }
 
     let zones = state.zones.lock().unwrap();
