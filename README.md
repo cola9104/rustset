@@ -97,18 +97,18 @@ git commit -m "描述你的更改"
 
 ### 推送到 Gitee
 ```bash
-git push gitee main
+git push origin main
 ```
 
 ### 如果需要添加 Gitee 远程仓库
 ```bash
-git remote add gitee https://gitee.com/你的用户名/rustset.git
+git remote add origin https://gitee.com/你的用户名/rustset.git
 ```
 
 ### 快捷推送命令（推荐配置 Git alias）
 ```bash
 # 在 ~/.gitconfig 中添加别名
-git config --global alias.pg 'push gitee main'
+git config --global alias.pg 'push origin main'
 
 # 之后可以使用快捷命令
 git pg
@@ -123,11 +123,14 @@ git status
 # 查看远程仓库
 git remote -v
 
+# 查看当前分支
+git branch
+
 # 拉取 Gitee 更新
-git pull gitee main
+git pull origin main
 
 # 强制推送（慎用）
-git push gitee main --force
+git push origin main --force
 ```
 
 ## 项目结构
