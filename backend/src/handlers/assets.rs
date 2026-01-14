@@ -60,6 +60,11 @@ pub async fn update_asset(State(state): State<AppState>, headers: HeaderMap, Pat
         }
         asset.contact_person = req.contact_person;
         asset.contact_phone = req.contact_phone;
+        asset.owner = req.owner;
+        asset.weight = req.weight;
+        asset.labels = req.labels;
+        asset.os = req.os;
+        asset.device_type = req.device_type;
         asset.updated_by = Some(user.username.clone());
 
         log_action(&state.audit_logs, &user, "UPDATE_ASSET", &asset.name, "Updated asset details");

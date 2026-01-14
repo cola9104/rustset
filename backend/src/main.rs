@@ -26,8 +26,9 @@ use handlers::{
     logs::get_audit_logs,
     assets::{get_assets, add_asset, update_asset, delete_asset, add_asset_port, update_asset_port, delete_asset_port, bind_port},
     tasks::{get_tasks, create_task, update_task, delete_task, trigger_scan},
-    risks::{get_risks, resolve_risk},
+    risks::{get_risks, resolve_risk, update_risk_status},
     zones::{get_zones, create_zone, update_zone, delete_zone},
+    cloud_assets::{get_cloud_assets, get_cloud_asset, create_cloud_asset, update_cloud_asset, delete_cloud_asset, get_cloud_asset_stats, sync_cloud_assets},
 };
 
 #[tokio::main]
@@ -46,6 +47,8 @@ async fn main() {
                     port: 80, 
                     is_open: true, 
                     service: Some("HTTP".to_string()), 
+                    version: Some("1.18.0".to_string()),
+                    banner: Some("Server: nginx/1.18.0".to_string()),
                     is_bound: true,
                     system_name: Some("Gateway Portal".to_string()),
                     middleware: Some("Nginx".to_string()),
@@ -58,6 +61,11 @@ async fn main() {
             contact_phone: Some("13800000000".to_string()),
             created_by: Some("system".to_string()),
             updated_by: None,
+            owner: Some("IT Dept".to_string()),
+            weight: 80,
+            labels: vec!["Core".to_string(), "Gateway".to_string()],
+            os: Some("Linux".to_string()),
+            device_type: Some("Server".to_string()),
         }
     ];
 
@@ -115,9 +123,16 @@ async fn main() {
         .route("/api/tasks/:id", delete(delete_task).put(update_task))
         .route("/api/risks", get(get_risks))
         .route("/api/risks/:id/resolve", post(resolve_risk))
+        .route("/api/risks/:id/status/:status", post(update_risk_status))
         // Zones
         .route("/api/zones", get(get_zones).post(create_zone))
         .route("/api/zones/:id", delete(delete_zone).put(update_zone))
+        // Cloud Assets (Multi-Cloud Management)
+        .route("/api/cloud-assets", get(get_cloud_assets).post(create_cloud_asset))
+        .route("/api/cloud-assets/stats", get(get_cloud_asset_stats))
+        .route("/api/cloud-assets/sync", post(sync_cloud_assets))
+        .route("/api/cloud-assets/:id", get(get_cloud_asset).put(update_cloud_asset).delete(delete_cloud_asset))
+        // Scan
         .route("/api/scan", post(trigger_scan))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())

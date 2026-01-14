@@ -5,3 +5,4 @@ pub mod tasks;
 pub mod risks;
 pub mod zones;
 pub mod logs;
+pub mod cloud_assets;

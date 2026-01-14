@@ -3,19 +3,36 @@ name = "frontend"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+[workspace]
 
 [dependencies]
-yew = { version = "0.21", features = ["csr"] }
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-gloo-net = "0.5"
-gloo-dialogs = "0.2"
+# Yew web framework
+yew = { version = "0.21", default-features = false, features = ["csr"] }
+
+# Tokio without net features for wasm32 compatibility
+tokio = { version = "1", default-features = false, features = ["sync", "rt", "time", "macros", "io-util"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Time handling
+chrono = "0.4"
+
+# Shared types
 shared = { path = "../shared" }
-web-sys = { version = "0.3", features = ["HtmlInputElement", "HtmlSelectElement"] }
-yew-router = "0.18"
-gloo-console = "0.3.0"
+
+# Logging
+gloo-console = "0.3"
+
+# HTTP client
+gloo-net = { version = "0.6", features = ["http"] }
+
+# WASM support
+wasm-bindgen-futures = "0.4"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["Window", "Storage", "HtmlInputElement", "HtmlSelectElement", "InputEvent", "Event", "Navigator", "Clipboard"] }
+
+# Utils
+gloo-utils = "0.2"
 gloo-timers = "0.3"
