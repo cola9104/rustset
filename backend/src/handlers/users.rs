@@ -2,11 +2,90 @@ use axum::{
     extract::{State, Json, Path},
     http::{StatusCode, HeaderMap},
 };
-use shared::{User, CreateUserRequest, Role};
+use serde::{Deserialize, Serialize};
+use shared::{User, CreateUserRequest, Role, Permissions, PasswordPolicy};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
 use uuid::Uuid;
 use chrono::Utc;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+// 计算密码强度
+fn calculate_password_strength(password: &str) -> (String, u32) {
+    let mut score = 0;
+
+    // 长度检查
+    if password.len() >= 8 { score += 1; }
+    if password.len() >= 12 { score += 1; }
+
+    // 包含小写字母
+    if password.chars().any(|c| c.is_ascii_lowercase()) { score += 1; }
+
+    // 包含大写字母
+    if password.chars().any(|c| c.is_ascii_uppercase()) { score += 1; }
+
+    // 包含数字
+    if password.chars().any(|c| c.is_ascii_digit()) { score += 1; }
+
+    // 包含特殊字符
+    if password.chars().any(|c| !c.is_alphanumeric()) { score += 1; }
+
+    let strength = match score {
+        0..=2 => "weak",
+        3..=4 => "medium",
+        _ => "strong",
+    };
+
+    (strength.to_string(), score)
+}
+
+// 根据策略验证密码
+fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Result<(), String> {
+    // 长度检查
+    if password.len() < policy.min_length as usize {
+        return Err(format!("密码长度至少为 {}", policy.min_length));
+    }
+
+    // 大写字母检查
+    if policy.require_uppercase && !password.chars().any(|c| c.is_ascii_uppercase()) {
+        return Err("密码必须包含至少一个大写字母".to_string());
+    }
+
+    // 小写字母检查
+    if policy.require_lowercase && !password.chars().any(|c| c.is_ascii_lowercase()) {
+        return Err("密码必须包含至少一个小写字母".to_string());
+    }
+
+    // 数字检查
+    if policy.require_number && !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err("密码必须包含至少一个数字".to_string());
+    }
+
+    // 特殊字符检查
+    if policy.require_special && !password.chars().any(|c| !c.is_alphanumeric()) {
+        return Err("密码必须包含至少一个特殊字符".to_string());
+    }
+
+    // 强度检查
+    let (_, score) = calculate_password_strength(password);
+    let strength_score = match policy.min_strength.as_str() {
+        "weak" => 0,
+        "medium" => 3,
+        "strong" => 5,
+        _ => 0,
+    };
+
+    if score < strength_score {
+        return Err(format!("密码强度不足，需要{}强度或更高", policy.min_strength));
+    }
+
+    Ok(())
+}
 
 pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<User>>, (StatusCode, String)> {
     let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
@@ -28,17 +107,35 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
         return Err((StatusCode::BAD_REQUEST, "Username exists".to_string()));
     }
 
+    // Set default permissions based on role
+    let permissions = match &req.role {
+        Role::SysAdmin => Some(shared::Permissions::sys_admin()),
+        Role::SecAdmin => Some(shared::Permissions::sec_admin()),
+        Role::Auditor => Some(shared::Permissions::auditor()),
+        Role::Custom(_) => None, // Custom roles need explicit permissions set later
+    };
+
     let new_user = User {
         id: Uuid::new_v4().to_string(),
         username: req.username.clone(),
         password: req.password,
         role: req.role,
+        permissions,
         created_at: Utc::now(),
+        password_changed_at: Some(Utc::now()),
+        password_strength: Some("weak".to_string()),
+        force_password_change: Some(false),
+        last_login_at: None,
+        email: None,
+        phone: None,
+        status: Some("active".to_string()),
+        failed_login_attempts: Some(0),
+        locked_until: None,
     };
 
     users.push(new_user.clone());
     log_action(&state.audit_logs, &current_user, "CREATE_USER", &new_user.username, "Created new user");
-    
+
     Ok(Json(new_user))
 }
 
@@ -56,4 +153,115 @@ pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path
     } else {
         Err((StatusCode::NOT_FOUND, "User not found".to_string()))
     }
+}
+
+pub async fn update_user_permissions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(permissions): Json<Permissions>,
+) -> Result<Json<User>, (StatusCode, String)> {
+    let current_user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+
+    // Check if current user has permission to manage permissions
+    let current_perms = current_user.permissions.as_ref().ok_or((StatusCode::FORBIDDEN, "No permissions set".to_string()))?;
+    if !current_perms.can_manage_permissions {
+        return Err((StatusCode::FORBIDDEN, "Permission denied".to_string()));
+    }
+
+    let mut users = state.users.lock().unwrap();
+    if let Some(idx) = users.iter().position(|u| u.id == id) {
+        let user = &mut users[idx];
+        user.permissions = Some(permissions.clone());
+
+        log_action(&state.audit_logs, &current_user, "UPDATE_PERMISSIONS", &user.username, "Updated user permissions");
+
+        Ok(Json(user.clone()))
+    } else {
+        Err((StatusCode::NOT_FOUND, "User not found".to_string()))
+    }
+}
+
+pub async fn change_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Result<Json<String>, (StatusCode, String)> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+
+    // 获取密码策略
+    let policy = state.password_policy.lock().unwrap().clone();
+
+    // 验证新密码是否符合策略
+    if let Err(e) = validate_password_policy(&req.new_password, &policy) {
+        return Err((StatusCode::BAD_REQUEST, e));
+    }
+
+    let mut users = state.users.lock().unwrap();
+    if let Some(idx) = users.iter().position(|u| u.id == current_user.id) {
+        let user = &mut users[idx];
+
+        // 验证当前密码
+        if user.password != req.current_password {
+            return Err((StatusCode::BAD_REQUEST, "Current password is incorrect".to_string()));
+        }
+
+        // 计算密码强度
+        let (strength, _) = calculate_password_strength(&req.new_password);
+
+        // 更新密码和相关字段
+        user.password = req.new_password;
+        user.password_changed_at = Some(Utc::now());
+        user.password_strength = Some(strength.clone());
+
+        // 记录密码历史
+        let mut history = state.password_history.lock().unwrap();
+        history.push((user.id.clone(), user.password.clone(), Utc::now()));
+
+        log_action(&state.audit_logs, &current_user, "CHANGE_PASSWORD", &user.username,
+                   &format!("Password changed, strength: {}", strength));
+
+        Ok(Json("Password changed successfully".to_string()))
+    } else {
+        Err((StatusCode::NOT_FOUND, "User not found".to_string()))
+    }
+}
+
+// 获取密码策略
+pub async fn get_password_policy(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+    
+    // 只有 admin 可以查看密码策略
+    if user.role != Role::SysAdmin {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+    
+    let policy = state.password_policy.lock().unwrap();
+    Ok(Json(policy.clone()))
+}
+
+// 更新密码策略
+pub async fn update_password_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(policy): Json<PasswordPolicy>,
+) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+    
+    // 只有 admin 可以修改密码策略
+    if current_user.role != Role::SysAdmin {
+        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+    }
+    
+    let mut policy_state = state.password_policy.lock().unwrap();
+    *policy_state = policy.clone();
+    
+    log_action(&state.audit_logs, &current_user, "UPDATE_PASSWORD_POLICY", "system", 
+               &format!("Updated password policy: min_length={}, require_uppercase={}, require_number={}", 
+                       policy.min_length, policy.require_uppercase, policy.require_number));
+    
+    Ok(Json(policy))
 }

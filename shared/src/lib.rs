@@ -415,13 +415,260 @@ pub struct ZoneConfig {
     pub priority: i32,
 }
 
+/// IP区域配置 - 支持自定义网段划分
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IPZone {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub cidr: String,
+    pub cloud_region: Option<CloudRegion>,
+    pub is_cloud: bool,
+    pub priority: i32,
+    pub scan_enabled: bool,           // 是否启用扫描
+    pub auto_discover: bool,          // 是否自动发现
+    pub port_scan_policy: PortScanPolicy, // 端口扫描策略
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub created_by: Option<String>,
+}
+
+/// 端口扫描策略
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortScanPolicy {
+    pub policy_type: String, // "TOP100", "TOP1000", "COMMON", "CUSTOM", "ALL"
+    pub custom_ports: Option<Vec<u16>>, // 自定义端口列表
+    pub scan_timeout_seconds: u32, // 扫描超时时间
+    pub max_concurrent: u32, // 最大并发数
+}
+
+/// 端口详细信息 - 可编辑的web系统等信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortDetail {
+    pub id: String,
+    pub asset_id: String,           // 关联的资产ID
+    pub ip: String,                 // IP地址
+    pub port: u16,                  // 端口号
+    pub protocol: String,           // TCP/UDP
+    pub status: String,             // open/closed/filtered
+    pub service_name: Option<String>, // 服务名称
+    pub service_version: Option<String>, // 服务版本
+    pub service_banner: Option<String>, // 服务Banner
+
+    // 资产管理字段 - 可编辑
+    pub system_name: Option<String>,    // 系统名称
+    pub system_type: Option<String>,    // 系统类型 (Web系统/数据库/中间件等)
+    pub system_url: Option<String>,     // 访问URL (for web systems)
+    pub middleware: Option<String>,     // 中间件信息
+    pub framework: Option<String>,      // 框架信息
+    pub language: Option<String>,       // 开发语言
+
+    // 环境信息
+    pub environment: Option<String>,    // 环境 (生产/测试/开发)
+    pub department: Option<String>,     // 部门
+    pub owner: Option<String>,          // 负责人
+    pub owner_contact: Option<String>,  // 负责人联系方式
+
+    // 安全信息
+    pub vulnerability_level: Option<String>, // 风险等级
+    pub has_vulnerability: bool,         // 是否存在漏洞
+    pub vulnerability_count: i32,        // 漏洞数量
+
+    // 指纹信息
+    pub fingerprint: Option<ServiceFingerprint>, // 服务指纹
+
+    // 元数据
+    pub is_bound: bool,              // 是否已绑定/确认
+    pub notes: Option<String>,       // 备注
+    pub last_scanned: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub created_by: Option<String>,
+    pub updated_by: Option<String>,
+}
+
+/// 服务指纹信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceFingerprint {
+    pub service: Option<String>,      // 服务名称
+    pub product: Option<String>,      // 产品名称
+    pub version: Option<String>,      // 版本
+    pub extra_info: Option<String>,   // 额外信息
+    pub cpe: Option<String>,         // CPE标识
+    pub os_match: Option<String>,    // 操作系统匹配
+    pub confidence: i32,             // 置信度
+}
+
+/// IP扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IPScanResult {
+    pub id: String,
+    pub ip_zone_id: String,          // 所属IP区域
+    pub ip: String,
+    pub is_alive: bool,
+    pub hostname: Option<String>,    // 主机名
+    pub mac_address: Option<String>, // MAC地址
+    pub open_ports: Vec<PortDetail>,
+    pub os_fingerprint: Option<String>, // 操作系统指纹
+    pub device_type: Option<String>,  // 设备类型
+    pub confidence: i32,              // 扫描置信度
+    pub scan_time: DateTime<Utc>,
+    pub scan_duration_ms: i64,       // 扫描耗时
+    pub scanned_by: String,          // 扫描人
+}
+
+/// 批量IP扫描请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchIPScanRequest {
+    pub ip_zone_id: String,          // IP区域ID
+    pub ip_ranges: Vec<String>,      // IP范围列表，如 ["192.168.1.1-192.168.1.100", "192.168.2.0/24"]
+    pub port_policy: PortScanPolicy,
+    pub ping_check: bool,            // 是否先ping检查
+    pub max_concurrent: u32,         // 最大并发数
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanResult {
+    pub ip: String,
+    pub is_alive: bool,
+    pub open_ports: Vec<PortInfo>,
+    pub fingerprint: Option<String>,
+    pub scanned_at: DateTime<Utc>,
+}
+
 // --- Auth & Audit ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Role {
-    SysAdmin, // Manage users
+    SysAdmin, // Manage users and permissions
     SecAdmin, // Manage assets, tasks, risks
     Auditor,  // View logs
+    Custom(String), // Custom role with specific permissions
+}
+
+/// 细化权限位掩码
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Permissions {
+    // 扫描权限
+    pub can_create_scan: bool,
+    pub can_delete_scan: bool,
+    pub can_export_scan: bool,
+
+    // 资产权限
+    pub can_view_assets: bool,
+    pub can_create_asset: bool,
+    pub can_update_asset: bool,
+    pub can_delete_asset: bool,
+
+    // 云资产权限
+    pub can_view_cloud: bool,
+    pub can_manage_cloud: bool,
+    pub can_delete_cloud: bool,
+    pub can_sync_cloud: bool,
+
+    // 风险权限
+    pub can_view_risks: bool,
+    pub can_resolve_risk: bool,
+    pub can_delete_risk: bool,
+
+    // 用户管理权限
+    pub can_view_users: bool,
+    pub can_create_user: bool,
+    pub can_update_user: bool,
+    pub can_delete_user: bool,
+    pub can_manage_permissions: bool,
+
+    // 审计权限
+    pub can_view_audit_logs: bool,
+
+    // 区域管理权限
+    pub can_view_zones: bool,
+    pub can_manage_zones: bool,
+}
+
+impl Default for Permissions {
+    fn default() -> Self {
+        Self {
+            can_create_scan: false,
+            can_delete_scan: false,
+            can_export_scan: false,
+            can_view_assets: false,
+            can_create_asset: false,
+            can_update_asset: false,
+            can_delete_asset: false,
+            can_view_cloud: false,
+            can_manage_cloud: false,
+            can_delete_cloud: false,
+            can_sync_cloud: false,
+            can_view_risks: false,
+            can_resolve_risk: false,
+            can_delete_risk: false,
+            can_view_users: false,
+            can_create_user: false,
+            can_update_user: false,
+            can_delete_user: false,
+            can_manage_permissions: false,
+            can_view_audit_logs: false,
+            can_view_zones: false,
+            can_manage_zones: false,
+        }
+    }
+}
+
+impl Permissions {
+    /// SysAdmin 默认权限
+    pub fn sys_admin() -> Self {
+        Self {
+            can_view_users: true,
+            can_create_user: true,
+            can_update_user: true,
+            can_delete_user: true,
+            can_manage_permissions: true,
+            can_view_audit_logs: true,
+            can_view_cloud: true,
+            can_view_assets: true,
+            can_view_zones: true,
+            can_view_risks: true,
+            ..Default::default()
+        }
+    }
+
+    /// SecAdmin 默认权限
+    pub fn sec_admin() -> Self {
+        Self {
+            can_create_scan: true,
+            can_delete_scan: true,
+            can_export_scan: true,
+            can_view_assets: true,
+            can_create_asset: true,
+            can_update_asset: true,
+            can_delete_asset: true,
+            can_view_cloud: true,
+            can_manage_cloud: true,
+            can_delete_cloud: true,
+            can_sync_cloud: true,
+            can_view_risks: true,
+            can_resolve_risk: true,
+            can_delete_risk: true,
+            can_view_zones: true,
+            can_manage_zones: true,
+            can_view_audit_logs: true,
+            ..Default::default()
+        }
+    }
+
+    /// Auditor 默认权限
+    pub fn auditor() -> Self {
+        Self {
+            can_view_assets: true,
+            can_view_cloud: true,
+            can_view_risks: true,
+            can_view_audit_logs: true,
+            can_export_scan: true,
+            can_view_users: true,
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -431,7 +678,28 @@ pub struct User {
     #[serde(skip_serializing, default)] // Don't send password hash to frontend, allow missing on receive
     pub password: String, // In real app, this is a hash. For demo, we might store plain or simple hash.
     pub role: Role,
+    pub permissions: Option<Permissions>, // 细化权限（如果 role 是 Custom）
     pub created_at: DateTime<Utc>,
+    // 密码策略相关
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_changed_at: Option<DateTime<Utc>>, // 最后修改密码时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_strength: Option<String>, // 密码强度：weak/medium/strong
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force_password_change: Option<bool>, // 是否强制修改密码
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_login_at: Option<DateTime<Utc>>, // 最后登录时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>, // 邮箱
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phone: Option<String>, // 手机号
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>, // 账户状态：active/disabled/locked
+    // 账户锁定相关
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_login_attempts: Option<u32>, // 失败登录次数
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub locked_until: Option<DateTime<Utc>>, // 锁定到期时间
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -439,6 +707,38 @@ pub struct CreateUserRequest {
     pub username: String,
     pub password: String,
     pub role: Role,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordPolicy {
+    pub min_length: u32,           // 最小长度
+    pub require_uppercase: bool,    // 需要大写字母
+    pub require_lowercase: bool,    // 需要小写字母
+    pub require_number: bool,       // 需要数字
+    pub require_special: bool,      // 需要特殊字符
+    pub max_age_days: Option<u32>,  // 密码最大有效期（天）
+    pub prevent_reuse: u32,         // 防止重用最近N次密码
+    pub min_strength: String,       // 最低强度要求：weak/medium/strong
+    // 账户锁定配置
+    pub max_login_attempts: Option<u32>,  // 最大登录失败次数，None表示不限制
+    pub lockout_duration_minutes: u32,    // 账户锁定时长（分钟）
+}
+
+impl Default for PasswordPolicy {
+    fn default() -> Self {
+        Self {
+            min_length: 6,
+            require_uppercase: false,
+            require_lowercase: false,
+            require_number: false,
+            require_special: false,
+            max_age_days: Some(90),  // 默认90天有效期
+            prevent_reuse: 3,
+            min_strength: "weak".to_string(),
+            max_login_attempts: Some(5),  // 默认5次失败后锁定
+            lockout_duration_minutes: 30,  // 默认锁定30分钟
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -468,4 +768,159 @@ pub struct AuditLog {
     pub target: String, // e.g., "Asset: 1", "User: admin"
     pub details: String, // JSON or text description
     pub timestamp: DateTime<Utc>,
+}
+
+// ============== Advanced Scanning Types ==============
+
+/// 扫描策略类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ScanStrategy {
+    Quick,              // 快速扫描（TOP 100）
+    Standard,           // 标准扫描（TOP 1000）
+    Full,               // 全端口扫描（1-65535）
+    Custom(Vec<u16>),   // 自定义端口列表
+    Cloud,              // 云平台优化扫描
+}
+
+/// 扫描引擎类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ScanEngine {
+    BasicTcp,           // 基础 TCP 连接（现有实现）
+    RustScan,           // RustScan 快速扫描
+    Nmap,               // Nmap 深度扫描
+    Hybrid,             // RustScan + Nmap 混合
+}
+
+/// 高级扫描配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdvancedScanConfig {
+    /// 扫描策略
+    pub strategy: ScanStrategy,
+
+    /// 扫描引擎
+    pub engine: ScanEngine,
+
+    /// 并发级别
+    pub concurrency: u32,
+
+    /// 超时设置（毫秒）
+    pub timeout_ms: u64,
+
+    /// 服务指纹识别
+    pub service_detection: bool,
+
+    /// 操作系统识别
+    pub os_detection: bool,
+
+    /// Web 应用指纹识别
+    pub web_fingerprint: bool,
+
+    /// 漏洞扫描
+    pub vulnerability_scan: bool,
+
+    /// 云平台标签同步
+    pub cloud_tag_sync: bool,
+
+    /// 速率限制（每秒包数）
+    pub rate_limit: Option<u32>,
+}
+
+impl Default for AdvancedScanConfig {
+    fn default() -> Self {
+        Self {
+            strategy: ScanStrategy::Standard,
+            engine: ScanEngine::Hybrid,
+            concurrency: 1000,
+            timeout_ms: 5000,
+            service_detection: true,
+            os_detection: false,
+            web_fingerprint: true,
+            vulnerability_scan: false,
+            cloud_tag_sync: true,
+            rate_limit: None,
+        }
+    }
+}
+
+/// 服务指纹规则
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceFingerprintRule {
+    /// 服务名称
+    pub service: String,
+
+    /// 匹配规则（正则表达式）
+    pub patterns: Vec<String>,
+
+    /// 端口号（可选）
+    pub port: Option<u16>,
+
+    /// 协议（TCP/UDP）
+    pub protocol: String,
+
+    /// CPE 标识
+    pub cpe: Option<String>,
+
+    /// 置信度（0-100）
+    pub confidence: i32,
+
+    /// 版本提取正则
+    pub version_regex: Option<String>,
+}
+
+/// 指纹匹配结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FingerprintMatch {
+    pub service: String,
+    pub version: Option<String>,
+    pub confidence: i32,
+    pub cpe: Option<String>,
+    pub matched_pattern: String,
+}
+
+/// 扫描结果与云资产关联
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanCloudAssetMapping {
+    pub id: String,
+    pub ip: String,
+    pub cloud_asset_id: Option<i32>,
+    pub cloud_provider: Option<CloudProvider>,
+    pub instance_id: Option<String>,
+    pub matched_tags: Vec<String>,
+    pub confidence: f32,
+    pub last_matched: DateTime<Utc>,
+}
+
+/// 高级扫描任务
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdvancedScanTask {
+    pub id: String,
+    pub name: String,
+    pub targets: Vec<String>,
+    pub config: AdvancedScanConfig,
+    pub status: TaskStatus,
+    pub progress: f32,  // 0.0 - 1.0
+    pub current_target: Option<String>,
+    pub scanned_count: u32,
+    pub total_count: u32,
+    pub start_time: Option<DateTime<Utc>>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub results: Vec<ScanResult>,
+    pub cloud_mappings: Vec<ScanCloudAssetMapping>,
+    pub error_message: Option<String>,
+    pub created_by: Option<String>,
+}
+
+/// 高级扫描请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateAdvancedScanRequest {
+    pub name: String,
+    pub targets: Vec<String>,
+    pub strategy: ScanStrategy,
+    pub engine: ScanEngine,
+    pub concurrency: Option<u32>,
+    pub timeout_ms: Option<u64>,
+    pub service_detection: Option<bool>,
+    pub os_detection: Option<bool>,
+    pub web_fingerprint: Option<bool>,
+    pub cloud_tag_sync: Option<bool>,
 }

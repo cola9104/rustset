@@ -7,11 +7,15 @@ use shared::{
     Risk, ZoneConfig, User, Role, LoginRequest, LoginResponse, AuditLog,
     // Multi-Cloud types
     CloudAsset, CloudAssetStats, CloudProvider, VMStatus, BillingMode,
+    // Advanced Scanning types
+    ScanStrategy, ScanEngine, AdvancedScanConfig, AdvancedScanTask,
+    CreateAdvancedScanRequest, ScanResult, Permissions, PasswordPolicy,
 };
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{InputEvent, Event};
+use web_sys::{InputEvent, Event, HtmlSelectElement, HtmlTextAreaElement, HtmlInputElement, window, Url};
 use yew::prelude::*;
 use gloo_timers::callback::Timeout;
+use js_sys::Array;
 
 // ============== Page State ==============
 
@@ -20,12 +24,15 @@ pub enum Page {
     Login,
     Dashboard,
     TaskCenter,
+    AdvancedScanning, // 新增高级扫描页面
     AssetCenter,
     ZoneManagement,
     RiskCenter,
     UserManagement,
     AuditLogs,
     CloudManagement, // 混合云管理
+    UserProfile, // 个人中心
+    PasswordPolicyManagement, // 密码策略管理
 }
 
 // ============== Auth State ==============
@@ -57,6 +64,8 @@ impl Language {
             (Language::En, "logout") => "Logout".to_string(),
             (Language::Zh, "user_management") => "👥 用户管理".to_string(),
             (Language::En, "user_management") => "👥 User Management".to_string(),
+            (Language::Zh, "password_policy_management") => "🔐 密码策略管理".to_string(),
+            (Language::En, "password_policy_management") => "🔐 Password Policy".to_string(),
             (Language::Zh, "audit_logs") => "📜 审计日志".to_string(),
             (Language::En, "audit_logs") => "📜 Audit Logs".to_string(),
             (Language::Zh, "role") => "角色".to_string(),
@@ -69,6 +78,28 @@ impl Language {
             (Language::En, "dashboard") => "📊 Dashboard".to_string(),
             (Language::Zh, "task_center") => "🚀 任务中心".to_string(),
             (Language::En, "task_center") => "🚀 Task Center".to_string(),
+            (Language::Zh, "advanced_scanning") => "🔍 高级扫描".to_string(),
+            (Language::En, "advanced_scanning") => "🔍 Advanced Scanning".to_string(),
+            (Language::Zh, "create_scan") => "创建扫描".to_string(),
+            (Language::En, "create_scan") => "Create Scan".to_string(),
+            (Language::Zh, "scan_tasks") => "扫描任务".to_string(),
+            (Language::En, "scan_tasks") => "Scan Tasks".to_string(),
+            (Language::Zh, "scan_name") => "扫描名称".to_string(),
+            (Language::En, "scan_name") => "Scan Name".to_string(),
+            (Language::Zh, "targets") => "扫描目标".to_string(),
+            (Language::En, "targets") => "Targets".to_string(),
+            (Language::Zh, "strategy") => "扫描策略".to_string(),
+            (Language::En, "strategy") => "Strategy".to_string(),
+            (Language::Zh, "engine") => "扫描引擎".to_string(),
+            (Language::En, "engine") => "Engine".to_string(),
+            (Language::Zh, "start_scan") => "开始扫描".to_string(),
+            (Language::En, "start_scan") => "Start Scan".to_string(),
+            (Language::Zh, "scan_progress") => "扫描进度".to_string(),
+            (Language::En, "scan_progress") => "Scan Progress".to_string(),
+            (Language::Zh, "scan_results") => "扫描结果".to_string(),
+            (Language::En, "scan_results") => "Scan Results".to_string(),
+            (Language::Zh, "export_results") => "导出结果".to_string(),
+            (Language::En, "export_results") => "Export Results".to_string(),
             (Language::Zh, "assets_risks") => "资产与风险".to_string(),
             (Language::En, "assets_risks") => "Assets & Risks".to_string(),
             (Language::Zh, "asset_management") => "📂 资产管理".to_string(),
@@ -196,6 +227,74 @@ impl Language {
             (Language::Zh, "access_denied") => "访问拒绝".to_string(),
             (Language::En, "access_denied") => "Access Denied".to_string(),
 
+            // User Profile
+            (Language::Zh, "user_profile") => "👤 个人中心".to_string(),
+            (Language::En, "user_profile") => "👤 Profile".to_string(),
+            (Language::Zh, "profile_info") => "个人信息".to_string(),
+            (Language::En, "profile_info") => "Profile Information".to_string(),
+            (Language::Zh, "change_password") => "修改密码".to_string(),
+            (Language::En, "change_password") => "Change Password".to_string(),
+            (Language::Zh, "current_password") => "当前密码".to_string(),
+            (Language::En, "current_password") => "Current Password".to_string(),
+            (Language::Zh, "new_password") => "新密码".to_string(),
+            (Language::En, "new_password") => "New Password".to_string(),
+            (Language::Zh, "confirm_password") => "确认密码".to_string(),
+            (Language::En, "confirm_password") => "Confirm Password".to_string(),
+            (Language::Zh, "password_updated") => "密码修改成功".to_string(),
+            (Language::En, "password_updated") => "Password updated successfully".to_string(),
+            (Language::Zh, "password_mismatch") => "两次密码不一致".to_string(),
+            (Language::En, "password_mismatch") => "Passwords do not match".to_string(),
+            (Language::Zh, "wrong_current_password") => "当前密码错误".to_string(),
+            (Language::En, "wrong_current_password") => "Current password is incorrect".to_string(),
+            (Language::Zh, "created_at") => "创建时间".to_string(),
+            (Language::En, "created_at") => "Created At".to_string(),
+            (Language::Zh, "last_login") => "最后登录".to_string(),
+            (Language::En, "last_login") => "Last Login".to_string(),
+
+            // Password Policy Management
+            (Language::Zh, "min_length") => "最小长度".to_string(),
+            (Language::En, "min_length") => "Minimum Length".to_string(),
+            (Language::Zh, "require_uppercase") => "需要大写字母".to_string(),
+            (Language::En, "require_uppercase") => "Require Uppercase".to_string(),
+            (Language::Zh, "require_lowercase") => "需要小写字母".to_string(),
+            (Language::En, "require_lowercase") => "Require Lowercase".to_string(),
+            (Language::Zh, "require_number") => "需要数字".to_string(),
+            (Language::En, "require_number") => "Require Number".to_string(),
+            (Language::Zh, "require_special") => "需要特殊字符".to_string(),
+            (Language::En, "require_special") => "Require Special Character".to_string(),
+            (Language::Zh, "max_age_days") => "密码最大有效期（天）".to_string(),
+            (Language::En, "max_age_days") => "Password Max Age (Days)".to_string(),
+            (Language::Zh, "prevent_reuse") => "防止重用最近N次密码".to_string(),
+            (Language::En, "prevent_reuse") => "Prevent Reusing Last N Passwords".to_string(),
+            (Language::Zh, "min_strength") => "最低强度要求".to_string(),
+            (Language::En, "min_strength") => "Minimum Strength".to_string(),
+            (Language::Zh, "weak") => "弱".to_string(),
+            (Language::En, "weak") => "Weak".to_string(),
+            (Language::Zh, "medium") => "中".to_string(),
+            (Language::En, "medium") => "Medium".to_string(),
+            (Language::Zh, "strong") => "强".to_string(),
+            (Language::En, "strong") => "Strong".to_string(),
+            (Language::Zh, "save_policy") => "保存策略".to_string(),
+            (Language::En, "save_policy") => "Save Policy".to_string(),
+            (Language::Zh, "cancel") => "取消".to_string(),
+            (Language::En, "cancel") => "Cancel".to_string(),
+            (Language::Zh, "policy_saved") => "策略保存成功".to_string(),
+            (Language::En, "policy_saved") => "Policy saved successfully".to_string(),
+            (Language::Zh, "policy_error") => "策略保存失败".to_string(),
+            (Language::En, "policy_error") => "Failed to save policy".to_string(),
+
+            // Account Lockout Policy
+            (Language::Zh, "account_lockout") => "账户锁定策略".to_string(),
+            (Language::En, "account_lockout") => "Account Lockout".to_string(),
+            (Language::Zh, "max_login_attempts") => "最大登录失败次数".to_string(),
+            (Language::En, "max_login_attempts") => "Max Login Attempts".to_string(),
+            (Language::Zh, "lockout_duration_minutes") => "锁定时长（分钟）".to_string(),
+            (Language::En, "lockout_duration_minutes") => "Lockout Duration (Minutes)".to_string(),
+            (Language::Zh, "unlimited") => "不限制".to_string(),
+            (Language::En, "unlimited") => "Unlimited".to_string(),
+            (Language::Zh, "no_limit") => "无限制".to_string(),
+            (Language::En, "no_limit") => "No Limit".to_string(),
+
             // Multi-Cloud Management
             (Language::Zh, "cloud_management") => "☁️ 混合云管理".to_string(),
             (Language::En, "cloud_management") => "☁️ Multi-Cloud".to_string(),
@@ -295,6 +394,16 @@ fn get_auth_user() -> Option<User> {
         },
         _ => None,
     }
+}
+
+// Helper function to get user role
+fn get_user_role() -> Option<Role> {
+    get_auth_user().map(|user| user.role)
+}
+
+// Helper function to get user permissions
+fn get_user_permissions() -> Option<Permissions> {
+    get_auth_user().and_then(|user| user.permissions)
 }
 
 // Helper function to set auth in localStorage
@@ -499,6 +608,7 @@ fn Sidebar(props: &SidebarProps) -> Html {
 
     // Get user from localStorage
     let user_role = get_auth_user().map(|u| u.role);
+    let user_permissions = get_auth_user().and_then(|u| u.permissions);
 
     let toggle_lang = {
         let lang = lang.clone();
@@ -511,9 +621,9 @@ fn Sidebar(props: &SidebarProps) -> Html {
         })
     };
 
-    let on_logout = {
+    let on_logout: Callback<Event> = {
         let current_page = current_page.clone();
-        Callback::from(move |_| {
+        Callback::from(move |_: Event| {
             clear_auth();
             current_page.set(Page::Login);
         })
@@ -545,6 +655,7 @@ fn Sidebar(props: &SidebarProps) -> Html {
                 <li><a onclick={navigate(Page::Dashboard)}>{ lang.t("dashboard") }</a></li>
                 if user_role == Some(Role::SecAdmin) || user_role == Some(Role::Auditor) {
                     <li><a onclick={navigate(Page::TaskCenter)}>{ lang.t("task_center") }</a></li>
+                    <li><a onclick={navigate(Page::AdvancedScanning)}>{ lang.t("advanced_scanning") }</a></li>
                 }
             </ul>
             if user_role == Some(Role::SecAdmin) {
@@ -555,15 +666,18 @@ fn Sidebar(props: &SidebarProps) -> Html {
                     <li><a onclick={navigate(Page::RiskCenter)}>{ lang.t("risk_monitoring") }</a></li>
                 </ul>
             }
-            // 混合云管理 - 所有角色都可访问
-            <p class="menu-label">{ "Cloud" }</p>
-            <ul class="menu-list">
-                <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
-            </ul>
+            // 混合云管理 - 根据用户权限显示
+            if user_permissions.as_ref().map(|p| p.can_view_cloud).unwrap_or(false) {
+                <p class="menu-label">{ "Cloud" }</p>
+                <ul class="menu-list">
+                    <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
+                </ul>
+            }
             if user_role == Some(Role::SysAdmin) {
                 <p class="menu-label">{ lang.t("user_management") }</p>
                 <ul class="menu-list">
                     <li><a onclick={navigate(Page::UserManagement)}>{ lang.t("user_management") }</a></li>
+                    <li><a onclick={navigate(Page::PasswordPolicyManagement)}>{ lang.t("password_policy_management") }</a></li>
                 </ul>
             }
             if user_role == Some(Role::Auditor) {
@@ -574,7 +688,7 @@ fn Sidebar(props: &SidebarProps) -> Html {
             }
             <p class="menu-label">{ "Account" }</p>
             <ul class="menu-list">
-                <li><a onclick={on_logout}>{ lang.t("logout") }</a></li>
+                <li><a onclick={navigate(Page::UserProfile)}>{ lang.t("user_profile") }</a></li>
             </ul>
         </aside>
     }
@@ -1031,8 +1145,16 @@ fn UserManagement() -> Html {
     let users = use_state(|| Vec::new());
     let loading = use_state(|| true);
 
+    // Permission editing state
+    let show_permissions_modal = use_state(|| false);
+    let editing_user = use_state(|| None as Option<(String, String, Permissions)>); // (id, username, permissions)
+    let temp_permissions = use_state(|| None as Option<Permissions>);
+
     // Get token from localStorage
     let token = get_auth_token();
+
+    // Get current user role
+    let user_role = get_user_role();
 
     // Use effect to fetch data only once on mount
     use_effect_with((), {
@@ -1053,12 +1175,134 @@ fn UserManagement() -> Html {
         }
     });
 
-    let role_name = |role: &Role| -> &'static str {
+    let role_name = |role: &Role| -> String {
         match role {
-            Role::SysAdmin => "SysAdmin",
-            Role::SecAdmin => "SecAdmin",
-            Role::Auditor => "Auditor",
+            Role::SysAdmin => "SysAdmin".to_string(),
+            Role::SecAdmin => "SecAdmin".to_string(),
+            Role::Auditor => "Auditor".to_string(),
+            Role::Custom(name) => name.clone(),
         }
+    };
+
+    // Open permission edit modal
+    let on_edit_permissions = {
+        let users = users.clone();
+        let show_permissions_modal = show_permissions_modal.clone();
+        let editing_user = editing_user.clone();
+        let temp_permissions = temp_permissions.clone();
+
+        Callback::from(move |user_id: String| {
+            if let Some(user) = users.iter().find(|u| u.id == user_id) {
+                if let Some(perms) = &user.permissions {
+                    editing_user.set(Some((user.id.clone(), user.username.clone(), perms.clone())));
+                    temp_permissions.set(Some(perms.clone()));
+                    show_permissions_modal.set(true);
+                }
+            }
+        })
+    };
+
+    // Close modal
+    let on_close_modal = {
+        let show_permissions_modal = show_permissions_modal.clone();
+        let editing_user = editing_user.clone();
+        let temp_permissions = temp_permissions.clone();
+
+        Callback::from(move |_| {
+            show_permissions_modal.set(false);
+            editing_user.set(None);
+            temp_permissions.set(None);
+        })
+    };
+
+    // Save permissions
+    let on_save_permissions = {
+        let token = token.clone();
+        let users = users.clone();
+        let editing_user = editing_user.clone();
+        let temp_permissions = temp_permissions.clone();
+        let show_permissions_modal = show_permissions_modal.clone();
+
+        Callback::from(move |_| {
+            if let Some((user_id, _, _)) = &*editing_user {
+                if let Some(perms) = &*temp_permissions {
+                    let user_id = user_id.clone();
+                    let perms = perms.clone();
+                    let token = token.clone();
+                    let users = users.clone();
+                    let show_permissions_modal = show_permissions_modal.clone();
+
+                    spawn_local(async move {
+                        let json_body = serde_json::to_string(&perms).unwrap_or_default();
+                        let url = format!("http://localhost:3003/api/users/{}/permissions", user_id);
+
+                        if let Ok(resp) = Request::put(&url)
+                            .header("Authorization", &token)
+                            .header("Content-Type", "application/json")
+                            .body(json_body)
+                            .unwrap()
+                            .send()
+                            .await
+                        {
+                            if resp.ok() {
+                                // Refresh users
+                                if let Ok(resp) = Request::get("http://localhost:3003/api/users")
+                                    .header("Authorization", &token)
+                                    .send()
+                                    .await
+                                {
+                                    if let Ok(data) = resp.json::<Vec<User>>().await {
+                                        users.set(data);
+                                    }
+                                }
+                                show_permissions_modal.set(false);
+                            }
+                        }
+                    });
+                }
+            }
+        })
+    };
+
+    // Toggle permission - create individual callbacks for each permission
+    let temp_perms_for_callbacks = temp_permissions.clone();
+
+    let make_toggle_callback = |field: String| {
+        let temp_permissions = temp_perms_for_callbacks.clone();
+        Callback::from(move |e: Event| {
+            let target = e.target_unchecked_into::<HtmlInputElement>();
+            let value = target.checked();
+            let field = field.clone();
+
+            if let Some(mut perms) = (*temp_permissions).clone() {
+                match field.as_str() {
+                    "can_create_scan" => perms.can_create_scan = value,
+                    "can_delete_scan" => perms.can_delete_scan = value,
+                    "can_export_scan" => perms.can_export_scan = value,
+                    "can_view_assets" => perms.can_view_assets = value,
+                    "can_create_asset" => perms.can_create_asset = value,
+                    "can_update_asset" => perms.can_update_asset = value,
+                    "can_delete_asset" => perms.can_delete_asset = value,
+                    "can_view_cloud" => perms.can_view_cloud = value,
+                    "can_manage_cloud" => perms.can_manage_cloud = value,
+                    "can_delete_cloud" => perms.can_delete_cloud = value,
+                    "can_sync_cloud" => perms.can_sync_cloud = value,
+                    "can_view_risks" => perms.can_view_risks = value,
+                    "can_resolve_risk" => perms.can_resolve_risk = value,
+                    "can_delete_risk" => perms.can_delete_risk = value,
+                    "can_view_users" => perms.can_view_users = value,
+                    "can_create_user" => perms.can_create_user = value,
+                    "can_update_user" => perms.can_update_user = value,
+                    "can_delete_user" => perms.can_delete_user = value,
+                    "can_manage_permissions" => perms.can_manage_permissions = value,
+                    "can_view_audit_logs" => perms.can_view_audit_logs = value,
+                    "can_view_zones" => perms.can_view_zones = value,
+                    "can_manage_zones" => perms.can_manage_zones = value,
+                    _ => {}
+                }
+                temp_permissions.set(Some(perms));
+            }
+        })
     };
 
     html! {
@@ -1076,10 +1320,15 @@ fn UserManagement() -> Html {
                                 <th>{ lang.t("username") }</th>
                                 <th>{ lang.t("role") }</th>
                                 <th>{ lang.t("timestamp") }</th>
+                                <th>{ "操作" }</th>
                             </tr>
                         </thead>
                         <tbody>
                             { for users.iter().map(|user| {
+                                let user_id = user.id.clone();
+                                let on_edit = on_edit_permissions.clone();
+                                let current_user_role = user_role.clone();
+
                                 html! {
                                     <tr>
                                         <td>{ &user.username }</td>
@@ -1087,6 +1336,17 @@ fn UserManagement() -> Html {
                                             <span class="tag">{ role_name(&user.role) }</span>
                                         </td>
                                         <td>{ &user.created_at.format("%Y-%m-%d %H:%M:%S").to_string() }</td>
+                                        <td>
+                                            // Only admin can edit permissions
+                                            if current_user_role == Some(Role::SysAdmin) && user.permissions.is_some() {
+                                                <button
+                                                    class="button is-small is-info"
+                                                    onclick={move |_| on_edit.emit(user_id.clone())}
+                                                >
+                                                    { "编辑权限" }
+                                                </button>
+                                            }
+                                        </td>
                                     </tr>
                                 }
                             })}
@@ -1094,6 +1354,264 @@ fn UserManagement() -> Html {
                     </table>
                 }
             </div>
+
+            // Permission Editing Modal
+            if *show_permissions_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_modal.clone()}></div>
+                    <div class="modal-card" style="width: 800px;">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">
+                                { "编辑权限 - " }
+                                { if let Some((_, username, _)) = &*editing_user {
+                                    username.clone()
+                                } else {
+                                    String::new()
+                                }}
+                            </p>
+                            <button class="delete" onclick={on_close_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body" style="max-height: 70vh; overflow-y: auto;">
+                            if let Some(perms) = &*temp_permissions {
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "📋 基本信息" }</h4>
+                                    <div class="box" style="background-color: #f5f5f5;">
+                                        <p><strong>{ "用户名: " }</strong>{
+                                            if let Some((_, username, _)) = &*editing_user {
+                                                username.clone()
+                                            } else {
+                                                String::new()
+                                            }
+                                        }</p>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "🔍 扫描权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_create_scan}
+                                                onchange={make_toggle_callback(String::from("can_create_scan"))}/
+                                            >
+                                            { " 创建扫描" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_delete_scan}
+                                                onchange={make_toggle_callback(String::from("can_delete_scan"))}/
+                                            >
+                                            { " 删除扫描" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_export_scan}
+                                                onchange={make_toggle_callback(String::from("can_export_scan"))}/
+                                            >
+                                            { " 导出结果" }
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "💰 资产权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_assets}
+                                                onchange={make_toggle_callback(String::from("can_view_assets"))}/
+                                            >
+                                            { " 查看资产" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_create_asset}
+                                                onchange={make_toggle_callback(String::from("can_create_asset"))}/
+                                            >
+                                            { " 创建资产" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_update_asset}
+                                                onchange={make_toggle_callback(String::from("can_update_asset"))}/
+                                            >
+                                            { " 更新资产" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_delete_asset}
+                                                onchange={make_toggle_callback(String::from("can_delete_asset"))}/
+                                            >
+                                            { " 删除资产" }
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "☁️ 云资产权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_cloud}
+                                                onchange={make_toggle_callback(String::from("can_view_cloud"))}/
+                                            >
+                                            { " 查看云资产" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_manage_cloud}
+                                                onchange={make_toggle_callback(String::from("can_manage_cloud"))}/
+                                            >
+                                            { " 管理云资产" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_delete_cloud}
+                                                onchange={make_toggle_callback(String::from("can_delete_cloud"))}/
+                                            >
+                                            { " 删除云资产" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_sync_cloud}
+                                                onchange={make_toggle_callback(String::from("can_sync_cloud"))}/
+                                            >
+                                            { " 同步云资产" }
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "⚠️ 风险权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_risks}
+                                                onchange={make_toggle_callback(String::from("can_view_risks"))}/
+                                            >
+                                            { " 查看风险" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_resolve_risk}
+                                                onchange={make_toggle_callback(String::from("can_resolve_risk"))}/
+                                            >
+                                            { " 处置风险" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_delete_risk}
+                                                onchange={make_toggle_callback(String::from("can_delete_risk"))}/
+                                            >
+                                            { " 删除风险" }
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "👥 用户管理权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_users}
+                                                onchange={make_toggle_callback(String::from("can_view_users"))}/
+                                            >
+                                            { " 查看用户" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_create_user}
+                                                onchange={make_toggle_callback(String::from("can_create_user"))}/
+                                            >
+                                            { " 创建用户" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_update_user}
+                                                onchange={make_toggle_callback(String::from("can_update_user"))}/
+                                            >
+                                            { " 更新用户" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_delete_user}
+                                                onchange={make_toggle_callback(String::from("can_delete_user"))}/
+                                            >
+                                            { " 删除用户" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_manage_permissions}
+                                                onchange={make_toggle_callback(String::from("can_manage_permissions"))}/
+                                            >
+                                            { " 管理权限" }
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "📋 审计权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_audit_logs}
+                                                onchange={make_toggle_callback(String::from("can_view_audit_logs"))}/
+                                            >
+                                            { " 查看审计日志" }
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "🌐 区域管理权限" }</h4>
+                                    <div class="box">
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_zones}
+                                                onchange={make_toggle_callback(String::from("can_view_zones"))}/
+                                            >
+                                            { " 查看区域" }
+                                        </label>
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_manage_zones}
+                                                onchange={make_toggle_callback(String::from("can_manage_zones"))}/
+                                            >
+                                            { " 管理区域" }
+                                        </label>
+                                    </div>
+                                </div>
+                            }
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_save_permissions}>{ "保存" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
         </div>
     }
 }
@@ -1192,6 +1710,9 @@ fn CloudManagement() -> Html {
     let filter_provider = use_state(|| String::new());
     let filter_status = use_state(|| String::new());
     let filter_search = use_state(|| String::new());
+
+    // Get user role
+    let user_role = get_user_role();
 
     // Get token from localStorage
     let token = get_auth_token();
@@ -1739,6 +2260,7 @@ fn CloudManagement() -> Html {
                                                         let on_edit_click = on_edit_click.clone();
                                                         let asset_for_console = asset_for_console.clone();
                                                         let asset_for_ssh = asset_for_ssh.clone();
+                                                        let user_role = user_role.clone();
                                                         Callback::from(move |e: Event| {
                                                             let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
                                                             match select.value().as_str() {
@@ -1784,12 +2306,32 @@ fn CloudManagement() -> Html {
                                                     } }>
                                                         <option value="">{"\u{1f4cb} 操作..."}</option>
                                                         <option value="view">{"\u{1f440} 查看详情"}</option>
-                                                        <option value="console">{"\u{1f5a5} 云控制台"}</option>
-                                                        <option value="ssh">{"\u{1f4bb} SSH连接"}</option>
-                                                        <option value="reboot">{"\u{1f504} 重启实例"}</option>
-                                                        <option value="start">{"\u{25b6} 启动实例"}</option>
-                                                        <option value="stop">{"\u{23f9} 停止实例"}</option>
-                                                        <option value="delete" style="color: #e74c3c;">{"\u{1f5d1} 释放实例"}</option>
+                                                        {
+                                                            // SecAdmin 和 SysAdmin 可以看到更多操作
+                                                            if user_role == Some(Role::SecAdmin) || user_role == Some(Role::SysAdmin) {
+                                                                html! {
+                                                                    <>
+                                                                        <option value="console">{"\u{1f5a5} 云控制台"}</option>
+                                                                        <option value="ssh">{"\u{1f4bb} SSH连接"}</option>
+                                                                        <option value="reboot">{"\u{1f504} 重启实例"}</option>
+                                                                        <option value="start">{"\u{25b6} 启动实例"}</option>
+                                                                        <option value="stop">{"\u{23f9} 停止实例"}</option>
+                                                                    </>
+                                                                }
+                                                            } else {
+                                                                html! {}
+                                                            }
+                                                        }
+                                                        {
+                                                            // 只有 SecAdmin 可以删除实例
+                                                            if user_role == Some(Role::SecAdmin) {
+                                                                html! {
+                                                                    <option value="delete" style="color: #e74c3c;">{"\u{1f5d1} 释放实例"}</option>
+                                                                }
+                                                            } else {
+                                                                html! {}
+                                                            }
+                                                        }
                                                     </select>
                                                 </div>
                                             </td>
@@ -2034,12 +2576,15 @@ pub fn App() -> Html {
                             { match page {
                                 Page::Dashboard => html! { <Dashboard /> },
                                 Page::TaskCenter => html! { <TaskCenter /> },
+                                Page::AdvancedScanning => html! { <AdvancedScanning /> },
                                 Page::AssetCenter => html! { <AssetCenter /> },
                                 Page::ZoneManagement => html! { <ZoneManagement /> },
                                 Page::RiskCenter => html! { <RiskCenter /> },
                                 Page::UserManagement => html! { <UserManagement /> },
                                 Page::AuditLogs => html! { <AuditLogs /> },
                                 Page::CloudManagement => html! { <CloudManagement /> },
+                                Page::UserProfile => html! { <UserProfile current_page={current_page.clone()} /> },
+                                Page::PasswordPolicyManagement => html! { <PasswordPolicyManagement /> },
                                 Page::Login => html! { <Login current_page={current_page.clone()} /> },
                             }}
                         </div>
@@ -2049,3 +2594,1529 @@ pub fn App() -> Html {
         </div>
     }
 }
+
+// ============== Advanced Scanning Component ==============
+
+#[function_component]
+fn AdvancedScanning() -> Html {
+    let lang = use_state(|| Language::Zh);
+    let tasks = use_state(|| Vec::new());
+    let loading = use_state(|| true);
+    let show_create_modal = use_state(|| false);
+
+    // 扫描配置状态
+    let scan_name = use_state(|| "".to_string());
+    let scan_targets = use_state(|| "".to_string());
+    let scan_strategy = use_state(|| ScanStrategy::Standard);
+    let scan_engine = use_state(|| ScanEngine::Hybrid);
+
+    let token = get_auth_token();
+
+    // 加载任务列表
+    let load_tasks = {
+        let tasks = tasks.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let tasks = tasks.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                if let Ok(resp) = Request::get("http://localhost:3003/api/scan/advanced/tasks")
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if let Ok(data) = resp.json::<Vec<AdvancedScanTask>>().await {
+                        tasks.set(data);
+                    }
+                }
+            });
+        })
+    };
+
+    // 初始加载任务列表
+    {
+        let loading = loading.clone();
+        let load_tasks = load_tasks.clone();
+
+        use_effect_with((), move |_| {
+            load_tasks.emit(());
+            loading.set(false);
+            || ()
+        });
+    }
+
+    // 自动刷新运行中的任务
+    {
+        let tasks = tasks.clone();
+        let load_tasks = load_tasks.clone();
+
+        use_effect_with((), move |_| {
+            let has_running = tasks.iter().any(|t| matches!(t.status, TaskStatus::Running));
+
+            if has_running {
+                let load_tasks = load_tasks.clone();
+                Timeout::new(2000, move || {
+                    load_tasks.emit(());
+                }).forget();
+            }
+
+            || ()
+        });
+    }
+
+    // 创建扫描任务
+    let on_create_scan = {
+        let scan_name = scan_name.clone();
+        let scan_targets = scan_targets.clone();
+        let scan_strategy = scan_strategy.clone();
+        let scan_engine = scan_engine.clone();
+        let show_create_modal = show_create_modal.clone();
+        let token = token.clone();
+        let load_tasks = load_tasks.clone();
+
+        Callback::from(move |_| {
+            let name = (*scan_name).clone();
+            let targets: Vec<String> = (*scan_targets).clone()
+                .split('\n')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            let strategy = (*scan_strategy).clone();
+            let engine = (*scan_engine).clone();
+            let token = token.clone();
+            let load_tasks = load_tasks.clone();
+
+            spawn_local(async move {
+                let request = CreateAdvancedScanRequest {
+                    name: name.clone(),
+                    targets: targets.clone(),
+                    strategy,
+                    engine,
+                    concurrency: Some(1000),
+                    timeout_ms: Some(5000),
+                    service_detection: Some(true),
+                    os_detection: Some(false),
+                    web_fingerprint: Some(true),
+                    cloud_tag_sync: Some(true),
+                };
+
+                let json = serde_json::to_string(&request).unwrap();
+                let http_req = Request::post("http://localhost:3003/api/scan/advanced")
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(json)
+                    .unwrap();
+                let resp = http_req.send().await;
+
+                match resp {
+                    Ok(response) if response.ok() => {
+                        // 刷新任务列表
+                        load_tasks.emit(());
+                    }
+                    Ok(response) => {
+                        let status = response.status();
+                        gloo_console::error!("Create scan failed with status:", status as i32);
+                    }
+                    Err(e) => {
+                        gloo_console::error!("Network Error:", e.to_string());
+                    }
+                }
+            });
+
+            show_create_modal.set(false);
+        })
+    };
+
+    // Modal open/close callbacks
+    let on_open_modal = {
+        let show_create_modal = show_create_modal.clone();
+        Callback::from(move |_| show_create_modal.set(true))
+    };
+
+    let on_close_modal = {
+        let show_create_modal = show_create_modal.clone();
+        Callback::from(move |_| show_create_modal.set(false))
+    };
+
+    // Input callbacks
+    let on_scan_name_input = {
+        let scan_name = scan_name.clone();
+        Callback::from(move |e: InputEvent| {
+            if let Some(input) = e.target_dyn_into::<HtmlInputElement>() {
+                scan_name.set(input.value());
+            }
+        })
+    };
+
+    let on_scan_targets_input = {
+        let scan_targets = scan_targets.clone();
+        Callback::from(move |e: InputEvent| {
+            if let Some(input) = e.target_dyn_into::<HtmlTextAreaElement>() {
+                scan_targets.set(input.value());
+            }
+        })
+    };
+
+    let status_class = |status: &TaskStatus| -> &'static str {
+        match status {
+            TaskStatus::Pending => "is-warning",
+            TaskStatus::Running => "is-info",
+            TaskStatus::Completed => "is-success",
+            TaskStatus::Failed => "is-danger",
+        }
+    };
+
+    let on_strategy_change = {
+        let scan_strategy = scan_strategy.clone();
+        Callback::from(move |e: Event| {
+            if let Some(select) = e.target_dyn_into::<HtmlSelectElement>() {
+                let value = select.value();
+                let strategy = match value.as_str() {
+                    "Quick" => ScanStrategy::Quick,
+                    "Standard" => ScanStrategy::Standard,
+                    "Full" => ScanStrategy::Full,
+                    "Cloud" => ScanStrategy::Cloud,
+                    _ => ScanStrategy::Standard,
+                };
+                scan_strategy.set(strategy);
+            }
+        })
+    };
+
+    let on_engine_change = {
+        let scan_engine = scan_engine.clone();
+        Callback::from(move |e: Event| {
+            if let Some(select) = e.target_dyn_into::<HtmlSelectElement>() {
+                let value = select.value();
+                let engine = match value.as_str() {
+                    "BasicTcp" => ScanEngine::BasicTcp,
+                    "RustScan" => ScanEngine::RustScan,
+                    "Nmap" => ScanEngine::Nmap,
+                    "Hybrid" => ScanEngine::Hybrid,
+                    _ => ScanEngine::Hybrid,
+                };
+                scan_engine.set(engine);
+            }
+        })
+    };
+
+    // 导出扫描结果
+    let on_export_results = {
+        let token = token.clone();
+
+        Callback::from(move |task_id: String| {
+            let token = token.clone();
+            let task_id_clone = task_id.clone();
+
+            spawn_local(async move {
+                if let Ok(resp) = Request::get(&format!(
+                    "http://localhost:3003/api/scan/advanced/tasks/{}/export",
+                    task_id_clone
+                ))
+                .header("Authorization", &token)
+                .send()
+                .await
+                {
+                    if let Ok(results) = resp.json::<Vec<shared::ScanResult>>().await {
+                        // 转换为 CSV 格式
+                        let mut csv = String::from("IP,Status,Open Ports,Services\n");
+                        for result in &results {
+                            let status = if result.is_alive { "Alive" } else { "Down" };
+                            let ports: Vec<String> = result.open_ports.iter()
+                                .map(|p| format!("{}", p.port))
+                                .collect();
+                            let services: Vec<String> = result.open_ports.iter()
+                                .filter_map(|p| p.service.as_ref())
+                                .cloned()
+                                .collect();
+
+                            csv.push_str(&format!(
+                                "{},{},{},{}\n",
+                                result.ip,
+                                status,
+                                ports.join(";"),
+                                services.join(";")
+                            ));
+                        }
+
+                        // 下载 CSV 文件
+                        if let Some(window) = web_sys::window() {
+                            let blob_array = Array::new();
+                            let bytes = js_sys::Uint8Array::from(csv.as_bytes());
+                            blob_array.push(&bytes);
+
+                            let js_blob = web_sys::Blob::new_with_u8_array_sequence_and_options(
+                                &blob_array.into(),
+                                web_sys::BlobPropertyBag::new().type_("text/csv")
+                            ).unwrap();
+
+                            let url = Url::create_object_url_with_blob(&js_blob).unwrap();
+
+                            if let Some(document) = window.document() {
+                                let a = document.create_element("a").unwrap();
+                                a.set_attribute("href", &url).unwrap();
+                                a.set_attribute("download", "scan_results.csv").unwrap();
+                                let event = web_sys::Event::new("click").unwrap();
+                                a.dispatch_event(&event).unwrap();
+                            }
+                        }
+                    }
+                }
+            });
+        })
+    };
+
+    html! {
+        <div class="container p-4">
+            <div class="level">
+                <div class="level-left">
+                    <h1 class="title">{ lang.t("advanced_scanning") }</h1>
+                </div>
+                <div class="level-right">
+                    <button class="button is-primary" onclick={on_open_modal}>
+                        { lang.t("create_scan") }
+                    </button>
+                </div>
+            </div>
+
+            // 创建扫描任务对话框
+            if *show_create_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_modal.clone()}></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ lang.t("create_scan") }</p>
+                            <button class="delete" aria-label="close" onclick={on_close_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ lang.t("scan_name") }</label>
+                                <div class="control">
+                                    <input
+                                        class="input"
+                                        type="text"
+                                        value={(*scan_name).clone()}
+                                        oninput={on_scan_name_input}
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ lang.t("targets") }</label>
+                                <div class="control">
+                                    <textarea
+                                        class="textarea"
+                                        rows="5"
+                                        placeholder="192.168.1.1&#10;192.168.1.100-192.168.1.200&#10;10.0.0.0/24"
+                                        value={(*scan_targets).clone()}
+                                        oninput={on_scan_targets_input}
+                                    ></textarea>
+                                    <p class="help">{"支持单个 IP、IP 范围（192.168.1.1-192.168.1.100）或 CIDR（192.168.1.0/24），每行一个"}</p>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ lang.t("strategy") }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            onchange={on_strategy_change}
+                                        >
+                                            <option value="Quick" selected={*scan_strategy == ScanStrategy::Quick}>{"快速扫描 (TOP 100)"}</option>
+                                            <option value="Standard" selected={*scan_strategy == ScanStrategy::Standard}>{"标准扫描 (TOP 1000)"}</option>
+                                            <option value="Full" selected={*scan_strategy == ScanStrategy::Full}>{"全端口扫描 (1-65535)"}</option>
+                                            <option value="Cloud" selected={*scan_strategy == ScanStrategy::Cloud}>{"云平台优化扫描"}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ lang.t("engine") }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            onchange={on_engine_change}
+                                        >
+                                            <option value="Hybrid" selected={*scan_engine == ScanEngine::Hybrid}>{"混合模式 (推荐)"}</option>
+                                            <option value="RustScan" selected={*scan_engine == ScanEngine::RustScan}>{"RustScan (极速)"}</option>
+                                            <option value="Nmap" selected={*scan_engine == ScanEngine::Nmap}>{"Nmap (深度)"}</option>
+                                            <option value="BasicTcp" selected={*scan_engine == ScanEngine::BasicTcp}>{"基础 TCP (兼容)"}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="checkbox">
+                                    <input type="checkbox" checked={true} />
+                                    {"服务指纹识别"}
+                                </label>
+                                <label class="checkbox">
+                                    <input type="checkbox" />
+                                    {"操作系统识别"}
+                                </label>
+                                <label class="checkbox">
+                                    <input type="checkbox" checked={true} />
+                                    {"云平台标签同步"}
+                                </label>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot">
+                            <button class="button is-success" onclick={on_create_scan}>
+                                { lang.t("start_scan") }
+                            </button>
+                            <button class="button" onclick={on_close_modal.clone()}>{"取消"}</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            // 扫描任务列表
+            <div class="box mt-4">
+                if (*tasks).is_empty() && *loading {
+                    <p>{"Loading..." }</p>
+                } else if (*tasks).is_empty() {
+                    <div class="has-text-centered">
+                        <p class="has-text-grey">{"暂无扫描任务"}</p>
+                    </div>
+                } else {
+                    <table class="table is-fullwidth is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{ lang.t("scan_name") }</th>
+                                <th>{"目标数量"}</th>
+                                <th>{"策略"}</th>
+                                <th>{"引擎"}</th>
+                                <th>{ lang.t("scan_progress") }</th>
+                                <th>{"状态"}</th>
+                                <th>{"操作"}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            { for tasks.iter().map(|task| {
+                                let progress_percent = (task.progress * 100.0) as i32;
+                                let status_str = format!("{:?}", task.status);
+                                let task_id = task.id.clone();
+                                html! {
+                                    <tr>
+                                        <td>{ &task.name }</td>
+                                        <td>{ task.total_count }</td>
+                                        <td>{ format!("{:?}", task.config.strategy) }</td>
+                                        <td>{ format!("{:?}", task.config.engine) }</td>
+                                        <td>
+                                            <progress
+                                                value={format!("{}", task.progress)}
+                                                max="1"
+                                                class={if task.progress >= 1.0 { "progress is-success" } else { "progress is-primary" }}
+                                            >
+                                                { format!("{}%", progress_percent) }
+                                            </progress>
+                                            <span class="ml-2">{ format!("{}%", progress_percent) }</span>
+                                        </td>
+                                        <td>
+                                            <span class={format!("tag {}", status_class(&task.status))}>
+                                                { status_str }
+                                            </span>
+                                        </td>
+                                        <td>
+                                            if task.status == TaskStatus::Running {
+                                                <button class="button is-small is-warning is-light">{"取消"}</button>
+                                            } else if task.status == TaskStatus::Completed {
+                                                <button
+                                                    class="button is-small is-info is-light"
+                                                    onclick={on_export_results.reform(move |_| task_id.clone())}
+                                                >{"导出结果"}</button>
+                                            }
+                                            <button class="button is-small is-danger is-light">{"删除"}</button>
+                                        </td>
+                                    </tr>
+                                }
+                            })}
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+}
+
+
+
+// ============== User Profile Component ==============
+// ============== User Profile Component ==============
+
+#[derive(Properties, PartialEq)]
+struct UserProfileProps {
+    current_page: UseStateHandle<Page>,
+}
+
+#[function_component]
+fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
+    let lang = use_state(|| Language::Zh);
+    let current_user = use_state(|| None);
+    let token = get_auth_token();
+
+    // 修改密码状态
+    let show_change_password = use_state(|| false);
+    let current_password = use_state(|| "".to_string());
+    let new_password = use_state(|| "".to_string());
+    let confirm_password = use_state(|| "".to_string());
+    let message = use_state(|| None as Option<(String, String)>); // (type, message)
+
+    // 加载当前用户信息
+    {
+        let current_user = current_user.clone();
+
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                if let Some(auth_user) = get_auth_user() {
+                    current_user.set(Some(auth_user));
+                }
+            });
+            || ()
+        });
+    }
+
+    let on_logout = {
+        let current_page = current_page.clone();
+        Callback::from(move |_| {
+            if let Some(window) = web_sys::window() {
+                let storage = window.local_storage().unwrap().unwrap();
+                storage.delete("auth_token").unwrap();
+                storage.delete("auth_user").unwrap();
+            }
+            current_page.set(Page::Login);
+        })
+    };
+
+    let on_change_password = {
+        let show_change_password = show_change_password.clone();
+        let message = message.clone();
+        Callback::from(move |_| {
+            show_change_password.set(true);
+            message.set(None);
+        })
+    };
+
+    let on_close_modal = {
+        let show_change_password = show_change_password.clone();
+        let message = message.clone();
+        Callback::from(move |_| {
+            show_change_password.set(false);
+            message.set(None);
+        })
+    };
+
+    let on_submit_password = {
+        let token = token.clone();
+        let current_pwd = current_password.clone();
+        let new_pwd = new_password.clone();
+        let confirm_pwd = confirm_password.clone();
+        let show_change_password = show_change_password.clone();
+        let msg = message.clone();
+        let lang = lang.clone();
+
+        Callback::from(move |e: SubmitEvent| {
+            e.prevent_default();
+
+            // 验证密码
+            if *new_pwd != *confirm_pwd {
+                msg.set(Some(("is-danger".to_string(), lang.t("password_mismatch"))));
+                return;
+            }
+
+            if new_pwd.len() < 6 {
+                msg.set(Some(("is-danger".to_string(), "密码长度至少6位".to_string())));
+                return;
+            }
+
+            let token = token.clone();
+            let current_pwd = current_pwd.clone();
+            let new_pwd = new_pwd.clone();
+            let show_change_password = show_change_password.clone();
+            let msg = msg.clone();
+            let lang = lang.clone();
+
+            spawn_local(async move {
+                match Request::post("http://localhost:3003/api/users/change-password")
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(
+                        serde_json::to_string(&(serde_json::json!({
+                            "current_password": current_pwd.as_str(),
+                            "new_password": new_pwd.as_str(),
+                        }))).unwrap_or_default()
+                    )
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        msg.set(Some(("is-success".to_string(), lang.t("password_updated"))));
+                        gloo_timers::callback::Timeout::new(1500, move || {
+                            show_change_password.set(false);
+                        }).forget();
+                    }
+                    Ok(resp) => {
+                        if let Ok(text) = resp.text().await {
+                            msg.set(Some(("is-danger".to_string(), text)));
+                        }
+                    }
+                    Err(e) => {
+                        msg.set(Some(("is-danger".to_string(), format!("请求失败: {:?}", e))));
+                    }
+                }
+            });
+        })
+    };
+
+    match current_user.as_ref() {
+        None => html! {
+            <div class="section">
+                <div class="container">
+                    <div class="has-text-centered">
+                        <progress class="progress is-small is-info" max="100">{"30%"}</progress>
+                        <p class="mt-4 has-text-grey">{"加载中..."}</p>
+                    </div>
+                </div>
+            </div>
+        },
+        Some(user) => {
+            let (role_display, role_color) = match &user.role {
+                Role::SysAdmin => ("系统管理员", "is-primary"),
+                Role::SecAdmin => ("安全管理员", "is-success"),
+                Role::Auditor => ("审计员", "is-warning"),
+                Role::Custom(name) => (name.as_str(), "is-info"),
+            };
+
+            let total_permissions = user.permissions.as_ref().map(|p| {
+                let mut count = 0;
+                if p.can_create_scan { count += 1; }
+                if p.can_delete_scan { count += 1; }
+                if p.can_export_scan { count += 1; }
+                if p.can_view_assets { count += 1; }
+                if p.can_create_asset { count += 1; }
+                if p.can_update_asset { count += 1; }
+                if p.can_delete_asset { count += 1; }
+                if p.can_view_cloud { count += 1; }
+                if p.can_manage_cloud { count += 1; }
+                if p.can_delete_cloud { count += 1; }
+                if p.can_sync_cloud { count += 1; }
+                if p.can_view_risks { count += 1; }
+                if p.can_resolve_risk { count += 1; }
+                if p.can_delete_risk { count += 1; }
+                if p.can_view_users { count += 1; }
+                if p.can_create_user { count += 1; }
+                if p.can_update_user { count += 1; }
+                if p.can_delete_user { count += 1; }
+                if p.can_manage_permissions { count += 1; }
+                if p.can_view_audit_logs { count += 1; }
+                if p.can_view_zones { count += 1; }
+                if p.can_manage_zones { count += 1; }
+                count
+            }).unwrap_or(0);
+
+            html! {
+                <div class="section" style="background-color: #f5f7fa; min-height: 100vh;">
+                    <div class="container">
+                        // 页面标题
+                        <div class="level mb-5">
+                            <div class="level-left">
+                                <h1 class="title is-3">
+                                    <span class="icon mr-2"><i class="fas fa-user-circle"></i></span>
+                                    { lang.t("user_profile") }
+                                </h1>
+                            </div>
+                            <div class="level-right">
+                                <button class="button is-danger is-outlined" onclick={on_logout}>
+                                    <span class="icon"><i class="fas fa-sign-out-alt"></i></span>
+                                    <span>{ lang.t("logout") }</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="columns">
+                            // 左侧：个人信息卡片
+                            <div class="column is-4">
+                                // 用户信息卡片
+                                <div class="card mb-4">
+                                    <div class="card-content">
+                                        <div class="has-text-centered">
+                                            <div class="image is-128x128 is-inline-block mb-3">
+                                                <img class="is-rounded" 
+                                                     src="https://bulma.io/images/placeholders/128x128.png" 
+                                                     alt="User Avatar"
+                                                     style="border: 4px solid #3273dc; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+                                            </div>
+                                            <h2 class="title is-4 mb-1">{ &user.username }</h2>
+                                            <span class={classes!("tag", "is-medium", role_color)}>
+                                                { role_display }
+                                            </span>
+                                        </div>
+
+                                        <hr class="my-4" />
+
+                                        <div class="content">
+                                            <table class="table is-fullwidth is-borderless">
+                                                <tbody>
+                                                    <tr>
+                                                        <td class="has-text-grey-light">{ "用户 ID" }</td>
+                                                        <td class="has-text-right">
+                                                            <code class="is-size-7">{ &user.id[..8] }{"..."}</code>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="has-text-grey">{ "📅 " }{ lang.t("created_at") }</td>
+                                                        <td class="has-text-right">
+                                                            { format!("{}", user.created_at.format("%Y-%m-%d")) }
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="has-text-grey">{ "🔑 拥有权限" }</td>
+                                                        <td class="has-text-right">
+                                                            <span class="tag is-info">{ format!("{} 项", total_permissions) }</span>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        <div class="buttons is-centered">
+                                            <button class="button is-info is-fullwidth" onclick={on_change_password}>
+                                                <span class="icon"><i class="fas fa-key"></i></span>
+                                                <span>{ lang.t("change_password") }</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                // 账户安全提示
+                                <div class="card">
+                                    <div class="card-content">
+                                        <p class="title is-6 mb-2">
+                                            <span class="icon has-text-info"><i class="fas fa-shield-alt"></i></span>
+                                            { "安全提示" }
+                                        </p>
+                                        <div class="content is-small">
+                                            <ul>
+                                                <li>{"定期修改密码以保护账户安全"}</li>
+                                                <li>{"不要与他人分享账户信息"}</li>
+                                                <li>{"退出时记得点击退出登录"}</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            // 右侧：权限信息
+                            <div class="column is-8">
+                                if let Some(permissions) = &user.permissions {
+                                    <div class="columns is-multiline">
+                                        // 扫描权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-search has-text-primary"></i></span>
+                                                        {"扫描权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{ 
+                                                            format!("{}/3", 
+                                                                [permissions.can_create_scan, permissions.can_delete_scan, permissions.can_export_scan]
+                                                                .iter().filter(|&&x| x).count())
+                                                            }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_create_scan, permissions.can_delete_scan, permissions.can_export_scan]
+                                                            .iter()
+                                                            .zip(["创建扫描", "删除扫描", "导出结果"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 资产权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-box has-text-info"></i></span>
+                                                        {"资产权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{ 
+                                                            format!("{}/4", 
+                                                                [permissions.can_view_assets, permissions.can_create_asset, permissions.can_update_asset, permissions.can_delete_asset]
+                                                                .iter().filter(|&&x| x).count())
+                                                            }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_assets, permissions.can_create_asset, permissions.can_update_asset, permissions.can_delete_asset]
+                                                            .iter()
+                                                            .zip(["查看资产", "创建资产", "更新资产", "删除资产"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 云资产权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-cloud has-text-link"></i></span>
+                                                        {"云资产权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{ 
+                                                            format!("{}/4", 
+                                                                [permissions.can_view_cloud, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
+                                                                .iter().filter(|&&x| x).count())
+                                                            }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_cloud, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
+                                                            .iter()
+                                                            .zip(["查看云资产", "管理云资产", "删除云资产", "同步云资产"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 风险权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-exclamation-triangle has-text-warning"></i></span>
+                                                        {"风险权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{ 
+                                                            format!("{}/3", 
+                                                                [permissions.can_view_risks, permissions.can_resolve_risk, permissions.can_delete_risk]
+                                                                .iter().filter(|&&x| x).count())
+                                                            }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_risks, permissions.can_resolve_risk, permissions.can_delete_risk]
+                                                            .iter()
+                                                            .zip(["查看风险", "处置风险", "删除风险"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 用户管理权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-users-cog has-text-primary"></i></span>
+                                                        {"用户管理权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{ 
+                                                            format!("{}/5", 
+                                                                [permissions.can_view_users, permissions.can_create_user, permissions.can_update_user, permissions.can_delete_user, permissions.can_manage_permissions]
+                                                                .iter().filter(|&&x| x).count())
+                                                            }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_users, permissions.can_create_user, permissions.can_update_user, permissions.can_delete_user, permissions.can_manage_permissions]
+                                                            .iter()
+                                                            .zip(["查看用户", "创建用户", "更新用户", "删除用户", "管理权限"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 审计权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-clipboard-list has-text-grey"></i></span>
+                                                        {"审计权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{
+                                                            format!("{}/1",
+                                                                [permissions.can_view_audit_logs]
+                                                                .iter().filter(|&&x| x).count())
+                                                        }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_audit_logs]
+                                                            .iter()
+                                                            .zip(["查看审计日志"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 区域管理权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-globe has-text-success"></i></span>
+                                                        {"区域管理权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{
+                                                            format!("{}/2",
+                                                                [permissions.can_view_zones, permissions.can_manage_zones]
+                                                                .iter().filter(|&&x| x).count())
+                                                        }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_zones, permissions.can_manage_zones]
+                                                            .iter()
+                                                            .zip(["查看区域", "管理区域"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                } else {
+                                    <div class="notification is-warning is-light">
+                                        <p class="has-text-centered">
+                                            <span class="icon is-medium"><i class="fas fa-exclamation-circle"></i></span>
+                                            <span class="ml-2">{"暂无权限信息配置"}</span>
+                                        </p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        // 修改密码对话框
+                        if *show_change_password {
+                            <div class="modal is-active">
+                                <div class="modal-background" onclick={on_close_modal.clone()}></div>
+                                <div class="modal-card" style="max-width: 450px;">
+                                    <header class="modal-card-head">
+                                        <p class="modal-card-title">
+                                            <span class="icon mr-2"><i class="fas fa-key"></i></span>
+                                            { lang.t("change_password") }
+                                        </p>
+                                        <button class="delete" aria-label="close" onclick={on_close_modal.clone()}></button>
+                                    </header>
+                                    <section class="modal-card-body">
+                                        if let Some((msg_type, msg_text)) = message.as_ref() {
+                                            <div class={classes!("notification", msg_type)}>
+                                                <button class="delete" onclick={let message = message.clone(); move |_| message.set(None)}></button>
+                                                { msg_text }
+                                            </div>
+                                        }
+
+                                        <form onsubmit={on_submit_password}>
+                                            <div class="field">
+                                                <label class="label">{ lang.t("current_password") }</label>
+                                                <div class="control has-icons-left">
+                                                    <input
+                                                        type="password"
+                                                        class="input"
+                                                        placeholder="请输入当前密码"
+                                                        value={(*current_password).clone()}
+                                                        onchange={let current_password = current_password.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            current_password.set(input.value());
+                                                        }}
+                                                        required=true
+                                                    />
+                                                    <span class="icon is-small is-left">
+                                                        <i class="fas fa-lock"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="field">
+                                                <label class="label">{ lang.t("new_password") }</label>
+                                                <div class="control has-icons-left">
+                                                    <input
+                                                        type="password"
+                                                        class="input"
+                                                        placeholder="请输入新密码（至少6位）"
+                                                        value={(*new_password).clone()}
+                                                        onchange={let new_password = new_password.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            new_password.set(input.value());
+                                                        }}
+                                                        required=true
+                                                        minlength="6"
+                                                    />
+                                                    <span class="icon is-small is-left">
+                                                        <i class="fas fa-key"></i>
+                                                    </span>
+                                                </div>
+                                                <p class="help">{"密码长度至少 6 位字符"}</p>
+                                            </div>
+
+                                            <div class="field">
+                                                <label class="label">{ lang.t("confirm_password") }</label>
+                                                <div class="control has-icons-left">
+                                                    <input
+                                                        type="password"
+                                                        class="input"
+                                                        placeholder="请再次输入新密码"
+                                                        value={(*confirm_password).clone()}
+                                                        onchange={let confirm_password = confirm_password.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            confirm_password.set(input.value());
+                                                        }}
+                                                        required=true
+                                                        minlength="6"
+                                                    />
+                                                    <span class="icon is-small is-left">
+                                                        <i class="fas fa-check-circle"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="field mt-5">
+                                                <div class="control">
+                                                    <button type="submit" class="button is-primary is-fullwidth">
+                                                        <span class="icon"><i class="fas fa-save"></i></span>
+                                                        <span>{ lang.t("save") }</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </section>
+                                    <footer class="modal-card-foot">
+                                        <button class="button" onclick={on_close_modal.clone()}>{ lang.t("cancel") }</button>
+                                    </footer>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    }
+}
+
+// ============== Password Policy Management Component ==============
+
+#[function_component]
+fn PasswordPolicyManagement() -> Html {
+    let lang = use_state(|| Language::Zh);
+    let policy = use_state(|| None as Option<PasswordPolicy>);
+    let loading = use_state(|| true);
+    let message = use_state(|| None as Option<(String, String)>); // (type, message)
+    let token = get_auth_token();
+
+    // Form state
+    let min_length = use_state(|| 6u32);
+    let require_uppercase = use_state(|| false);
+    let require_lowercase = use_state(|| false);
+    let require_number = use_state(|| false);
+    let require_special = use_state(|| false);
+    let max_age_days = use_state(|| Some(90u32));  // 默认90天
+    let prevent_reuse = use_state(|| 3u32);
+    let min_strength = use_state(|| "weak".to_string());
+    let max_login_attempts = use_state(|| Some(5u32));
+    let lockout_duration_minutes = use_state(|| 30u32);
+
+    // Load current policy
+    {
+        let policy = policy.clone();
+        let loading = loading.clone();
+        let token = token.clone();
+        let min_length = min_length.clone();
+        let require_uppercase = require_uppercase.clone();
+        let require_lowercase = require_lowercase.clone();
+        let require_number = require_number.clone();
+        let require_special = require_special.clone();
+        let max_age_days = max_age_days.clone();
+        let prevent_reuse = prevent_reuse.clone();
+        let min_strength = min_strength.clone();
+        let max_login_attempts = max_login_attempts.clone();
+        let lockout_duration_minutes = lockout_duration_minutes.clone();
+        let msg = message.clone();
+        let lang_clone = lang.clone();
+
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                match Request::get("http://localhost:3003/api/password-policy")
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        if response.ok() {
+                            if let Ok(p) = response.json::<PasswordPolicy>().await {
+                                min_length.set(p.min_length);
+                                require_uppercase.set(p.require_uppercase);
+                                require_lowercase.set(p.require_lowercase);
+                                require_number.set(p.require_number);
+                                require_special.set(p.require_special);
+                                max_age_days.set(p.max_age_days);
+                                prevent_reuse.set(p.prevent_reuse);
+                                min_strength.set(p.min_strength.clone());
+                                max_login_attempts.set(p.max_login_attempts);
+                                lockout_duration_minutes.set(p.lockout_duration_minutes);
+                                policy.set(Some(p));
+                            }
+                        } else {
+                            msg.set(Some(("is-danger".to_string(), lang_clone.t("policy_error"))));
+                        }
+                    }
+                    Err(_) => {
+                        msg.set(Some(("is-danger".to_string(), lang_clone.t("policy_error"))));
+                    }
+                }
+                loading.set(false);
+            });
+            || ()
+        });
+    }
+
+    let on_save = {
+        let token = token.clone();
+        let policy_state = policy.clone();
+        let min_length = min_length.clone();
+        let require_uppercase = require_uppercase.clone();
+        let require_lowercase = require_lowercase.clone();
+        let require_number = require_number.clone();
+        let require_special = require_special.clone();
+        let max_age_days = max_age_days.clone();
+        let prevent_reuse = prevent_reuse.clone();
+        let min_strength = min_strength.clone();
+        let max_login_attempts = max_login_attempts.clone();
+        let lockout_duration_minutes = lockout_duration_minutes.clone();
+        let msg = message.clone();
+        let lang = lang.clone();
+
+        Callback::from(move |e: SubmitEvent| {
+            e.prevent_default();
+
+            let new_policy = PasswordPolicy {
+                min_length: *min_length,
+                require_uppercase: *require_uppercase,
+                require_lowercase: *require_lowercase,
+                require_number: *require_number,
+                require_special: *require_special,
+                max_age_days: *max_age_days,
+                prevent_reuse: *prevent_reuse,
+                min_strength: (*min_strength).clone(),
+                max_login_attempts: *max_login_attempts,
+                lockout_duration_minutes: *lockout_duration_minutes,
+            };
+
+            let token = token.clone();
+            let policy_state = policy_state.clone();
+            let msg = msg.clone();
+            let lang = lang.clone();
+
+            spawn_local(async move {
+                match Request::put("http://localhost:3003/api/password-policy")
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&new_policy).unwrap_or_default())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        if response.ok() {
+                            if let Ok(p) = response.json::<PasswordPolicy>().await {
+                                policy_state.set(Some(p));
+                                msg.set(Some(("is-success".to_string(), lang.t("policy_saved"))));
+                            }
+                        } else {
+                            msg.set(Some(("is-danger".to_string(), lang.t("policy_error"))));
+                        }
+                    }
+                    Err(_) => {
+                        msg.set(Some(("is-danger".to_string(), lang.t("policy_error"))));
+                    }
+                }
+            });
+        })
+    };
+
+    let on_reset = {
+        let policy = policy.clone();
+        let min_length = min_length.clone();
+        let require_uppercase = require_uppercase.clone();
+        let require_lowercase = require_lowercase.clone();
+        let require_number = require_number.clone();
+        let require_special = require_special.clone();
+        let max_age_days = max_age_days.clone();
+        let prevent_reuse = prevent_reuse.clone();
+        let min_strength = min_strength.clone();
+        let max_login_attempts = max_login_attempts.clone();
+        let lockout_duration_minutes = lockout_duration_minutes.clone();
+
+        Callback::from(move |_| {
+            if let Some(p) = (*policy).clone() {
+                min_length.set(p.min_length);
+                require_uppercase.set(p.require_uppercase);
+                require_lowercase.set(p.require_lowercase);
+                require_number.set(p.require_number);
+                require_special.set(p.require_special);
+                max_age_days.set(p.max_age_days);
+                prevent_reuse.set(p.prevent_reuse);
+                min_strength.set(p.min_strength);
+                max_login_attempts.set(p.max_login_attempts);
+                lockout_duration_minutes.set(p.lockout_duration_minutes);
+            }
+        })
+    };
+
+    html! {
+        <div class="container p-4">
+            <h1 class="title">{ lang.t("password_policy_management") }</h1>
+
+            if *loading {
+                <div class="notification is-info">
+                    { "Loading..." }
+                </div>
+            } else {
+                if let Some((msg_type, msg_text)) = message.as_ref() {
+                    <div class={classes!("notification", msg_type)}>
+                        <button class="delete" onclick={let message = message.clone(); move |_| message.set(None)}></button>
+                        { msg_text }
+                    </div>
+                }
+
+                <div class="box">
+                    <form onsubmit={on_save}>
+                        <div class="columns">
+                            // Left column - basic settings
+                            <div class="column is-6">
+                                <div class="field">
+                                    <label class="label">{ lang.t("min_length") }</label>
+                                    <div class="control">
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            min="1"
+                                            max="128"
+                                            value={(*min_length).to_string()}
+                                            onchange={let min_length = min_length.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                if let Ok(val) = input.value().parse::<u32>() {
+                                                    min_length.set(val);
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    <p class="help">{"密码的最小长度（1-128位）"}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="label">{ lang.t("max_age_days") }</label>
+                                    <div class="control">
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            min="0"
+                                            placeholder="0表示不限制"
+                                            value={max_age_days.map(|d| d.to_string()).unwrap_or_else(|| "0".to_string())}
+                                            onchange={let max_age_days = max_age_days.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                let val = input.value();
+                                                if let Ok(d) = val.parse::<u32>() {
+                                                    // 0 表示不限制，设置为 None
+                                                    if d == 0 {
+                                                        max_age_days.set(None);
+                                                    } else {
+                                                        max_age_days.set(Some(d));
+                                                    }
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    <p class="help">{"密码最大有效期（天），输入 0 表示不限制"}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="label">{ lang.t("prevent_reuse") }</label>
+                                    <div class="control">
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            min="0"
+                                            max="50"
+                                            value={(*prevent_reuse).to_string()}
+                                            onchange={let prevent_reuse = prevent_reuse.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                if let Ok(val) = input.value().parse::<u32>() {
+                                                    prevent_reuse.set(val);
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    <p class="help">{"防止用户重用最近 N 次的旧密码"}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="label">{ lang.t("min_strength") }</label>
+                                    <div class="control has-icons-left">
+                                        <div class="select is-fullwidth">
+                                            <select
+                                                value={(*min_strength).clone()}
+                                                onchange={let min_strength = min_strength.clone(); move |e: Event| {
+                                                    let select = e.target_unchecked_into::<HtmlSelectElement>();
+                                                    min_strength.set(select.value());
+                                                }}
+                                            >
+                                                <option value="weak">{ lang.t("weak") }</option>
+                                                <option value="medium">{ lang.t("medium") }</option>
+                                                <option value="strong">{ lang.t("strong") }</option>
+                                            </select>
+                                        </div>
+                                        <span class="icon is-small is-left">
+                                            <i class="fas fa-shield-alt"></i>
+                                        </span>
+                                    </div>
+                                    <p class="help">{"密码最低强度要求"}</p>
+                                    <div class="box has-background-info-light has-text-info mt-2 p-3">
+                                        <p class="is-size-7 mb-1"><strong>{"密码强度说明："}</strong></p>
+                                        <ul class="is-size-7 ml-4 mt-1">
+                                            <li>{"🔴 弱：长度 < 8 位，或字符类型单一"}</li>
+                                            <li>{"🟡 中：长度 ≥ 8 位，包含 2-3 种字符类型（大小写、数字、特殊字符）"}</li>
+                                            <li>{"🟢 强：长度 ≥ 12 位，包含所有字符类型（大小写、数字、特殊字符）"}</li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <hr class="has-background-grey-light mt-4 mb-4" />
+
+                                <h4 class="title is-6 has-text-primary">{ lang.t("account_lockout") }</h4>
+
+                                <div class="field">
+                                    <label class="label">{ lang.t("max_login_attempts") }</label>
+                                    <div class="control has-icons-left">
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            min="0"
+                                            placeholder="留空表示不限制"
+                                            value={max_login_attempts.map(|n| n.to_string()).unwrap_or_default()}
+                                            onchange={let max_login_attempts = max_login_attempts.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                let val = input.value();
+                                                if val.is_empty() {
+                                                    max_login_attempts.set(None);
+                                                } else if let Ok(n) = val.parse::<u32>() {
+                                                    max_login_attempts.set(Some(n));
+                                                }
+                                            }}
+                                        />
+                                        <span class="icon is-small is-left">
+                                            <i class="fas fa-user-lock"></i>
+                                        </span>
+                                    </div>
+                                    <p class="help">{format!("登录失败多少次后锁定账户，0 或留空表示{}", lang.t("no_limit"))}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="label">{ lang.t("lockout_duration_minutes") }</label>
+                                    <div class="control has-icons-left">
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            min="1"
+                                            max="1440"
+                                            value={(*lockout_duration_minutes).to_string()}
+                                            onchange={let lockout_duration_minutes = lockout_duration_minutes.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                if let Ok(val) = input.value().parse::<u32>() {
+                                                    lockout_duration_minutes.set(val.max(1));
+                                                }
+                                            }}
+                                        />
+                                        <span class="icon is-small is-left">
+                                            <i class="fas fa-clock"></i>
+                                        </span>
+                                    </div>
+                                    <p class="help">{"账户锁定后多久自动解锁（分钟）"}</p>
+                                </div>
+                            </div>
+
+                            // Right column - character requirements
+                            <div class="column is-6">
+                                <div class="field">
+                                    <label class="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={*require_uppercase}
+                                            onchange={let require_uppercase = require_uppercase.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                require_uppercase.set(input.checked());
+                                            }}
+                                        />
+                                        <span class="ml-2">{ lang.t("require_uppercase") }</span>
+                                    </label>
+                                    <p class="help ml-6">{"密码必须包含至少一个大写字母（A-Z）"}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={*require_lowercase}
+                                            onchange={let require_lowercase = require_lowercase.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                require_lowercase.set(input.checked());
+                                            }}
+                                        />
+                                        <span class="ml-2">{ lang.t("require_lowercase") }</span>
+                                    </label>
+                                    <p class="help ml-6">{"密码必须包含至少一个小写字母（a-z）"}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={*require_number}
+                                            onchange={let require_number = require_number.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                require_number.set(input.checked());
+                                            }}
+                                        />
+                                        <span class="ml-2">{ lang.t("require_number") }</span>
+                                    </label>
+                                    <p class="help ml-6">{"密码必须包含至少一个数字（0-9）"}</p>
+                                </div>
+
+                                <div class="field">
+                                    <label class="checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={*require_special}
+                                            onchange={let require_special = require_special.clone(); move |e: Event| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                require_special.set(input.checked());
+                                            }}
+                                        />
+                                        <span class="ml-2">{ lang.t("require_special") }</span>
+                                    </label>
+                                    <p class="help ml-6">{"密码必须包含至少一个特殊字符（如 !@#$%^&*）"}</p>
+                                </div>
+
+                                // Policy preview card
+                                <div class="box has-background-light mt-5">
+                                    <h4 class="title is-6">{"密码要求预览"}</h4>
+                                    <ul class="is-size-7">
+                                        <li>{format!("• 最小长度：{} 位", *min_length)}</li>
+                                        <li>{format!("• 强度要求：{}", match min_strength.as_str() {
+                                            "weak" => "弱",
+                                            "medium" => "中",
+                                            "strong" => "强",
+                                            _ => "未知"
+                                        })}</li>
+                                        <li>{format!("• 大写字母：{}", if *require_uppercase { "✓ 必需" } else { "✗ 不必需" })}</li>
+                                        <li>{format!("• 小写字母：{}", if *require_lowercase { "✓ 必需" } else { "✗ 不必需" })}</li>
+                                        <li>{format!("• 数字：{}", if *require_number { "✓ 必需" } else { "✗ 不必需" })}</li>
+                                        <li>{format!("• 特殊字符：{}", if *require_special { "✓ 必需" } else { "✗ 不必需" })}</li>
+                                        <li>{format!("• 有效期：{}", max_age_days.map(|d| format!("{} 天", d)).unwrap_or("不限制".to_string()))}</li>
+                                        <li>{format!("• 防重用：最近 {} 次", *prevent_reuse)}</li>
+                                        <li>{format!("• 账户锁定：{}", max_login_attempts.map(|n| format!("{} 次失败后锁定", n)).unwrap_or("不限制".to_string()))}</li>
+                                        <li>{format!("• 锁定时长：{} 分钟", *lockout_duration_minutes)}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr />
+
+                        <div class="field is-grouped">
+                            <div class="control">
+                                <button type="submit" class="button is-primary">
+                                    <span class="icon"><i class="fas fa-save"></i></span>
+                                    <span>{ lang.t("save_policy") }</span>
+                                </button>
+                            </div>
+                            <div class="control">
+                                <button type="button" class="button" onclick={on_reset}>
+                                    <span class="icon"><i class="fas fa-undo"></i></span>
+                                    <span>{ lang.t("cancel") }</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                }
+            </div>
+        }
+    }
