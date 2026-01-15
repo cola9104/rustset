@@ -1,18 +1,54 @@
 //! RustSet Frontend - Yew 0.21 Version
 //! Security Asset Management Platform
 
+use serde::{Serialize, Deserialize};
 use gloo_net::http::Request;
+
+// API 基础 URL - 使用 window.location 自动检测
+// 在开发环境可以使用 localhost，在生产环境使用实际访问的地址
+fn api_base_url() -> String {
+    // 尝试从当前页面 URL 获取主机和端口
+    if let Some(window) = web_sys::window() {
+        if let Ok(href) = window.location().href() {
+            // 如果是通过 HTTP 访问的，使用同源的 API 地址（默认端口 3003）
+            if let Ok(host) = window.location().host() {
+                // 将 8080 替换为 3003
+                if host.contains(":8080") {
+                    return host.replace(":8080", ":3003");
+                }
+                // 如果没有端口，添加 3003
+                if !host.contains(':') {
+                    return format!("{}:3003", host);
+                }
+                return host;
+            }
+        }
+    }
+    // 默认回退到 localhost
+    "localhost:3003".to_string()
+}
+
+// 构建 API URL 的辅助函数
+fn api_url(path: &str) -> String {
+    format!("http://{}/api/{}", api_base_url(), path)
+}
+
 use shared::{
     Asset, NetworkZone, Task, TaskStatus,
-    Risk, ZoneConfig, User, Role, LoginRequest, LoginResponse, AuditLog,
+    Risk, ZoneConfig, User, Role, LoginRequest, LoginResponse, AuditLog, CreateUserRequest,
     // Multi-Cloud types
     CloudAsset, CloudAssetStats, CloudProvider, VMStatus, BillingMode,
+    CloudProviderConfigStatus, CloudProviderConfig,
     // Advanced Scanning types
     ScanStrategy, ScanEngine, AdvancedScanConfig, AdvancedScanTask,
     CreateAdvancedScanRequest, ScanResult, Permissions, PasswordPolicy,
+    // Business Resource types
+    BusinessResource, CreateBusinessResourceRequest, UpdateBusinessResourceRequest,
+    // Cloud Service Asset types
+    CloudServiceAsset, CloudServiceAssetQuery, CloudServiceAssetStats,
 };
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{InputEvent, Event, HtmlSelectElement, HtmlTextAreaElement, HtmlInputElement, window, Url};
+use web_sys::{InputEvent, Event, HtmlSelectElement, HtmlTextAreaElement, HtmlInputElement, Url, KeyboardEvent};
 use yew::prelude::*;
 use gloo_timers::callback::Timeout;
 use js_sys::Array;
@@ -25,14 +61,18 @@ pub enum Page {
     Dashboard,
     TaskCenter,
     AdvancedScanning, // 新增高级扫描页面
-    AssetCenter,
-    ZoneManagement,
     RiskCenter,
     UserManagement,
     AuditLogs,
     CloudManagement, // 混合云管理
+    CloudProviderManagement, // 云区对接管理
     UserProfile, // 个人中心
     PasswordPolicyManagement, // 密码策略管理
+    BusinessAcceptance, // 业务受理（保留用于兼容性，实际使用子页面）
+    BusinessApplication, // 业务申请
+    OperationsManagement, // 运维管理（补充信息、审批）
+    AutomationOrchestration, // 自动化资源编排（原运维交付）
+    CloudServiceAssetManagement, // 云服务资产管理（统一纳管物理机+云虚拟机）
 }
 
 // ============== Auth State ==============
@@ -60,6 +100,10 @@ impl Language {
             (Language::En, "username") => "Username".to_string(),
             (Language::Zh, "password") => "密码".to_string(),
             (Language::En, "password") => "Password".to_string(),
+            (Language::Zh, "default_account_hint") => "默认管理员账户".to_string(),
+            (Language::En, "default_account_hint") => "Default Administrator Account".to_string(),
+            (Language::Zh, "change_password_hint") => "首次登录后请修改密码".to_string(),
+            (Language::En, "change_password_hint") => "Please change password after first login".to_string(),
             (Language::Zh, "logout") => "退出登录".to_string(),
             (Language::En, "logout") => "Logout".to_string(),
             (Language::Zh, "user_management") => "👥 用户管理".to_string(),
@@ -102,8 +146,6 @@ impl Language {
             (Language::En, "export_results") => "Export Results".to_string(),
             (Language::Zh, "assets_risks") => "资产与风险".to_string(),
             (Language::En, "assets_risks") => "Assets & Risks".to_string(),
-            (Language::Zh, "asset_management") => "📂 资产管理".to_string(),
-            (Language::En, "asset_management") => "📂 Asset Management".to_string(),
             (Language::Zh, "risk_monitoring") => "⚠️ 风险监控".to_string(),
             (Language::En, "risk_monitoring") => "⚠️ Risk Monitoring".to_string(),
             (Language::Zh, "verify") => "验证".to_string(),
@@ -192,8 +234,6 @@ impl Language {
             (Language::En, "os_detection") => "OS Detection".to_string(),
             (Language::Zh, "site_identify") => "站点指纹识别".to_string(),
             (Language::En, "site_identify") => "Web Fingerprint".to_string(),
-            (Language::Zh, "zone_management") => "🌐 区域管理".to_string(),
-            (Language::En, "zone_management") => "🌐 Zone Management".to_string(),
             (Language::Zh, "cidr") => "CIDR".to_string(),
             (Language::En, "cidr") => "CIDR".to_string(),
             (Language::Zh, "priority") => "优先级".to_string(),
@@ -298,6 +338,8 @@ impl Language {
             // Multi-Cloud Management
             (Language::Zh, "cloud_management") => "☁️ 混合云管理".to_string(),
             (Language::En, "cloud_management") => "☁️ Multi-Cloud".to_string(),
+            (Language::Zh, "cloud_provider_management") => "🌐 云区对接管理".to_string(),
+            (Language::En, "cloud_provider_management") => "🌐 Cloud Providers".to_string(),
             (Language::Zh, "asset_name") => "资产名称".to_string(),
             (Language::En, "asset_name") => "Asset Name".to_string(),
             (Language::Zh, "spec") => "规格".to_string(),
@@ -358,6 +400,101 @@ impl Language {
             (Language::En, "sync_cloud_assets") => "Sync Assets".to_string(),
             (Language::Zh, "expiring_soon") => "即将到期".to_string(),
             (Language::En, "expiring_soon") => "Expiring Soon".to_string(),
+            // Business Acceptance translations
+            (Language::Zh, "business_acceptance") => "📋 业务受理".to_string(),
+            (Language::En, "business_acceptance") => "📋 Business Acceptance".to_string(),
+            (Language::Zh, "business_application") => "📝 业务申请".to_string(),
+            (Language::En, "business_application") => "📝 Business Application".to_string(),
+            (Language::Zh, "operations_management") => "🔧 运维管理".to_string(),
+            (Language::En, "operations_management") => "🔧 Operations".to_string(),
+            (Language::Zh, "automation_orchestration") => "⚙️ 自动化资源编排".to_string(),
+            (Language::En, "automation_orchestration") => "⚙️ Automation Orchestration".to_string(),
+            (Language::Zh, "cloud_service_asset_management") => "🖥️ 云服务资产".to_string(),
+            (Language::En, "cloud_service_asset_management") => "🖥️ Cloud Assets".to_string(),
+            (Language::Zh, "ecs_name") => "ECS名称".to_string(),
+            (Language::En, "ecs_name") => "ECS Name".to_string(),
+            (Language::Zh, "ecs_status") => "ECS状态".to_string(),
+            (Language::En, "ecs_status") => "ECS Status".to_string(),
+            (Language::Zh, "resource_id") => "资源ID".to_string(),
+            (Language::En, "resource_id") => "Resource ID".to_string(),
+            (Language::Zh, "cloud_region") => "云区域".to_string(),
+            (Language::En, "cloud_region") => "Cloud Region".to_string(),
+            (Language::Zh, "cloud_category") => "云类别".to_string(),
+            (Language::En, "cloud_category") => "Cloud Category".to_string(),
+            (Language::Zh, "county_city") => "县市区".to_string(),
+            (Language::En, "county_city") => "County/City".to_string(),
+            (Language::Zh, "vdc_name") => "VDC名称".to_string(),
+            (Language::En, "vdc_name") => "VDC Name".to_string(),
+            (Language::Zh, "customer_name") => "客户名称".to_string(),
+            (Language::En, "customer_name") => "Customer Name".to_string(),
+            (Language::Zh, "application_name") => "应用名称".to_string(),
+            (Language::En, "application_name") => "Application Name".to_string(),
+            (Language::Zh, "contract_name") => "合同名称".to_string(),
+            (Language::En, "contract_name") => "Contract Name".to_string(),
+            (Language::Zh, "instance_id") => "实例ID".to_string(),
+            (Language::En, "instance_id") => "Instance ID".to_string(),
+            (Language::Zh, "ecs_type") => "ECS类型".to_string(),
+            (Language::En, "ecs_type") => "ECS Type".to_string(),
+            (Language::Zh, "ecs_os") => "ECS操作系统".to_string(),
+            (Language::En, "ecs_os") => "ECS OS".to_string(),
+            (Language::Zh, "cpu_cores") => "CPU核数".to_string(),
+            (Language::En, "cpu_cores") => "CPU Cores".to_string(),
+            (Language::Zh, "memory_gb") => "内存(GB)".to_string(),
+            (Language::En, "memory_gb") => "Memory (GB)".to_string(),
+            (Language::Zh, "system_disk") => "系统盘".to_string(),
+            (Language::En, "system_disk") => "System Disk".to_string(),
+            (Language::Zh, "system_disk_size_gb") => "系统盘大小(GB)".to_string(),
+            (Language::En, "system_disk_size_gb") => "System Disk Size (GB)".to_string(),
+            (Language::Zh, "data_disk") => "数据盘".to_string(),
+            (Language::En, "data_disk") => "Data Disk".to_string(),
+            (Language::Zh, "completion_time") => "完成时间".to_string(),
+            (Language::En, "completion_time") => "Completion Time".to_string(),
+            (Language::Zh, "release_time") => "释放时间".to_string(),
+            (Language::En, "release_time") => "Release Time".to_string(),
+            (Language::Zh, "has_security_product") => "安全产品".to_string(),
+            (Language::En, "has_security_product") => "Security Product".to_string(),
+            (Language::Zh, "ip_address") => "IP地址".to_string(),
+            (Language::En, "ip_address") => "IP Address".to_string(),
+            (Language::Zh, "ecs_login_method") => "登录方式".to_string(),
+            (Language::En, "ecs_login_method") => "Login Method".to_string(),
+            (Language::Zh, "ecs_login_username") => "登录用户名".to_string(),
+            (Language::En, "ecs_login_username") => "Login Username".to_string(),
+            (Language::Zh, "ecs_initial_password") => "初始密码".to_string(),
+            (Language::En, "ecs_initial_password") => "Initial Password".to_string(),
+            (Language::Zh, "bastion_address") => "堡垒机地址".to_string(),
+            (Language::En, "bastion_address") => "Bastion Address".to_string(),
+            (Language::Zh, "bastion_admin_account") => "堡垒机账号".to_string(),
+            (Language::En, "bastion_admin_account") => "Bastion Account".to_string(),
+            (Language::Zh, "bastion_initial_password") => "堡垒机密码".to_string(),
+            (Language::En, "bastion_initial_password") => "Bastion Password".to_string(),
+            (Language::Zh, "remarks") => "备注".to_string(),
+            (Language::En, "remarks") => "Remarks".to_string(),
+            (Language::Zh, "running") => "运行中".to_string(),
+            (Language::En, "running") => "Running".to_string(),
+            (Language::Zh, "stopped") => "已停止".to_string(),
+            (Language::En, "stopped") => "Stopped".to_string(),
+            (Language::Zh, "released") => "已释放".to_string(),
+            (Language::En, "released") => "Released".to_string(),
+            (Language::Zh, "add_business_resource") => "添加业务资源".to_string(),
+            (Language::En, "add_business_resource") => "Add Business Resource".to_string(),
+            (Language::Zh, "edit") => "编辑".to_string(),
+            (Language::En, "edit") => "Edit".to_string(),
+            (Language::Zh, "delete") => "删除".to_string(),
+            (Language::En, "delete") => "Delete".to_string(),
+            (Language::Zh, "save") => "保存".to_string(),
+            (Language::En, "save") => "Save".to_string(),
+            (Language::Zh, "cancel") => "取消".to_string(),
+            (Language::En, "cancel") => "Cancel".to_string(),
+            (Language::Zh, "export") => "导出".to_string(),
+            (Language::En, "export") => "Export".to_string(),
+            (Language::Zh, "public_cloud") => "公有云".to_string(),
+            (Language::En, "public_cloud") => "Public Cloud".to_string(),
+            (Language::Zh, "private_cloud") => "私有云".to_string(),
+            (Language::En, "private_cloud") => "Private Cloud".to_string(),
+            (Language::Zh, "hybrid_cloud") => "混合云".to_string(),
+            (Language::En, "hybrid_cloud") => "Hybrid Cloud".to_string(),
+            (Language::Zh, "actions") => "操作".to_string(),
+            (Language::En, "actions") => "Actions".to_string(),
 
             _ => key.to_string(),
         }
@@ -467,7 +604,7 @@ fn Login(props: &LoginProps) -> Html {
                 };
 
                 let json = serde_json::to_string(&req).unwrap();
-                let http_req = Request::post("http://localhost:3003/api/login")
+                let http_req = Request::post(&api_url("login"))
                     .header("Content-Type", "application/json")
                     .body(json)
                     .unwrap();
@@ -584,6 +721,11 @@ fn Login(props: &LoginProps) -> Html {
                                             { lang.t("login") }
                                         </button>
                                     </div>
+                                    <div class="content mt-4 has-text-centered has-text-grey is-size-7">
+                                        <p>{ lang.t("default_account_hint") }</p>
+                                        <p class="is-family-monospace">{ "admin / admin" }</p>
+                                        <p class="has-text-warning-dark mt-2">{ lang.t("change_password_hint") }</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -661,15 +803,24 @@ fn Sidebar(props: &SidebarProps) -> Html {
             if user_role == Some(Role::SecAdmin) {
                 <p class="menu-label">{ lang.t("assets_risks") }</p>
                 <ul class="menu-list">
-                    <li><a onclick={navigate(Page::AssetCenter)}>{ lang.t("asset_management") }</a></li>
-                    <li><a onclick={navigate(Page::ZoneManagement)}>{ lang.t("zone_management") }</a></li>
+                    <li><a onclick={navigate(Page::CloudServiceAssetManagement)}>{ lang.t("cloud_service_asset_management") }</a></li>
                     <li><a onclick={navigate(Page::RiskCenter)}>{ lang.t("risk_monitoring") }</a></li>
+                </ul>
+            }
+            // 业务资源流程: 业务申请 → 运维管理 → 自动化资源编排 → 混合云管理
+            if user_role == Some(Role::SecAdmin) || user_permissions.as_ref().map(|p| p.can_view_assets).unwrap_or(false) {
+                <p class="menu-label">{ "业务流程" }</p>
+                <ul class="menu-list">
+                    <li><a onclick={navigate(Page::BusinessApplication)}>{ lang.t("business_application") }</a></li>
+                    <li><a onclick={navigate(Page::OperationsManagement)}>{ lang.t("operations_management") }</a></li>
+                    <li><a onclick={navigate(Page::AutomationOrchestration)}>{ lang.t("automation_orchestration") }</a></li>
                 </ul>
             }
             // 混合云管理 - 根据用户权限显示
             if user_permissions.as_ref().map(|p| p.can_view_cloud).unwrap_or(false) {
                 <p class="menu-label">{ "Cloud" }</p>
                 <ul class="menu-list">
+                    <li><a onclick={navigate(Page::CloudProviderManagement)}>{ lang.t("cloud_provider_management") }</a></li>
                     <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
                 </ul>
             }
@@ -715,11 +866,11 @@ fn Dashboard() -> Html {
             spawn_local(async move {
                 loading.set(true);
 
-                let assets_req = Request::get("http://localhost:3003/api/assets")
+                let assets_req = Request::get(&api_url("assets"))
                     .header("Authorization", &token)
                     .send()
                     .await;
-                let tasks_req = Request::get("http://localhost:3003/api/tasks")
+                let tasks_req = Request::get(&api_url("tasks"))
                     .header("Authorization", &token)
                     .send()
                     .await;
@@ -808,7 +959,7 @@ fn TaskCenter() -> Html {
 
         move |_| {
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/tasks").header("Authorization", &token).send().await {
+                if let Ok(resp) = Request::get(&api_url("tasks")).header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<Task>>().await {
                         tasks.set(data);
                     }
@@ -895,7 +1046,7 @@ fn RiskCenter() -> Html {
 
         move |_| {
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/risks").header("Authorization", &token).send().await {
+                if let Ok(resp) = Request::get(&api_url("risks")).header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<Risk>>().await {
                         risks.set(data);
                     }
@@ -963,101 +1114,1273 @@ fn RiskCenter() -> Html {
     }
 }
 
-// ============== Asset Center Component ==============
+// ============== Business Application Component (业务申请) ==============
 
 #[function_component]
-fn AssetCenter() -> Html {
+fn BusinessApplication() -> Html {
     let lang = use_state(|| Language::Zh);
-    let assets = use_state(|| Vec::new());
+    let resources = use_state(|| Vec::new());
     let loading = use_state(|| true);
+
+    // Active cloud provider configs (from cloud-provider-configs/active API)
+    let active_configs = use_state(|| Vec::<CloudProviderConfig>::new());
+
+    // Form state for adding/editing
+    let show_form = use_state(|| false);
+    let editing_id = use_state(|| None as Option<i32>);
+    let form_data = use_state(|| CreateBusinessResourceRequest {
+        resource_type: "cloud".to_string(),
+        ecs_name: String::new(),
+        ecs_status: "待审批".to_string(),
+        resource_id: String::new(),
+        cloud_region: String::new(),
+        cloud_category: String::new(),
+        cloud_provider_config_id: None,
+        county_city: None,
+        vdc_name: None,
+        customer_name: String::new(),
+        application_name: None,
+        contract_name: None,
+        instance_id: String::new(),
+        ecs_type: String::new(),
+        ecs_os: String::new(),
+        cpu_cores: 2,
+        memory_gb: 4,
+        system_disk: "ESSD".to_string(),
+        system_disk_size_gb: 40,
+        data_disk: None,
+        completion_time: None,
+        release_time: None,
+        has_security_product: false,
+        ip_address: String::new(),
+        ecs_login_method: None,
+        ecs_login_username: None,
+        ecs_initial_password: None,
+        bastion_address: None,
+        bastion_admin_account: None,
+        bastion_initial_password: None,
+        // 物理机特有字段
+        serial_number: None,
+        rack_location: None,
+        hardware_model: None,
+        warranty_expiry: None,
+        ipmi_address: None,
+        remarks: None,
+    });
 
     // Get token from localStorage
     let token = get_auth_token();
 
-    // Use effect to fetch data only once on mount
-    use_effect_with((), {
-        let assets = assets.clone();
+    // Fetch active cloud provider configs
+    let fetch_active_configs = {
+        let active_configs = active_configs.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let active_configs = active_configs.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                if let Ok(resp) = Request::get(&api_url("cloud-provider-configs/active"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if let Ok(data) = resp.json::<Vec<CloudProviderConfig>>().await {
+                        active_configs.set(data);
+                    }
+                }
+            });
+        })
+    };
+
+    // Fetch business resources (filter by status: 待审批, 审批中)
+    let fetch_resources = {
+        let resources = resources.clone();
         let loading = loading.clone();
         let token = token.clone();
 
-        move |_| {
+        Callback::from(move |_| {
+            let resources = resources.clone();
+            let loading = loading.clone();
+            let token = token.clone();
+
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/assets").header("Authorization", &token).send().await {
-                    if let Ok(data) = resp.json::<Vec<Asset>>().await {
-                        assets.set(data);
+                if let Ok(resp) = Request::get(&api_url("business-resources"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if let Ok(data) = resp.json::<Vec<BusinessResource>>().await {
+                        // Filter for application status (待审批, 审批中)
+                        let filtered: Vec<BusinessResource> = data
+                            .into_iter()
+                            .filter(|r| r.ecs_status == "待审批" || r.ecs_status == "审批中" || r.ecs_status == "已驳回")
+                            .collect();
+                        resources.set(filtered);
                     }
                 }
                 loading.set(false);
             });
+        })
+    };
+
+    // Use effect to fetch data on mount
+    use_effect_with((), {
+        let fetch_resources = fetch_resources.clone();
+        let fetch_active_configs = fetch_active_configs.clone();
+        move |_| {
+            fetch_active_configs.emit(());
+            fetch_resources.emit(());
             || ()
         }
     });
 
-    let zone_name = |zone: &NetworkZone| -> String {
-        match zone {
-            NetworkZone::Internet => "Internet".to_string(),
-            NetworkZone::DMZ => "DMZ".to_string(),
-            NetworkZone::Intranet => "Intranet".to_string(),
-            NetworkZone::Custom(s) => s.clone(),
+    // Status badge class
+    let status_class = |status: &str| -> &'static str {
+        match status {
+            "待审批" => "is-warning",
+            "审批中" => "is-info",
+            "已驳回" => "is-danger",
+            "已通过" => "is-success",
+            _ => "is-light",
         }
     };
 
-    let zone_class = |zone: &NetworkZone| -> &'static str {
-        match zone {
-            NetworkZone::Internet => "is-info",
-            NetworkZone::DMZ => "is-warning",
-            NetworkZone::Intranet => "is-success",
-            NetworkZone::Custom(_) => "is-light",
+    // Helper function to get provider name in Chinese
+    let provider_name = |provider: &CloudProvider| -> String {
+        match provider {
+            CloudProvider::Aliyun => "阿里云".to_string(),
+            CloudProvider::Tencent => "腾讯云".to_string(),
+            CloudProvider::Huawei => "华为云".to_string(),
+            CloudProvider::Aws => "AWS".to_string(),
+            CloudProvider::Azure => "Azure".to_string(),
+            CloudProvider::Gcp => "GCP".to_string(),
+            CloudProvider::Baidu => "百度云".to_string(),
+            CloudProvider::Custom(s) => s.clone(),
         }
+    };
+
+    // Handle form submission
+    let on_submit = {
+        let form_data = form_data.clone();
+        let editing_id = editing_id.clone();
+        let show_form = show_form.clone();
+        let token = token.clone();
+        let fetch_resources = fetch_resources.clone();
+
+        Callback::from(move |_| {
+            let data = form_data.clone();
+            let edit_id = *editing_id;
+            let token = token.clone();
+            let fetch_resources = fetch_resources.clone();
+            let show_form = show_form.clone();
+
+            spawn_local(async move {
+                let result = if let Some(id) = edit_id {
+                    // For update, we need to convert to UpdateRequest
+                    let update_req = UpdateBusinessResourceRequest {
+                        resource_type: Some(data.resource_type.clone()),
+                        ecs_name: Some(data.ecs_name.clone()),
+                        ecs_status: Some(data.ecs_status.clone()),
+                        cloud_region: Some(data.cloud_region.clone()),
+                        cloud_category: Some(data.cloud_category.clone()),
+                        cloud_provider_config_id: data.cloud_provider_config_id,
+                        county_city: data.county_city.clone(),
+                        vdc_name: data.vdc_name.clone(),
+                        customer_name: Some(data.customer_name.clone()),
+                        application_name: data.application_name.clone(),
+                        contract_name: data.contract_name.clone(),
+                        ecs_type: Some(data.ecs_type.clone()),
+                        ecs_os: Some(data.ecs_os.clone()),
+                        cpu_cores: Some(data.cpu_cores),
+                        memory_gb: Some(data.memory_gb),
+                        system_disk: Some(data.system_disk.clone()),
+                        system_disk_size_gb: Some(data.system_disk_size_gb),
+                        data_disk: data.data_disk.clone(),
+                        completion_time: data.completion_time,
+                        release_time: data.release_time,
+                        has_security_product: Some(data.has_security_product),
+                        ip_address: Some(data.ip_address.clone()),
+                        ecs_login_method: data.ecs_login_method.clone(),
+                        ecs_login_username: data.ecs_login_username.clone(),
+                        ecs_initial_password: data.ecs_initial_password.clone(),
+                        bastion_address: data.bastion_address.clone(),
+                        bastion_admin_account: data.bastion_admin_account.clone(),
+                        bastion_initial_password: data.bastion_initial_password.clone(),
+                        // 物理机特有字段
+                        serial_number: data.serial_number.clone(),
+                        rack_location: data.rack_location.clone(),
+                        hardware_model: data.hardware_model.clone(),
+                        warranty_expiry: data.warranty_expiry,
+                        agent_status: None,
+                        ipmi_address: data.ipmi_address.clone(),
+                        remarks: data.remarks.clone(),
+                    };
+                    let url = format!("{}/{}", api_url("business-resources"), id);
+                    let json_body = serde_json::to_string(&update_req).unwrap_or_default();
+                    Request::put(&url)
+                        .header("Authorization", &token)
+                        .header("Content-Type", "application/json")
+                        .body(json_body)
+                        .unwrap()
+                        .send()
+                        .await
+                } else {
+                    let json_body = serde_json::to_string(&*data).unwrap_or_default();
+                    Request::post(&api_url("business-resources"))
+                        .header("Authorization", &token)
+                        .header("Content-Type", "application/json")
+                        .body(json_body)
+                        .unwrap()
+                        .send()
+                        .await
+                };
+
+                if result.is_ok() {
+                    show_form.set(false);
+                    fetch_resources.emit(());
+                }
+            });
+        })
+    };
+
+    // Handle edit
+    let on_edit = {
+        let editing_id = editing_id.clone();
+        let show_form = show_form.clone();
+        let form_data = form_data.clone();
+
+        Callback::from(move |resource: BusinessResource| {
+            let edit_data = CreateBusinessResourceRequest {
+                resource_type: resource.resource_type.clone(),
+                ecs_name: resource.ecs_name.clone(),
+                ecs_status: resource.ecs_status.clone(),
+                resource_id: resource.resource_id.clone(),
+                cloud_region: resource.cloud_region.clone(),
+                cloud_category: resource.cloud_category.clone(),
+                cloud_provider_config_id: resource.cloud_provider_config_id,
+                county_city: resource.county_city.clone(),
+                vdc_name: resource.vdc_name.clone(),
+                customer_name: resource.customer_name.clone(),
+                application_name: resource.application_name.clone(),
+                contract_name: resource.contract_name.clone(),
+                instance_id: resource.instance_id.clone(),
+                ecs_type: resource.ecs_type.clone(),
+                ecs_os: resource.ecs_os.clone(),
+                cpu_cores: resource.cpu_cores,
+                memory_gb: resource.memory_gb,
+                system_disk: resource.system_disk.clone(),
+                system_disk_size_gb: resource.system_disk_size_gb,
+                data_disk: resource.data_disk.clone(),
+                completion_time: resource.completion_time,
+                release_time: resource.release_time,
+                has_security_product: resource.has_security_product,
+                ip_address: resource.ip_address.clone(),
+                ecs_login_method: resource.ecs_login_method.clone(),
+                ecs_login_username: resource.ecs_login_username.clone(),
+                ecs_initial_password: resource.ecs_initial_password.clone(),
+                bastion_address: resource.bastion_address.clone(),
+                bastion_admin_account: resource.bastion_admin_account.clone(),
+                bastion_initial_password: resource.bastion_initial_password.clone(),
+                // 物理机特有字段
+                serial_number: resource.serial_number.clone(),
+                rack_location: resource.rack_location.clone(),
+                hardware_model: resource.hardware_model.clone(),
+                warranty_expiry: resource.warranty_expiry,
+                ipmi_address: resource.ipmi_address.clone(),
+                remarks: resource.remarks.clone(),
+            };
+
+            form_data.set(edit_data);
+            editing_id.set(resource.id);
+            show_form.set(true);
+        })
+    };
+
+    // Handle delete
+    let on_delete = {
+        let token = token.clone();
+        let fetch_resources = fetch_resources.clone();
+
+        Callback::from(move |id: i32| {
+            let token = token.clone();
+            let fetch_resources = fetch_resources.clone();
+
+            spawn_local(async move {
+                let url = format!("{}/{}", api_url("business-resources"), id);
+                if Request::delete(&url)
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                    .is_ok()
+                {
+                    fetch_resources.emit(());
+                }
+            });
+        })
+    };
+
+    // Handle approve/reject
+    let on_approve = {
+        let token = token.clone();
+        let fetch_resources = fetch_resources.clone();
+
+        Callback::from(move |(id, status): (i32, String)| {
+            let token = token.clone();
+            let fetch_resources = fetch_resources.clone();
+
+            spawn_local(async move {
+                if status == "已通过" {
+                    // 调用审批API，自动创建云资源
+                    let url = format!("{}/{}/approve", api_url("business-resources"), id);
+                    if Request::post(&url)
+                        .header("Authorization", &token)
+                        .send()
+                        .await
+                        .is_ok()
+                    {
+                        fetch_resources.emit(());
+                    }
+                } else {
+                    // 驳回，直接更新状态
+                    let update_req = UpdateBusinessResourceRequest {
+                        ecs_status: Some(status),
+                        ..Default::default()
+                    };
+                    let url = format!("{}/{}", api_url("business-resources"), id);
+                    let json_body = serde_json::to_string(&update_req).unwrap_or_default();
+                    if Request::put(&url)
+                        .header("Authorization", &token)
+                        .header("Content-Type", "application/json")
+                        .body(json_body)
+                        .unwrap()
+                        .send()
+                        .await
+                        .is_ok()
+                    {
+                        fetch_resources.emit(());
+                    }
+                }
+            });
+        })
+    };
+
+    // Reset form
+    let reset_form = {
+        let form_data = form_data.clone();
+        let editing_id = editing_id.clone();
+        let show_form = show_form.clone();
+
+        Callback::from(move |_| {
+            form_data.set(CreateBusinessResourceRequest {
+                resource_type: "cloud".to_string(),
+                ecs_name: String::new(),
+                ecs_status: "待审批".to_string(),
+                resource_id: String::new(),
+                cloud_region: String::new(),
+                cloud_category: String::new(),
+                cloud_provider_config_id: None,
+                county_city: None,
+                vdc_name: None,
+                customer_name: String::new(),
+                application_name: None,
+                contract_name: None,
+                instance_id: String::new(),
+                ecs_type: String::new(),
+                ecs_os: String::new(),
+                cpu_cores: 2,
+                memory_gb: 4,
+                system_disk: "ESSD".to_string(),
+                system_disk_size_gb: 40,
+                data_disk: None,
+                completion_time: None,
+                release_time: None,
+                has_security_product: false,
+                ip_address: String::new(),
+                ecs_login_method: None,
+                ecs_login_username: None,
+                ecs_initial_password: None,
+                bastion_address: None,
+                bastion_admin_account: None,
+                bastion_initial_password: None,
+                // 物理机特有字段
+                serial_number: None,
+                rack_location: None,
+                hardware_model: None,
+                warranty_expiry: None,
+                ipmi_address: None,
+                remarks: None,
+            });
+            editing_id.set(None);
+            show_form.set(false);
+        })
+    };
+
+    // Handle input change
+    let on_input_change = {
+        let form_data = form_data.clone();
+
+        Callback::from(move |(field, value): (String, String)| {
+            let mut data = (*form_data).clone();
+
+            match field.as_str() {
+                "ecs_name" => data.ecs_name = value,
+                "ecs_status" => data.ecs_status = value,
+                "resource_id" => data.resource_id = value,
+                "cloud_region" => data.cloud_region = value,
+                "cloud_category" => data.cloud_category = value,
+                "county_city" => data.county_city = if value.is_empty() { None } else { Some(value) },
+                "vdc_name" => data.vdc_name = if value.is_empty() { None } else { Some(value) },
+                "customer_name" => data.customer_name = value,
+                "application_name" => data.application_name = if value.is_empty() { None } else { Some(value) },
+                "contract_name" => data.contract_name = if value.is_empty() { None } else { Some(value) },
+                "instance_id" => data.instance_id = value,
+                "ecs_type" => data.ecs_type = value,
+                "ecs_os" => data.ecs_os = value,
+                "system_disk" => data.system_disk = value,
+                "data_disk" => data.data_disk = if value.is_empty() { None } else { Some(value) },
+                "ip_address" => data.ip_address = value,
+                "ecs_login_method" => data.ecs_login_method = if value.is_empty() { None } else { Some(value) },
+                "ecs_login_username" => data.ecs_login_username = if value.is_empty() { None } else { Some(value) },
+                "ecs_initial_password" => data.ecs_initial_password = if value.is_empty() { None } else { Some(value) },
+                "bastion_address" => data.bastion_address = if value.is_empty() { None } else { Some(value) },
+                "bastion_admin_account" => data.bastion_admin_account = if value.is_empty() { None } else { Some(value) },
+                "bastion_initial_password" => data.bastion_initial_password = if value.is_empty() { None } else { Some(value) },
+                "remarks" => data.remarks = if value.is_empty() { None } else { Some(value) },
+                _ => {}
+            }
+
+            form_data.set(data);
+        })
+    };
+
+    // Handle numeric input
+    let on_number_input = {
+        let form_data = form_data.clone();
+
+        Callback::from(move |(field, value): (String, u32)| {
+            let mut data = (*form_data).clone();
+
+            match field.as_str() {
+                "cpu_cores" => data.cpu_cores = value,
+                "memory_gb" => data.memory_gb = value,
+                "system_disk_size_gb" => data.system_disk_size_gb = value,
+                _ => {}
+            }
+
+            form_data.set(data);
+        })
+    };
+
+    // Handle checkbox
+    let on_checkbox_change = {
+        let form_data = form_data.clone();
+
+        Callback::from(move |value: bool| {
+            let mut data = (*form_data).clone();
+            data.has_security_product = value;
+            form_data.set(data);
+        })
+    };
+
+    // Handle cloud provider config selection
+    let on_config_select = {
+        let form_data = form_data.clone();
+        let active_configs = active_configs.clone();
+        let provider_name_for_callback = provider_name;
+
+        Callback::from(move |config_id_str: String| {
+            let mut data = (*form_data).clone();
+
+            if config_id_str.is_empty() {
+                // No selection
+                data.cloud_provider_config_id = None;
+                // 不清空cloud_category，因为用户可能已经选择了云类别
+                data.cloud_region = String::new();
+            } else if let Ok(config_id) = config_id_str.parse::<i32>() {
+                // Find the selected config
+                data.cloud_provider_config_id = Some(config_id);
+                if let Some(config) = active_configs.iter().find(|c| c.id == Some(config_id)) {
+                    // Auto-fill cloud_category (使用中文名称) and cloud_region from the selected config
+                    data.cloud_category = provider_name_for_callback(&config.provider);
+                    data.cloud_region = config.region_name.clone();
+                    // 云资源类型
+                    data.resource_type = "cloud".to_string();
+                }
+            }
+
+            form_data.set(data);
+        })
+    };
+
+    // 计算是否应该显示云平台配置选择（不是物理机且已选择云类别）
+    let show_cloud_config_select = {
+        let is_physical = (*form_data).cloud_category == "物理机";
+        !is_physical && !(*form_data).cloud_category.is_empty()
+    };
+
+    // 从已启用的云平台配置中提取唯一的云厂商列表（用于云类别下拉）
+    let unique_providers: Vec<(CloudProvider, String)> = {
+        use std::collections::HashSet;
+        let mut providers = HashSet::new();
+        for config in (*active_configs).iter() {
+            providers.insert(config.provider.clone());
+        }
+        let mut provider_list: Vec<(CloudProvider, String)> = providers
+            .into_iter()
+            .map(|p| (p.clone(), provider_name(&p)))
+            .collect();
+        provider_list.sort_by(|a, b| a.1.cmp(&b.1)); // 按中文名称排序
+        provider_list
     };
 
     html! {
         <div class="container p-4">
-            <h1 class="title">{ lang.t("asset_management") }</h1>
+            <h1 class="title">{ lang.t("business_application") }</h1>
+
             <div class="box">
-                if (*assets).is_empty() && *loading {
+                <div class="level">
+                    <div class="level-left">
+                        <button class="button is-primary" onclick={
+                            let show_form = show_form.clone();
+                            Callback::from(move |_| show_form.set(true))
+                        }>
+                            <span class="icon"><i class="fas fa-plus"></i></span>
+                            <span>{ lang.t("add_business_resource") }</span>
+                        </button>
+                        <button class="button is-info ml-2" onclick={
+                            let token = token.clone();
+                            Callback::from(move |_| {
+                                let token = token.clone();
+                                spawn_local(async move {
+                                    let _ = Request::get(&api_url("business-resources/export"))
+                                        .header("Authorization", &token)
+                                        .send()
+                                        .await;
+                                });
+                            })
+                        }>
+                            <span class="icon"><i class="fas fa-download"></i></span>
+                            <span>{ lang.t("export") }</span>
+                        </button>
+                    </div>
+                </div>
+
+                if *show_form {
+                    <div class="modal is-active">
+                        <div class="modal-background" onclick={reset_form.clone()}></div>
+                        <div class="modal-card" style="width: 800px;">
+                            <header class="modal-card-head">
+                                <p class="modal-card-title">
+                                    { if (*editing_id).is_some() { lang.t("edit") } else { lang.t("add_business_resource") } }
+                                </p>
+                                <button class="delete" onclick={reset_form.clone()}></button>
+                            </header>
+                            <section class="modal-card-body" style="max-height: calc(100vh - 200px); overflow-y: auto;">
+                                <div class="columns is-multiline">
+                                    // Basic Info
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_name") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).ecs_name.clone()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ecs_name".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_status") }</label>
+                                        <div class="select is-fullwidth">
+                                            <select
+                                                onchange={
+                                                    let on_input_change = on_input_change.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let select: HtmlSelectElement = e.target_unchecked_into();
+                                                        on_input_change.emit(("ecs_status".to_string(), select.value()));
+                                                    })
+                                                }
+                                            >
+                                                <option selected={(*form_data).ecs_status == "待审批"}>{ "待审批" }</option>
+                                                <option selected={(*form_data).ecs_status == "审批中"}>{ "审批中" }</option>
+                                                <option selected={(*form_data).ecs_status == "已驳回"}>{ "已驳回" }</option>
+                                                <option selected={(*form_data).ecs_status == "已通过"}>{ "已通过" }</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("resource_id") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).resource_id.clone()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("resource_id".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("instance_id") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).instance_id.clone()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("instance_id".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+
+                                    // Cloud Info
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("cloud_region") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).cloud_region.clone()}
+                                            placeholder="华东1"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("cloud_region".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("cloud_category") }</label>
+                                        <div class="select is-fullwidth">
+                                            <select
+                                                onchange={
+                                                    let on_input_change = on_input_change.clone();
+                                                    let form_data = form_data.clone();
+                                                    let active_configs = active_configs.clone();
+                                                    let provider_name_clone = provider_name;
+                                                    Callback::from(move |e: Event| {
+                                                        let select: HtmlSelectElement = e.target_unchecked_into();
+                                                        let value = select.value();
+
+                                                        // 根据云类别设置resource_type
+                                                        let mut data = (*form_data).clone();
+                                                        if value == "物理机" {
+                                                            data.resource_type = "physical".to_string();
+                                                            data.cloud_provider_config_id = None;
+                                                        } else {
+                                                            data.resource_type = "cloud".to_string();
+                                                        }
+                                                        data.cloud_category = value.clone();
+
+                                                        // 如果不是物理机且有云平台配置，自动填充云平台信息
+                                                        if value != "物理机" && !value.is_empty() {
+                                                            // 查找匹配的云平台配置（通过中文名称匹配）
+                                                            if let Some(config) = (*active_configs).iter().find(|c| {
+                                                                provider_name_clone(&c.provider) == value
+                                                            }) {
+                                                                data.cloud_provider_config_id = config.id;
+                                                                data.cloud_region = config.region_name.clone();
+                                                            }
+                                                        } else if value == "物理机" {
+                                                            data.cloud_region = "物理机房".to_string();
+                                                        }
+
+                                                        form_data.set(data);
+                                                        on_input_change.emit(("cloud_category".to_string(), value));
+                                                    })
+                                                }
+                                            >
+                                                <option value="">{ "选择云类别..." }</option>
+                                                <option value="物理机" selected={(*form_data).cloud_category == "物理机"}>{ "物理机" }</option>
+                                                {
+                                                    unique_providers.iter().map(|(provider, provider_name_cn)| {
+                                                        let provider_str = format!("{:?}", provider);
+                                                        let is_selected = (*form_data).cloud_category == *provider_name_cn;
+                                                        html! {
+                                                            <option
+                                                                value={provider_name_cn.clone()}
+                                                                selected={is_selected}
+                                                            >
+                                                                { provider_name_cn }
+                                                            </option>
+                                                        }
+                                                    }).collect::<Vec<_>>()
+                                                }
+                                            </select>
+                                        </div>
+                                        // 显示已选中的云平台信息
+                                        if !(*form_data).cloud_category.is_empty() {
+                                            <p class="help is-info">
+                                                { format!("已选择: {}", (*form_data).cloud_category) }
+                                                { if (*form_data).resource_type == "physical" {
+                                                    html! { <span>{ " - 物理机不需要云平台配置" }</span> }
+                                                } else {
+                                                    html! {}
+                                                }}
+                                            </p>
+                                        }
+                                    </div>
+
+                                    // 云平台配置选择 - 只有选择云资源时才显示
+                                    if show_cloud_config_select {
+                                        <div class="column is-6">
+                                            <label class="label">{ "云平台配置" }</label>
+                                            <div class="select is-fullwidth">
+                                                <select
+                                                    onchange={
+                                                        let on_config_select = on_config_select.clone();
+                                                        Callback::from(move |e: Event| {
+                                                            let select: HtmlSelectElement = e.target_unchecked_into();
+                                                            on_config_select.emit(select.value());
+                                                        })
+                                                    }
+                                                >
+                                                    <option value="">{ "选择云平台配置..." }</option>
+                                                    {
+                                                        (*active_configs).iter().filter(|c| {
+                                                            // 只显示已选择的云类别的配置（通过中文名称匹配）
+                                                            let provider_name_cn = provider_name(&c.provider);
+                                                            provider_name_cn == (*form_data).cloud_category || (*form_data).cloud_category.is_empty()
+                                                        }).map(|config| {
+                                                            let selected = (*form_data).cloud_provider_config_id == config.id;
+                                                            let provider_name_cn = provider_name(&config.provider);
+                                                            let label = format!("{} - {}", provider_name_cn, config.region_name);
+                                                            html! {
+                                                                <option
+                                                                    value={config.id.unwrap_or(0).to_string()}
+                                                                    selected={selected}
+                                                                >
+                                                                    { label }
+                                                                </option>
+                                                            }
+                                                        }).collect::<Vec<_>>()
+                                                    }
+                                                </select>
+                                            </div>
+                                            <p class="help">
+                                                { "选择已对接的云平台账户和区域" }
+                                            </p>
+                                        </div>
+                                    } else {
+                                        <div class="column is-6"></div>
+                                    }
+
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("county_city") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).county_city.clone().unwrap_or_default()}
+                                            placeholder={ if (*form_data).cloud_category == "物理机" { "如：杭州机房" } else { "杭州市" } }
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("county_city".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("vdc_name") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).vdc_name.clone().unwrap_or_default()}
+                                            placeholder="VDC-01"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("vdc_name".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+
+                                    // Customer Info
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("customer_name") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).customer_name.clone()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("customer_name".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("application_name") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).application_name.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("application_name".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("contract_name") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).contract_name.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("contract_name".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+
+                                    // ECS Specs
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_type") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).ecs_type.clone()}
+                                            placeholder="ecs.g6.large"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ecs_type".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_os") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).ecs_os.clone()}
+                                            placeholder="CentOS 7.9"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ecs_os".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-4">
+                                        <label class="label">{ lang.t("cpu_cores") }</label>
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            value={(*form_data).cpu_cores.to_string()}
+                                            onchange={
+                                                let on_number_input = on_number_input.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    if let Ok(val) = input.value().parse::<u32>() {
+                                                        on_number_input.emit(("cpu_cores".to_string(), val));
+                                                    }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-4">
+                                        <label class="label">{ lang.t("memory_gb") }</label>
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            value={(*form_data).memory_gb.to_string()}
+                                            onchange={
+                                                let on_number_input = on_number_input.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    if let Ok(val) = input.value().parse::<u32>() {
+                                                        on_number_input.emit(("memory_gb".to_string(), val));
+                                                    }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-4">
+                                        <label class="label">{ lang.t("system_disk_size_gb") }</label>
+                                        <input
+                                            type="number"
+                                            class="input"
+                                            value={(*form_data).system_disk_size_gb.to_string()}
+                                            onchange={
+                                                let on_number_input = on_number_input.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    if let Ok(val) = input.value().parse::<u32>() {
+                                                        on_number_input.emit(("system_disk_size_gb".to_string(), val));
+                                                    }
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("system_disk") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).system_disk.clone()}
+                                            placeholder="ESSD"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("system_disk".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("data_disk") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).data_disk.clone().unwrap_or_default()}
+                                            placeholder="ESSD 100GB"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("data_disk".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+
+                                    // Network Info
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ip_address") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).ip_address.clone()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ip_address".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_login_method") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).ecs_login_method.clone().unwrap_or_default()}
+                                            placeholder="SSH/密码"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ecs_login_method".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_login_username") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).ecs_login_username.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ecs_login_username".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("ecs_initial_password") }</label>
+                                        <input
+                                            type="password"
+                                            class="input"
+                                            value={(*form_data).ecs_initial_password.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("ecs_initial_password".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+
+                                    // Bastion Info
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("bastion_address") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).bastion_address.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("bastion_address".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("bastion_admin_account") }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).bastion_admin_account.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("bastion_admin_account".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                    <div class="column is-6">
+                                        <label class="label">{ lang.t("bastion_initial_password") }</label>
+                                        <input
+                                            type="password"
+                                            class="input"
+                                            value={(*form_data).bastion_initial_password.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("bastion_initial_password".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                    </div>
+
+                                    // Security Product
+                                    <div class="column is-12">
+                                        <label class="checkbox">
+                                            <input
+                                                type="checkbox"
+                                                checked={(*form_data).has_security_product}
+                                                onchange={
+                                                    let on_checkbox_change = on_checkbox_change.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                        on_checkbox_change.emit(input.checked());
+                                                    })
+                                                }
+                                            />
+                                            { format!(" {} {}", lang.t("has_security_product"), if (*form_data).has_security_product { "(是)" } else { "(否)" }) }
+                                        </label>
+                                    </div>
+
+                                    // Remarks
+                                    <div class="column is-12">
+                                        <label class="label">{ lang.t("remarks") }</label>
+                                        <textarea
+                                            class="textarea"
+                                            rows="3"
+                                            value={(*form_data).remarks.clone().unwrap_or_default()}
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlTextAreaElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("remarks".to_string(), input.value()));
+                                                })
+                                            }
+                                        ></textarea>
+                                    </div>
+                                </div>
+                            </section>
+                            <footer class="modal-card-foot">
+                                <button class="button is-success" onclick={on_submit.clone()}>{ lang.t("save") }</button>
+                                <button class="button" onclick={reset_form.clone()}>{ lang.t("cancel") }</button>
+                            </footer>
+                        </div>
+                    </div>
+                }
+
+                if (*resources).is_empty() && *loading {
                     <p class="has-text-centered has-text-grey">{ "Loading..." }</p>
-                } else if (*assets).is_empty() {
-                    <p class="has-text-centered has-text-grey">{ "No assets yet" }</p>
+                } else if (*resources).is_empty() {
+                    <p class="has-text-centered has-text-grey">{ "暂无业务资源" }</p>
                 } else {
-                    <div class="table-container">
-                        <table class="table is-fullwidth is-hoverable is-striped">
+                    <div class="table-container" style="overflow-x: auto;">
+                        <table class="table is-fullwidth is-hoverable is-striped" style="min-width: max-content;">
                             <thead>
                                 <tr>
-                                    <th>{ lang.t("name") }</th>
-                                    <th>{ lang.t("ip") }</th>
-                                    <th>{ lang.t("zone") }</th>
-                                    <th>{ lang.t("owner") }</th>
-                                    <th>{ lang.t("weight") }</th>
-                                    <th>{ lang.t("ports") }</th>
+                                    <th>{ lang.t("ecs_name") }</th>
+                                    <th>{ lang.t("ecs_status") }</th>
+                                    <th>{ lang.t("resource_id") }</th>
+                                    <th>{ lang.t("cloud_region") }</th>
+                                    <th>{ lang.t("cloud_category") }</th>
+                                    <th>{ lang.t("county_city") }</th>
+                                    <th>{ lang.t("vdc_name") }</th>
+                                    <th>{ lang.t("customer_name") }</th>
+                                    <th>{ lang.t("application_name") }</th>
+                                    <th>{ lang.t("contract_name") }</th>
+                                    <th>{ lang.t("instance_id") }</th>
+                                    <th>{ lang.t("ecs_type") }</th>
+                                    <th>{ lang.t("ecs_os") }</th>
+                                    <th>{ lang.t("cpu_cores") }</th>
+                                    <th>{ lang.t("memory_gb") }</th>
+                                    <th>{ lang.t("system_disk") }</th>
+                                    <th>{ lang.t("system_disk_size_gb") }</th>
+                                    <th>{ lang.t("data_disk") }</th>
+                                    <th>{ lang.t("completion_time") }</th>
+                                    <th>{ lang.t("release_time") }</th>
+                                    <th>{ lang.t("has_security_product") }</th>
+                                    <th>{ lang.t("ip_address") }</th>
+                                    <th>{ lang.t("ecs_login_method") }</th>
+                                    <th>{ lang.t("ecs_login_username") }</th>
+                                    <th>{ lang.t("ecs_initial_password") }</th>
+                                    <th>{ lang.t("bastion_address") }</th>
+                                    <th>{ lang.t("bastion_admin_account") }</th>
+                                    <th>{ lang.t("bastion_initial_password") }</th>
+                                    <th>{ lang.t("remarks") }</th>
+                                    <th>{ lang.t("actions") }</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                { for assets.iter().map(|asset| {
-                                    let zone = asset.zone.clone();
+                                { for resources.iter().map(|resource| {
+                                    let resource_clone = resource.clone();
+                                    let resource_for_delete = resource.clone();
+                                    let resource_for_approve = resource.clone();
+                                    let on_edit = on_edit.clone();
+                                    let on_delete = on_delete.clone();
+                                    let on_approve = on_approve.clone();
+
                                     html! {
                                         <tr>
-                                            <td>{ &asset.name }</td>
-                                            <td><code>{ &asset.ip }</code></td>
+                                            <td><strong>{ &resource_clone.ecs_name }</strong></td>
                                             <td>
-                                                <span class={classes!("tag", zone_class(&zone))}>
-                                                    { zone_name(&zone) }
+                                                <span class={classes!("tag", status_class(&resource_clone.ecs_status))}>
+                                                    { &resource_clone.ecs_status }
                                                 </span>
                                             </td>
-                                            <td>{ asset.owner.clone().unwrap_or_default() }</td>
-                                            <td>{ asset.weight }</td>
+                                            <td><code>{ &resource_clone.resource_id }</code></td>
+                                            <td>{ &resource_clone.cloud_region }</td>
+                                            <td>{ &resource_clone.cloud_category }</td>
+                                            <td>{ resource_clone.county_city.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.vdc_name.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ &resource_clone.customer_name }</td>
+                                            <td>{ resource_clone.application_name.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.contract_name.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td><code>{ &resource_clone.instance_id }</code></td>
+                                            <td>{ &resource_clone.ecs_type }</td>
+                                            <td>{ &resource_clone.ecs_os }</td>
+                                            <td>{ resource_clone.cpu_cores }</td>
+                                            <td>{ resource_clone.memory_gb }</td>
+                                            <td>{ &resource_clone.system_disk }</td>
+                                            <td>{ resource_clone.system_disk_size_gb }</td>
+                                            <td>{ resource_clone.data_disk.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.completion_time.map(|d| d.format("%Y-%m-%d").to_string()).unwrap_or_default() }</td>
+                                            <td>{ resource_clone.release_time.map(|d| d.format("%Y-%m-%d").to_string()).unwrap_or_default() }</td>
                                             <td>
-                                                <div class="tags are-small">
-                                                    { for asset.ports.iter().take(3).map(|port| {
-                                                        html! {
-                                                            <span class={if port.is_bound { "tag is-primary" } else { "tag is-light" }}>
-                                                                { format!("{} ({})", port.port, port.service.clone().unwrap_or_default()) }
-                                                            </span>
-                                                        }
-                                                    })}
-                                                    if asset.ports.len() > 3 {
-                                                        <span class="tag">{ format!("+{}", asset.ports.len() - 3) }</span>
+                                                if resource_clone.has_security_product {
+                                                    <span class="tag is-success">{ "是" }</span>
+                                                } else {
+                                                    <span class="tag is-light">{ "否" }</span>
+                                                }
+                                            </td>
+                                            <td><code>{ &resource_clone.ip_address }</code></td>
+                                            <td>{ resource_clone.ecs_login_method.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.ecs_login_username.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.ecs_initial_password.as_ref().map(|_| "***").unwrap_or_default() }</td>
+                                            <td>{ resource_clone.bastion_address.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.bastion_admin_account.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.bastion_initial_password.as_ref().map(|_| "***").unwrap_or_default() }</td>
+                                            <td>{ resource_clone.remarks.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>
+                                                <div class="buttons are-small">
+                                                    // Approve button
+                                                    if resource_clone.ecs_status == "待审批" || resource_clone.ecs_status == "审批中" {
+                                                        <button
+                                                            class="button is-success is-outlined"
+                                                            onclick={
+                                                                let on_approve = on_approve.clone();
+                                                                let id = resource_for_approve.id;
+                                                                Callback::from(move |_| {
+                                                                    if let Some(id_val) = id {
+                                                                        on_approve.emit((id_val, "已通过".to_string()));
+                                                                    }
+                                                                })
+                                                            }
+                                                        >
+                                                            <span class="icon"><i class="fas fa-check"></i></span>
+                                                            <span>{ "通过" }</span>
+                                                        </button>
+                                                        <button
+                                                            class="button is-warning is-outlined"
+                                                            onclick={
+                                                                let on_approve = on_approve.clone();
+                                                                let id = resource_for_approve.id;
+                                                                Callback::from(move |_| {
+                                                                    if let Some(id_val) = id {
+                                                                        on_approve.emit((id_val, "已驳回".to_string()));
+                                                                    }
+                                                                })
+                                                            }
+                                                        >
+                                                            <span class="icon"><i class="fas fa-times"></i></span>
+                                                            <span>{ "驳回" }</span>
+                                                        </button>
                                                     }
+                                                    <button
+                                                        class="button is-info is-outlined"
+                                                        onclick={
+                                                            let on_edit = on_edit.clone();
+                                                            let r = resource_clone.clone();
+                                                            Callback::from(move |_| on_edit.emit(r.clone()))
+                                                        }
+                                                    >
+                                                        <span class="icon"><i class="fas fa-edit"></i></span>
+                                                        <span>{ lang.t("edit") }</span>
+                                                    </button>
+                                                    <button
+                                                        class="button is-danger is-outlined"
+                                                        onclick={
+                                                            let on_delete = on_delete.clone();
+                                                            let id = resource_for_delete.id;
+                                                            Callback::from(move |_| {
+                                                                if let Some(id_val) = id {
+                                                                    on_delete.emit(id_val);
+                                                                }
+                                                            })
+                                                        }
+                                                    >
+                                                        <span class="icon"><i class="fas fa-trash"></i></span>
+                                                        <span>{ lang.t("delete") }</span>
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1072,67 +2395,1103 @@ fn AssetCenter() -> Html {
     }
 }
 
-// ============== Zone Management Component ==============
+// ============== Operations Management Component (运维管理) ==============
+// 运维人员使用：补充信息、审批业务申请
 
 #[function_component]
-fn ZoneManagement() -> Html {
+fn OperationsManagement() -> Html {
     let lang = use_state(|| Language::Zh);
-    let zones = use_state(|| Vec::new());
+    let resources = use_state(|| Vec::new());
     let loading = use_state(|| true);
+
+    // Modal states
+    let show_detail_modal = use_state(|| false);
+    let show_approve_modal = use_state(|| false);
+    let show_supplement_modal = use_state(|| false);
+    let selected_resource = use_state(|| None as Option<BusinessResource>);
+
+    // Form state for supplementing info
+    let supplement_form = use_state(|| UpdateBusinessResourceRequest::default());
 
     // Get token from localStorage
     let token = get_auth_token();
 
-    // Use effect to fetch data only once on mount
-    use_effect_with((), {
-        let zones = zones.clone();
+    // Fetch all pending resources (待审批, 审批中, 待交付)
+    let fetch_resources = {
+        let resources = resources.clone();
         let loading = loading.clone();
         let token = token.clone();
 
-        move |_| {
+        Callback::from(move |_| {
+            let resources = resources.clone();
+            let loading = loading.clone();
+            let token = token.clone();
+
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/zones").header("Authorization", &token).send().await {
-                    if let Ok(data) = resp.json::<Vec<ZoneConfig>>().await {
-                        zones.set(data);
+                if let Ok(resp) = Request::get(&api_url("business-resources"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if let Ok(data) = resp.json::<Vec<BusinessResource>>().await {
+                        // Filter for operations statuses (待审批, 审批中, 待交付)
+                        let filtered: Vec<BusinessResource> = data
+                            .into_iter()
+                            .filter(|r| {
+                                r.ecs_status == "待审批" ||
+                                r.ecs_status == "审批中" ||
+                                r.ecs_status == "待交付" ||
+                                r.ecs_status == "已驳回"
+                            })
+                            .collect();
+                        resources.set(filtered);
                     }
                 }
                 loading.set(false);
             });
+        })
+    };
+
+    // Use effect to fetch data on mount
+    use_effect_with((), {
+        let fetch_resources = fetch_resources.clone();
+        move |_| {
+            fetch_resources.emit(());
             || ()
         }
     });
 
+    // Status badge class
+    let status_class = |status: &str| -> &'static str {
+        match status {
+            "待审批" => "is-warning",
+            "审批中" => "is-info",
+            "待交付" => "is-primary",
+            "已驳回" => "is-danger",
+            "已交付" => "is-success",
+            _ => "is-light",
+        }
+    };
+
+    // Handle view detail
+    let on_view_detail = {
+        let selected_resource = selected_resource.clone();
+        let show_detail_modal = show_detail_modal.clone();
+
+        Callback::from(move |resource: BusinessResource| {
+            selected_resource.set(Some(resource));
+            show_detail_modal.set(true);
+        })
+    };
+
+    // Handle approve/reject
+    let on_approve_click = {
+        let selected_resource = selected_resource.clone();
+        let show_approve_modal = show_approve_modal.clone();
+
+        Callback::from(move |resource: BusinessResource| {
+            selected_resource.set(Some(resource));
+            show_approve_modal.set(true);
+        })
+    };
+
+    // Handle supplement info
+    let on_supplement_click = {
+        let selected_resource = selected_resource.clone();
+        let show_supplement_modal = show_supplement_modal.clone();
+        let supplement_form = supplement_form.clone();
+
+        Callback::from(move |resource: BusinessResource| {
+            let resource_clone = resource.clone();
+            selected_resource.set(Some(resource));
+
+            // Pre-fill form with current resource data
+            supplement_form.set(UpdateBusinessResourceRequest {
+                ip_address: if resource_clone.ip_address.is_empty() { None } else { Some(resource_clone.ip_address.clone()) },
+                ecs_login_method: resource_clone.ecs_login_method.clone(),
+                ecs_login_username: resource_clone.ecs_login_username.clone(),
+                ecs_initial_password: resource_clone.ecs_initial_password.clone(),
+                bastion_address: resource_clone.bastion_address.clone(),
+                bastion_admin_account: resource_clone.bastion_admin_account.clone(),
+                bastion_initial_password: resource_clone.bastion_initial_password.clone(),
+                remarks: resource_clone.remarks.clone(),
+                ..Default::default()
+            });
+
+            show_supplement_modal.set(true);
+        })
+    };
+
+    // Submit approval/reject
+    let on_submit_approve = {
+        let token = token.clone();
+        let selected_resource = selected_resource.clone();
+        let show_approve_modal = show_approve_modal.clone();
+        let fetch_resources = fetch_resources.clone();
+
+        Callback::from(move |(id, status, note): (i32, String, String)| {
+            let token = token.clone();
+            let fetch_resources = fetch_resources.clone();
+            let selected_resource = selected_resource.clone();
+            let show_approve_modal = show_approve_modal.clone();
+
+            spawn_local(async move {
+                if status == "approved" {
+                    // 调用审批API
+                    let url = format!("{}/{}/approve", api_url("business-resources"), id);
+                    if Request::post(&url)
+                        .header("Authorization", &token)
+                        .send()
+                        .await
+                        .is_ok()
+                    {
+                        fetch_resources.emit(());
+                    }
+                } else {
+                    // 驳回，更新状态为已驳回
+                    let update_req = UpdateBusinessResourceRequest {
+                        ecs_status: Some("已驳回".to_string()),
+                        remarks: Some(note),
+                        ..Default::default()
+                    };
+                    let url = format!("{}/{}", api_url("business-resources"), id);
+                    let json_body = serde_json::to_string(&update_req).unwrap_or_default();
+                    if Request::put(&url)
+                        .header("Authorization", &token)
+                        .header("Content-Type", "application/json")
+                        .body(json_body)
+                        .unwrap()
+                        .send()
+                        .await
+                        .is_ok()
+                    {
+                        fetch_resources.emit(());
+                    }
+                }
+                selected_resource.set(None);
+                show_approve_modal.set(false);
+            });
+        })
+    };
+
+    // Submit supplement
+    let on_submit_supplement = {
+        let token = token.clone();
+        let selected_resource = selected_resource.clone();
+        let show_supplement_modal = show_supplement_modal.clone();
+        let supplement_form = supplement_form.clone();
+        let fetch_resources = fetch_resources.clone();
+
+        Callback::from(move |_| {
+            let token = token.clone();
+            let selected_resource = selected_resource.clone();
+            let show_supplement_modal = show_supplement_modal.clone();
+            let supplement_form = supplement_form.clone();
+            let fetch_resources = fetch_resources.clone();
+
+            spawn_local(async move {
+                if let Some(resource) = &*selected_resource {
+                    if let Some(id) = resource.id {
+                        let url = format!("{}/{}", api_url("business-resources"), id);
+                        let json_body = serde_json::to_string(&*supplement_form).unwrap_or_default();
+                        if Request::put(&url)
+                            .header("Authorization", &token)
+                            .header("Content-Type", "application/json")
+                            .body(json_body)
+                            .unwrap()
+                            .send()
+                            .await
+                            .is_ok()
+                        {
+                            fetch_resources.emit(());
+                        }
+                    }
+                }
+                selected_resource.set(None);
+                show_supplement_modal.set(false);
+            });
+        })
+    };
+
+    // Handle form input change
+    let on_form_input = {
+        let supplement_form = supplement_form.clone();
+        Callback::from(move |(field, value): (String, String)| {
+            let mut data = (*supplement_form).clone();
+            match field.as_str() {
+                "ip_address" => data.ip_address = Some(value),
+                "ecs_login_method" => data.ecs_login_method = if value.is_empty() { None } else { Some(value) },
+                "ecs_login_username" => data.ecs_login_username = if value.is_empty() { None } else { Some(value) },
+                "ecs_initial_password" => data.ecs_initial_password = if value.is_empty() { None } else { Some(value) },
+                "bastion_address" => data.bastion_address = if value.is_empty() { None } else { Some(value) },
+                "bastion_admin_account" => data.bastion_admin_account = if value.is_empty() { None } else { Some(value) },
+                "bastion_initial_password" => data.bastion_initial_password = if value.is_empty() { None } else { Some(value) },
+                "remarks" => data.remarks = if value.is_empty() { None } else { Some(value) },
+                _ => {}
+            }
+            supplement_form.set(data);
+        })
+    };
+
+    // Stats
+    let total_count = (*resources).len();
+    let pending_count = (*resources).iter().filter(|r| r.ecs_status == "待审批").count();
+    let processing_count = (*resources).iter().filter(|r| r.ecs_status == "审批中" || r.ecs_status == "待交付").count();
+    let rejected_count = (*resources).iter().filter(|r| r.ecs_status == "已驳回").count();
+
     html! {
         <div class="container p-4">
-            <h1 class="title">{ lang.t("zone_management") }</h1>
-            <div class="box">
-                if (*zones).is_empty() && *loading {
-                    <p class="has-text-centered has-text-grey">{ "Loading..." }</p>
-                } else if (*zones).is_empty() {
-                    <p class="has-text-centered has-text-grey">{ "No zones configured" }</p>
-                } else {
+            <h1 class="title">{ lang.t("operations_management") }</h1>
+
+            // Stats cards
+            <div class="columns is-multiline">
+                <div class="column is-3">
+                    <div class="box has-background-white-bis">
+                        <p class="heading">{"总数"}</p>
+                        <p class="title is-4">{ total_count }</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="box has-background-warning-light">
+                        <p class="heading">{"待审批"}</p>
+                        <p class="title is-4 has-text-warning">{ pending_count }</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="box has-background-info-light">
+                        <p class="heading">{"处理中"}</p>
+                        <p class="title is-4 has-text-info">{ processing_count }</p>
+                    </div>
+                </div>
+                <div class="column is-3">
+                    <div class="box has-background-danger-light">
+                        <p class="heading">{"已驳回"}</p>
+                        <p class="title is-4 has-text-danger">{ rejected_count }</p>
+                    </div>
+                </div>
+            </div>
+
+            // Filter tabs
+            <div class="tabs is-boxed mb-4">
+                <ul>
+                    <li class={Classes::from(&*active_tab_filter(|_| true, &resources))}>
+                        <a onclick={
+                            let resources = resources.clone();
+                            Callback::from(move |_| {
+                                // Show all
+                            })
+                        }>{"全部"}</a>
+                    </li>
+                    <li><a>{"待审批"}</a></li>
+                    <li><a>{"处理中"}</a></li>
+                    <li><a>{"已驳回"}</a></li>
+                </ul>
+            </div>
+
+            // Resources table
+            if *loading {
+                <div class="has-text-centered py-6">
+                    <span class="icon is-large">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                    <p>{"加载中..."}</p>
+                </div>
+            } else if (*resources).is_empty() {
+                <div class="box has-background-white-bis has-text-centered py-6">
+                    <p class="is-size-5 has-text-grey">{"暂无待处理业务申请"}</p>
+                </div>
+            } else {
+                <div class="box">
                     <table class="table is-fullwidth is-hoverable">
                         <thead>
                             <tr>
-                                <th>{ lang.t("zone") }</th>
-                                <th>{ lang.t("cidr") }</th>
-                                <th>{ lang.t("priority") }</th>
+                                <th>{"ID"}</th>
+                                <th>{"ECS名称"}</th>
+                                <th>{"云平台"}</th>
+                                <th>{"区域"}</th>
+                                <th>{"客户"}</th>
+                                <th>{"状态"}</th>
+                                <th>{"申请时间"}</th>
+                                <th>{"操作"}</th>
                             </tr>
                         </thead>
                         <tbody>
-                            { for zones.iter().map(|zone| {
-                                html! {
-                                    <tr>
-                                        <td>{ &zone.name }</td>
-                                        <td><code>{ &zone.cidr }</code></td>
-                                        <td>{ zone.priority }</td>
-                                    </tr>
-                                }
-                            })}
+                            {
+                                (*resources).iter().map(|resource| {
+                                    let on_view_detail = on_view_detail.clone();
+                                    let on_approve_click = on_approve_click.clone();
+                                    let on_supplement_click = on_supplement_click.clone();
+                                    let resource_clone = resource.clone();
+
+                                    html! {
+                                        <tr key={resource.id.unwrap_or(0)}>
+                                            <td>{ resource.id.unwrap_or(0) }</td>
+                                            <td>{ &resource_clone.ecs_name }</td>
+                                            <td>{ &resource_clone.cloud_category }</td>
+                                            <td>{ &resource_clone.cloud_region }</td>
+                                            <td>{ &resource_clone.customer_name }</td>
+                                            <td>
+                                                <span class={classes!("tag", status_class(&resource_clone.ecs_status))}>
+                                                    { &resource_clone.ecs_status }
+                                                </span>
+                                            </td>
+                                            <td>{
+                                                resource_clone.created_at
+                                                    .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
+                                                    .unwrap_or_default()
+                                            }</td>
+                                            <td>
+                                                <div class="buttons are-small">
+                                                    <button class="button is-info is-light"
+                                                        onclick={
+                                                            let resource_clone = resource_clone.clone();
+                                                            Callback::from(move |_| on_view_detail.emit(resource_clone.clone()))
+                                                        }>
+                                                        <span class="icon"><i class="fas fa-eye"></i></span>
+                                                        <span>{"查看"}</span>
+                                                    </button>
+                                                    {
+                                                        if resource_clone.ecs_status == "待审批" || resource_clone.ecs_status == "审批中" {
+                                                            html! {
+                                                                <>
+                                                                    <button class="button is-success is-light"
+                                                                        onclick={
+                                                                            let resource_clone = resource_clone.clone();
+                                                                            Callback::from(move |_| on_approve_click.emit(resource_clone.clone()))
+                                                                        }>
+                                                                        <span class="icon"><i class="fas fa-check"></i></span>
+                                                                        <span>{"审批"}</span>
+                                                                    </button>
+                                                                    <button class="button is-warning is-light"
+                                                                        onclick={
+                                                                            let resource_clone = resource_clone.clone();
+                                                                            Callback::from(move |_| on_supplement_click.emit(resource_clone.clone()))
+                                                                        }>
+                                                                        <span class="icon"><i class="fas fa-edit"></i></span>
+                                                                        <span>{"补充信息"}</span>
+                                                                    </button>
+                                                                </>
+                                                            }
+                                                        } else if resource_clone.ecs_status == "待交付" {
+                                                            html! {
+                                                                <button class="button is-primary is-light"
+                                                                    onclick={
+                                                                        let resource_clone = resource_clone.clone();
+                                                                        Callback::from(move |_| on_supplement_click.emit(resource_clone.clone()))
+                                                                    }>
+                                                                    <span class="icon"><i class="fas fa-plus"></i></span>
+                                                                    <span>{"录入云资源"}</span>
+                                                                </button>
+                                                            }
+                                                        } else {
+                                                            html! {}
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }).collect::<Html>()
+                            }
                         </tbody>
                     </table>
+                </div>
+            }
+
+            // Detail Modal
+            {
+                if *show_detail_modal {
+                    if let Some(resource) = &*selected_resource {
+                        html! {
+                            <div class="modal is-active">
+                                <div class="modal-background" onclick={
+                                    let show_detail_modal = show_detail_modal.clone();
+                                    Callback::from(move |_| show_detail_modal.set(false))
+                                }></div>
+                                <div class="modal-card">
+                                    <header class="modal-card-head">
+                                        <p class="modal-card-title">{"业务申请详情"}</p>
+                                        <button class="delete" onclick={
+                                            let show_detail_modal = show_detail_modal.clone();
+                                            Callback::from(move |_| show_detail_modal.set(false))
+                                        }></button>
+                                    </header>
+                                    <section class="modal-card-body">
+                                        <div class="content">
+                                            <table class="table is-fullwidth">
+                                                <tr><td><strong>{"ID"}</strong></td><td>{ resource.id.unwrap_or(0) }</td></tr>
+                                                <tr><td><strong>{"资源类型"}</strong></td><td>{ &resource.resource_type }</td></tr>
+                                                <tr><td><strong>{"ECS名称"}</strong></td><td>{ &resource.ecs_name }</td></tr>
+                                                <tr><td><strong>{"云平台"}</strong></td><td>{ &resource.cloud_category }</td></tr>
+                                                <tr><td><strong>{"区域"}</strong></td><td>{ &resource.cloud_region }</td></tr>
+                                                <tr><td><strong>{"客户"}</strong></td><td>{ &resource.customer_name }</td></tr>
+                                                <tr><td><strong>{"应用"}</strong></td><td>{ resource.application_name.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                <tr><td><strong>{"合同"}</strong></td><td>{ resource.contract_name.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                <tr><td><strong>{"实例类型"}</strong></td><td>{ &resource.ecs_type }</td></tr>
+                                                <tr><td><strong>{"操作系统"}</strong></td><td>{ &resource.ecs_os }</td></tr>
+                                                <tr><td><strong>{"CPU"}</strong></td><td>{ resource.cpu_cores }</td></tr>
+                                                <tr><td><strong>{"内存"}</strong></td><td>{ resource.memory_gb }{" GB"}</td></tr>
+                                                <tr><td><strong>{"系统盘"}</strong></td><td>{ format!("{} GB {}", resource.system_disk_size_gb, resource.system_disk) }</td></tr>
+                                                <tr><td><strong>{"安全产品"}</strong></td><td>{ if resource.has_security_product { "是" } else { "否" } }</td></tr>
+                                                <tr><td><strong>{"状态"}</strong></td><td>
+                                                    <span class={classes!("tag", status_class(&resource.ecs_status))}>
+                                                        { &resource.ecs_status }
+                                                    </span>
+                                                </td></tr>
+                                                <tr><td><strong>{"IP地址"}</strong></td><td>{ if resource.ip_address.is_empty() { "-" } else { &resource.ip_address } }</td></tr>
+                                                <tr><td><strong>{"创建时间"}</strong></td><td>{
+                                                    resource.created_at.map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default()
+                                                }</td></tr>
+                                            </table>
+                                        </div>
+                                    </section>
+                                    <footer class="modal-card-foot">
+                                        <button class="button" onclick={
+                                            let show_detail_modal = show_detail_modal.clone();
+                                            Callback::from(move |_| show_detail_modal.set(false))
+                                        }>{"关闭"}</button>
+                                    </footer>
+                                </div>
+                            </div>
+                        }
+                    } else { html! {} }
+                } else { html! {} }
+            }
+
+            // Approve/Reject Modal
+            {
+                if *show_approve_modal {
+                    if let Some(resource) = &*selected_resource {
+                        html! {
+                            <div class="modal is-active">
+                                <div class="modal-background" onclick={
+                                    let show_approve_modal = show_approve_modal.clone();
+                                    Callback::from(move |_| show_approve_modal.set(false))
+                                }></div>
+                                <div class="modal-card">
+                                    <header class="modal-card-head">
+                                        <p class="modal-card-title">{"审批业务申请"}</p>
+                                        <button class="delete" onclick={
+                                            let show_approve_modal = show_approve_modal.clone();
+                                            Callback::from(move |_| show_approve_modal.set(false))
+                                        }></button>
+                                    </header>
+                                    <section class="modal-card-body">
+                                        <p><strong>{"ECS名称: "}</strong>{ &resource.ecs_name }</p>
+                                        <p><strong>{"云平台: "}</strong>{ &resource.cloud_category }</p>
+                                        <p><strong>{"区域: "}</strong>{ &resource.cloud_region }</p>
+                                        <p><strong>{"客户: "}</strong>{ &resource.customer_name }</p>
+                                        <p><strong>{"配置: "}</strong>{ resource.cpu_cores }{" vCPU, "}{ resource.memory_gb }{" GB"}</p>
+                                        <hr />
+                                        {
+                                            if resource.ecs_status == "待审批" {
+                                                html! {
+                                                    <div class="field">
+                                                        <label class="label">{"审批决定"}</label>
+                                                        <div class="control">
+                                                            <label class="radio">
+                                                                <input type="radio" name="approve_decision" checked={true} />
+                                                                {"通过"}
+                                                            </label>
+                                                            <label class="radio">
+                                                                <input type="radio" name="approve_decision" />
+                                                                {"驳回"}
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            } else {
+                                                html! {
+                                                    <div class="notification is-info">
+                                                        {"该申请已进入审批流程，是否确认通过并进入待交付状态？"}
+                                                    </div>
+                                                }
+                                            }
+                                        }
+                                    </section>
+                                    <footer class="modal-card-foot">
+                                        <button class="button is-success"
+                                            onclick={
+                                                let resource_id = resource.id.unwrap_or(0);
+                                                let on_submit_approve = on_submit_approve.clone();
+                                                Callback::from(move |_| on_submit_approve.emit((resource_id, "approved".to_string(), String::new())))
+                                            }>
+                                            {"通过"}
+                                        </button>
+                                        <button class="button is-danger"
+                                            onclick={
+                                                let resource_id = resource.id.unwrap_or(0);
+                                                let on_submit_approve = on_submit_approve.clone();
+                                                Callback::from(move |_| on_submit_approve.emit((resource_id, "rejected".to_string(), String::new())))
+                                            }>
+                                            {"驳回"}
+                                        </button>
+                                        <button class="button" onclick={
+                                            let show_approve_modal = show_approve_modal.clone();
+                                            Callback::from(move |_| show_approve_modal.set(false))
+                                        }>{"取消"}</button>
+                                    </footer>
+                                </div>
+                            </div>
+                        }
+                    } else { html! {} }
+                } else { html! {} }
+            }
+
+            // Supplement Info Modal
+            {
+                if *show_supplement_modal {
+                    if let Some(resource) = &*selected_resource {
+                        html! {
+                            <div class="modal is-active">
+                                <div class="modal-background" onclick={
+                                    let show_supplement_modal = show_supplement_modal.clone();
+                                    Callback::from(move |_| show_supplement_modal.set(false))
+                                }></div>
+                                <div class="modal-card" style="width: 800px;">
+                                    <header class="modal-card-head">
+                                        <p class="modal-card-title">
+                                            { if resource.ecs_status == "待交付" { "录入云资源" } else { "补充信息" } }
+                                        </p>
+                                        <button class="delete" onclick={
+                                            let show_supplement_modal = show_supplement_modal.clone();
+                                            Callback::from(move |_| show_supplement_modal.set(false))
+                                        }></button>
+                                    </header>
+                                    <section class="modal-card-body">
+                                        <div class="columns">
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"IP地址"}</label>
+                                                    <div class="control">
+                                                        <input class="input" type="text"
+                                                            value={(*supplement_form).ip_address.clone().unwrap_or_default()}
+                                                            placeholder="192.168.1.100"
+                                                            onchange={
+                                                                let on_form_input = on_form_input.clone();
+                                                                Callback::from(move |e: Event| {
+                                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                                    on_form_input.emit(("ip_address".to_string(), input.value()));
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"登录方式"}</label>
+                                                    <div class="control">
+                                                        <div class="select is-fullwidth">
+                                                            <select
+                                                                onchange={
+                                                                    let on_form_input = on_form_input.clone();
+                                                                    Callback::from(move |e: Event| {
+                                                                        let select: HtmlSelectElement = e.target_unchecked_into();
+                                                                        on_form_input.emit(("ecs_login_method".to_string(), select.value()));
+                                                                    })
+                                                                }
+                                                            >
+                                                                <option value="" selected={(*supplement_form).ecs_login_method.is_none()}>{"请选择"}</option>
+                                                                <option value="SSH" selected={(*supplement_form).ecs_login_method.as_ref() == Some(&"SSH".to_string())}>{"SSH"}</option>
+                                                                <option value="RDP" selected={(*supplement_form).ecs_login_method.as_ref() == Some(&"RDP".to_string())}>{"RDP"}</option>
+                                                                <option value="堡垒机" selected={(*supplement_form).ecs_login_method.as_ref() == Some(&"堡垒机".to_string())}>{"堡垒机"}</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="columns">
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"登录用户名"}</label>
+                                                    <div class="control">
+                                                        <input class="input" type="text"
+                                                            value={(*supplement_form).ecs_login_username.clone().unwrap_or_default()}
+                                                            placeholder="root / administrator"
+                                                            onchange={
+                                                                let on_form_input = on_form_input.clone();
+                                                                Callback::from(move |e: Event| {
+                                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                                    on_form_input.emit(("ecs_login_username".to_string(), input.value()));
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"初始密码"}</label>
+                                                    <div class="control">
+                                                        <input class="input" type="password"
+                                                            value={(*supplement_form).ecs_initial_password.clone().unwrap_or_default()}
+                                                            placeholder="••••••••"
+                                                            onchange={
+                                                                let on_form_input = on_form_input.clone();
+                                                                Callback::from(move |e: Event| {
+                                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                                    on_form_input.emit(("ecs_initial_password".to_string(), input.value()));
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 堡垒机信息
+                                        <div class="columns">
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"堡垒机地址"}</label>
+                                                    <div class="control">
+                                                        <input class="input" type="text"
+                                                            value={(*supplement_form).bastion_address.clone().unwrap_or_default()}
+                                                            placeholder="bastion.example.com"
+                                                            onchange={
+                                                                let on_form_input = on_form_input.clone();
+                                                                Callback::from(move |e: Event| {
+                                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                                    on_form_input.emit(("bastion_address".to_string(), input.value()));
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"堡垒机账号"}</label>
+                                                    <div class="control">
+                                                        <input class="input" type="text"
+                                                            value={(*supplement_form).bastion_admin_account.clone().unwrap_or_default()}
+                                                            placeholder="admin"
+                                                            onchange={
+                                                                let on_form_input = on_form_input.clone();
+                                                                Callback::from(move |e: Event| {
+                                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                                    on_form_input.emit(("bastion_admin_account".to_string(), input.value()));
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="field">
+                                            <label class="label">{"备注"}</label>
+                                            <div class="control">
+                                                <textarea class="textarea"
+                                                    placeholder="添加备注信息..."
+                                                    rows="3"
+                                                    onchange={
+                                                        let on_form_input = on_form_input.clone();
+                                                        Callback::from(move |e: Event| {
+                                                            let textarea: HtmlTextAreaElement = e.target_unchecked_into();
+                                                            on_form_input.emit(("remarks".to_string(), textarea.value()));
+                                                        })
+                                                    }
+                                                >
+                                                    { (*supplement_form).remarks.clone().unwrap_or_default() }
+                                                </textarea>
+                                            </div>
+                                        </div>
+
+                                        {
+                                            if resource.ecs_status == "待交付" {
+                                                html! {
+                                                    <div class="notification is-info">
+                                                        <p class="heading">{"提示"}</p>
+                                                        <p>{"提交后将创建云资产记录，请确保信息填写完整。"}</p>
+                                                    </div>
+                                                }
+                                            } else {
+                                                html! {}
+                                            }
+                                        }
+                                    </section>
+                                    <footer class="modal-card-foot">
+                                        <button class="button is-primary" onclick={on_submit_supplement.clone()}>
+                                            {"保存"}
+                                        </button>
+                                        <button class="button" onclick={
+                                            let show_supplement_modal = show_supplement_modal.clone();
+                                            Callback::from(move |_| show_supplement_modal.set(false))
+                                        }>{"取消"}</button>
+                                    </footer>
+                                </div>
+                            </div>
+                        }
+                    } else { html! {} }
+                } else { html! {} }
+            }
+        </div>
+    }
+}
+
+// Helper function for active tab
+fn active_tab_filter<F>(f: F, resources: &UseStateHandle<Vec<BusinessResource>>) -> &'static str
+where
+    F: Fn(&BusinessResource) -> bool,
+{
+    if (*resources).iter().filter(|r| f(r)).count() > 0 {
+        "is-active"
+    } else {
+        ""
+    }
+}
+
+// ============== Cloud Service Asset Management Component ==============
+// 统一纳管物理机和云虚拟机
+
+#[function_component]
+fn CloudServiceAssetManagement() -> Html {
+    let lang = use_state(|| Language::Zh);
+    let assets = use_state(|| Vec::<CloudServiceAsset>::new());
+    let stats = use_state(|| None::<CloudServiceAssetStats>);
+    let loading = use_state(|| true);
+
+    // 过滤条件
+    let filter_asset_type = use_state(|| None::<String>);
+    let filter_status = use_state(|| None::<String>);
+    let filter_provider = use_state(|| None::<String>);
+    let search_keyword = use_state(|| String::new());
+
+    let token = get_auth_token();
+
+    // 获取统计数据
+    {
+        let stats = stats.clone();
+        let token = token.clone();
+        use_effect_with((), move |_: &()| {
+            spawn_local(async move {
+                if let Ok(resp) = Request::get(&api_url("cloud-service-assets/stats"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if let Ok(data) = resp.json::<CloudServiceAssetStats>().await {
+                        stats.set(Some(data));
+                    }
                 }
+            });
+            || ()
+        });
+    }
+
+    // 获取资产列表的函数
+    let fetch_assets_fn = {
+        let assets = assets.clone();
+        let loading = loading.clone();
+        let token = token.clone();
+        let filter_asset_type = filter_asset_type.clone();
+        let filter_status = filter_status.clone();
+        let filter_provider = filter_provider.clone();
+        let search_keyword = search_keyword.clone();
+
+        move || {
+            let assets = assets.clone();
+            let loading = loading.clone();
+            let token = token.clone();
+            let filter_asset_type = filter_asset_type.clone();
+            let filter_status = filter_status.clone();
+            let filter_provider = filter_provider.clone();
+            let search_keyword = search_keyword.clone();
+
+            spawn_local(async move {
+                loading.set(true);
+                let mut url = api_url("cloud-service-assets");
+                let mut has_params = false;
+
+                if let Some(t) = &*filter_asset_type {
+                    url.push_str(&format!("?asset_type={}", t));
+                    has_params = true;
+                }
+                if let Some(s) = &*filter_status {
+                    url.push_str(&format!("{}status={}", if has_params { "&" } else { "?" }, s));
+                    has_params = true;
+                }
+                if let Some(p) = &*filter_provider {
+                    url.push_str(&format!("{}cloud_provider={}", if has_params { "&" } else { "?" }, p));
+                    has_params = true;
+                }
+                if !search_keyword.is_empty() {
+                    let sk = (*search_keyword).clone();
+                    url.push_str(&format!("{}search_keyword={}", if has_params { "&" } else { "?" }, sk));
+                }
+
+                if let Ok(resp) = Request::get(&url).header("Authorization", &token).send().await {
+                    if let Ok(data) = resp.json::<Vec<CloudServiceAsset>>().await {
+                        assets.set(data);
+                    }
+                }
+                loading.set(false);
+            });
+        }
+    };
+
+    // 初始加载
+    {
+        let fetch_assets_fn = fetch_assets_fn.clone();
+        use_effect_with((), move |_: &()| {
+            fetch_assets_fn();
+            || ()
+        });
+    }
+
+    // 状态标签样式
+    fn status_class(status: &str) -> &'static str {
+        match status {
+            "运行中" => "is-success",
+            "stopped" | "已停止" => "is-dark",
+            "released" | "已释放" => "is-danger",
+            s if s.contains("待") => "is-warning",
+            _ => "is-info",
+        }
+    }
+
+    // 资产类型标签样式
+    fn asset_type_class(asset_type: &str) -> &'static str {
+        match asset_type {
+            "physical" => "is-primary",
+            "virtual" => "is-link",
+            _ => "is-light",
+        }
+    }
+
+    // 克隆 fetch_assets_fn 供各个事件使用
+    let fetch_assets_onclick = {
+        let fetch_assets_fn = fetch_assets_fn.clone();
+        Callback::from(move |_| {
+            fetch_assets_fn();
+        })
+    };
+
+    let on_clear_filters = {
+        let filter_asset_type = filter_asset_type.clone();
+        let filter_status = filter_status.clone();
+        let filter_provider = filter_provider.clone();
+        let search_keyword = search_keyword.clone();
+        let fetch_assets_fn = fetch_assets_fn.clone();
+
+        Callback::from(move |_| {
+            filter_asset_type.set(None);
+            filter_status.set(None);
+            filter_provider.set(None);
+            search_keyword.set(String::new());
+            fetch_assets_fn();
+        })
+    };
+
+    html! {
+        <div class="container" style="margin-top: 20px;">
+            <h1 class="title">{ "云服务资产管理" }</h1>
+            <p class="subtitle">{ "统一纳管物理机和云虚拟机资产" }</p>
+
+            // 统计卡片
+            if let Some(s) = (*stats).clone() {
+                <div class="columns" style="margin-top: 20px;">
+                    <div class="column">
+                        <div class="box">
+                            <p class="heading">{ "总资产数" }</p>
+                            <p class="title">{ s.total_count }</p>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="box">
+                            <p class="heading">{ "物理机" }</p>
+                            <p class="title has-text-primary">{ s.physical_count }</p>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="box">
+                            <p class="heading">{ "云虚拟机" }</p>
+                            <p class="title has-text-link">{ s.virtual_count }</p>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="box">
+                            <p class="heading">{ "运行中" }</p>
+                            <p class="title has-text-success">{ s.running_count }</p>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="box">
+                            <p class="heading">{ "总CPU核数" }</p>
+                            <p class="title">{ s.total_cpu_cores }</p>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="box">
+                            <p class="heading">{ "总内存(GB)" }</p>
+                            <p class="title">{ s.total_memory_gb }</p>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            // 过滤器
+            <div class="box" style="margin-top: 20px;">
+                <div class="columns">
+                    <div class="column is-2">
+                        <label class="label">{ "资产类型" }</label>
+                        <div class="select is-fullwidth">
+                            <select
+                                onchange={
+                                    let filter_asset_type = filter_asset_type.clone();
+                                    let fetch_assets_fn = fetch_assets_fn.clone();
+                                    Callback::from(move |e: Event| {
+                                        let select: HtmlSelectElement = e.target_unchecked_into();
+                                        let value = select.value();
+                                        filter_asset_type.set(if value.is_empty() { None } else { Some(value) });
+                                        fetch_assets_fn();
+                                    })
+                                }
+                            >
+                                <option value="" selected={(*filter_asset_type).is_none()}>{ "全部" }</option>
+                                <option value="physical" selected={(*filter_asset_type).as_ref() == Some(&"physical".to_string())}>{ "物理机" }</option>
+                                <option value="virtual" selected={(*filter_asset_type).as_ref() == Some(&"virtual".to_string())}>{ "云虚拟机" }</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="column is-2">
+                        <label class="label">{ "状态" }</label>
+                        <div class="select is-fullwidth">
+                            <select
+                                onchange={
+                                    let filter_status = filter_status.clone();
+                                    let fetch_assets_fn = fetch_assets_fn.clone();
+                                    Callback::from(move |e: Event| {
+                                        let select: HtmlSelectElement = e.target_unchecked_into();
+                                        let value = select.value();
+                                        filter_status.set(if value.is_empty() { None } else { Some(value) });
+                                        fetch_assets_fn();
+                                    })
+                                }
+                            >
+                                <option value="" selected={(*filter_status).is_none()}>{ "全部" }</option>
+                                <option value="运行中" selected={(*filter_status).as_ref() == Some(&"运行中".to_string())}>{ "运行中" }</option>
+                                <option value="已停止" selected={(*filter_status).as_ref() == Some(&"已停止".to_string())}>{ "已停止" }</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="column is-2">
+                        <label class="label">{ "云厂商" }</label>
+                        <div class="select is-fullwidth">
+                            <select
+                                onchange={
+                                    let filter_provider = filter_provider.clone();
+                                    let fetch_assets_fn = fetch_assets_fn.clone();
+                                    Callback::from(move |e: Event| {
+                                        let select: HtmlSelectElement = e.target_unchecked_into();
+                                        let value = select.value();
+                                        filter_provider.set(if value.is_empty() { None } else { Some(value) });
+                                        fetch_assets_fn();
+                                    })
+                                }
+                            >
+                                <option value="" selected={(*filter_provider).is_none()}>{ "全部" }</option>
+                                <option value="阿里云" selected={(*filter_provider).as_ref() == Some(&"阿里云".to_string())}>{ "阿里云" }</option>
+                                <option value="腾讯云" selected={(*filter_provider).as_ref() == Some(&"腾讯云".to_string())}>{ "腾讯云" }</option>
+                                <option value="华为云" selected={(*filter_provider).as_ref() == Some(&"华为云".to_string())}>{ "华为云" }</option>
+                                <option value="AWS" selected={(*filter_provider).as_ref() == Some(&"AWS".to_string())}>{ "AWS" }</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="column is-4">
+                        <label class="label">{ "搜索" }</label>
+                        <input class="input"
+                            type="text"
+                            placeholder="资产名称/实例ID/IP地址"
+                            value={(*search_keyword).clone()}
+                            onchange={
+                                let search_keyword = search_keyword.clone();
+                                Callback::from(move |e: Event| {
+                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                    search_keyword.set(input.value());
+                                })
+                            }
+                        />
+                    </div>
+                    <div class="column is-2">
+                        <label class="label">{ " " }</label>
+                        <div class="buttons">
+                            <button class="button is-primary" onclick={fetch_assets_onclick.clone()}>
+                                { "搜索" }
+                            </button>
+                            <button class="button" onclick={on_clear_filters.clone()}>
+                                { "清除" }
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            // 资产列表
+            if *loading {
+                <div class="section">
+                    <progress class="progress is-small is-primary" max="100">{ "30%" }</progress>
+                </div>
+            } else {
+                <div class="table-container" style="margin-top: 20px;">
+                    <table class="table is-fullwidth is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{ "类型" }</th>
+                                <th>{ "资产名称" }</th>
+                                <th>{ "实例ID" }</th>
+                                <th>{ "状态" }</th>
+                                <th>{ "云厂商" }</th>
+                                <th>{ "区域" }</th>
+                                <th>{ "实例类型" }</th>
+                                <th>{ "CPU/内存" }</th>
+                                <th>{ "IP地址" }</th>
+                                <th>{ "客户" }</th>
+                                <th>{ "来源" }</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            { for (*assets).iter().map(|asset| {
+                                let asset_type_label = if asset.asset_type == "physical" { "物理机" } else { "云虚拟机" };
+                                let source_label = if asset.source_type == "business_resource" { "业务受理" } else { "混合云" };
+
+                                html! {
+                                    <tr>
+                                        <td>
+                                            <span class={classes!("tag", asset_type_class(&asset.asset_type))}>
+                                                { asset_type_label }
+                                            </span>
+                                        </td>
+                                        <td>{ &asset.name }</td>
+                                        <td style="font-family: monospace; font-size: 12px;">{ &asset.instance_id }</td>
+                                        <td>
+                                            <span class={classes!("tag", status_class(&asset.status))}>
+                                                { &asset.status }
+                                            </span>
+                                        </td>
+                                        <td>{ &asset.cloud_provider }</td>
+                                        <td>{ &asset.region }</td>
+                                        <td>{ &asset.instance_type }</td>
+                                        <td>{ format!("{} vCPU / {} GB", asset.cpu_cores, asset.memory_gb) }</td>
+                                        <td style="font-family: monospace;">{ &asset.ip_address }</td>
+                                        <td>{ &asset.customer_name }</td>
+                                        <td>
+                                            <span class="tag is-light">{ source_label }</span>
+                                        </td>
+                                    </tr>
+                                }
+                            }).collect::<Vec<_>>() }
+                        </tbody>
+                    </table>
+                    { if (*assets).is_empty() {
+                        html! { <div class="has-text-centered" style="padding: 40px;">{ "暂无数据" }</div> }
+                    } else { html! {} }}
+                </div>
+            }
         </div>
     }
 }
@@ -1150,6 +3509,13 @@ fn UserManagement() -> Html {
     let editing_user = use_state(|| None as Option<(String, String, Permissions)>); // (id, username, permissions)
     let temp_permissions = use_state(|| None as Option<Permissions>);
 
+    // Create user state
+    let show_create_modal = use_state(|| false);
+    let new_username = use_state(|| String::new());
+    let new_password = use_state(|| String::new());
+    let new_role = use_state(|| String::from("SysAdmin"));
+    let create_message = use_state(|| None as Option<String>);
+
     // Get token from localStorage
     let token = get_auth_token();
 
@@ -1164,7 +3530,7 @@ fn UserManagement() -> Html {
 
         move |_| {
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/users").header("Authorization", &token).send().await {
+                if let Ok(resp) = Request::get(&api_url("users")).header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<User>>().await {
                         users.set(data);
                     }
@@ -1182,6 +3548,130 @@ fn UserManagement() -> Html {
             Role::Auditor => "Auditor".to_string(),
             Role::Custom(name) => name.clone(),
         }
+    };
+
+    // Open create user modal
+    let on_open_create_modal = {
+        let show_create_modal = show_create_modal.clone();
+        let new_username = new_username.clone();
+        let new_password = new_password.clone();
+        let new_role = new_role.clone();
+        let create_message = create_message.clone();
+
+        Callback::from(move |_| {
+            new_username.set(String::new());
+            new_password.set(String::new());
+            new_role.set(String::from("SysAdmin"));
+            create_message.set(None);
+            show_create_modal.set(true);
+        })
+    };
+
+    // Close create modal
+    let on_close_create_modal = {
+        let show_create_modal = show_create_modal.clone();
+
+        Callback::from(move |_| {
+            show_create_modal.set(false);
+        })
+    };
+
+    // Create user
+    let on_create_user = {
+        let token = token.clone();
+        let users = users.clone();
+        let new_username = new_username.clone();
+        let new_password = new_password.clone();
+        let new_role = new_role.clone();
+        let show_create_modal = show_create_modal.clone();
+        let create_message = create_message.clone();
+
+        Callback::from(move |_| {
+            let username = (*new_username).clone();
+            let password = (*new_password).clone();
+            let role_str = (*new_role).clone();
+            let token = token.clone();
+            let users = users.clone();
+            let show_create_modal = show_create_modal.clone();
+            let create_message = create_message.clone();
+
+            if username.is_empty() || password.is_empty() {
+                create_message.set(Some("用户名和密码不能为空".to_string()));
+                return;
+            }
+
+            // Parse role
+            let role = match role_str.as_str() {
+                "SecAdmin" => Role::SecAdmin,
+                "Auditor" => Role::Auditor,
+                _ => Role::SysAdmin,
+            };
+
+            spawn_local(async move {
+                let req = CreateUserRequest {
+                    username: username.clone(),
+                    password: password.clone(),
+                    role,
+                };
+
+                if let Ok(resp) = Request::post(&api_url("users"))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&req).unwrap_or_default())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    if resp.ok() {
+                        // Refresh users
+                        if let Ok(resp) = Request::get(&api_url("users"))
+                            .header("Authorization", &token)
+                            .send()
+                            .await
+                        {
+                            if let Ok(data) = resp.json::<Vec<User>>().await {
+                                users.set(data);
+                            }
+                        }
+                        show_create_modal.set(false);
+                    } else {
+                        create_message.set(Some("创建用户失败".to_string()));
+                    }
+                }
+            });
+        })
+    };
+
+    // Delete user
+    let on_delete_user = {
+        let token = token.clone();
+        let users = users.clone();
+
+        Callback::from(move |user_id: String| {
+            let token = token.clone();
+            let users = users.clone();
+
+            spawn_local(async move {
+                if let Ok(resp) = Request::delete(&format!("{}/{}", api_url("users"), user_id))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if resp.ok() {
+                        // Refresh users
+                        if let Ok(resp) = Request::get(&api_url("users"))
+                            .header("Authorization", &token)
+                            .send()
+                            .await
+                        {
+                            if let Ok(data) = resp.json::<Vec<User>>().await {
+                                users.set(data);
+                            }
+                        }
+                    }
+                }
+            });
+        })
     };
 
     // Open permission edit modal
@@ -1234,7 +3724,7 @@ fn UserManagement() -> Html {
 
                     spawn_local(async move {
                         let json_body = serde_json::to_string(&perms).unwrap_or_default();
-                        let url = format!("http://localhost:3003/api/users/{}/permissions", user_id);
+                        let url = format!("{}/{}/permissions", api_url("users"), user_id);
 
                         if let Ok(resp) = Request::put(&url)
                             .header("Authorization", &token)
@@ -1246,7 +3736,7 @@ fn UserManagement() -> Html {
                         {
                             if resp.ok() {
                                 // Refresh users
-                                if let Ok(resp) = Request::get("http://localhost:3003/api/users")
+                                if let Ok(resp) = Request::get(&api_url("users"))
                                     .header("Authorization", &token)
                                     .send()
                                     .await
@@ -1307,7 +3797,15 @@ fn UserManagement() -> Html {
 
     html! {
         <div class="container p-4">
-            <h1 class="title">{ lang.t("user_management") }</h1>
+            <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
+                <h1 class="title">{ lang.t("user_management") }</h1>
+                if user_role == Some(Role::SysAdmin) {
+                    <button class="button is-primary" onclick={on_open_create_modal.clone()}>
+                        <span class="icon"><i class="fas fa-plus"></i></span>
+                        <span>{ "创建用户" }</span>
+                    </button>
+                }
+            </div>
             <div class="box">
                 if (*users).is_empty() && *loading {
                     <p class="has-text-centered has-text-grey">{ "Loading..." }</p>
@@ -1325,9 +3823,12 @@ fn UserManagement() -> Html {
                         </thead>
                         <tbody>
                             { for users.iter().map(|user| {
-                                let user_id = user.id.clone();
+                                let user_id_edit = user.id.clone();
+                                let user_id_delete = user.id.clone();
                                 let on_edit = on_edit_permissions.clone();
                                 let current_user_role = user_role.clone();
+                                let on_delete = on_delete_user.clone();
+                                let username = user.username.clone();
 
                                 html! {
                                     <tr>
@@ -1337,15 +3838,26 @@ fn UserManagement() -> Html {
                                         </td>
                                         <td>{ &user.created_at.format("%Y-%m-%d %H:%M:%S").to_string() }</td>
                                         <td>
-                                            // Only admin can edit permissions
-                                            if current_user_role == Some(Role::SysAdmin) && user.permissions.is_some() {
-                                                <button
-                                                    class="button is-small is-info"
-                                                    onclick={move |_| on_edit.emit(user_id.clone())}
-                                                >
-                                                    { "编辑权限" }
-                                                </button>
-                                            }
+                                            <div class="buttons are-small">
+                                                // Only admin can edit permissions
+                                                if current_user_role == Some(Role::SysAdmin) && user.permissions.is_some() {
+                                                    <button
+                                                        class="button is-small is-info"
+                                                        onclick={move |_| on_edit.emit(user_id_edit.clone())}
+                                                    >
+                                                        { "编辑权限" }
+                                                    </button>
+                                                }
+                                                // Only admin can delete users (but not themselves)
+                                                if current_user_role == Some(Role::SysAdmin) && username != "admin" {
+                                                    <button
+                                                        class="button is-small is-danger"
+                                                        onclick={move |_| on_delete.emit(user_id_delete.clone())}
+                                                    >
+                                                        { "删除" }
+                                                    </button>
+                                                }
+                                            </div>
                                         </td>
                                     </tr>
                                 }
@@ -1354,6 +3866,85 @@ fn UserManagement() -> Html {
                     </table>
                 }
             </div>
+
+            // Create User Modal
+            if *show_create_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_create_modal.clone()}></div>
+                    <div class="modal-card" style="width: 500px;">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "创建用户" }</p>
+                            <button class="delete" onclick={on_close_create_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            if let Some(msg) = &*create_message {
+                                <div class="notification is-danger">{ msg }</div>
+                            }
+                            <div class="field">
+                                <label class="label">{ "用户名" }</label>
+                                <div class="control">
+                                    <input
+                                        class="input"
+                                        type="text"
+                                        placeholder="输入用户名"
+                                        value={(*new_username).clone()}
+                                        oninput={
+                                            let new_username = new_username.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                new_username.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label class="label">{ "密码" }</label>
+                                <div class="control">
+                                    <input
+                                        class="input"
+                                        type="password"
+                                        placeholder="输入密码"
+                                        value={(*new_password).clone()}
+                                        oninput={
+                                            let new_password = new_password.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                new_password.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label class="label">{ "角色" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            value={(*new_role).clone()}
+                                            onchange={
+                                                let new_role = new_role.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let select = e.target_unchecked_into::<HtmlSelectElement>();
+                                                    new_role.set(select.value());
+                                                })
+                                            }
+                                        >
+                                            <option value="SysAdmin">{ "系统管理员 (SysAdmin) - 全部权限" }</option>
+                                            <option value="SecAdmin">{ "安全管理员 (SecAdmin) - 资产、扫描、风险管理" }</option>
+                                            <option value="Auditor">{ "审计员 (Auditor) - 日志查看" }</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_create_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_create_user}>{ "创建" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
 
             // Permission Editing Modal
             if *show_permissions_modal {
@@ -1635,7 +4226,7 @@ fn AuditLogs() -> Html {
 
         move |_| {
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/logs").header("Authorization", &token).send().await {
+                if let Ok(resp) = Request::get(&api_url("logs")).header("Authorization", &token).send().await {
                     if let Ok(data) = resp.json::<Vec<AuditLog>>().await {
                         logs.set(data);
                     }
@@ -1692,6 +4283,405 @@ fn NotFound() -> Html {
     }
 }
 
+// ============== Automation Orchestration Component ==============
+// 自动化资源编排 - 云资源自动化编排（仅处理云资源，物理机不进入此流程）
+// 注意：本系统不直接调用云厂商API创建资源。运维人员需在云厂商控制台手动创建资源后，在此模块录入系统。
+
+#[derive(Clone, Debug)]
+struct OrchestrationTask {
+    id: i32,
+    business_resource_id: i32,
+    business_resource_name: String,
+    status: String, // 待编排, 编排中, 已完成, 失败
+    cloud_provider: String,
+    region: String,
+    instance_type: String,
+    created_at: String,
+    completed_at: Option<String>,
+    error_message: Option<String>,
+    terraform_state: Option<String>, // Terraform 状态文件引用
+    cloud_asset_id: Option<i32>,      // 关联的云资产ID
+}
+
+#[function_component]
+fn AutomationOrchestration() -> Html {
+    let lang = use_state(|| Language::Zh);
+    let tasks = use_state(|| Vec::new());
+    let loading = use_state(|| true);
+    let show_logs_modal = use_state(|| false);
+    let selected_task_logs = use_state(|| String::new());
+
+    let token = get_auth_token();
+
+    // 加载编排任务列表
+    let load_tasks = {
+        let token = token.clone();
+        let tasks = tasks.clone();
+        let loading = loading.clone();
+
+        Callback::from(move |_| {
+            let token = token.clone();
+            let tasks = tasks.clone();
+            let loading = loading.clone();
+
+            spawn_local(async move {
+                loading.set(true);
+
+                // 获取已审批通过的业务资源作为编排任务源
+                let business_resources_req = Request::get(&api_url("business-resources"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await;
+
+                let mut orchestration_tasks = vec![];
+
+                if let Ok(resp) = business_resources_req {
+                    if let Ok(resources) = resp.json::<Vec<BusinessResource>>().await {
+                        // 只处理已审批通过的云资源业务申请（物理机不进入自动化编排流程）
+                        let mut idx = 0;
+                        for resource in resources.iter() {
+                            // 云资源且已审批通过状态（待交付）
+                            let is_approved = resource.ecs_status == "已通过" || resource.ecs_status == "待交付";
+                            if is_approved && resource.resource_type == "cloud" {
+                                let is_completed = !resource.instance_id.is_empty();
+                                idx += 1;
+                                orchestration_tasks.push(OrchestrationTask {
+                                    id: idx,
+                                    business_resource_id: resource.id.unwrap_or(0),
+                                    business_resource_name: resource.ecs_name.clone(),
+                                    status: if is_completed {
+                                        "已完成".to_string()
+                                    } else {
+                                        "待编排".to_string()
+                                    },
+                                    cloud_provider: resource.cloud_category.clone(),
+                                    region: resource.cloud_region.clone(),
+                                    instance_type: resource.ecs_type.clone(),
+                                    created_at: resource.created_at.map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_else(|| "-".to_string()),
+                                    completed_at: None,
+                                    error_message: None,
+                                    terraform_state: None,
+                                    cloud_asset_id: None,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                tasks.set(orchestration_tasks);
+                loading.set(false);
+            });
+        })
+    };
+
+    // Initial load
+    use_effect_with((), {
+        let load_tasks = load_tasks.clone();
+        move |_| {
+            load_tasks.emit(());
+            || ()
+        }
+    });
+
+    // 执行编排 (模拟调用 Terraform/云 SDK)
+    let execute_orchestration = {
+        let token = token.clone();
+        let tasks = tasks.clone();
+        let load_tasks = load_tasks.clone();
+
+        Callback::from(move |task_id: i32| {
+            let token = token.clone();
+            let tasks_clone = tasks.clone();
+            let load_tasks = load_tasks.clone();
+
+            spawn_local(async move {
+                // 更新状态为编排中
+                let updated_tasks = tasks_clone.iter().map(|t| {
+                    if t.id == task_id {
+                        OrchestrationTask {
+                            status: "编排中".to_string(),
+                            ..t.clone()
+                        }
+                    } else {
+                        t.clone()
+                    }
+                }).collect::<Vec<_>>();
+                tasks_clone.set(updated_tasks);
+
+                // 模拟异步编排过程 (实际应调用后端编排 API)
+                // 这里会调用 approve_business_resource API 来创建云资产
+                let current_task = tasks_clone.iter().find(|t| t.id == task_id);
+
+                if let Some(task) = current_task {
+                    let url = format!("{}/{}/approve", api_url("business-resources"), task.business_resource_id);
+
+                    if let Ok(resp) = Request::post(&url)
+                        .header("Authorization", &token)
+                        .send()
+                        .await
+                    {
+                        if resp.status() == 200 {
+                            // 编排成功，重新加载任务状态
+                            load_tasks.emit(());
+                        } else {
+                            // 编排失败
+                            let failed_tasks = tasks_clone.iter().map(|t| {
+                                if t.id == task_id {
+                                    OrchestrationTask {
+                                        status: "失败".to_string(),
+                                        error_message: Some("编排失败，请检查云服务配置".to_string()),
+                                        ..t.clone()
+                                    }
+                                } else {
+                                    t.clone()
+                                }
+                            }).collect::<Vec<_>>();
+                            tasks_clone.set(failed_tasks);
+                        }
+                    }
+                }
+            });
+        })
+    };
+
+    let on_view_logs = {
+        let selected_task_logs = selected_task_logs.clone();
+        let show_logs_modal = show_logs_modal.clone();
+
+        Callback::from(move |task: OrchestrationTask| {
+            // 生成云资源编排日志（此模块仅处理云资源）
+            let logs = format!(
+                "编排任务日志 - {}\n\
+                 状态: {}\n\
+                 资源类型: 云服务器\n\
+                 云服务商: {}\n\
+                 区域: {}\n\
+                 实例类型: {}\n\
+                 \n\
+                 [云资源交付流程]\n\
+                 1. 业务申请审批通过，状态变为「待交付」\n\
+                 2. 运维人员登录云厂商控制台（{}）创建资源\n\
+                 3. 记录云厂商返回的实例ID、IP地址等信息\n\
+                 4. 在系统中录入云资源信息\n\
+                 5. 混合云管理模块可API同步资源状态\n\
+                 \n\
+                 [Terraform 执行日志]\n\
+                 2024-01-15 10:30:00 [INFO] 初始化 Terraform 配置\n\
+                 2024-01-15 10:30:05 [INFO] 连接 {} API\n\
+                 2024-01-15 10:30:10 [INFO] 创建 VPC 网络配置\n\
+                 2024-01-15 10:30:15 [INFO] 创建安全组规则\n\
+                 2024-01-15 10:30:20 [INFO] 启动云主机实例 {}\n\
+                 2024-01-15 10:32:00 [INFO] 实例创建成功\n\
+                 2024-01-15 10:32:05 [INFO] 配置网络规则完成\n\
+                 \n\
+                 [请注意] 请手动在云厂商控制台创建资源后，将实例ID等信息录入本系统。",
+                task.business_resource_name,
+                task.status,
+                task.cloud_provider,
+                task.region,
+                task.instance_type,
+                task.cloud_provider,
+                task.cloud_provider,
+                task.business_resource_name
+            );
+
+            selected_task_logs.set(logs);
+            show_logs_modal.set(true);
+        })
+    };
+
+    let get_status_class = |status: &str| -> &str {
+        match status {
+            "待编排" => "is-warning",
+            "编排中" => "is-info",
+            "已完成" => "is-success",
+            "失败" => "is-danger",
+            _ => "",
+        }
+    };
+
+    let lang_enum = (*lang).clone();
+
+    html! {
+        <div class="container">
+            <div class="columns">
+                <div class="column is-12">
+                    <h1 class="title">{ lang_enum.t("automation_orchestration") }</h1>
+                    <p class="subtitle">{ "云资源自动化编排" }</p>
+
+                    // 工作流程说明
+                    <div class="content">
+                        <div class="notification is-info is-light">
+                            <p class="heading">{ "云资源交付流程" }</p>
+                            <p class="mb-3">
+                                <strong>{ "注意：本系统不直接调用云厂商API创建资源。运维人员需在云厂商控制台手动创建资源后，在此模块录入系统。" }</strong>
+                            </p>
+                            <p class="mb-3">
+                                <strong>{ "正确流程说明:" }</strong>
+                            </p>
+                            <ol class="mb-3">
+                                <li>{ "业务申请审批通过后，状态变为「待交付」" }</li>
+                                <li>{ "运维人员登录云厂商控制台（阿里云/腾讯云等）创建资源" }</li>
+                                <li>{ "记录云厂商返回的实例ID、IP地址等信息" }</li>
+                                <li>{ "在系统中录入云资源信息" }</li>
+                                <li>{ "混合云管理模块可API同步资源状态" }</li>
+                            </ol>
+                            <p class="has-text-grey">
+                                { "注：物理机不进入此流程，物理机交付请直接在「云服务资产管理」模块录入。" }
+                            </p>
+                        </div>
+                    </div>
+
+                    // 统计卡片
+                    <div class="columns">
+                        <div class="column">
+                            <div class="card">
+                                <div class="card-content">
+                                    <div class="content">
+                                        <p class="title is-5">{ "待编排" }</p>
+                                        <p class="subtitle is-3">
+                                            { tasks.iter().filter(|t| t.status == "待编排").count() }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="card">
+                                <div class="card-content">
+                                    <div class="content">
+                                        <p class="title is-5">{ "编排中" }</p>
+                                        <p class="subtitle is-3">
+                                            { tasks.iter().filter(|t| t.status == "编排中").count() }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="card">
+                                <div class="card-content">
+                                    <div class="content">
+                                        <p class="title is-5">{ "已完成" }</p>
+                                        <p class="subtitle is-3">
+                                            { tasks.iter().filter(|t| t.status == "已完成").count() }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="card">
+                                <div class="card-content">
+                                    <div class="content">
+                                        <p class="title is-5">{ "失败" }</p>
+                                        <p class="subtitle is-3 has-text-danger">
+                                            { tasks.iter().filter(|t| t.status == "失败").count() }
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    // 任务列表
+                    <div class="card">
+                        <div class="card-content">
+                            if *loading {
+                                <progress class="progress is-primary" />
+                            } else if tasks.is_empty() {
+                                <div class="content has-text-centered">
+                                    <p class="has-text-grey">{ "暂无编排任务，已审批通过的云资源业务申请（待交付状态）将在此显示" }</p>
+                                    <p class="has-text-grey is-size-7">{ "注：物理机不进入此流程" }</p>
+                                </div>
+                            } else {
+                                <table class="table is-fullwidth is-hoverable">
+                                    <thead>
+                                        <tr>
+                                            <th>{ "业务名称" }</th>
+                                            <th>{ "云服务商" }</th>
+                                            <th>{ "区域" }</th>
+                                            <th>{ "实例类型" }</th>
+                                            <th>{ "状态" }</th>
+                                            <th>{ "创建时间" }</th>
+                                            <th>{ "操作" }</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        { for tasks.iter().map(|task| {
+                                            let task_id = task.id;
+                                            let task_clone = task.clone();
+                                            let on_execute = execute_orchestration.clone();
+                                            let on_view = on_view_logs.clone();
+
+                                            html! {
+                                                <tr>
+                                                    <td>{ &task.business_resource_name }</td>
+                                                    <td>{ &task.cloud_provider }</td>
+                                                    <td>{ &task.region }</td>
+                                                    <td>{ &task.instance_type }</td>
+                                                    <td>
+                                                        <span class={format!("tag {}", get_status_class(&task.status))}>
+                                                            { &task.status }
+                                                        </span>
+                                                    </td>
+                                                    <td>{ &task.created_at }</td>
+                                                    <td>
+                                                        <div class="buttons are-small">
+                                                            if task.status == "待编排" {
+                                                                <button class="button is-primary" onclick={Callback::from(move |_| on_execute.emit(task_id))}>
+                                                                    { "创建云资源" }
+                                                                </button>
+                                                            }
+                                                            <button class="button is-light" onclick={Callback::from(move |_| on_view.emit(task_clone.clone()))}>
+                                                                { "查看日志" }
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        })}
+                                    </tbody>
+                                </table>
+                            }
+                        </div>
+                    </div>
+
+                    // 日志模态框
+                    if *show_logs_modal {
+                        <div class="modal is-active">
+                            <div class="modal-background" onclick={
+                                let show_logs_modal = show_logs_modal.clone();
+                                Callback::from(move |_| show_logs_modal.set(false))
+                            } />
+                            <div class="modal-card">
+                                <header class="modal-card-head">
+                                    <p class="modal-card-title">{ "编排日志" }</p>
+                                    <button class="delete" aria-label="close" onclick={
+                                        let show_logs_modal = show_logs_modal.clone();
+                                        Callback::from(move |_| show_logs_modal.set(false))
+                                    } />
+                                </header>
+                                <section class="modal-card-body">
+                                    <pre class="is-family-monogram" style="white-space: pre-wrap; background: #f5f5f5; padding: 1rem;">
+                                        { (*selected_task_logs).clone() }
+                                    </pre>
+                                </section>
+                                <footer class="modal-card-foot">
+                                    <button class="button" onclick={
+                                        let show_logs_modal = show_logs_modal.clone();
+                                        Callback::from(move |_| show_logs_modal.set(false))
+                                    }>{ "关闭" }</button>
+                                </footer>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+}
+
 // ============== Cloud Management Component ==============
 
 #[function_component]
@@ -1727,7 +4717,7 @@ fn CloudManagement() -> Html {
         move |_| {
             spawn_local(async move {
                 // Fetch cloud assets
-                if let Ok(resp) = Request::get("http://localhost:3003/api/cloud-assets")
+                if let Ok(resp) = Request::get(&api_url("cloud-assets"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -1738,7 +4728,7 @@ fn CloudManagement() -> Html {
                 }
 
                 // Fetch stats
-                if let Ok(resp) = Request::get("http://localhost:3003/api/cloud-assets/stats")
+                if let Ok(resp) = Request::get(&api_url("cloud-assets/stats"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -1882,7 +4872,7 @@ fn CloudManagement() -> Html {
             spawn_local(async move {
                 loading.set(true);
 
-                if let Ok(resp) = Request::get("http://localhost:3003/api/cloud-assets")
+                if let Ok(resp) = Request::get(&api_url("cloud-assets"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -1892,7 +4882,7 @@ fn CloudManagement() -> Html {
                     }
                 }
 
-                if let Ok(resp) = Request::get("http://localhost:3003/api/cloud-assets/stats")
+                if let Ok(resp) = Request::get(&api_url("cloud-assets/stats"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -1955,7 +4945,7 @@ fn CloudManagement() -> Html {
                         }
                     };
 
-                    if let Ok(resp) = Request::put(&format!("http://localhost:3003/api/cloud-assets/{}", asset_id))
+                    if let Ok(resp) = Request::put(&format!("{}/{}", api_url("cloud-assets"), asset_id))
                         .header("Authorization", &token)
                         .header("Content-Type", "application/json")
                         .body(asset_json)
@@ -1966,7 +4956,7 @@ fn CloudManagement() -> Html {
                         if resp.ok() {
                             edit_message.set(Some("保存成功".to_string()));
                             // Refresh assets
-                            if let Ok(resp) = Request::get("http://localhost:3003/api/cloud-assets")
+                            if let Ok(resp) = Request::get(&api_url("cloud-assets"))
                                 .header("Authorization", &token)
                                 .send()
                                 .await
@@ -1994,6 +4984,19 @@ fn CloudManagement() -> Html {
     html! {
         <div class="container p-4">
             <h1 class="title">{ lang.t("cloud_management") }</h1>
+
+            // 混合云管理说明
+            <div class="notification is-info is-light mb-4">
+                <div class="content">
+                    <p class="heading">{ "☁️ 混合云管理说明" }</p>
+                    <p>
+                        { "本模块统一纳管各云厂商（阿里云/腾讯云/华为云/AWS等）的资源，支持手动录入和API自动同步。" }
+                    </p>
+                    <p class="is-size-7 has-text-grey mt-2">
+                        { "运维流程: 业务申请 → 审批通过 → 云厂商平台创建资源 → 手动录入系统 → API同步状态" }
+                    </p>
+                </div>
+            </div>
 
             // Statistics Cards
             if let Some(ref s) = *stats {
@@ -2546,6 +5549,796 @@ fn CloudManagement() -> Html {
     }
 }
 
+// ============== Cloud Provider Management Component ==============
+// 云区对接管理组件
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CloudProviderConfigDisplay {
+    pub id: Option<i32>,
+    pub provider: CloudProvider,
+    pub region_id: String,
+    pub region_name: String,
+    pub available_zones: Vec<String>,
+    pub account_name: String,
+    pub access_key_id: String,
+    pub status: CloudProviderConfigStatus,
+    pub remarks: Option<String>,
+    pub last_test_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_test_result: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[function_component]
+fn CloudProviderManagement() -> Html {
+    let configs = use_state(|| Vec::new());
+    let loading = use_state(|| true);
+    let error_message = use_state(|| None as Option<String>);
+    let success_message = use_state(|| None as Option<String>);
+
+    // Modal states
+    let show_create_modal = use_state(|| false);
+
+    // Form states
+    let form_provider = use_state(|| CloudProvider::Aliyun);
+    let form_region_id = use_state(|| String::new());
+    let form_region_name = use_state(|| String::new());
+    let form_account_name = use_state(|| String::new());
+    let form_access_key_id = use_state(|| String::new());
+    let form_access_key_secret = use_state(|| String::new());
+    let form_remarks = use_state(|| None as Option<String>);
+
+    // Filter states
+    let filter_provider = use_state(|| String::new());
+    let filter_status = use_state(|| String::new());
+
+    let token = get_auth_token();
+
+    // Fetch configs
+    let fetch_configs = {
+        let configs = configs.clone();
+        let loading = loading.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let configs = configs.clone();
+            let loading = loading.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                loading.set(true);
+                error_message.set(None);
+
+                match Request::get(&api_url("cloud-provider-configs"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<Vec<serde_json::Value>>().await {
+                            Ok(data) => {
+                                let parsed_configs: Vec<CloudProviderConfigDisplay> = data
+                                    .into_iter()
+                                    .filter_map(|v| serde_json::from_value(v).ok())
+                                    .collect();
+                                configs.set(parsed_configs);
+                            }
+                            Err(e) => {
+                                error_message.set(Some(format!("解析响应失败: {}", e)));
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("获取配置失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+
+                loading.set(false);
+            });
+        })
+    };
+
+    // Initial fetch
+    use_effect_with((), {
+        let fetch_configs = fetch_configs.clone();
+        move |_| {
+            fetch_configs.emit(());
+            || ()
+        }
+    });
+
+    // Helper functions
+    let provider_name = |provider: &CloudProvider| -> String {
+        match provider {
+            CloudProvider::Aliyun => "阿里云".to_string(),
+            CloudProvider::Tencent => "腾讯云".to_string(),
+            CloudProvider::Huawei => "华为云".to_string(),
+            CloudProvider::Aws => "AWS".to_string(),
+            CloudProvider::Azure => "Azure".to_string(),
+            CloudProvider::Gcp => "GCP".to_string(),
+            CloudProvider::Baidu => "百度云".to_string(),
+            CloudProvider::Custom(s) => s.clone(),
+        }
+    };
+
+    let status_badge = |status: &CloudProviderConfigStatus| -> Html {
+        match status {
+            CloudProviderConfigStatus::Active => {
+                html! { <span class="tag is-success">{ "已启用" }</span> }
+            }
+            CloudProviderConfigStatus::Inactive => {
+                html! { <span class="tag is-light">{ "已停用" }</span> }
+            }
+            CloudProviderConfigStatus::Testing => {
+                html! { <span class="tag is-warning">{ "测试中" }</span> }
+            }
+            CloudProviderConfigStatus::Error => {
+                html! { <span class="tag is-danger">{ "连接错误" }</span> }
+            }
+        }
+    };
+
+    // Filter configs
+    let filtered_configs = (*configs).iter().filter(|config| {
+        let provider_match = filter_provider.is_empty()
+            || config.provider.as_str() == &*filter_provider;
+        let status_match = filter_status.is_empty()
+            || config.status.as_str() == &*filter_status;
+        provider_match && status_match
+    }).cloned().collect::<Vec<_>>();
+
+    let on_provider_filter_change = {
+        let filter_provider = filter_provider.clone();
+        Callback::from(move |e: Event| {
+            let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+            filter_provider.set(select.value());
+        })
+    };
+
+    let on_status_filter_change = {
+        let filter_status = filter_status.clone();
+        Callback::from(move |e: Event| {
+            let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+            filter_status.set(select.value());
+        })
+    };
+
+    let on_open_create_modal = Callback::from({
+        let show_create_modal = show_create_modal.clone();
+        move |_| show_create_modal.set(true)
+    });
+
+    let on_close_create_modal = {
+        let show_create_modal = show_create_modal.clone();
+        let form_provider = form_provider.clone();
+        let form_region_id = form_region_id.clone();
+        let form_region_name = form_region_name.clone();
+        let form_account_name = form_account_name.clone();
+        let form_access_key_id = form_access_key_id.clone();
+        let form_access_key_secret = form_access_key_secret.clone();
+        let form_remarks = form_remarks.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            show_create_modal.set(false);
+            form_provider.set(CloudProvider::Aliyun);
+            form_region_id.set(String::new());
+            form_region_name.set(String::new());
+            form_account_name.set(String::new());
+            form_access_key_id.set(String::new());
+            form_access_key_secret.set(String::new());
+            form_remarks.set(None);
+        })
+    };
+
+    let on_create_config = {
+        let fetch_configs = fetch_configs.clone();
+        let show_create_modal = show_create_modal.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+        let form_provider = form_provider.clone();
+        let form_region_id = form_region_id.clone();
+        let form_region_name = form_region_name.clone();
+        let form_account_name = form_account_name.clone();
+        let form_access_key_id = form_access_key_id.clone();
+        let form_access_key_secret = form_access_key_secret.clone();
+        let form_remarks = form_remarks.clone();
+        let on_close_create_modal = on_close_create_modal.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            let provider = (*form_provider).clone();
+            let region_id = (*form_region_id).clone();
+            let region_name = (*form_region_name).clone();
+            let account_name = (*form_account_name).clone();
+            let access_key_id = (*form_access_key_id).clone();
+            let access_key_secret = (*form_access_key_secret).clone();
+            let remarks = (*form_remarks).clone();
+
+            let fetch_configs = fetch_configs.clone();
+            let show_create_modal = show_create_modal.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+            let on_close_create_modal = on_close_create_modal.clone();
+
+            spawn_local(async move {
+                let body = serde_json::json!({
+                    "provider": provider,
+                    "region_id": region_id,
+                    "region_name": region_name,
+                    "available_zones": [],
+                    "account_name": account_name,
+                    "access_key_id": access_key_id,
+                    "access_key_secret": access_key_secret,
+                    "remarks": remarks,
+                });
+
+                match Request::post(&api_url("cloud-provider-configs"))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(body.to_string())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some("云区对接配置创建成功".to_string()));
+                        show_create_modal.set(false);
+                        fetch_configs.emit(());
+                        spawn_local(async move {
+                            Timeout::new(3000, move || {
+                                success_message.set(None);
+                            }).forget();
+                        });
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("创建失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+                on_close_create_modal.emit(web_sys::MouseEvent::new("click").unwrap());
+            });
+        })
+    };
+
+    let on_test_connection = {
+        let configs = configs.clone();
+        let fetch_configs = fetch_configs.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |config_id: i32| {
+            let fetch_configs = fetch_configs.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                match Request::post(&format!("{}{}/test", api_url("cloud-provider-configs"), config_id))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<serde_json::Value>().await {
+                            Ok(result) => {
+                                if result.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                    success_message.set(Some(format!(
+                                        "连接测试成功: {}",
+                                        result.get("message").and_then(|v| v.as_str()).unwrap_or("成功")
+                                    )));
+                                } else {
+                                    error_message.set(Some(format!(
+                                        "连接测试失败: {}",
+                                        result.get("message").and_then(|v| v.as_str()).unwrap_or("未知错误")
+                                    )));
+                                }
+                                fetch_configs.emit(());
+                            }
+                            Err(e) => {
+                                error_message.set(Some(format!("解析响应失败: {}", e)));
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("测试失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    let on_delete_config = {
+        let fetch_configs = fetch_configs.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |config_id: i32| {
+            if !web_sys::window().unwrap().confirm_with_message("确定要删除这个云区对接配置吗？").unwrap_or(true) {
+                return;
+            }
+
+            let fetch_configs = fetch_configs.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                match Request::delete(&format!("{}{}", api_url("cloud-provider-configs"), config_id))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some("云区对接配置已删除".to_string()));
+                        fetch_configs.emit(());
+                        spawn_local(async move {
+                            Timeout::new(3000, move || {
+                                success_message.set(None);
+                            }).forget();
+                        });
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("删除失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    let on_toggle_status = {
+        let fetch_configs = fetch_configs.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |(config_id, new_status): (i32, CloudProviderConfigStatus)| {
+            let fetch_configs = fetch_configs.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                let body = serde_json::json!({
+                    "status": new_status,
+                });
+
+                match Request::put(&format!("{}{}", api_url("cloud-provider-configs"), config_id))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(body.to_string())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        let msg = match new_status {
+                            CloudProviderConfigStatus::Active => "已启用",
+                            CloudProviderConfigStatus::Inactive => "已停用",
+                            _ => "状态已更新",
+                        };
+                        success_message.set(Some(format!("配置{}", msg)));
+                        fetch_configs.emit(());
+                        spawn_local(async move {
+                            Timeout::new(3000, move || {
+                                success_message.set(None);
+                            }).forget();
+                        });
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("更新失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    html! {
+        <div class="cloud-provider-management">
+            <div class="level mb-4">
+                <div class="level-left">
+                    <div class="level-item">
+                        <h1 class="title is-4">{ "🌐 云区对接管理" }</h1>
+                    </div>
+                </div>
+                <div class="level-right">
+                    <div class="level-item">
+                        <button class="button is-primary" onclick={on_open_create_modal}>
+                            <span class="icon"><i class="fas fa-plus"></i></span>
+                            <span>{ "添加云区配置" }</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            { if let Some(msg) = (*error_message).clone() {
+                html! {
+                    <div class="notification is-danger is-light">
+                        <button class="delete" onclick={
+                            let error_message = error_message.clone();
+                            Callback::from(move |_| error_message.set(None))
+                        }></button>
+                        { msg }
+                    </div>
+                }
+            } else { html! {} } }
+
+            { if let Some(msg) = (*success_message).clone() {
+                html! {
+                    <div class="notification is-success is-light">
+                        <button class="delete" onclick={
+                            let success_message = success_message.clone();
+                            Callback::from(move |_| success_message.set(None))
+                        }></button>
+                        { msg }
+                    </div>
+                }
+            } else { html! {} } }
+
+            <div class="box">
+                <div class="field is-horizontal">
+                    <div class="field-label is-normal">
+                        <label class="label">{ "筛选条件" }</label>
+                    </div>
+                    <div class="field-body">
+                        <div class="field">
+                            <label class="label">{ "云厂商" }</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select onchange={on_provider_filter_change.clone()}>
+                                        <option value="">{ "全部" }</option>
+                                        <option value="aliyun">{ "阿里云" }</option>
+                                        <option value="tencent">{ "腾讯云" }</option>
+                                        <option value="huawei">{ "华为云" }</option>
+                                        <option value="aws">{ "AWS" }</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">{ "状态" }</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select onchange={on_status_filter_change.clone()}>
+                                        <option value="">{ "全部" }</option>
+                                        <option value="active">{ "已启用" }</option>
+                                        <option value="inactive">{ "已停用" }</option>
+                                        <option value="testing">{ "测试中" }</option>
+                                        <option value="error">{ "连接错误" }</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {
+                if *loading {
+                    html! {
+                        <div class="has-text-centered py-6">
+                            <span class="button is-loading is-large is-white"></span>
+                            <p class="mt-4">{ "加载中..." }</p>
+                        </div>
+                    }
+                } else if filtered_configs.is_empty() {
+                    html! {
+                        <div class="box has-text-centered py-6">
+                            <p class="has-text-grey">{ "暂无云区对接配置" }</p>
+                            <p class="has-text-grey is-size-7 mt-2">
+                                { "点击上方「添加云区配置」按钮添加新的云平台对接" }
+                            </p>
+                        </div>
+                    }
+                } else {
+                    html! {
+                        <div class="columns is-multiline">
+                        { for filtered_configs.iter().map(|config| {
+                            let config_id = config.id.unwrap_or(0);
+                            let on_test_click = on_test_connection.clone();
+                            let on_delete_click = on_delete_config.clone();
+                            let on_toggle_click = on_toggle_status.clone();
+                            let provider = config.provider.clone();
+                            let status = config.status.clone();
+                            let config_name = format!("{} - {} ({})",
+                                provider_name(&provider),
+                                config.region_name,
+                                config.account_name
+                            );
+
+                            let can_enable = status != CloudProviderConfigStatus::Active;
+                            let can_disable = status != CloudProviderConfigStatus::Inactive;
+
+                            html! {
+                                <div key={format!("{:?}", config_id)} class="column is-6">
+                                    <div class="box">
+                                        <div class="level">
+                                            <div class="level-left">
+                                                <div class="level-item">
+                                                    <span class="icon is-medium has-text-info">
+                                                        <i class="fas fa-cloud fa-lg"></i>
+                                                    </span>
+                                                    <div class="ml-3">
+                                                        <p class="title is-5 mb-1">{ config_name }</p>
+                                                        <p class="subtitle is-7 mb-0">
+                                                            { format!("Region: {} | Zone: {}",
+                                                                config.region_id,
+                                                                if config.available_zones.is_empty() {
+                                                                    "默认".to_string()
+                                                                } else {
+                                                                    config.available_zones.join(", ")
+                                                                }
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="level-right">
+                                                <div class="level-item">
+                                                    { status_badge(&status) }
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        if let Some(result) = &config.last_test_result {
+                                            <div class="content is-small mt-3">
+                                                <p class={classes![
+                                                    "has-text-weight-normal",
+                                                    if config.status == CloudProviderConfigStatus::Active {
+                                                        "has-text-success"
+                                                    } else {
+                                                        "has-text-danger"
+                                                    }
+                                                ]}>
+                                                    <span class="icon is-small">
+                                                        <i class="fas fa-info-circle"></i>
+                                                    </span>
+                                                    { result.clone() }
+                                                </p>
+                                                if let Some(test_time) = config.last_test_time {
+                                                    <p class="has-text-grey is-size-7 mt-1">
+                                                        { format!("最后测试: {}", test_time.format("%Y-%m-%d %H:%M")) }
+                                                    </p>
+                                                }
+                                            </div>
+                                        }
+
+                                        <div class="buttons is-right mt-4">
+                                            if can_enable {
+                                                <button class="button is-small is-success"
+                                                    onclick={on_toggle_click.reform(move |_| (config_id, CloudProviderConfigStatus::Active))}>
+                                                    <span class="icon"><i class="fas fa-check"></i></span>
+                                                    <span>{ "启用" }</span>
+                                                </button>
+                                            }
+                                            if can_disable {
+                                                <button class="button is-small is-light"
+                                                    onclick={on_toggle_click.reform(move |_| (config_id, CloudProviderConfigStatus::Inactive))}>
+                                                    <span class="icon"><i class="fas fa-pause"></i></span>
+                                                    <span>{ "停用" }</span>
+                                                </button>
+                                            }
+                                            <button class="button is-small is-info"
+                                                onclick={on_test_click.reform(move |_| config_id)}>
+                                                <span class="icon"><i class="fas fa-plug"></i></span>
+                                                <span>{ "测试连接" }</span>
+                                            </button>
+                                            <button class="button is-small is-danger is-outlined"
+                                                onclick={on_delete_click.reform(move |_| config_id)}>
+                                                <span class="icon"><i class="fas fa-trash"></i></span>
+                                                <span>{ "删除" }</span>
+                                            </button>
+                                        </div>
+
+                                        if let Some(remarks) = &config.remarks {
+                                            <div class="content is-small mt-3 pt-3" style="border-top: 1px solid #eee;">
+                                                <p class="has-text-grey">{ format!("备注: {}", remarks) }</p>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }) }
+                    </div>
+                    }
+                }
+            }
+
+            {
+                if *show_create_modal {
+                    html! {
+                    <div class="modal is-active">
+                        <div class="modal-background" onclick={on_close_create_modal.clone()}></div>
+                        <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "添加云区对接配置" }</p>
+                            <button class="delete" onclick={on_close_create_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ "云厂商" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select onchange={
+                                            let form_provider = form_provider.clone();
+                                            Callback::from(move |e: Event| {
+                                                let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                match select.value().as_str() {
+                                                    "aliyun" => form_provider.set(CloudProvider::Aliyun),
+                                                    "tencent" => form_provider.set(CloudProvider::Tencent),
+                                                    "huawei" => form_provider.set(CloudProvider::Huawei),
+                                                    "aws" => form_provider.set(CloudProvider::Aws),
+                                                    _ => form_provider.set(CloudProvider::Aliyun),
+                                                }
+                                            })
+                                        }>
+                                            <option value="aliyun">{ "阿里云" }</option>
+                                            <option value="tencent">{ "腾讯云" }</option>
+                                            <option value="huawei">{ "华为云" }</option>
+                                            <option value="aws">{ "AWS" }</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "区域ID" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="例如: cn-hangzhou (阿里云) / ap-guangzhou (腾讯云)"
+                                        value={(*form_region_id).clone()}
+                                        oninput={
+                                            let form_region_id = form_region_id.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_region_id.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "区域名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="例如: 华东1(杭州)"
+                                        value={(*form_region_name).clone()}
+                                        oninput={
+                                            let form_region_name = form_region_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_region_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "账户名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="用于标识不同的云账户"
+                                        value={(*form_account_name).clone()}
+                                        oninput={
+                                            let form_account_name = form_account_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_account_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "Access Key ID" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="云平台 Access Key ID"
+                                        value={(*form_access_key_id).clone()}
+                                        oninput={
+                                            let form_access_key_id = form_access_key_id.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_access_key_id.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "Access Key Secret" }</label>
+                                <div class="control">
+                                    <input type="password" class="input"
+                                        placeholder="云平台 Access Key Secret"
+                                        value={(*form_access_key_secret).clone()}
+                                        oninput={
+                                            let form_access_key_secret = form_access_key_secret.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_access_key_secret.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "备注" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="选填"
+                                        value={(*form_remarks).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_remarks = form_remarks.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_remarks.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <article class="message is-small is-info">
+                                <div class="message-body">
+                                    <p class="is-size-7">
+                                        { "注意：创建后请先进行「测试连接」，确认配置正确后再启用。" }
+                                    </p>
+                                </div>
+                            </article>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_create_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_create_config}>{ "创建" }</button>
+                        </footer>
+                    </div>
+                    </div>
+                    }
+                } else {
+                    html! {}
+                }
+            }
+
+            <div class="box mt-5">
+                <p class="heading">{ "🌐 云区对接管理说明" }</p>
+                <ul>
+                    <li>{ "云区对接配置用于管理已对接的云平台账户和区域信息" }</li>
+                    <li>{ "业务申请时只能选择已配置且启用的云区" }</li>
+                    <li>{ "创建配置后请先进行「测试连接」，确认凭证正确后再启用" }</li>
+                    <li>{ "停用配置不会删除数据，业务申请时将不会显示该配置" }</li>
+                </ul>
+            </div>
+        </div>
+    }
+}
+
 // ============== Main App Component ==============
 
 #[function_component]
@@ -2577,12 +6370,16 @@ pub fn App() -> Html {
                                 Page::Dashboard => html! { <Dashboard /> },
                                 Page::TaskCenter => html! { <TaskCenter /> },
                                 Page::AdvancedScanning => html! { <AdvancedScanning /> },
-                                Page::AssetCenter => html! { <AssetCenter /> },
-                                Page::ZoneManagement => html! { <ZoneManagement /> },
+                                Page::BusinessAcceptance => html! { <BusinessApplication /> }, // 兼容旧路由，跳转到业务申请
+                                Page::BusinessApplication => html! { <BusinessApplication /> },
+                                Page::OperationsManagement => html! { <OperationsManagement /> },
+                                Page::AutomationOrchestration => html! { <AutomationOrchestration /> },
                                 Page::RiskCenter => html! { <RiskCenter /> },
                                 Page::UserManagement => html! { <UserManagement /> },
                                 Page::AuditLogs => html! { <AuditLogs /> },
                                 Page::CloudManagement => html! { <CloudManagement /> },
+                                Page::CloudProviderManagement => html! { <CloudProviderManagement /> },
+                                Page::CloudServiceAssetManagement => html! { <CloudServiceAssetManagement /> },
                                 Page::UserProfile => html! { <UserProfile current_page={current_page.clone()} /> },
                                 Page::PasswordPolicyManagement => html! { <PasswordPolicyManagement /> },
                                 Page::Login => html! { <Login current_page={current_page.clone()} /> },
@@ -2622,7 +6419,7 @@ fn AdvancedScanning() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                if let Ok(resp) = Request::get("http://localhost:3003/api/scan/advanced/tasks")
+                if let Ok(resp) = Request::get(&api_url("scan/advanced/tasks"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -2703,7 +6500,7 @@ fn AdvancedScanning() -> Html {
                 };
 
                 let json = serde_json::to_string(&request).unwrap();
-                let http_req = Request::post("http://localhost:3003/api/scan/advanced")
+                let http_req = Request::post(&api_url("scan/advanced"))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(json)
@@ -2812,7 +6609,8 @@ fn AdvancedScanning() -> Html {
 
             spawn_local(async move {
                 if let Ok(resp) = Request::get(&format!(
-                    "http://localhost:3003/api/scan/advanced/tasks/{}/export",
+                    "{}/{}/export",
+                    api_url("scan/advanced/tasks"),
                     task_id_clone
                 ))
                 .header("Authorization", &token)
@@ -3141,7 +6939,7 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
             let lang = lang.clone();
 
             spawn_local(async move {
-                match Request::post("http://localhost:3003/api/users/change-password")
+                match Request::post(&api_url("users/change-password"))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(
@@ -3713,7 +7511,7 @@ fn PasswordPolicyManagement() -> Html {
 
         use_effect_with((), move |_| {
             spawn_local(async move {
-                match Request::get("http://localhost:3003/api/password-policy")
+                match Request::get(&api_url("password-policy"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -3785,7 +7583,7 @@ fn PasswordPolicyManagement() -> Html {
             let lang = lang.clone();
 
             spawn_local(async move {
-                match Request::put("http://localhost:3003/api/password-policy")
+                match Request::put(&api_url("password-policy"))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(serde_json::to_string(&new_policy).unwrap_or_default())

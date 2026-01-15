@@ -33,11 +33,28 @@ use handlers::{
     // ip_zones::{get_ip_zones, get_ip_zone, create_ip_zone, update_ip_zone, delete_ip_zone, find_zone_by_ip},
     // scanners::{scan_ip, get_scan_results, batch_scan_ips, get_ip_scan_results},
     // port_details::{get_port_details, get_port_detail, create_port_detail, update_port_detail, delete_port_detail, batch_bind_ports},
-    cloud_assets::{get_cloud_assets, get_cloud_asset, create_cloud_asset, update_cloud_asset, delete_cloud_asset, get_cloud_asset_stats, sync_cloud_assets},
+    cloud_assets::{
+        get_cloud_assets, get_cloud_asset, create_cloud_asset, update_cloud_asset,
+        delete_cloud_asset, get_cloud_asset_stats, sync_cloud_assets,
+        create_cloud_asset_from_business,
+    },
+    cloud_provider_configs::{
+        get_cloud_provider_configs, get_cloud_provider_config, create_cloud_provider_config,
+        update_cloud_provider_config, delete_cloud_provider_config, test_cloud_provider_connection,
+        get_active_cloud_provider_configs,
+    },
     advanced_scan::{
         execute_advanced_scan, get_advanced_tasks, get_advanced_task,
         cancel_advanced_scan, delete_advanced_scan, export_scan_results,
         get_scan_engines_status, scan_progress_stream,
+    },
+    business_resources::{
+        get_business_resources, get_business_resource, create_business_resource,
+        update_business_resource, delete_business_resource, get_business_resource_stats,
+        export_business_resources, batch_import_business_resources, approve_business_resource,
+    },
+    cloud_service_assets::{
+        get_cloud_service_assets, get_cloud_service_asset_stats,
     },
 };
 
@@ -79,54 +96,21 @@ async fn main() {
         }
     ];
 
-    // Default Users
+    // Default Users - 初始部署只有 admin 用户
+    // 其他用户可以由 admin 创建并分配到不同的权限组
     let initial_users = vec![
         User {
             id: Uuid::new_v4().to_string(),
             username: "admin".to_string(),
-            password: "admin".to_string(), // Plain text for demo
+            password: "admin".to_string(), // 首次部署后应修改
             role: Role::SysAdmin,
             permissions: Some(shared::Permissions::sys_admin()),
             created_at: Utc::now(),
             password_changed_at: Some(Utc::now()),
             password_strength: Some("weak".to_string()),
-            force_password_change: Some(false),
+            force_password_change: Some(true), // 建议首次登录后修改密码
             last_login_at: None,
             email: Some("admin@rustset.local".to_string()),
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
-        },
-        User {
-            id: Uuid::new_v4().to_string(),
-            username: "sec".to_string(),
-            password: "sec".to_string(),
-            role: Role::SecAdmin,
-            permissions: Some(shared::Permissions::sec_admin()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("weak".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: Some("sec@rustset.local".to_string()),
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
-        },
-        User {
-            id: Uuid::new_v4().to_string(),
-            username: "audit".to_string(),
-            password: "audit".to_string(),
-            role: Role::Auditor,
-            permissions: Some(shared::Permissions::auditor()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("weak".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: Some("audit@rustset.local".to_string()),
             phone: None,
             status: Some("active".to_string()),
             failed_login_attempts: Some(0),
@@ -153,6 +137,8 @@ async fn main() {
         audit_logs: Arc::new(StdMutex::new(vec![])),
         advanced_tasks: Arc::new(StdMutex::new(vec![])),
         cloud_assets: Arc::new(StdMutex::new(vec![])),
+        business_resources: Arc::new(StdMutex::new(vec![])),
+        cloud_provider_configs: Arc::new(StdMutex::new(vec![])),
         scan_manager: Arc::new(TokioMutex::new(scan_manager)),
         password_policy: Arc::new(StdMutex::new(PasswordPolicy::default())),
         password_history: Arc::new(StdMutex::new(vec![])),
@@ -203,11 +189,28 @@ async fn main() {
         // .route("/api/batch-scan-ips", post(batch_scan_ips))
         // .route("/api/scan-results", get(get_scan_results))
         // .route("/api/ip-scan-results", get(get_ip_scan_results))
-        // Cloud Assets (Multi-Cloud Management)
+        // Cloud Assets (混合云管理 - 统一纳管 + API对接)
         .route("/api/cloud-assets", get(get_cloud_assets).post(create_cloud_asset))
         .route("/api/cloud-assets/stats", get(get_cloud_asset_stats))
         .route("/api/cloud-assets/sync", post(sync_cloud_assets))
         .route("/api/cloud-assets/:id", get(get_cloud_asset).put(update_cloud_asset).delete(delete_cloud_asset))
+        // Cloud Assets - 从业务资源创建（运维交付录入）
+        .route("/api/cloud-assets/from-business/:id", post(create_cloud_asset_from_business))
+        // Cloud Provider Configs (云区对接管理 - 管理已对接的云平台账户)
+        .route("/api/cloud-provider-configs", get(get_cloud_provider_configs).post(create_cloud_provider_config))
+        .route("/api/cloud-provider-configs/active", get(get_active_cloud_provider_configs))
+        .route("/api/cloud-provider-configs/:id", get(get_cloud_provider_config).put(update_cloud_provider_config).delete(delete_cloud_provider_config))
+        .route("/api/cloud-provider-configs/:id/test", post(test_cloud_provider_connection))
+        // Business Resources (业务受理 - 业务申请与审批)
+        .route("/api/business-resources", get(get_business_resources).post(create_business_resource))
+        .route("/api/business-resources/stats", get(get_business_resource_stats))
+        .route("/api/business-resources/export", get(export_business_resources))
+        .route("/api/business-resources/batch-import", post(batch_import_business_resources))
+        .route("/api/business-resources/:id", get(get_business_resource).put(update_business_resource).delete(delete_business_resource))
+        .route("/api/business-resources/:id/approve", post(approve_business_resource))
+        // Cloud Service Assets (云服务资产管理 - 统一纳管物理机和云虚拟机)
+        .route("/api/cloud-service-assets", get(get_cloud_service_assets))
+        .route("/api/cloud-service-assets/stats", get(get_cloud_service_asset_stats))
         // Scan
         .route("/api/scan", post(trigger_scan))
         .layer(TraceLayer::new_for_http())

@@ -6,3 +6,7 @@ pub mod risks;
 pub mod zones;
 pub mod logs;
 pub mod cloud_assets;
+pub mod cloud_provider_configs;
+pub mod advanced_scan;
+pub mod business_resources;
+pub mod cloud_service_assets;

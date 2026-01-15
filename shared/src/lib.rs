@@ -253,6 +253,8 @@ pub struct CreateCloudAssetRequest {
     pub snapshot_count: u32,
     pub tags: Vec<String>,
     pub bandwidth_mbps: Option<u32>,
+    /// 关联的业务资源ID（从业务申请录入时使用）
+    pub business_resource_id: Option<i32>,
 }
 
 /// 更新云资产请求
@@ -279,6 +281,7 @@ pub struct CloudAssetQuery {
     pub owner_id: Option<String>,
     pub search_keyword: Option<String>, // 搜索资产名称或实例ID
     pub expire_soon_days: Option<u32>,  // 即将到期天数
+    pub business_resource_id: Option<i32>, // 按业务资源ID筛选
 }
 
 /// 云资产统计
@@ -294,6 +297,270 @@ pub struct CloudAssetStats {
     pub by_provider: Vec<(CloudProvider, u32)>, // 按厂商统计
     pub by_department: Vec<(String, u32)>,      // 按部门统计
     pub by_project: Vec<(String, u32)>,         // 按项目统计
+}
+
+// ============== Business Resource / 业务受理 Types ==============
+
+/// 资源类型 - 支持云资源和物理机
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ResourceType {
+    #[serde(rename = "cloud")]
+    Cloud,           // 云服务器 (ECS/云主机)
+    #[serde(rename = "physical")]
+    Physical,        // 物理机
+}
+
+impl ResourceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ResourceType::Cloud => "cloud",
+            ResourceType::Physical => "physical",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "cloud" => Some(ResourceType::Cloud),
+            "physical" => Some(ResourceType::Physical),
+            _ => None,
+        }
+    }
+}
+
+/// 物理机特有信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PhysicalMachineInfo {
+    pub serial_number: String,           // 设备序列号
+    pub rack_location: Option<String>,    // 机架位置 (如: A区-03机柜-U12)
+    pub hardware_model: Option<String>,   // 硬件型号 (如: Dell PowerEdge R740)
+    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
+    pub agent_status: Option<String>,     // Agent 状态 (installed/online/offline/none)
+    pub ipmi_address: Option<String>,     // IPMI/iDRAC 地址
+    pub ipmi_username: Option<String>,    // IPMI 用户名
+    pub ipmi_password: Option<String>,    // IPMI 密码
+}
+
+/// 业务受理单 - 云资源管理 & 物理机管理
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BusinessResource {
+    pub id: Option<i32>,
+
+    // 资源类型
+    pub resource_type: String,          // 资源类型: cloud(云服务器) / physical(物理机)
+
+    // 基本信息
+    pub ecs_name: String,                // ECS名称/物理机名称
+    pub ecs_status: String,              // ECS状态 (运行中/已停止/已释放等)
+    pub resource_id: String,             // 资源ID
+    pub cloud_region: String,            // 云区域 (如 华东1-杭州) 或 机房位置
+    pub cloud_category: String,          // 云类别 (阿里云/腾讯云/华为云/AWS等) 或 机房名称
+    pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
+    pub county_city: Option<String>,     // 县市区
+    pub vdc_name: Option<String>,        // VDC名称
+
+    // 业务信息
+    pub customer_name: String,           // 客户名称
+    pub application_name: Option<String>, // 应用名称
+    pub contract_name: Option<String>,  // 合同名称
+    pub instance_id: String,             // 实例ID / 物理机序列号
+    pub ecs_type: String,               // ECS类型 (如 ecs.g6.large) 或 物理机型号
+
+    // 配置信息
+    pub ecs_os: String,                 // ECS操作系统 (如 CentOS 7.9, Windows Server 2019)
+    pub cpu_cores: u32,                 // CPU核数
+    pub memory_gb: u32,                 // 内存(GB)
+    pub system_disk: String,            // 系统盘类型 (如 cloud_ssd, cloud_essd) 或 物理磁盘类型
+    pub system_disk_size_gb: u32,       // 系统盘大小(GB)
+    pub data_disk: Option<String>,      // 数据盘信息 (JSON字符串存储多块盘信息)
+
+    // 时间信息
+    pub completion_time: Option<DateTime<Utc>>, // 完成时间
+    pub release_time: Option<DateTime<Utc>>,   // 释放时间
+
+    // 安全产品
+    pub has_security_product: bool,    // 是否创建安全产品
+
+    // 网络信息
+    pub ip_address: String,             // IP地址
+    pub ecs_login_method: Option<String>, // ECS远程登录方式 (SSH/RDP/堡垒机等)
+    pub ecs_login_username: Option<String>, // ECS登录用户名
+    pub ecs_initial_password: Option<String>, // ECS初始密码
+
+    // 堡垒机信息
+    pub bastion_address: Option<String>,     // 堡垒机地址
+    pub bastion_admin_account: Option<String>, // 堡垒机管理员账号
+    pub bastion_initial_password: Option<String>, // 堡垒机初始密码
+
+    // 物理机特有信息 (仅当 resource_type = physical 时使用)
+    pub serial_number: Option<String>,         // 设备序列号
+    pub rack_location: Option<String>,         // 机架位置
+    pub hardware_model: Option<String>,        // 硬件型号
+    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
+    pub agent_status: Option<String>,          // Agent 状态
+    pub ipmi_address: Option<String>,          // IPMI/iDRAC 地址
+
+    // 其他
+    pub remarks: Option<String>,         // 备注
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub created_by: Option<String>,
+    pub updated_by: Option<String>,
+}
+
+/// 创建业务资源请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateBusinessResourceRequest {
+    pub resource_type: String,         // 资源类型: cloud / physical
+    pub ecs_name: String,
+    pub ecs_status: String,
+    pub resource_id: String,
+    pub cloud_region: String,
+    pub cloud_category: String,
+    pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
+    pub county_city: Option<String>,
+    pub vdc_name: Option<String>,
+    pub customer_name: String,
+    pub application_name: Option<String>,
+    pub contract_name: Option<String>,
+    pub instance_id: String,
+    pub ecs_type: String,
+    pub ecs_os: String,
+    pub cpu_cores: u32,
+    pub memory_gb: u32,
+    pub system_disk: String,
+    pub system_disk_size_gb: u32,
+    pub data_disk: Option<String>,
+    pub completion_time: Option<DateTime<Utc>>,
+    pub release_time: Option<DateTime<Utc>>,
+    pub has_security_product: bool,
+    pub ip_address: String,
+    pub ecs_login_method: Option<String>,
+    pub ecs_login_username: Option<String>,
+    pub ecs_initial_password: Option<String>,
+    pub bastion_address: Option<String>,
+    pub bastion_admin_account: Option<String>,
+    pub bastion_initial_password: Option<String>,
+    // 物理机特有字段
+    pub serial_number: Option<String>,         // 设备序列号
+    pub rack_location: Option<String>,         // 机架位置
+    pub hardware_model: Option<String>,        // 硬件型号
+    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
+    pub ipmi_address: Option<String>,          // IPMI/iDRAC 地址
+    pub remarks: Option<String>,
+}
+
+/// 更新业务资源请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateBusinessResourceRequest {
+    pub resource_type: Option<String>,         // 资源类型
+    pub ecs_name: Option<String>,
+    pub ecs_status: Option<String>,
+    pub cloud_region: Option<String>,
+    pub cloud_category: Option<String>,
+    pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
+    pub county_city: Option<String>,
+    pub vdc_name: Option<String>,
+    pub customer_name: Option<String>,
+    pub application_name: Option<String>,
+    pub contract_name: Option<String>,
+    pub ecs_type: Option<String>,
+    pub ecs_os: Option<String>,
+    pub cpu_cores: Option<u32>,
+    pub memory_gb: Option<u32>,
+    pub system_disk: Option<String>,
+    pub system_disk_size_gb: Option<u32>,
+    pub data_disk: Option<String>,
+    pub completion_time: Option<DateTime<Utc>>,
+    pub release_time: Option<DateTime<Utc>>,
+    pub has_security_product: Option<bool>,
+    pub ip_address: Option<String>,
+    pub ecs_login_method: Option<String>,
+    pub ecs_login_username: Option<String>,
+    pub ecs_initial_password: Option<String>,
+    pub bastion_address: Option<String>,
+    pub bastion_admin_account: Option<String>,
+    pub bastion_initial_password: Option<String>,
+    // 物理机特有字段
+    pub serial_number: Option<String>,         // 设备序列号
+    pub rack_location: Option<String>,         // 机架位置
+    pub hardware_model: Option<String>,        // 硬件型号
+    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
+    pub agent_status: Option<String>,          // Agent 状态
+    pub ipmi_address: Option<String>,          // IPMI/iDRAC 地址
+    pub remarks: Option<String>,
+}
+
+impl Default for UpdateBusinessResourceRequest {
+    fn default() -> Self {
+        Self {
+            resource_type: None,
+            ecs_name: None,
+            ecs_status: None,
+            cloud_region: None,
+            cloud_category: None,
+            cloud_provider_config_id: None,
+            county_city: None,
+            vdc_name: None,
+            customer_name: None,
+            application_name: None,
+            contract_name: None,
+            ecs_type: None,
+            ecs_os: None,
+            cpu_cores: None,
+            memory_gb: None,
+            system_disk: None,
+            system_disk_size_gb: None,
+            data_disk: None,
+            completion_time: None,
+            release_time: None,
+            has_security_product: None,
+            ip_address: None,
+            ecs_login_method: None,
+            ecs_login_username: None,
+            ecs_initial_password: None,
+            bastion_address: None,
+            bastion_admin_account: None,
+            bastion_initial_password: None,
+            serial_number: None,
+            rack_location: None,
+            hardware_model: None,
+            warranty_expiry: None,
+            agent_status: None,
+            ipmi_address: None,
+            remarks: None,
+        }
+    }
+}
+
+/// 业务资源查询参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BusinessResourceQuery {
+    pub search_keyword: Option<String>,     // 搜索关键词（ECS名称、客户名称、IP地址等）
+    pub resource_type: Option<String>,      // 资源类型筛选 (cloud/physical)
+    pub cloud_category: Option<String>,     // 云类别/机房筛选
+    pub ecs_status: Option<String>,         // 状态筛选
+    pub customer_name: Option<String>,      // 客户名称筛选
+    pub county_city: Option<String>,        // 县市区筛选
+    pub application_name: Option<String>,   // 应用名称筛选
+    pub contract_name: Option<String>,      // 合同名称筛选
+}
+
+/// 业务资源统计
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BusinessResourceStats {
+    pub total_count: u32,
+    pub running_count: u32,
+    pub stopped_count: u32,
+    pub released_count: u32,
+    pub total_cpu_cores: u32,
+    pub total_memory_gb: u32,
+    pub with_security_product_count: u32,
+    pub cloud_count: u32,                   // 云资源数量
+    pub physical_count: u32,                // 物理机数量
+    pub by_category: Vec<(String, u32)>,     // 按云类别统计
+    pub by_customer: Vec<(String, u32)>,     // 按客户统计
+    pub by_county: Vec<(String, u32)>,       // 按县市区统计
+    pub by_application: Vec<(String, u32)>,  // 按应用统计
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -923,4 +1190,221 @@ pub struct CreateAdvancedScanRequest {
     pub os_detection: Option<bool>,
     pub web_fingerprint: Option<bool>,
     pub cloud_tag_sync: Option<bool>,
+}
+
+// ============== Cloud Provider Integration / 云区对接管理 Types ==============
+
+/// 云区对接配置状态
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CloudProviderConfigStatus {
+    #[serde(rename = "active")]
+    Active,     // 已启用，可用于业务申请
+    #[serde(rename = "inactive")]
+    Inactive,   // 已停用
+    #[serde(rename = "testing")]
+    Testing,    // 测试中
+    #[serde(rename = "error")]
+    Error,      // 连接错误
+}
+
+impl CloudProviderConfigStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            CloudProviderConfigStatus::Active => "active",
+            CloudProviderConfigStatus::Inactive => "inactive",
+            CloudProviderConfigStatus::Testing => "testing",
+            CloudProviderConfigStatus::Error => "error",
+        }
+    }
+
+    pub fn display_name(&self) -> &str {
+        match self {
+            CloudProviderConfigStatus::Active => "已启用",
+            CloudProviderConfigStatus::Inactive => "已停用",
+            CloudProviderConfigStatus::Testing => "测试中",
+            CloudProviderConfigStatus::Error => "连接错误",
+        }
+    }
+}
+
+/// 云区对接配置
+///
+/// 用于管理已对接的云平台账户和区域信息，
+/// 业务申请时只能选择已配置且启用的云区。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudProviderConfig {
+    pub id: Option<i32>,
+    /// 云厂商
+    pub provider: CloudProvider,
+    /// 区域ID (如 cn-hangzhou, ap-guangzhou)
+    pub region_id: String,
+    /// 区域名称 (如 华东1(杭州), 华南-广州)
+    pub region_name: String,
+    /// 可用区列表 (可选，如 ["cn-hangzhou-i", "cn-hangzhou-j"])
+    pub available_zones: Vec<String>,
+    /// 账户/AK名称 (用于标识不同账户)
+    pub account_name: String,
+    /// Access Key ID (加密存储)
+    pub access_key_id: String,
+    /// Access Key Secret (加密存储)
+    pub access_key_secret: String,
+    /// 状态
+    pub status: CloudProviderConfigStatus,
+    /// 备注
+    pub remarks: Option<String>,
+    /// 最后连接测试时间
+    pub last_test_time: Option<DateTime<Utc>>,
+    /// 最后连接测试结果
+    pub last_test_result: Option<String>,
+    /// 创建时间
+    pub created_at: DateTime<Utc>,
+    /// 更新时间
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// 创建云区对接配置请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCloudProviderConfigRequest {
+    pub provider: CloudProvider,
+    pub region_id: String,
+    pub region_name: String,
+    pub available_zones: Vec<String>,
+    pub account_name: String,
+    pub access_key_id: String,
+    pub access_key_secret: String,
+    pub remarks: Option<String>,
+}
+
+/// 更新云区对接配置请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCloudProviderConfigRequest {
+    pub region_name: Option<String>,
+    pub available_zones: Option<Vec<String>>,
+    pub account_name: Option<String>,
+    pub access_key_id: Option<String>,
+    pub access_key_secret: Option<String>,
+    pub status: Option<CloudProviderConfigStatus>,
+    pub remarks: Option<String>,
+}
+
+/// 云区对接配置查询参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudProviderConfigQuery {
+    pub provider: Option<CloudProvider>,
+    pub region_id: Option<String>,
+    pub status: Option<CloudProviderConfigStatus>,
+    pub account_name: Option<String>,
+}
+
+/// 连接测试结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionTestResult {
+    pub success: bool,
+    pub message: String,
+    pub response_time_ms: Option<u64>,
+    pub tested_at: DateTime<Utc>,
+}
+
+// ============== Cloud Service Asset / 云服务资产管理 Types ==============
+
+/// 统一的云服务资产（包含物理机和云虚拟机）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudServiceAsset {
+    // 基础标识
+    pub id: String,                      // 统一ID，格式: "{type}-{id}"
+    pub asset_type: String,              // 资产类型: "physical"(物理机) / "virtual"(云虚拟机)
+    pub source_type: String,             // 来源类型: "business_resource"(业务受理) / "cloud_asset"(混合云同步)
+
+    // 基本信息
+    pub name: String,                    // 资产名称
+    pub instance_id: String,             // 实例ID / 设备序列号
+    pub status: String,                  // 状态: 运行中/已停止/已释放等
+    pub cloud_provider: String,          // 云厂商 (阿里云/腾讯云/华为云/AWS) 或 机房名称
+    pub region: String,                  // 区域/机房位置
+
+    // 实例配置
+    pub instance_type: String,           // 实例类型 (如 ecs.g6.large) 或 物理机型号
+    pub cpu_cores: u32,                  // CPU核数
+    pub memory_gb: u32,                  // 内存(GB)
+    pub system_disk_type: String,        // 系统盘类型
+    pub system_disk_size_gb: u32,        // 系统盘大小(GB)
+    pub data_disk_info: Option<String>,  // 数据盘信息
+
+    // 操作系统
+    pub os_type: String,                 // 操作系统类型
+    pub os_name: String,                 // 操作系统名称
+
+    // 网络信息
+    pub ip_address: String,              // 主IP地址
+    pub public_ip: Option<String>,       // 公网IP
+    pub ipv6_address: Option<String>,    // IPv6地址
+
+    // 业务信息
+    pub customer_name: String,           // 客户名称
+    pub department: Option<String>,      // 部门
+    pub project: Option<String>,         // 项目
+    pub application_name: Option<String>, // 应用名称
+    pub contract_name: Option<String>,   // 合同名称
+    pub owner_name: Option<String>,      // 负责人
+
+    // 访问信息
+    pub login_method: Option<String>,    // 登录方式 (SSH/RDP/堡垒机等)
+    pub login_username: Option<String>,  // 登录用户名
+    pub bastion_address: Option<String>, // 堡垒机地址
+    pub bastion_account: Option<String>, // 堡垒机账号
+
+    // 物理机特有信息
+    pub serial_number: Option<String>,   // 设备序列号
+    pub rack_location: Option<String>,   // 机架位置
+    pub hardware_model: Option<String>,  // 硬件型号
+    pub warranty_expiry: Option<String>, // 维保到期时间
+    pub agent_status: Option<String>,    // Agent状态
+    pub ipmi_address: Option<String>,    // IPMI/iDRAC地址
+
+    // 云虚拟机特有信息
+    pub billing_mode: Option<String>,    // 计费模式
+    pub expire_time: Option<String>,     // 到期时间
+    pub charge_type: Option<String>,     // 付费类型
+
+    // 时间信息
+    pub created_at: String,              // 创建时间
+    pub updated_at: Option<String>,      // 更新时间
+    pub last_synced: Option<String>,     // 最后同步时间
+
+    // 其他
+    pub tags: Option<String>,            // 标签 (JSON字符串)
+    pub remarks: Option<String>,         // 备注
+
+    // 关联ID
+    pub business_resource_id: Option<i32>, // 关联的业务资源ID
+    pub cloud_asset_id: Option<i32>,       // 关联的云资产ID
+}
+
+/// 云服务资产查询参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudServiceAssetQuery {
+    pub asset_type: Option<String>,      // 资产类型筛选
+    pub source_type: Option<String>,     // 来源类型筛选
+    pub cloud_provider: Option<String>,  // 云厂商筛选
+    pub status: Option<String>,          // 状态筛选
+    pub customer_name: Option<String>,   // 客户筛选
+    pub department: Option<String>,      // 部门筛选
+    pub project: Option<String>,         // 项目筛选
+    pub search_keyword: Option<String>,  // 搜索关键词
+}
+
+/// 云服务资产统计
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudServiceAssetStats {
+    pub total_count: u32,
+    pub physical_count: u32,             // 物理机数量
+    pub virtual_count: u32,              // 云虚拟机数量
+    pub running_count: u32,
+    pub stopped_count: u32,
+    pub total_cpu_cores: u32,
+    pub total_memory_gb: u32,
+    pub expiring_soon_count: u32,        // 即将到期数量
+    pub by_provider: Vec<(String, u32)>, // 按厂商统计
+    pub by_customer: Vec<(String, u32)>, // 按客户统计
+    pub by_status: Vec<(String, u32)>,   // 按状态统计
 }

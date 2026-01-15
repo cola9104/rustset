@@ -128,10 +128,12 @@ name = "frontend"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "getrandom",
  "gloo-console 0.3.0",
  "gloo-net 0.6.0",
  "gloo-timers 0.3.0",
  "gloo-utils 0.2.0",
+ "js-sys",
  "serde",
  "serde_json",
  "shared",
@@ -968,6 +970,7 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "getrandom",
  "serde",
 ]
 
