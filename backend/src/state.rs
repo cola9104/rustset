@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex as TokioMutex;
 use chrono::{DateTime, Utc};
-use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, IPZone, ScanResult, PortDetail, IPScanResult, AdvancedScanTask, CloudAsset, PasswordPolicy};
+use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, AdvancedScanTask, CloudAsset, PasswordPolicy};
 use crate::scanners::engine::ScanManager;
 
 #[derive(Clone)]
@@ -10,10 +10,6 @@ pub struct AppState {
     pub tasks: Arc<StdMutex<Vec<Task>>>,
     pub risks: Arc<StdMutex<Vec<Risk>>>,
     pub zones: Arc<StdMutex<Vec<ZoneConfig>>>,
-    pub ip_zones: Arc<StdMutex<Vec<IPZone>>>,
-    pub scan_results: Arc<StdMutex<Vec<ScanResult>>>,
-    pub port_details: Arc<StdMutex<Vec<PortDetail>>>, // 端口详细信息表
-    pub ip_scan_results: Arc<StdMutex<Vec<IPScanResult>>>, // IP扫描结果
     pub users: Arc<StdMutex<Vec<User>>>,
     pub audit_logs: Arc<StdMutex<Vec<AuditLog>>>,
     pub advanced_tasks: Arc<StdMutex<Vec<AdvancedScanTask>>>, // 高级扫描任务

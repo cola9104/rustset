@@ -30,10 +30,7 @@ use handlers::{
     tasks::{get_tasks, create_task, update_task, delete_task, trigger_scan},
     risks::{get_risks, resolve_risk, update_risk_status},
     zones::{get_zones, create_zone, update_zone, delete_zone},
-    // ip_zones::{get_ip_zones, get_ip_zone, create_ip_zone, update_ip_zone, delete_ip_zone, find_zone_by_ip},
-    // scanners::{scan_ip, get_scan_results, batch_scan_ips, get_ip_scan_results},
-    // port_details::{get_port_details, get_port_detail, create_port_detail, update_port_detail, delete_port_detail, batch_bind_ports},
-    // cloud_assets::{get_cloud_assets, get_cloud_asset, create_cloud_asset, update_cloud_asset, delete_cloud_asset, get_cloud_asset_stats, sync_cloud_assets},
+    business_resources::{get_business_resources, create_business_resource, update_business_resource, delete_business_resource},
     advanced_scan::{
         execute_advanced_scan, get_advanced_tasks, get_advanced_task,
         cancel_advanced_scan, delete_advanced_scan, export_scan_results,
@@ -145,10 +142,6 @@ async fn main() {
             ZoneConfig { id: "1".to_string(), name: "Intranet".to_string(), cidr: "192.168.0.0/16".to_string(), priority: 10 },
             ZoneConfig { id: "2".to_string(), name: "DMZ".to_string(), cidr: "10.0.0.0/8".to_string(), priority: 20 },
         ])),
-        ip_zones: Arc::new(StdMutex::new(vec![])),
-        scan_results: Arc::new(StdMutex::new(vec![])),
-        port_details: Arc::new(StdMutex::new(vec![])),
-        ip_scan_results: Arc::new(StdMutex::new(vec![])),
         users: Arc::new(StdMutex::new(initial_users)),
         audit_logs: Arc::new(StdMutex::new(vec![])),
         advanced_tasks: Arc::new(StdMutex::new(vec![])),
@@ -183,6 +176,9 @@ async fn main() {
         // Zones
         .route("/api/zones", get(get_zones).post(create_zone))
         .route("/api/zones/:id", delete(delete_zone).put(update_zone))
+        // Business Resources (业务申请)
+        .route("/api/business-resources", get(get_business_resources).post(create_business_resource))
+        .route("/api/business-resources/:id", put(update_business_resource).delete(delete_business_resource))
         // Advanced Scanning (新增高级扫描 API)
         .route("/api/scan/advanced", post(execute_advanced_scan))
         .route("/api/scan/advanced/tasks", get(get_advanced_tasks))

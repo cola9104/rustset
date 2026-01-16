@@ -682,126 +682,6 @@ pub struct ZoneConfig {
     pub priority: i32,
 }
 
-/// IP区域配置 - 支持自定义网段划分
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IPZone {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub cidr: String,
-    pub cloud_region: Option<CloudRegion>,
-    pub is_cloud: bool,
-    pub priority: i32,
-    pub scan_enabled: bool,           // 是否启用扫描
-    pub auto_discover: bool,          // 是否自动发现
-    pub port_scan_policy: PortScanPolicy, // 端口扫描策略
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
-    pub created_by: Option<String>,
-}
-
-/// 端口扫描策略
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortScanPolicy {
-    pub policy_type: String, // "TOP100", "TOP1000", "COMMON", "CUSTOM", "ALL"
-    pub custom_ports: Option<Vec<u16>>, // 自定义端口列表
-    pub scan_timeout_seconds: u32, // 扫描超时时间
-    pub max_concurrent: u32, // 最大并发数
-}
-
-/// 端口详细信息 - 可编辑的web系统等信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortDetail {
-    pub id: String,
-    pub asset_id: String,           // 关联的资产ID
-    pub ip: String,                 // IP地址
-    pub port: u16,                  // 端口号
-    pub protocol: String,           // TCP/UDP
-    pub status: String,             // open/closed/filtered
-    pub service_name: Option<String>, // 服务名称
-    pub service_version: Option<String>, // 服务版本
-    pub service_banner: Option<String>, // 服务Banner
-
-    // 资产管理字段 - 可编辑
-    pub system_name: Option<String>,    // 系统名称
-    pub system_type: Option<String>,    // 系统类型 (Web系统/数据库/中间件等)
-    pub system_url: Option<String>,     // 访问URL (for web systems)
-    pub middleware: Option<String>,     // 中间件信息
-    pub framework: Option<String>,      // 框架信息
-    pub language: Option<String>,       // 开发语言
-
-    // 环境信息
-    pub environment: Option<String>,    // 环境 (生产/测试/开发)
-    pub department: Option<String>,     // 部门
-    pub owner: Option<String>,          // 负责人
-    pub owner_contact: Option<String>,  // 负责人联系方式
-
-    // 安全信息
-    pub vulnerability_level: Option<String>, // 风险等级
-    pub has_vulnerability: bool,         // 是否存在漏洞
-    pub vulnerability_count: i32,        // 漏洞数量
-
-    // 指纹信息
-    pub fingerprint: Option<ServiceFingerprint>, // 服务指纹
-
-    // 元数据
-    pub is_bound: bool,              // 是否已绑定/确认
-    pub notes: Option<String>,       // 备注
-    pub last_scanned: Option<DateTime<Utc>>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
-    pub created_by: Option<String>,
-    pub updated_by: Option<String>,
-}
-
-/// 服务指纹信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceFingerprint {
-    pub service: Option<String>,      // 服务名称
-    pub product: Option<String>,      // 产品名称
-    pub version: Option<String>,      // 版本
-    pub extra_info: Option<String>,   // 额外信息
-    pub cpe: Option<String>,         // CPE标识
-    pub os_match: Option<String>,    // 操作系统匹配
-    pub confidence: i32,             // 置信度
-}
-
-/// IP扫描结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IPScanResult {
-    pub id: String,
-    pub ip_zone_id: String,          // 所属IP区域
-    pub ip: String,
-    pub is_alive: bool,
-    pub hostname: Option<String>,    // 主机名
-    pub mac_address: Option<String>, // MAC地址
-    pub open_ports: Vec<PortDetail>,
-    pub os_fingerprint: Option<String>, // 操作系统指纹
-    pub device_type: Option<String>,  // 设备类型
-    pub confidence: i32,              // 扫描置信度
-    pub scan_time: DateTime<Utc>,
-    pub scan_duration_ms: i64,       // 扫描耗时
-    pub scanned_by: String,          // 扫描人
-}
-
-/// 批量IP扫描请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BatchIPScanRequest {
-    pub ip_zone_id: String,          // IP区域ID
-    pub ip_ranges: Vec<String>,      // IP范围列表，如 ["192.168.1.1-192.168.1.100", "192.168.2.0/24"]
-    pub port_policy: PortScanPolicy,
-    pub ping_check: bool,            // 是否先ping检查
-    pub max_concurrent: u32,         // 最大并发数
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScanResult {
-    pub ip: String,
-    pub is_alive: bool,
-    pub open_ports: Vec<PortInfo>,
-    pub fingerprint: Option<String>,
-    pub scanned_at: DateTime<Utc>,
-}
 
 // --- Auth & Audit ---
 
@@ -850,6 +730,22 @@ pub struct Permissions {
 
     // 业务流程
     pub can_view_business_process: bool,    // 子级：查看业务流程
+
+    // 业务申请
+    pub can_view_business_applications: bool,  // 孙级：查看业务申请列表
+    pub can_create_business_application: bool,  // 孙级：创建业务申请
+    pub can_approve_business_application: bool,  // 孙级：审批业务申请
+    pub can_supplement_business_application: bool, // 孙级：补充业务申请信息
+    pub can_delete_business_application: bool,    // 孙级：删除业务申请
+
+    // 运维管理
+    pub can_view_operations_management: bool,  // 孙级：查看运维管理
+    pub can_manage_operations: bool,           // 孙级：运维操作权限
+
+    // 自动化资源编排
+    pub can_view_automation_orchestration: bool, // 孙级：查看自动化编排
+    pub can_execute_orchestration: bool,         // 孙级：执行编排任务
+    pub can_manage_orchestration: bool,          // 孙级：管理编排任务
 
     // ========== Cloud模块 ==========
     pub can_access_cloud: bool,             // 顶级：访问Cloud模块
@@ -907,6 +803,16 @@ impl Default for Permissions {
             can_resolve_risk: false,
             can_delete_risk: false,
             can_view_business_process: false,
+            can_view_business_applications: false,
+            can_create_business_application: false,
+            can_approve_business_application: false,
+            can_supplement_business_application: false,
+            can_delete_business_application: false,
+            can_view_operations_management: false,
+            can_manage_operations: false,
+            can_view_automation_orchestration: false,
+            can_execute_orchestration: false,
+            can_manage_orchestration: false,
             can_access_cloud: false,
             can_view_cloud_providers: false,
             can_manage_cloud_providers: false,
@@ -951,6 +857,16 @@ impl Permissions {
             can_resolve_risk: true,
             can_delete_risk: true,
             can_view_business_process: true,
+            can_view_business_applications: true,
+            can_create_business_application: true,
+            can_approve_business_application: true,
+            can_supplement_business_application: true,
+            can_delete_business_application: true,
+            can_view_operations_management: true,
+            can_manage_operations: true,
+            can_view_automation_orchestration: true,
+            can_execute_orchestration: true,
+            can_manage_orchestration: true,
             can_access_cloud: true,
             can_view_cloud_providers: true,
             can_manage_cloud_providers: true,
@@ -993,6 +909,16 @@ impl Permissions {
             can_resolve_risk: true,
             can_delete_risk: true,
             can_view_business_process: true,
+            can_view_business_applications: true,
+            can_create_business_application: true,
+            can_approve_business_application: true,
+            can_supplement_business_application: true,
+            can_delete_business_application: true,
+            can_view_operations_management: true,
+            can_manage_operations: true,
+            can_view_automation_orchestration: true,
+            can_execute_orchestration: true,
+            can_manage_orchestration: true,
             can_access_cloud: true,
             can_view_cloud_providers: true,
             can_manage_cloud_providers: true,
@@ -1018,6 +944,11 @@ impl Permissions {
             can_view_cloud_assets: true,
             can_view_risks: true,
             can_view_business_process: true,
+            can_view_business_applications: true,  // 审计员可以查看但不能操作
+            can_create_business_application: false,
+            can_approve_business_application: false,
+            can_supplement_business_application: false,
+            can_delete_business_application: false,
             can_access_cloud: true,
             can_view_cloud_providers: true,
             can_view_cloud_management: true,
@@ -1202,41 +1133,6 @@ impl Default for AdvancedScanConfig {
     }
 }
 
-/// 服务指纹规则
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceFingerprintRule {
-    /// 服务名称
-    pub service: String,
-
-    /// 匹配规则（正则表达式）
-    pub patterns: Vec<String>,
-
-    /// 端口号（可选）
-    pub port: Option<u16>,
-
-    /// 协议（TCP/UDP）
-    pub protocol: String,
-
-    /// CPE 标识
-    pub cpe: Option<String>,
-
-    /// 置信度（0-100）
-    pub confidence: i32,
-
-    /// 版本提取正则
-    pub version_regex: Option<String>,
-}
-
-/// 指纹匹配结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FingerprintMatch {
-    pub service: String,
-    pub version: Option<String>,
-    pub confidence: i32,
-    pub cpe: Option<String>,
-    pub matched_pattern: String,
-}
-
 /// 扫描结果与云资产关联
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanCloudAssetMapping {
@@ -1248,6 +1144,90 @@ pub struct ScanCloudAssetMapping {
     pub matched_tags: Vec<String>,
     pub confidence: f32,
     pub last_matched: DateTime<Utc>,
+}
+
+/// 简单的扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimpleScanResult {
+    pub target: String,
+    pub status: String,
+    pub message: Option<String>,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// 详细扫描结果（用于 quick_scan）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickScanResult {
+    pub ip: String,
+    pub is_alive: bool,
+    pub open_ports: Vec<PortInfo>,
+    pub fingerprint: Option<String>,
+    pub scanned_at: DateTime<Utc>,
+}
+
+/// 端口详细信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortDetail {
+    pub id: String,
+    pub asset_id: String,
+    pub ip: String,
+    pub port: u16,
+    pub protocol: String,
+    pub status: String,
+    pub service_name: Option<String>,
+    pub service_version: Option<String>,
+    pub service_banner: Option<String>,
+    pub system_name: Option<String>,
+    pub system_type: Option<String>,
+    pub system_url: Option<String>,
+    pub middleware: Option<String>,
+    pub framework: Option<String>,
+    pub language: Option<String>,
+    pub environment: Option<String>,
+    pub department: Option<String>,
+    pub owner: Option<String>,
+    pub owner_contact: Option<String>,
+    pub vulnerability_level: Option<String>,
+    pub has_vulnerability: bool,
+    pub vulnerability_count: i32,
+    pub fingerprint: Option<ServiceFingerprint>,
+    pub is_bound: bool,
+    pub notes: Option<String>,
+    pub last_scanned: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub created_by: Option<String>,
+    pub updated_by: Option<String>,
+}
+
+/// 服务指纹信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceFingerprint {
+    pub service: Option<String>,
+    pub product: Option<String>,
+    pub version: Option<String>,
+    pub extra_info: Option<String>,
+    pub cpe: Option<String>,
+    pub os_match: Option<String>,
+    pub confidence: i32,
+}
+
+/// IP扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IPScanResult {
+    pub id: String,
+    pub ip_zone_id: String,
+    pub ip: String,
+    pub is_alive: bool,
+    pub hostname: Option<String>,
+    pub mac_address: Option<String>,
+    pub open_ports: Vec<PortDetail>,
+    pub os_fingerprint: Option<String>,
+    pub device_type: Option<String>,
+    pub confidence: i32,
+    pub scan_time: DateTime<Utc>,
+    pub scan_duration_ms: i64,
+    pub scanned_by: String,
 }
 
 /// 高级扫描任务
@@ -1264,7 +1244,7 @@ pub struct AdvancedScanTask {
     pub total_count: u32,
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
-    pub results: Vec<ScanResult>,
+    pub results: Vec<QuickScanResult>,
     pub cloud_mappings: Vec<ScanCloudAssetMapping>,
     pub error_message: Option<String>,
     pub created_by: Option<String>,

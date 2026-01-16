@@ -8,7 +8,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::scanners::{rustscan::RustScan, service_detector::ServiceDetector};
-use shared::{ScanResult, PortInfo, IPScanResult, PortDetail, ServiceFingerprint, TaskStatus, AdvancedScanTask, AdvancedScanConfig, ScanStrategy};
+use shared::{QuickScanResult, PortInfo, IPScanResult, PortDetail, ServiceFingerprint, TaskStatus, AdvancedScanTask, AdvancedScanConfig, ScanStrategy};
 
 /// Scan engine type
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -55,7 +55,7 @@ impl ScanManager {
     }
 
     /// Quick port scan for a single target
-    pub async fn quick_scan(&self, target: &str, ports: &[u16]) -> ScanResult {
+    pub async fn quick_scan(&self, target: &str, ports: &[u16]) -> QuickScanResult {
         let result = self.rustscan.scan_target(target, ports).await;
 
         let port_infos: Vec<PortInfo> = result
@@ -75,7 +75,7 @@ impl ScanManager {
             })
             .collect();
 
-        ScanResult {
+        QuickScanResult {
             ip: result.ip,
             is_alive: result.is_alive,
             open_ports: port_infos,
@@ -163,12 +163,12 @@ impl ScanManager {
     }
 
     /// Scan multiple targets
-    pub async fn scan_multiple(&self, targets: &[String], ports: &[u16]) -> Vec<ScanResult> {
+    pub async fn scan_multiple(&self, targets: &[String], ports: &[u16]) -> Vec<QuickScanResult> {
         let results = self.rustscan.scan_targets(targets, ports).await;
 
         results
             .into_iter()
-            .map(|result| ScanResult {
+            .map(|result| QuickScanResult {
                 ip: result.ip.clone(),
                 is_alive: result.is_alive,
                 open_ports: result
@@ -228,7 +228,7 @@ impl ScanManager {
         for target in targets.iter() {
             let scan_result = if config.service_detection {
                 let detailed = self.detailed_scan(target, &ports).await;
-                ScanResult {
+                QuickScanResult {
                     ip: detailed.ip.clone(),
                     is_alive: detailed.is_alive,
                     open_ports: detailed

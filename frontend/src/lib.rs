@@ -41,7 +41,7 @@ use shared::{
     CloudProviderConfigStatus, CloudProviderConfig,
     // Advanced Scanning types
     ScanStrategy, ScanEngine, AdvancedScanConfig, AdvancedScanTask,
-    CreateAdvancedScanRequest, ScanResult, Permissions, PasswordPolicy,
+    CreateAdvancedScanRequest, QuickScanResult, Permissions, PasswordPolicy,
     // Business Resource types
     BusinessResource, CreateBusinessResourceRequest, UpdateBusinessResourceRequest,
     // Cloud Service Asset types
@@ -63,6 +63,7 @@ pub enum Page {
     AdvancedScanning, // 新增高级扫描页面
     RiskCenter,
     UserManagement,
+    PermissionManagement, // 权限管理
     AuditLogs,
     CloudManagement, // 混合云管理
     CloudProviderManagement, // 云区对接管理
@@ -108,6 +109,8 @@ impl Language {
             (Language::En, "logout") => "Logout".to_string(),
             (Language::Zh, "user_management") => "👥 用户管理".to_string(),
             (Language::En, "user_management") => "👥 User Management".to_string(),
+            (Language::Zh, "permission_management") => "🔑 权限管理".to_string(),
+            (Language::En, "permission_management") => "🔑 Permission Management".to_string(),
             (Language::Zh, "password_policy_management") => "🔐 密码策略管理".to_string(),
             (Language::En, "password_policy_management") => "🔐 Password Policy".to_string(),
             (Language::Zh, "audit_logs") => "📜 审计日志".to_string(),
@@ -858,19 +861,11 @@ fn Sidebar(props: &SidebarProps) -> Html {
                     <li><a onclick={navigate(Page::TaskCenter)}>{ lang.t("task_center") }</a></li>
                     <li><a onclick={navigate(Page::AdvancedScanning)}>{ lang.t("advanced_scanning") }</a></li>
                 }
+                // 风险监控 - 使用权限 can_view_risks
+                if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_risks).unwrap_or(false) {
+                    <li><a onclick={navigate(Page::RiskCenter)}>{ lang.t("risk_monitoring") }</a></li>
+                }
             </ul>
-            // 资产与风险管理 - 使用顶级权限 can_access_assets_risks
-            if user_role == Some(Role::SecAdmin) || user_role == Some(Role::Auditor) || effective_permissions.map(|p| p.can_access_assets_risks).unwrap_or(false) {
-                <p class="menu-label">{ lang.t("assets_risks") }</p>
-                <ul class="menu-list">
-                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_assets).unwrap_or(false) {
-                        <li><a onclick={navigate(Page::CloudServiceAssetManagement)}>{ lang.t("cloud_service_asset_management") }</a></li>
-                    }
-                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_risks).unwrap_or(false) {
-                        <li><a onclick={navigate(Page::RiskCenter)}>{ lang.t("risk_monitoring") }</a></li>
-                    }
-                </ul>
-            }
             // 业务流程 - 使用顶级权限 can_access_assets_risks
             if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_business_process).unwrap_or(false) {
                 <p class="menu-label">{ "业务流程" }</p>
@@ -880,9 +875,9 @@ fn Sidebar(props: &SidebarProps) -> Html {
                     <li><a onclick={navigate(Page::AutomationOrchestration)}>{ lang.t("automation_orchestration") }</a></li>
                 </ul>
             }
-            // Cloud模块 - 使用顶级权限 can_access_cloud
+            // 云管理模块 - 使用顶级权限 can_access_cloud
             if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_access_cloud).unwrap_or(false) {
-                <p class="menu-label">{ "Cloud" }</p>
+                <p class="menu-label">{ "云管理" }</p>
                 <ul class="menu-list">
                     if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_providers).unwrap_or(false) {
                         <li><a onclick={navigate(Page::CloudProviderManagement)}>{ lang.t("cloud_provider_management") }</a></li>
@@ -890,6 +885,10 @@ fn Sidebar(props: &SidebarProps) -> Html {
                     if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_management).unwrap_or(false) {
                         <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
                     }
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_assets).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::CloudServiceAssetManagement)}>{ lang.t("cloud_service_asset_management") }</a></li>
+                    }
+
                 </ul>
             }
             // 用户管理模块 - 使用顶级权限 can_access_user_management
@@ -898,6 +897,9 @@ fn Sidebar(props: &SidebarProps) -> Html {
                 <ul class="menu-list">
                     if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_users).unwrap_or(false) {
                         <li><a onclick={navigate(Page::UserManagement)}>{ lang.t("user_management") }</a></li>
+                    }
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_manage_permissions).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::PermissionManagement)}>{ lang.t("permission_management") }</a></li>
                     }
                     if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_password_policy).unwrap_or(false) {
                         <li><a onclick={navigate(Page::PasswordPolicyManagement)}>{ lang.t("password_policy_management") }</a></li>
@@ -3517,46 +3519,39 @@ fn CloudServiceAssetManagement() -> Html {
                     <table class="table is-fullwidth is-hoverable">
                         <thead>
                             <tr>
-                                <th>{ "类型" }</th>
-                                <th>{ "资产名称" }</th>
-                                <th>{ "实例ID" }</th>
-                                <th>{ "状态" }</th>
-                                <th>{ "云厂商" }</th>
+                                <th>{ "ID" }</th>
+                                <th>{ "ECS名称" }</th>
+                                <th>{ "云平台" }</th>
                                 <th>{ "区域" }</th>
-                                <th>{ "实例类型" }</th>
-                                <th>{ "CPU/内存" }</th>
-                                <th>{ "IP地址" }</th>
                                 <th>{ "客户" }</th>
+                                <th>{ "状态" }</th>
                                 <th>{ "来源" }</th>
+                                <th>{ "操作" }</th>
                             </tr>
                         </thead>
                         <tbody>
                             { for (*assets).iter().map(|asset| {
-                                let asset_type_label = if asset.asset_type == "physical" { "物理机" } else { "云虚拟机" };
                                 let source_label = if asset.source_type == "business_resource" { "业务受理" } else { "混合云" };
 
                                 html! {
                                     <tr>
-                                        <td>
-                                            <span class={classes!("tag", asset_type_class(&asset.asset_type))}>
-                                                { asset_type_label }
-                                            </span>
-                                        </td>
+                                        <td>{ &asset.id }</td>
                                         <td>{ &asset.name }</td>
-                                        <td style="font-family: monospace; font-size: 12px;">{ &asset.instance_id }</td>
+                                        <td>{ &asset.cloud_provider }</td>
+                                        <td>{ &asset.region }</td>
+                                        <td>{ &asset.customer_name }</td>
                                         <td>
                                             <span class={classes!("tag", status_class(&asset.status))}>
                                                 { &asset.status }
                                             </span>
                                         </td>
-                                        <td>{ &asset.cloud_provider }</td>
-                                        <td>{ &asset.region }</td>
-                                        <td>{ &asset.instance_type }</td>
-                                        <td>{ format!("{} vCPU / {} GB", asset.cpu_cores, asset.memory_gb) }</td>
-                                        <td style="font-family: monospace;">{ &asset.ip_address }</td>
-                                        <td>{ &asset.customer_name }</td>
                                         <td>
                                             <span class="tag is-light">{ source_label }</span>
+                                        </td>
+                                        <td>
+                                            <button class="button is-small is-info is-light">
+                                                { "查看" }
+                                            </button>
                                         </td>
                                     </tr>
                                 }
@@ -4332,77 +4327,14 @@ fn UserManagement() -> Html {
                                                     { " 导出结果" }
                                                 </label>
                                             </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                // ========== 资产与风险模块 ==========
-                                <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "💼 资产与风险模块" }</h4>
-                                    <div class="box">
-                                        // 顶级权限
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_access_assets_risks}
-                                                onchange={make_toggle_callback(String::from("can_access_assets_risks"))}/
-                                            >
-                                            { " 访问资产与风险模块" }
-                                        </label>
-                                        // 子级权限
-                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
-                                            // 云服务资产
-                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={perms.can_view_cloud_assets}
-                                                    onchange={make_toggle_callback(String::from("can_view_cloud_assets"))}
-                                                    disabled={!perms.can_access_assets_risks}
-                                                    style={if !perms.can_access_assets_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                >
-                                                { " 查看云服务资产" }
-                                            </label>
-                                            // 孙级权限 - 云资产操作
-                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
-                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={perms.can_create_cloud_asset}
-                                                        onchange={make_toggle_callback(String::from("can_create_cloud_asset"))}
-                                                        disabled={!perms.can_view_cloud_assets}
-                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                    >
-                                                    { " 创建云资产" }
-                                                </label>
-                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={perms.can_update_cloud_asset}
-                                                        onchange={make_toggle_callback(String::from("can_update_cloud_asset"))}
-                                                        disabled={!perms.can_view_cloud_assets}
-                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                    >
-                                                    { " 更新云资产" }
-                                                </label>
-                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={perms.can_delete_cloud_asset}
-                                                        onchange={make_toggle_callback(String::from("can_delete_cloud_asset"))}
-                                                        disabled={!perms.can_view_cloud_assets}
-                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                    >
-                                                    { " 删除云资产" }
-                                                </label>
-                                            </div>
                                             // 风险监控
                                             <label class="checkbox" style="display: block; margin: 0.5rem 0;">
                                                 <input
                                                     type="checkbox"
                                                     checked={perms.can_view_risks}
                                                     onchange={make_toggle_callback(String::from("can_view_risks"))}
-                                                    disabled={!perms.can_access_assets_risks}
-                                                    style={if !perms.can_access_assets_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    disabled={!perms.can_access_general}
+                                                    style={if !perms.can_access_general { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
                                                 >
                                                 { " 查看风险监控" }
                                             </label>
@@ -4429,24 +4361,144 @@ fn UserManagement() -> Html {
                                                     { " 删除风险" }
                                                 </label>
                                             </div>
-                                            // 业务流程
-                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={perms.can_view_business_process}
-                                                    onchange={make_toggle_callback(String::from("can_view_business_process"))}
-                                                    disabled={!perms.can_access_assets_risks}
-                                                    style={if !perms.can_access_assets_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                >
-                                                { " 查看业务流程" }
-                                            </label>
                                         </div>
                                     </div>
                                 </div>
 
-                                // ========== Cloud模块 ==========
+                                // ========== 业务流程 ==========
                                 <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "☁️ Cloud模块" }</h4>
+                                    <h4 class="title is-6">{ "🔄 业务流程" }</h4>
+                                    <div class="box">
+                                        // 顶级权限
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
+                                            <input
+                                                type="checkbox"
+                                                checked={perms.can_view_business_process}
+                                                onchange={make_toggle_callback(String::from("can_view_business_process"))}/
+                                            >
+                                            { " 访问业务流程" }
+                                        </label>
+                                        // 子级权限
+                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
+                                            // 业务申请
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_business_applications}
+                                                    onchange={make_toggle_callback(String::from("can_view_business_applications"))}
+                                                    disabled={!perms.can_view_business_process}
+                                                    style={if !perms.can_view_business_process { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 📝 查看业务申请" }
+                                            </label>
+                                            // 孙级权限 - 业务申请操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_create_business_application}
+                                                        onchange={make_toggle_callback(String::from("can_create_business_application"))}
+                                                        disabled={!perms.can_view_business_applications}
+                                                        style={if !perms.can_view_business_applications { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 创建业务申请" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_approve_business_application}
+                                                        onchange={make_toggle_callback(String::from("can_approve_business_application"))}
+                                                        disabled={!perms.can_view_business_applications}
+                                                        style={if !perms.can_view_business_applications { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 审批业务申请" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_supplement_business_application}
+                                                        onchange={make_toggle_callback(String::from("can_supplement_business_application"))}
+                                                        disabled={!perms.can_view_business_applications}
+                                                        style={if !perms.can_view_business_applications { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 补充业务申请信息" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_business_application}
+                                                        onchange={make_toggle_callback(String::from("can_delete_business_application"))}
+                                                        disabled={!perms.can_view_business_applications}
+                                                        style={if !perms.can_view_business_applications { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除业务申请" }
+                                                </label>
+                                            </div>
+                                            // 运维管理
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_operations_management}
+                                                    onchange={make_toggle_callback(String::from("can_view_operations_management"))}
+                                                    disabled={!perms.can_view_business_process}
+                                                    style={if !perms.can_view_business_process { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 🔧 查看运维管理" }
+                                            </label>
+                                            // 孙级权限 - 运维操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_manage_operations}
+                                                        onchange={make_toggle_callback(String::from("can_manage_operations"))}
+                                                        disabled={!perms.can_view_operations_management}
+                                                        style={if !perms.can_view_operations_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 运维操作权限" }
+                                                </label>
+                                            </div>
+                                            // 自动化资源编排
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_automation_orchestration}
+                                                    onchange={make_toggle_callback(String::from("can_view_automation_orchestration"))}
+                                                    disabled={!perms.can_view_business_process}
+                                                    style={if !perms.can_view_business_process { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " ⚙️ 查看自动化资源编排" }
+                                            </label>
+                                            // 孙级权限 - 编排操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_execute_orchestration}
+                                                        onchange={make_toggle_callback(String::from("can_execute_orchestration"))}
+                                                        disabled={!perms.can_view_automation_orchestration}
+                                                        style={if !perms.can_view_automation_orchestration { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 执行编排任务" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_manage_orchestration}
+                                                        onchange={make_toggle_callback(String::from("can_manage_orchestration"))}
+                                                        disabled={!perms.can_view_automation_orchestration}
+                                                        style={if !perms.can_view_automation_orchestration { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 管理编排任务" }
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                // ========== 云管理 ==========
+                                <div style="margin-bottom: 1rem;">
+                                    <h4 class="title is-6">{ "☁️ 云管理" }</h4>
                                     <div class="box">
                                         // 顶级权限
                                         <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
@@ -4455,7 +4507,7 @@ fn UserManagement() -> Html {
                                                 checked={perms.can_access_cloud}
                                                 onchange={make_toggle_callback(String::from("can_access_cloud"))}/
                                             >
-                                            { " 访问Cloud模块" }
+                                            { " 访问云管理模块" }
                                         </label>
                                         // 子级权限
                                         <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
@@ -4525,6 +4577,50 @@ fn UserManagement() -> Html {
                                                         style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
                                                     >
                                                     { " 同步云资产" }
+                                                </label>
+                                            </div>
+                                            // 云服务资产
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_cloud_assets}
+                                                    onchange={make_toggle_callback(String::from("can_view_cloud_assets"))}
+                                                    disabled={!perms.can_access_cloud}
+                                                    style={if !perms.can_access_cloud { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看云服务资产" }
+                                            </label>
+                                            // 孙级权限 - 云资产操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_create_cloud_asset}
+                                                        onchange={make_toggle_callback(String::from("can_create_cloud_asset"))}
+                                                        disabled={!perms.can_view_cloud_assets}
+                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 创建云资产" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_update_cloud_asset}
+                                                        onchange={make_toggle_callback(String::from("can_update_cloud_asset"))}
+                                                        disabled={!perms.can_view_cloud_assets}
+                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 更新云资产" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_cloud_asset}
+                                                        onchange={make_toggle_callback(String::from("can_delete_cloud_asset"))}
+                                                        disabled={!perms.can_view_cloud_assets}
+                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除云资产" }
                                                 </label>
                                             </div>
                                         </div>
@@ -6273,7 +6369,6 @@ fn CloudProviderManagement() -> Html {
     };
 
     let on_test_connection = {
-        let configs = configs.clone();
         let fetch_configs = fetch_configs.clone();
         let success_message = success_message.clone();
         let error_message = error_message.clone();
@@ -6838,6 +6933,7 @@ pub fn App() -> Html {
                                 Page::AutomationOrchestration => html! { <AutomationOrchestration /> },
                                 Page::RiskCenter => html! { <RiskCenter /> },
                                 Page::UserManagement => html! { <UserManagement /> },
+                                Page::PermissionManagement => html! { <PermissionManagement /> },
                                 Page::AuditLogs => html! { <AuditLogs /> },
                                 Page::CloudManagement => html! { <CloudManagement /> },
                                 Page::CloudProviderManagement => html! { <CloudProviderManagement /> },
@@ -7082,7 +7178,7 @@ fn AdvancedScanning() -> Html {
                 .send()
                 .await
                 {
-                    if let Ok(results) = resp.json::<Vec<shared::ScanResult>>().await {
+                    if let Ok(results) = resp.json::<Vec<shared::QuickScanResult>>().await {
                         // 转换为 CSV 格式
                         let mut csv = String::from("IP,Status,Open Ports,Services\n");
                         for result in &results {
@@ -7940,6 +8036,651 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                 </div>
             }
         }
+    }
+}
+
+// ============== Permission Management Component ==============
+
+#[function_component]
+fn PermissionManagement() -> Html {
+    let lang = use_state(|| Language::Zh);
+    let users = use_state(|| Vec::new());
+    let loading = use_state(|| true);
+    let show_edit_modal = use_state(|| false);
+    let editing_user = use_state(|| None as Option<(String, String, Permissions)>);
+    let temp_permissions = use_state(|| None as Option<Permissions>);
+    let success_message = use_state(|| None as Option<String>);
+
+    let token = get_auth_token();
+    let user_role = get_user_role();
+
+    // Fetch users
+    use_effect_with((), {
+        let users = users.clone();
+        let loading = loading.clone();
+        let token = token.clone();
+
+        move |_| {
+            spawn_local(async move {
+                if let Ok(resp) = Request::get(&api_url("users"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    if let Ok(data) = resp.json::<Vec<User>>().await {
+                        users.set(data);
+                    }
+                }
+                loading.set(false);
+            });
+            || ()
+        }
+    });
+
+    // Open edit modal
+    let on_edit = {
+        let users = users.clone();
+        let show_edit_modal = show_edit_modal.clone();
+        let editing_user = editing_user.clone();
+        let temp_permissions = temp_permissions.clone();
+
+        Callback::from(move |user_id: String| {
+            if let Some(user) = users.iter().find(|u| u.id == user_id) {
+                if let Some(perms) = &user.permissions {
+                    editing_user.set(Some((user.id.clone(), user.username.clone(), perms.clone())));
+                    temp_permissions.set(Some(perms.clone()));
+                    show_edit_modal.set(true);
+                }
+            }
+        })
+    };
+
+    // Close modal
+    let on_close_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        Callback::from(move |_| {
+            show_edit_modal.set(false);
+        })
+    };
+
+    // Save permissions
+    let on_save = {
+        let token = token.clone();
+        let editing_user = editing_user.clone();
+        let temp_permissions = temp_permissions.clone();
+        let show_edit_modal = show_edit_modal.clone();
+        let success_message = success_message.clone();
+
+        Callback::from(move |_| {
+            if let Some((user_id, _, _)) = &*editing_user {
+                if let Some(perms) = &*temp_permissions {
+                    let token = token.clone();
+                    let user_id = user_id.clone();
+                    let perms = perms.clone();
+                    let show_edit_modal = show_edit_modal.clone();
+                    let success_message = success_message.clone();
+
+                    spawn_local(async move {
+                        if let Ok(resp) = Request::put(&format!("{}/users/{}/permissions", api_url(""), user_id))
+                            .header("Authorization", &token)
+                            .header("Content-Type", "application/json")
+                            .body(serde_json::to_string(&perms).unwrap_or_default())
+                            .unwrap()
+                            .send()
+                            .await
+                        {
+                            if resp.ok() {
+                                success_message.set(Some("权限更新成功".to_string()));
+                                show_edit_modal.set(false);
+                            } else {
+                                success_message.set(Some("权限更新失败".to_string()));
+                            }
+                        }
+                    });
+                }
+            }
+        })
+    };
+
+    // Toggle permission
+    let on_toggle_permission = {
+        let temp_permissions = temp_permissions.clone();
+        Callback::from(move |(perm_key, value): (String, bool)| {
+            if let Some(mut perms) = (*temp_permissions).clone() {
+                match perm_key.as_str() {
+                    // 顶级权限
+                    "can_access_general" => perms.can_access_general = value,
+                    "can_view_business_process" => perms.can_view_business_process = value,
+                    "can_access_cloud" => perms.can_access_cloud = value,
+                    "can_access_user_management" => perms.can_access_user_management = value,
+                    "can_access_audit" => perms.can_access_audit = value,
+                    // 子级权限 - 通用模块
+                    "can_view_dashboard" => perms.can_view_dashboard = value,
+                    "can_view_tasks" => perms.can_view_tasks = value,
+                    "can_view_advanced_scan" => perms.can_view_advanced_scan = value,
+                    "can_view_risks" => perms.can_view_risks = value,
+                    // 子级权限 - 业务流程
+                    "can_view_business_applications" => perms.can_view_business_applications = value,
+                    "can_create_business_application" => perms.can_create_business_application = value,
+                    "can_approve_business_application" => perms.can_approve_business_application = value,
+                    "can_supplement_business_application" => perms.can_supplement_business_application = value,
+                    "can_delete_business_application" => perms.can_delete_business_application = value,
+                    "can_view_operations_management" => perms.can_view_operations_management = value,
+                    "can_manage_operations" => perms.can_manage_operations = value,
+                    "can_view_automation_orchestration" => perms.can_view_automation_orchestration = value,
+                    "can_execute_orchestration" => perms.can_execute_orchestration = value,
+                    "can_manage_orchestration" => perms.can_manage_orchestration = value,
+                    // 子级权限 - 云管理
+                    "can_view_cloud_providers" => perms.can_view_cloud_providers = value,
+                    "can_view_cloud_management" => perms.can_view_cloud_management = value,
+                    "can_view_cloud_assets" => perms.can_view_cloud_assets = value,
+                    // 子级权限 - 用户管理
+                    "can_view_users" => perms.can_view_users = value,
+                    "can_view_password_policy" => perms.can_view_password_policy = value,
+                    "can_manage_permissions" => perms.can_manage_permissions = value,
+                    // 子级权限 - 审计日志
+                    "can_view_audit_logs" => perms.can_view_audit_logs = value,
+                    _ => {}
+                }
+                temp_permissions.set(Some(perms));
+            }
+        })
+    };
+
+    html! {
+        <div class="container p-4">
+            <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
+                <h1 class="title">{ lang.t("permission_management") }</h1>
+            </div>
+
+            if let Some(msg) = &*success_message {
+                <div class="notification is-success is-light" style="margin-bottom: 1rem; position: relative;">
+                    <button class="delete" onclick={
+                        let success_message = success_message.clone();
+                        Callback::from(move |_| success_message.set(None))
+                    }></button>
+                    <p>{ msg.clone() }</p>
+                </div>
+            }
+
+            <div class="box">
+                if *loading {
+                    <div class="has-text-centered">
+                        <span class="icon is-large">
+                            <i class="fas fa-spinner fa-spin fa-2x"></i>
+                        </span>
+                        <p>{"加载中..."}</p>
+                    </div>
+                } else {
+                    <table class="table is-fullwidth is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{"用户名"}</th>
+                                <th>{"角色"}</th>
+                                <th>{"通用"}</th>
+                                <th>{"业务流程"}</th>
+                                <th>{"云管理"}</th>
+                                <th>{"用户管理"}</th>
+                                <th>{"审计日志"}</th>
+                                <th>{"操作"}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            { for users.iter().map(|user| {
+                                let role_display = match &user.role {
+                                    Role::SysAdmin => "SysAdmin",
+                                    Role::SecAdmin => "SecAdmin",
+                                    Role::Auditor => "Auditor",
+                                    Role::Custom(name) => name,
+                                };
+                                let perms = user.permissions.as_ref();
+                                let on_edit = on_edit.clone();
+                                let user_id = user.id.clone();
+
+                                html! {
+                                    <tr key={user_id.clone()}>
+                                        <td>{ &user.username }</td>
+                                        <td><span class="tag is-info">{ role_display }</span></td>
+                                        <td>
+                                            { perms.map(|p| {
+                                                if p.can_access_general || p.can_view_tasks || p.can_view_advanced_scan || p.can_view_risks {
+                                                    html! { <span class="icon has-text-success"><i class="fas fa-check"></i></span> }
+                                                } else {
+                                                    html! { <span class="icon has-text-danger"><i class="fas fa-times"></i></span> }
+                                                }
+                                            }).unwrap_or_else(|| html! { <span class="icon"><i class="fas fa-minus"></i></span> }) }
+                                        </td>
+                                        <td>
+                                            { perms.map(|p| {
+                                                if p.can_view_business_process {
+                                                    html! { <span class="icon has-text-success"><i class="fas fa-check"></i></span> }
+                                                } else {
+                                                    html! { <span class="icon has-text-danger"><i class="fas fa-times"></i></span> }
+                                                }
+                                            }).unwrap_or_else(|| html! { <span class="icon"><i class="fas fa-minus"></i></span> }) }
+                                        </td>
+                                        <td>
+                                            { perms.map(|p| {
+                                                if p.can_access_cloud {
+                                                    html! { <span class="icon has-text-success"><i class="fas fa-check"></i></span> }
+                                                } else {
+                                                    html! { <span class="icon has-text-danger"><i class="fas fa-times"></i></span> }
+                                                }
+                                            }).unwrap_or_else(|| html! { <span class="icon"><i class="fas fa-minus"></i></span> }) }
+                                        </td>
+                                        <td>
+                                            { perms.map(|p| {
+                                                if p.can_access_user_management {
+                                                    html! { <span class="icon has-text-success"><i class="fas fa-check"></i></span> }
+                                                } else {
+                                                    html! { <span class="icon has-text-danger"><i class="fas fa-times"></i></span> }
+                                                }
+                                            }).unwrap_or_else(|| html! { <span class="icon"><i class="fas fa-minus"></i></span> }) }
+                                        </td>
+                                        <td>
+                                            { perms.map(|p| {
+                                                if p.can_access_audit {
+                                                    html! { <span class="icon has-text-success"><i class="fas fa-check"></i></span> }
+                                                } else {
+                                                    html! { <span class="icon has-text-danger"><i class="fas fa-times"></i></span> }
+                                                }
+                                            }).unwrap_or_else(|| html! { <span class="icon"><i class="fas fa-minus"></i></span> }) }
+                                        </td>
+                                        <td>
+                                            if user.role != Role::SysAdmin {
+                                                <button class="button is-small is-info" onclick={
+                                                    let on_edit = on_edit.clone();
+                                                    move |_| on_edit.emit(user_id.clone())
+                                                }>
+                                                    <span class="icon"><i class="fas fa-edit"></i></span>
+                                                    <span>{"编辑"}</span>
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            })}
+                        </tbody>
+                    </table>
+                }
+            </div>
+
+            // Edit Modal
+            if *show_edit_modal {
+                if let Some((user_id, username, perms)) = &*editing_user {
+                    <div class="modal is-active">
+                        <div class="modal-background" onclick={on_close_modal.clone()}></div>
+                        <div class="modal-card" style="width: 900px;">
+                            <header class="modal-card-head">
+                                <p class="modal-card-title">{ format!("编辑用户权限: {}", username) }</p>
+                                <button class="delete" onclick={on_close_modal.clone()}></button>
+                            </header>
+                            <section class="modal-card-body" style="max-height: 70vh; overflow-y: auto;">
+                                if let Some(current_perms) = &*temp_permissions {
+                                    <div class="content">
+                                        // ========== 通用模块 ==========
+                                        <div class="box has-background-light">
+                                            <h4 class="title is-6 mb-3">{"📋 通用模块"}</h4>
+                                            <div class="field" style="margin-bottom: 0.5rem;">
+                                                <label class="checkbox">
+                                                    <input type="checkbox"
+                                                        checked={current_perms.can_access_general}
+                                                        onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            on_toggle.emit(("can_access_general".to_string(), input.checked()))
+                                                        }}
+                                                    />
+                                                    <strong>{ " 访问通用模块" }</strong>
+                                                </label>
+                                                <p class="help is-size-7 ml-5">{"控制是否可以访问通用模块下的所有功能"}</p>
+                                            </div>
+                                            <div class="ml-5">
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_dashboard}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_dashboard".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 仪表盘查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_tasks}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_tasks".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 任务中心查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_advanced_scan}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_advanced_scan".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 高级扫描查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_risks}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_risks".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 风险监控查看" }
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // ========== 业务流程 ==========
+                                        <div class="box has-background-light">
+                                            <h4 class="title is-6 mb-3">{"🔄 业务流程"}</h4>
+                                            <div class="field" style="margin-bottom: 0.5rem;">
+                                                <label class="checkbox">
+                                                    <input type="checkbox"
+                                                        checked={current_perms.can_view_business_process}
+                                                        onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            on_toggle.emit(("can_view_business_process".to_string(), input.checked()))
+                                                        }}
+                                                    />
+                                                    <strong>{ " 访问业务流程" }</strong>
+                                                </label>
+                                                <p class="help is-size-7 ml-5">{"控制是否可以访问业务流程管理功能"}</p>
+                                            </div>
+                                            <div class="ml-5">
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_business_applications}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_business_applications".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 📝 业务申请查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_create_business_application}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_create_business_application".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 创建业务申请" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_approve_business_application}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_approve_business_application".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 审批业务申请" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_supplement_business_application}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_supplement_business_application".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 补充业务申请信息" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_delete_business_application}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_delete_business_application".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 删除业务申请" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_operations_management}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_operations_management".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 🔧 运维管理查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_manage_operations}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_manage_operations".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 运维操作权限" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_automation_orchestration}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_automation_orchestration".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " ⚙️ 自动化资源编排查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_execute_orchestration}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_execute_orchestration".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 执行编排任务" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_manage_orchestration}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_manage_orchestration".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 管理编排任务" }
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // ========== 云管理 ==========
+                                        <div class="box has-background-light">
+                                            <h4 class="title is-6 mb-3">{"☁️ 云管理"}</h4>
+                                            <div class="field" style="margin-bottom: 0.5rem;">
+                                                <label class="checkbox">
+                                                    <input type="checkbox"
+                                                        checked={current_perms.can_access_cloud}
+                                                        onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            on_toggle.emit(("can_access_cloud".to_string(), input.checked()))
+                                                        }}
+                                                    />
+                                                    <strong>{ " 访问云管理模块" }</strong>
+                                                </label>
+                                                <p class="help is-size-7 ml-5">{"控制是否可以访问云管理模块下的所有功能"}</p>
+                                            </div>
+                                            <div class="ml-5">
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_cloud_providers}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_cloud_providers".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 云服务商管理查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_cloud_management}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_cloud_management".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 云管理查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_cloud_assets}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_cloud_assets".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 云服务资产查看" }
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // ========== 用户管理 ==========
+                                        <div class="box has-background-light">
+                                            <h4 class="title is-6 mb-3">{"👥 用户管理"}</h4>
+                                            <div class="field" style="margin-bottom: 0.5rem;">
+                                                <label class="checkbox">
+                                                    <input type="checkbox"
+                                                        checked={current_perms.can_access_user_management}
+                                                        onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            on_toggle.emit(("can_access_user_management".to_string(), input.checked()))
+                                                        }}
+                                                    />
+                                                    <strong>{ " 访问用户管理模块" }</strong>
+                                                </label>
+                                                <p class="help is-size-7 ml-5">{"控制是否可以访问用户管理模块下的所有功能"}</p>
+                                            </div>
+                                            <div class="ml-5">
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_users}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_users".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 用户管理查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_password_policy}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_password_policy".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 密码策略查看" }
+                                                    </label>
+                                                </div>
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_manage_permissions}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_manage_permissions".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 权限管理（可编辑其他用户权限）" }
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // ========== 审计日志 ==========
+                                        <div class="box has-background-light">
+                                            <h4 class="title is-6 mb-3">{"📜 审计日志"}</h4>
+                                            <div class="field" style="margin-bottom: 0.5rem;">
+                                                <label class="checkbox">
+                                                    <input type="checkbox"
+                                                        checked={current_perms.can_access_audit}
+                                                        onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                            let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                            on_toggle.emit(("can_access_audit".to_string(), input.checked()))
+                                                        }}
+                                                    />
+                                                    <strong>{ " 访问审计日志" }</strong>
+                                                </label>
+                                                <p class="help is-size-7 ml-5">{"控制是否可以访问审计日志功能"}</p>
+                                            </div>
+                                            <div class="ml-5">
+                                                <div class="field" style="margin-bottom: 0.5rem;">
+                                                    <label class="checkbox">
+                                                        <input type="checkbox"
+                                                            checked={current_perms.can_view_audit_logs}
+                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
+                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
+                                                                on_toggle.emit(("can_view_audit_logs".to_string(), input.checked()))
+                                                            }}
+                                                        />
+                                                        { " 审计日志查看" }
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </section>
+                            <footer class="modal-card-foot">
+                                <button class="button is-success" onclick={on_save}>{ "保存" }</button>
+                                <button class="button" onclick={on_close_modal}>{ "取消" }</button>
+                            </footer>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
     }
 }
 
