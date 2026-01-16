@@ -752,6 +752,64 @@ fn Sidebar(props: &SidebarProps) -> Html {
     let user_role = get_auth_user().map(|u| u.role);
     let user_permissions = get_auth_user().and_then(|u| u.permissions);
 
+    // 实时从后端获取最新权限
+    let latest_permissions = use_state(|| None as Option<Permissions>);
+    let loading_permissions = use_state(|| false);
+
+    // 获取 token
+    let token = get_auth_token();
+
+    // 使用 effect 在组件挂载时获取最新权限
+    let latest_permissions_clone = latest_permissions.clone();
+    let loading_permissions_clone = loading_permissions.clone();
+    let token_clone = token.clone();
+
+    use_effect_with((), move |_| {
+        let token = token_clone.clone();
+        if !token.is_empty() {
+            loading_permissions_clone.set(true);
+            spawn_local(async move {
+                match Request::get(&api_url("users/me"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        if let Ok(updated_user) = resp.json::<User>().await {
+                            // 更新 localStorage
+                            if let Ok(user_str) = serde_json::to_string(&updated_user) {
+                                let login_response = LoginResponse {
+                                    token: token.clone(),
+                                    user: updated_user.clone(),
+                                };
+                                if let Ok(login_str) = serde_json::to_string(&login_response) {
+                                    set_auth(&token, &login_str);
+                                }
+                            }
+                            // 更新权限状态
+                            latest_permissions_clone.set(updated_user.permissions);
+                        }
+                    }
+                    _ => {}
+                }
+                loading_permissions_clone.set(false);
+            });
+        }
+        || ()
+    });
+
+    // 使用实时获取的权限，如果没有则使用缓存的
+    let effective_permissions = latest_permissions.as_ref().or(user_permissions.as_ref());
+
+    // 调试：输出用户角色和权限信息
+    web_sys::console::log_1(&format!("🔍 侧边栏调试 - user_role: {:?}", user_role).into());
+    if let Some(perms) = effective_permissions {
+        web_sys::console::log_1(&format!("🔍 侧边栏调试 - 权限: can_access_general={}, can_access_assets_risks={}, can_access_cloud={}, can_access_audit={}",
+            perms.can_access_general, perms.can_access_assets_risks, perms.can_access_cloud, perms.can_access_audit).into());
+    } else {
+        web_sys::console::log_1(&"⚠️ 侧边栏调试 - user_permissions is None!".into());
+    }
+
     let toggle_lang = {
         let lang = lang.clone();
         Callback::from(move |_| {
@@ -795,20 +853,26 @@ fn Sidebar(props: &SidebarProps) -> Html {
             </div>
             <ul class="menu-list">
                 <li><a onclick={navigate(Page::Dashboard)}>{ lang.t("dashboard") }</a></li>
-                if user_role == Some(Role::SecAdmin) || user_role == Some(Role::Auditor) {
+                // 通用模块 - 使用顶级权限 can_access_general
+                if user_role == Some(Role::SecAdmin) || user_role == Some(Role::Auditor) || effective_permissions.map(|p| p.can_access_general).unwrap_or(false) {
                     <li><a onclick={navigate(Page::TaskCenter)}>{ lang.t("task_center") }</a></li>
                     <li><a onclick={navigate(Page::AdvancedScanning)}>{ lang.t("advanced_scanning") }</a></li>
                 }
             </ul>
-            if user_role == Some(Role::SecAdmin) {
+            // 资产与风险管理 - 使用顶级权限 can_access_assets_risks
+            if user_role == Some(Role::SecAdmin) || user_role == Some(Role::Auditor) || effective_permissions.map(|p| p.can_access_assets_risks).unwrap_or(false) {
                 <p class="menu-label">{ lang.t("assets_risks") }</p>
                 <ul class="menu-list">
-                    <li><a onclick={navigate(Page::CloudServiceAssetManagement)}>{ lang.t("cloud_service_asset_management") }</a></li>
-                    <li><a onclick={navigate(Page::RiskCenter)}>{ lang.t("risk_monitoring") }</a></li>
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_assets).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::CloudServiceAssetManagement)}>{ lang.t("cloud_service_asset_management") }</a></li>
+                    }
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_risks).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::RiskCenter)}>{ lang.t("risk_monitoring") }</a></li>
+                    }
                 </ul>
             }
-            // 业务资源流程: 业务申请 → 运维管理 → 自动化资源编排 → 混合云管理
-            if user_role == Some(Role::SecAdmin) || user_permissions.as_ref().map(|p| p.can_view_assets).unwrap_or(false) {
+            // 业务流程 - 使用顶级权限 can_access_assets_risks
+            if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_business_process).unwrap_or(false) {
                 <p class="menu-label">{ "业务流程" }</p>
                 <ul class="menu-list">
                     <li><a onclick={navigate(Page::BusinessApplication)}>{ lang.t("business_application") }</a></li>
@@ -816,25 +880,37 @@ fn Sidebar(props: &SidebarProps) -> Html {
                     <li><a onclick={navigate(Page::AutomationOrchestration)}>{ lang.t("automation_orchestration") }</a></li>
                 </ul>
             }
-            // 混合云管理 - 根据用户权限显示
-            if user_permissions.as_ref().map(|p| p.can_view_cloud).unwrap_or(false) {
+            // Cloud模块 - 使用顶级权限 can_access_cloud
+            if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_access_cloud).unwrap_or(false) {
                 <p class="menu-label">{ "Cloud" }</p>
                 <ul class="menu-list">
-                    <li><a onclick={navigate(Page::CloudProviderManagement)}>{ lang.t("cloud_provider_management") }</a></li>
-                    <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_providers).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::CloudProviderManagement)}>{ lang.t("cloud_provider_management") }</a></li>
+                    }
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_management).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
+                    }
                 </ul>
             }
-            if user_role == Some(Role::SysAdmin) {
+            // 用户管理模块 - 使用顶级权限 can_access_user_management
+            if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_access_user_management).unwrap_or(false) {
                 <p class="menu-label">{ lang.t("user_management") }</p>
                 <ul class="menu-list">
-                    <li><a onclick={navigate(Page::UserManagement)}>{ lang.t("user_management") }</a></li>
-                    <li><a onclick={navigate(Page::PasswordPolicyManagement)}>{ lang.t("password_policy_management") }</a></li>
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_users).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::UserManagement)}>{ lang.t("user_management") }</a></li>
+                    }
+                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_password_policy).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::PasswordPolicyManagement)}>{ lang.t("password_policy_management") }</a></li>
+                    }
                 </ul>
             }
-            if user_role == Some(Role::Auditor) {
+            // 审计模块 - 使用顶级权限 can_access_audit
+            if user_role == Some(Role::Auditor) || effective_permissions.map(|p| p.can_access_audit).unwrap_or(false) {
                 <p class="menu-label">{ lang.t("audit_logs") }</p>
                 <ul class="menu-list">
-                    <li><a onclick={navigate(Page::AuditLogs)}>{ lang.t("audit_logs") }</a></li>
+                    if user_role == Some(Role::Auditor) || effective_permissions.map(|p| p.can_view_audit_logs).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::AuditLogs)}>{ lang.t("audit_logs") }</a></li>
+                    }
                 </ul>
             }
             <p class="menu-label">{ "Account" }</p>
@@ -3508,6 +3584,7 @@ fn UserManagement() -> Html {
     let show_permissions_modal = use_state(|| false);
     let editing_user = use_state(|| None as Option<(String, String, Permissions)>); // (id, username, permissions)
     let temp_permissions = use_state(|| None as Option<Permissions>);
+    let success_message = use_state(|| None as Option<String>);
 
     // Create user state
     let show_create_modal = use_state(|| false);
@@ -3712,15 +3789,18 @@ fn UserManagement() -> Html {
         let editing_user = editing_user.clone();
         let temp_permissions = temp_permissions.clone();
         let show_permissions_modal = show_permissions_modal.clone();
+        let success_message = success_message.clone();
 
         Callback::from(move |_| {
-            if let Some((user_id, _, _)) = &*editing_user {
+            if let Some((user_id, username, _)) = &*editing_user {
                 if let Some(perms) = &*temp_permissions {
                     let user_id = user_id.clone();
                     let perms = perms.clone();
                     let token = token.clone();
                     let users = users.clone();
                     let show_permissions_modal = show_permissions_modal.clone();
+                    let username = username.clone();
+                    let success_message = success_message.clone();
 
                     spawn_local(async move {
                         let json_body = serde_json::to_string(&perms).unwrap_or_default();
@@ -3746,6 +3826,16 @@ fn UserManagement() -> Html {
                                     }
                                 }
                                 show_permissions_modal.set(false);
+                                // 显示成功提示
+                                success_message.set(Some(format!(
+                                    "✅ 用户 {} 的权限已成功更新！\n\n⚠️ 注意：该用户需要退出重新登录才能使新权限生效。",
+                                    username
+                                )));
+                                // 5秒后自动隐藏提示
+                                let success_message = success_message.clone();
+                                Timeout::new(5000, move || {
+                                    success_message.set(None);
+                                }).forget();
                             }
                         }
                     });
@@ -3755,6 +3845,7 @@ fn UserManagement() -> Html {
     };
 
     // Toggle permission - create individual callbacks for each permission
+    // 三层级权限关联逻辑：顶级 -> 子级 -> 孙级
     let temp_perms_for_callbacks = temp_permissions.clone();
 
     let make_toggle_callback = |field: String| {
@@ -3766,28 +3857,166 @@ fn UserManagement() -> Html {
 
             if let Some(mut perms) = (*temp_permissions).clone() {
                 match field.as_str() {
+                    // ========== 顶级权限：控制整个模块 ==========
+                    "can_access_general" => {
+                        perms.can_access_general = value;
+                        if !value {
+                            // 取消顶级时，自动取消所有子级和孙级
+                            perms.can_view_dashboard = false;
+                            perms.can_view_tasks = false;
+                            perms.can_create_task = false;
+                            perms.can_delete_task = false;
+                            perms.can_update_task = false;
+                            perms.can_view_advanced_scan = false;
+                            perms.can_create_scan = false;
+                            perms.can_delete_scan = false;
+                            perms.can_export_scan = false;
+                        }
+                    }
+
+                    "can_access_assets_risks" => {
+                        perms.can_access_assets_risks = value;
+                        if !value {
+                            perms.can_view_cloud_assets = false;
+                            perms.can_create_cloud_asset = false;
+                            perms.can_update_cloud_asset = false;
+                            perms.can_delete_cloud_asset = false;
+                            perms.can_view_risks = false;
+                            perms.can_resolve_risk = false;
+                            perms.can_delete_risk = false;
+                            perms.can_view_business_process = false;
+                        }
+                    }
+
+                    "can_access_cloud" => {
+                        perms.can_access_cloud = value;
+                        if !value {
+                            perms.can_view_cloud_providers = false;
+                            perms.can_manage_cloud_providers = false;
+                            perms.can_view_cloud_management = false;
+                            perms.can_manage_cloud = false;
+                            perms.can_delete_cloud = false;
+                            perms.can_sync_cloud = false;
+                        }
+                    }
+
+                    "can_access_user_management" => {
+                        perms.can_access_user_management = value;
+                        if !value {
+                            perms.can_view_users = false;
+                            perms.can_create_user = false;
+                            perms.can_update_user = false;
+                            perms.can_delete_user = false;
+                            perms.can_manage_permissions = false;
+                            perms.can_view_password_policy = false;
+                            perms.can_manage_password_policy = false;
+                        }
+                    }
+
+                    "can_access_audit" => {
+                        perms.can_access_audit = value;
+                        if !value {
+                            perms.can_view_audit_logs = false;
+                        }
+                    }
+
+                    // ========== 子级权限：控制页面访问 ==========
+                    "can_view_dashboard" => perms.can_view_dashboard = value,
+
+                    "can_view_tasks" => {
+                        perms.can_view_tasks = value;
+                        if !value {
+                            perms.can_create_task = false;
+                            perms.can_delete_task = false;
+                            perms.can_update_task = false;
+                        }
+                    }
+
+                    "can_view_advanced_scan" => {
+                        perms.can_view_advanced_scan = value;
+                        if !value {
+                            perms.can_create_scan = false;
+                            perms.can_delete_scan = false;
+                            perms.can_export_scan = false;
+                        }
+                    }
+
+                    "can_view_cloud_assets" => {
+                        perms.can_view_cloud_assets = value;
+                        if !value {
+                            perms.can_create_cloud_asset = false;
+                            perms.can_update_cloud_asset = false;
+                            perms.can_delete_cloud_asset = false;
+                        }
+                    }
+
+                    "can_view_risks" => {
+                        perms.can_view_risks = value;
+                        if !value {
+                            perms.can_resolve_risk = false;
+                            perms.can_delete_risk = false;
+                        }
+                    }
+
+                    "can_view_business_process" => perms.can_view_business_process = value,
+
+                    "can_view_cloud_providers" => {
+                        perms.can_view_cloud_providers = value;
+                        if !value {
+                            perms.can_manage_cloud_providers = false;
+                        }
+                    }
+
+                    "can_view_cloud_management" => {
+                        perms.can_view_cloud_management = value;
+                        if !value {
+                            perms.can_manage_cloud = false;
+                            perms.can_delete_cloud = false;
+                            perms.can_sync_cloud = false;
+                        }
+                    }
+
+                    "can_view_users" => {
+                        perms.can_view_users = value;
+                        if !value {
+                            perms.can_create_user = false;
+                            perms.can_update_user = false;
+                            perms.can_delete_user = false;
+                            perms.can_manage_permissions = false;
+                        }
+                    }
+
+                    "can_view_password_policy" => {
+                        perms.can_view_password_policy = value;
+                        if !value {
+                            perms.can_manage_password_policy = false;
+                        }
+                    }
+
+                    "can_view_audit_logs" => perms.can_view_audit_logs = value,
+
+                    // ========== 孙级权限：控制具体操作 ==========
+                    "can_create_task" => perms.can_create_task = value,
+                    "can_delete_task" => perms.can_delete_task = value,
+                    "can_update_task" => perms.can_update_task = value,
                     "can_create_scan" => perms.can_create_scan = value,
                     "can_delete_scan" => perms.can_delete_scan = value,
                     "can_export_scan" => perms.can_export_scan = value,
-                    "can_view_assets" => perms.can_view_assets = value,
-                    "can_create_asset" => perms.can_create_asset = value,
-                    "can_update_asset" => perms.can_update_asset = value,
-                    "can_delete_asset" => perms.can_delete_asset = value,
-                    "can_view_cloud" => perms.can_view_cloud = value,
+                    "can_create_cloud_asset" => perms.can_create_cloud_asset = value,
+                    "can_update_cloud_asset" => perms.can_update_cloud_asset = value,
+                    "can_delete_cloud_asset" => perms.can_delete_cloud_asset = value,
+                    "can_resolve_risk" => perms.can_resolve_risk = value,
+                    "can_delete_risk" => perms.can_delete_risk = value,
+                    "can_manage_cloud_providers" => perms.can_manage_cloud_providers = value,
                     "can_manage_cloud" => perms.can_manage_cloud = value,
                     "can_delete_cloud" => perms.can_delete_cloud = value,
                     "can_sync_cloud" => perms.can_sync_cloud = value,
-                    "can_view_risks" => perms.can_view_risks = value,
-                    "can_resolve_risk" => perms.can_resolve_risk = value,
-                    "can_delete_risk" => perms.can_delete_risk = value,
-                    "can_view_users" => perms.can_view_users = value,
                     "can_create_user" => perms.can_create_user = value,
                     "can_update_user" => perms.can_update_user = value,
                     "can_delete_user" => perms.can_delete_user = value,
                     "can_manage_permissions" => perms.can_manage_permissions = value,
-                    "can_view_audit_logs" => perms.can_view_audit_logs = value,
-                    "can_view_zones" => perms.can_view_zones = value,
-                    "can_manage_zones" => perms.can_manage_zones = value,
+                    "can_manage_password_policy" => perms.can_manage_password_policy = value,
+
                     _ => {}
                 }
                 temp_permissions.set(Some(perms));
@@ -3806,6 +4035,18 @@ fn UserManagement() -> Html {
                     </button>
                 }
             </div>
+
+            // 成功提示消息
+            if let Some(msg) = &*success_message {
+                <div class="notification is-success is-light" style="margin-bottom: 1rem; position: relative;">
+                    <button class="delete" onclick={ {
+                        let success_message = success_message.clone();
+                        Callback::from(move |_| success_message.set(None))
+                    } }></button>
+                    <p style="white-space: pre-line;">{ msg.clone() }</p>
+                </div>
+            }
+
             <div class="box">
                 if (*users).is_empty() && *loading {
                     <p class="has-text-centered has-text-grey">{ "Loading..." }</p>
@@ -3950,7 +4191,7 @@ fn UserManagement() -> Html {
             if *show_permissions_modal {
                 <div class="modal is-active">
                     <div class="modal-background" onclick={on_close_modal.clone()}></div>
-                    <div class="modal-card" style="width: 800px;">
+                    <div class="modal-card" style="width: 900px;">
                         <header class="modal-card-head">
                             <p class="modal-card-title">
                                 { "编辑权限 - " }
@@ -3977,221 +4218,442 @@ fn UserManagement() -> Html {
                                     </div>
                                 </div>
 
+                                // ========== 通用模块 ==========
                                 <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "🔍 扫描权限" }</h4>
+                                    <h4 class="title is-6">{ "📊 通用模块" }</h4>
                                     <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                        // 顶级权限 - 访问通用模块
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
                                             <input
                                                 type="checkbox"
-                                                checked={perms.can_create_scan}
-                                                onchange={make_toggle_callback(String::from("can_create_scan"))}/
+                                                checked={perms.can_access_general}
+                                                onchange={make_toggle_callback(String::from("can_access_general"))}/
                                             >
-                                            { " 创建扫描" }
+                                            { " 访问通用模块" }
                                         </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_delete_scan}
-                                                onchange={make_toggle_callback(String::from("can_delete_scan"))}/
-                                            >
-                                            { " 删除扫描" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_export_scan}
-                                                onchange={make_toggle_callback(String::from("can_export_scan"))}/
-                                            >
-                                            { " 导出结果" }
-                                        </label>
+                                        // 子级权限 - 缩进显示
+                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
+                                            // 仪表盘
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_dashboard}
+                                                    onchange={make_toggle_callback(String::from("can_view_dashboard"))}
+                                                    disabled={!perms.can_access_general}
+                                                    style={if !perms.can_access_general { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看仪表盘" }
+                                            </label>
+                                            // 任务中心
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_tasks}
+                                                    onchange={make_toggle_callback(String::from("can_view_tasks"))}
+                                                    disabled={!perms.can_access_general}
+                                                    style={if !perms.can_access_general { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看任务中心" }
+                                            </label>
+                                            // 孙级权限 - 任务操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_create_task}
+                                                        onchange={make_toggle_callback(String::from("can_create_task"))}
+                                                        disabled={!perms.can_view_tasks}
+                                                        style={if !perms.can_view_tasks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 创建任务" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_update_task}
+                                                        onchange={make_toggle_callback(String::from("can_update_task"))}
+                                                        disabled={!perms.can_view_tasks}
+                                                        style={if !perms.can_view_tasks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 更新任务" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_task}
+                                                        onchange={make_toggle_callback(String::from("can_delete_task"))}
+                                                        disabled={!perms.can_view_tasks}
+                                                        style={if !perms.can_view_tasks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除任务" }
+                                                </label>
+                                            </div>
+                                            // 高级扫描
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_advanced_scan}
+                                                    onchange={make_toggle_callback(String::from("can_view_advanced_scan"))}
+                                                    disabled={!perms.can_access_general}
+                                                    style={if !perms.can_access_general { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看高级扫描" }
+                                            </label>
+                                            // 孙级权限 - 扫描操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_create_scan}
+                                                        onchange={make_toggle_callback(String::from("can_create_scan"))}
+                                                        disabled={!perms.can_view_advanced_scan}
+                                                        style={if !perms.can_view_advanced_scan { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 创建扫描" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_scan}
+                                                        onchange={make_toggle_callback(String::from("can_delete_scan"))}
+                                                        disabled={!perms.can_view_advanced_scan}
+                                                        style={if !perms.can_view_advanced_scan { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除扫描" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_export_scan}
+                                                        onchange={make_toggle_callback(String::from("can_export_scan"))}
+                                                        disabled={!perms.can_view_advanced_scan}
+                                                        style={if !perms.can_view_advanced_scan { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 导出结果" }
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
+                                // ========== 资产与风险模块 ==========
                                 <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "💰 资产权限" }</h4>
+                                    <h4 class="title is-6">{ "💼 资产与风险模块" }</h4>
                                     <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                        // 顶级权限
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
                                             <input
                                                 type="checkbox"
-                                                checked={perms.can_view_assets}
-                                                onchange={make_toggle_callback(String::from("can_view_assets"))}/
+                                                checked={perms.can_access_assets_risks}
+                                                onchange={make_toggle_callback(String::from("can_access_assets_risks"))}/
                                             >
-                                            { " 查看资产" }
+                                            { " 访问资产与风险模块" }
                                         </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_create_asset}
-                                                onchange={make_toggle_callback(String::from("can_create_asset"))}/
-                                            >
-                                            { " 创建资产" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_update_asset}
-                                                onchange={make_toggle_callback(String::from("can_update_asset"))}/
-                                            >
-                                            { " 更新资产" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_delete_asset}
-                                                onchange={make_toggle_callback(String::from("can_delete_asset"))}/
-                                            >
-                                            { " 删除资产" }
-                                        </label>
+                                        // 子级权限
+                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
+                                            // 云服务资产
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_cloud_assets}
+                                                    onchange={make_toggle_callback(String::from("can_view_cloud_assets"))}
+                                                    disabled={!perms.can_access_assets_risks}
+                                                    style={if !perms.can_access_assets_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看云服务资产" }
+                                            </label>
+                                            // 孙级权限 - 云资产操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_create_cloud_asset}
+                                                        onchange={make_toggle_callback(String::from("can_create_cloud_asset"))}
+                                                        disabled={!perms.can_view_cloud_assets}
+                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 创建云资产" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_update_cloud_asset}
+                                                        onchange={make_toggle_callback(String::from("can_update_cloud_asset"))}
+                                                        disabled={!perms.can_view_cloud_assets}
+                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 更新云资产" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_cloud_asset}
+                                                        onchange={make_toggle_callback(String::from("can_delete_cloud_asset"))}
+                                                        disabled={!perms.can_view_cloud_assets}
+                                                        style={if !perms.can_view_cloud_assets { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除云资产" }
+                                                </label>
+                                            </div>
+                                            // 风险监控
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_risks}
+                                                    onchange={make_toggle_callback(String::from("can_view_risks"))}
+                                                    disabled={!perms.can_access_assets_risks}
+                                                    style={if !perms.can_access_assets_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看风险监控" }
+                                            </label>
+                                            // 孙级权限 - 风险操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_resolve_risk}
+                                                        onchange={make_toggle_callback(String::from("can_resolve_risk"))}
+                                                        disabled={!perms.can_view_risks}
+                                                        style={if !perms.can_view_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 处置风险" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_risk}
+                                                        onchange={make_toggle_callback(String::from("can_delete_risk"))}
+                                                        disabled={!perms.can_view_risks}
+                                                        style={if !perms.can_view_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除风险" }
+                                                </label>
+                                            </div>
+                                            // 业务流程
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_business_process}
+                                                    onchange={make_toggle_callback(String::from("can_view_business_process"))}
+                                                    disabled={!perms.can_access_assets_risks}
+                                                    style={if !perms.can_access_assets_risks { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看业务流程" }
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
 
+                                // ========== Cloud模块 ==========
                                 <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "☁️ 云资产权限" }</h4>
+                                    <h4 class="title is-6">{ "☁️ Cloud模块" }</h4>
                                     <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                        // 顶级权限
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
                                             <input
                                                 type="checkbox"
-                                                checked={perms.can_view_cloud}
-                                                onchange={make_toggle_callback(String::from("can_view_cloud"))}/
+                                                checked={perms.can_access_cloud}
+                                                onchange={make_toggle_callback(String::from("can_access_cloud"))}/
                                             >
-                                            { " 查看云资产" }
+                                            { " 访问Cloud模块" }
                                         </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_manage_cloud}
-                                                onchange={make_toggle_callback(String::from("can_manage_cloud"))}/
-                                            >
-                                            { " 管理云资产" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_delete_cloud}
-                                                onchange={make_toggle_callback(String::from("can_delete_cloud"))}/
-                                            >
-                                            { " 删除云资产" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_sync_cloud}
-                                                onchange={make_toggle_callback(String::from("can_sync_cloud"))}/
-                                            >
-                                            { " 同步云资产" }
-                                        </label>
+                                        // 子级权限
+                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
+                                            // 云区对接管理
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_cloud_providers}
+                                                    onchange={make_toggle_callback(String::from("can_view_cloud_providers"))}
+                                                    disabled={!perms.can_access_cloud}
+                                                    style={if !perms.can_access_cloud { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看云区对接" }
+                                            </label>
+                                            // 孙级权限 - 云区操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_manage_cloud_providers}
+                                                        onchange={make_toggle_callback(String::from("can_manage_cloud_providers"))}
+                                                        disabled={!perms.can_view_cloud_providers}
+                                                        style={if !perms.can_view_cloud_providers { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 管理云区对接" }
+                                                </label>
+                                            </div>
+                                            // 混合云管理
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_cloud_management}
+                                                    onchange={make_toggle_callback(String::from("can_view_cloud_management"))}
+                                                    disabled={!perms.can_access_cloud}
+                                                    style={if !perms.can_access_cloud { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看混合云管理" }
+                                            </label>
+                                            // 孙级权限 - 混合云操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_manage_cloud}
+                                                        onchange={make_toggle_callback(String::from("can_manage_cloud"))}
+                                                        disabled={!perms.can_view_cloud_management}
+                                                        style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 管理云资产" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_cloud}
+                                                        onchange={make_toggle_callback(String::from("can_delete_cloud"))}
+                                                        disabled={!perms.can_view_cloud_management}
+                                                        style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除云资产" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_sync_cloud}
+                                                        onchange={make_toggle_callback(String::from("can_sync_cloud"))}
+                                                        disabled={!perms.can_view_cloud_management}
+                                                        style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 同步云资产" }
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
+                                // ========== 用户管理模块 ==========
                                 <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "⚠️ 风险权限" }</h4>
+                                    <h4 class="title is-6">{ "👥 用户管理模块" }</h4>
                                     <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                        // 顶级权限
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
                                             <input
                                                 type="checkbox"
-                                                checked={perms.can_view_risks}
-                                                onchange={make_toggle_callback(String::from("can_view_risks"))}/
+                                                checked={perms.can_access_user_management}
+                                                onchange={make_toggle_callback(String::from("can_access_user_management"))}/
                                             >
-                                            { " 查看风险" }
+                                            { " 访问用户管理模块" }
                                         </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_resolve_risk}
-                                                onchange={make_toggle_callback(String::from("can_resolve_risk"))}/
-                                            >
-                                            { " 处置风险" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_delete_risk}
-                                                onchange={make_toggle_callback(String::from("can_delete_risk"))}/
-                                            >
-                                            { " 删除风险" }
-                                        </label>
+                                        // 子级权限
+                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
+                                            // 用户管理
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_users}
+                                                    onchange={make_toggle_callback(String::from("can_view_users"))}
+                                                    disabled={!perms.can_access_user_management}
+                                                    style={if !perms.can_access_user_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看用户管理" }
+                                            </label>
+                                            // 孙级权限 - 用户操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_create_user}
+                                                        onchange={make_toggle_callback(String::from("can_create_user"))}
+                                                        disabled={!perms.can_view_users}
+                                                        style={if !perms.can_view_users { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 创建用户" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_update_user}
+                                                        onchange={make_toggle_callback(String::from("can_update_user"))}
+                                                        disabled={!perms.can_view_users}
+                                                        style={if !perms.can_view_users { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 更新用户" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_delete_user}
+                                                        onchange={make_toggle_callback(String::from("can_delete_user"))}
+                                                        disabled={!perms.can_view_users}
+                                                        style={if !perms.can_view_users { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 删除用户" }
+                                                </label>
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_manage_permissions}
+                                                        onchange={make_toggle_callback(String::from("can_manage_permissions"))}
+                                                        disabled={!perms.can_view_users}
+                                                        style={if !perms.can_view_users { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 管理权限" }
+                                                </label>
+                                            </div>
+                                            // 密码策略管理
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_password_policy}
+                                                    onchange={make_toggle_callback(String::from("can_view_password_policy"))}
+                                                    disabled={!perms.can_access_user_management}
+                                                    style={if !perms.can_access_user_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看密码策略" }
+                                            </label>
+                                            // 孙级权限 - 密码策略操作
+                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
+                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={perms.can_manage_password_policy}
+                                                        onchange={make_toggle_callback(String::from("can_manage_password_policy"))}
+                                                        disabled={!perms.can_view_password_policy}
+                                                        style={if !perms.can_view_password_policy { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                    >
+                                                    { " 管理密码策略" }
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
+                                // ========== 审计模块 ==========
                                 <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "👥 用户管理权限" }</h4>
+                                    <h4 class="title is-6">{ "📋 审计模块" }</h4>
                                     <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                        // 顶级权限
+                                        <label class="checkbox" style="display: block; margin: 0.5rem 0; font-weight: bold; font-size: 1.1em;">
                                             <input
                                                 type="checkbox"
-                                                checked={perms.can_view_users}
-                                                onchange={make_toggle_callback(String::from("can_view_users"))}/
+                                                checked={perms.can_access_audit}
+                                                onchange={make_toggle_callback(String::from("can_access_audit"))}/
                                             >
-                                            { " 查看用户" }
+                                            { " 访问审计模块" }
                                         </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_create_user}
-                                                onchange={make_toggle_callback(String::from("can_create_user"))}/
-                                            >
-                                            { " 创建用户" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_update_user}
-                                                onchange={make_toggle_callback(String::from("can_update_user"))}/
-                                            >
-                                            { " 更新用户" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_delete_user}
-                                                onchange={make_toggle_callback(String::from("can_delete_user"))}/
-                                            >
-                                            { " 删除用户" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_manage_permissions}
-                                                onchange={make_toggle_callback(String::from("can_manage_permissions"))}/
-                                            >
-                                            { " 管理权限" }
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "📋 审计权限" }</h4>
-                                    <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_view_audit_logs}
-                                                onchange={make_toggle_callback(String::from("can_view_audit_logs"))}/
-                                            >
-                                            { " 查看审计日志" }
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <div style="margin-bottom: 1rem;">
-                                    <h4 class="title is-6">{ "🌐 区域管理权限" }</h4>
-                                    <div class="box">
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_view_zones}
-                                                onchange={make_toggle_callback(String::from("can_view_zones"))}/
-                                            >
-                                            { " 查看区域" }
-                                        </label>
-                                        <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                            <input
-                                                type="checkbox"
-                                                checked={perms.can_manage_zones}
-                                                onchange={make_toggle_callback(String::from("can_manage_zones"))}/
-                                            >
-                                            { " 管理区域" }
-                                        </label>
+                                        // 子级权限
+                                        <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
+                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={perms.can_view_audit_logs}
+                                                    onchange={make_toggle_callback(String::from("can_view_audit_logs"))}
+                                                    disabled={!perms.can_access_audit}
+                                                    style={if !perms.can_access_audit { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
+                                                >
+                                                { " 查看审计日志" }
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -6409,6 +6871,9 @@ fn AdvancedScanning() -> Html {
 
     let token = get_auth_token();
 
+    // 获取用户权限
+    let user_permissions = get_user_permissions();
+
     // 加载任务列表
     let load_tasks = {
         let tasks = tasks.clone();
@@ -6673,9 +7138,12 @@ fn AdvancedScanning() -> Html {
                     <h1 class="title">{ lang.t("advanced_scanning") }</h1>
                 </div>
                 <div class="level-right">
-                    <button class="button is-primary" onclick={on_open_modal}>
-                        { lang.t("create_scan") }
-                    </button>
+                    // 根据权限显示创建扫描按钮
+                    if user_permissions.as_ref().map(|p| p.can_create_scan).unwrap_or(false) {
+                        <button class="button is-primary" onclick={on_open_modal}>
+                            { lang.t("create_scan") }
+                        </button>
+                    }
                 </div>
             </div>
 
@@ -6823,12 +7291,18 @@ fn AdvancedScanning() -> Html {
                                             if task.status == TaskStatus::Running {
                                                 <button class="button is-small is-warning is-light">{"取消"}</button>
                                             } else if task.status == TaskStatus::Completed {
-                                                <button
-                                                    class="button is-small is-info is-light"
-                                                    onclick={on_export_results.reform(move |_| task_id.clone())}
-                                                >{"导出结果"}</button>
+                                                // 根据权限显示导出按钮
+                                                if user_permissions.as_ref().map(|p| p.can_export_scan).unwrap_or(false) {
+                                                    <button
+                                                        class="button is-small is-info is-light"
+                                                        onclick={on_export_results.reform(move |_| task_id.clone())}
+                                                    >{"导出结果"}</button>
+                                                }
                                             }
-                                            <button class="button is-small is-danger is-light">{"删除"}</button>
+                                            // 根据权限显示删除按钮
+                                            if user_permissions.as_ref().map(|p| p.can_delete_scan).unwrap_or(false) {
+                                                <button class="button is-small is-danger is-light">{"删除"}</button>
+                                            }
                                         </td>
                                     </tr>
                                 }
@@ -6995,11 +7469,13 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                 if p.can_create_scan { count += 1; }
                 if p.can_delete_scan { count += 1; }
                 if p.can_export_scan { count += 1; }
-                if p.can_view_assets { count += 1; }
-                if p.can_create_asset { count += 1; }
-                if p.can_update_asset { count += 1; }
-                if p.can_delete_asset { count += 1; }
-                if p.can_view_cloud { count += 1; }
+                if p.can_view_cloud_assets { count += 1; }
+                if p.can_create_cloud_asset { count += 1; }
+                if p.can_update_cloud_asset { count += 1; }
+                if p.can_delete_cloud_asset { count += 1; }
+                if p.can_view_cloud_providers { count += 1; }
+                if p.can_manage_cloud_providers { count += 1; }
+                if p.can_view_cloud_management { count += 1; }
                 if p.can_manage_cloud { count += 1; }
                 if p.can_delete_cloud { count += 1; }
                 if p.can_sync_cloud { count += 1; }
@@ -7012,8 +7488,6 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                 if p.can_delete_user { count += 1; }
                 if p.can_manage_permissions { count += 1; }
                 if p.can_view_audit_logs { count += 1; }
-                if p.can_view_zones { count += 1; }
-                if p.can_manage_zones { count += 1; }
                 count
             }).unwrap_or(0);
 
@@ -7156,16 +7630,16 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                                                         {"资产权限"}
                                                     </p>
                                                     <span class="card-header-icon">
-                                                        <span class="tag is-light">{ 
-                                                            format!("{}/4", 
-                                                                [permissions.can_view_assets, permissions.can_create_asset, permissions.can_update_asset, permissions.can_delete_asset]
+                                                        <span class="tag is-light">{
+                                                            format!("{}/4",
+                                                                [permissions.can_view_cloud_assets, permissions.can_create_cloud_asset, permissions.can_update_cloud_asset, permissions.can_delete_cloud_asset]
                                                                 .iter().filter(|&&x| x).count())
                                                             }</span>
                                                     </span>
                                                 </div>
                                                 <div class="card-content">
                                                     <div class="tags are-small">
-                                                        { for [permissions.can_view_assets, permissions.can_create_asset, permissions.can_update_asset, permissions.can_delete_asset]
+                                                        { for [permissions.can_view_cloud_assets, permissions.can_create_cloud_asset, permissions.can_update_cloud_asset, permissions.can_delete_cloud_asset]
                                                             .iter()
                                                             .zip(["查看资产", "创建资产", "更新资产", "删除资产"].iter())
                                                             .map(|(&enabled, name)| {
@@ -7187,21 +7661,55 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                                                 <div class="card-header">
                                                     <p class="card-header-title">
                                                         <span class="icon mr-2"><i class="fas fa-cloud has-text-link"></i></span>
-                                                        {"云资产权限"}
+                                                        {"云区对接权限"}
                                                     </p>
                                                     <span class="card-header-icon">
-                                                        <span class="tag is-light">{ 
-                                                            format!("{}/4", 
-                                                                [permissions.can_view_cloud, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
+                                                        <span class="tag is-light">{
+                                                            format!("{}/2",
+                                                                [permissions.can_view_cloud_providers, permissions.can_manage_cloud_providers]
                                                                 .iter().filter(|&&x| x).count())
                                                             }</span>
                                                     </span>
                                                 </div>
                                                 <div class="card-content">
                                                     <div class="tags are-small">
-                                                        { for [permissions.can_view_cloud, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
+                                                        { for [permissions.can_view_cloud_providers, permissions.can_manage_cloud_providers]
                                                             .iter()
-                                                            .zip(["查看云资产", "管理云资产", "删除云资产", "同步云资产"].iter())
+                                                            .zip(["查看云区对接", "管理云区对接"].iter())
+                                                            .map(|(&enabled, name)| {
+                                                                if enabled {
+                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
+                                                                } else {
+                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
+                                                                }
+                                                            })
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 混合云管理权限
+                                        <div class="column is-6">
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <p class="card-header-title">
+                                                        <span class="icon mr-2"><i class="fas fa-cloud-upload-alt has-text-primary"></i></span>
+                                                        {"混合云管理权限"}
+                                                    </p>
+                                                    <span class="card-header-icon">
+                                                        <span class="tag is-light">{
+                                                            format!("{}/4",
+                                                                [permissions.can_view_cloud_management, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
+                                                                .iter().filter(|&&x| x).count())
+                                                            }</span>
+                                                    </span>
+                                                </div>
+                                                <div class="card-content">
+                                                    <div class="tags are-small">
+                                                        { for [permissions.can_view_cloud_management, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
+                                                            .iter()
+                                                            .zip(["查看混合云", "管理云资产", "删除云资产", "同步云资产"].iter())
                                                             .map(|(&enabled, name)| {
                                                                 if enabled {
                                                                     html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
@@ -7304,40 +7812,6 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                                                         { for [permissions.can_view_audit_logs]
                                                             .iter()
                                                             .zip(["查看审计日志"].iter())
-                                                            .map(|(&enabled, name)| {
-                                                                if enabled {
-                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
-                                                                } else {
-                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
-                                                                }
-                                                            })
-                                                        }
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        // 区域管理权限
-                                        <div class="column is-6">
-                                            <div class="card">
-                                                <div class="card-header">
-                                                    <p class="card-header-title">
-                                                        <span class="icon mr-2"><i class="fas fa-globe has-text-success"></i></span>
-                                                        {"区域管理权限"}
-                                                    </p>
-                                                    <span class="card-header-icon">
-                                                        <span class="tag is-light">{
-                                                            format!("{}/2",
-                                                                [permissions.can_view_zones, permissions.can_manage_zones]
-                                                                .iter().filter(|&&x| x).count())
-                                                        }</span>
-                                                    </span>
-                                                </div>
-                                                <div class="card-content">
-                                                    <div class="tags are-small">
-                                                        { for [permissions.can_view_zones, permissions.can_manage_zones]
-                                                            .iter()
-                                                            .zip(["查看区域", "管理区域"].iter())
                                                             .map(|(&enabled, name)| {
                                                                 if enabled {
                                                                     html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }

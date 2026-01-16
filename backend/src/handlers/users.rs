@@ -161,23 +161,41 @@ pub async fn update_user_permissions(
     Path(id): Path<String>,
     Json(permissions): Json<Permissions>,
 ) -> Result<Json<User>, (StatusCode, String)> {
+    println!("📝 收到权限更新请求 - 用户ID: {}", id);
+    println!("📝 通用模块: can_access_general={}", permissions.can_access_general);
+    println!("📝 任务中心: can_view_tasks={}, can_create_task={}, can_delete_task={}, can_update_task={}",
+        permissions.can_view_tasks, permissions.can_create_task, permissions.can_delete_task, permissions.can_update_task);
+    println!("📝 高级扫描: can_view_advanced_scan={}, can_create_scan={}, can_delete_scan={}, can_export_scan={}",
+        permissions.can_view_advanced_scan, permissions.can_create_scan, permissions.can_delete_scan, permissions.can_export_scan);
+    println!("📝 资产风险: can_access_assets_risks={}", permissions.can_access_assets_risks);
+    println!("📝 云资产: can_view_cloud_assets={}, can_create_cloud_asset={}, can_update_cloud_asset={}, can_delete_cloud_asset={}",
+        permissions.can_view_cloud_assets, permissions.can_create_cloud_asset, permissions.can_update_cloud_asset, permissions.can_delete_cloud_asset);
+
     let current_user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+
+    println!("📝 当前用户: {}", current_user.username);
 
     // Check if current user has permission to manage permissions
     let current_perms = current_user.permissions.as_ref().ok_or((StatusCode::FORBIDDEN, "No permissions set".to_string()))?;
+    println!("📝 当前用户权限 - can_manage_permissions: {}", current_perms.can_manage_permissions);
+
     if !current_perms.can_manage_permissions {
+        println!("❌ 权限不足: 用户没有管理权限的权限");
         return Err((StatusCode::FORBIDDEN, "Permission denied".to_string()));
     }
 
     let mut users = state.users.lock().unwrap();
     if let Some(idx) = users.iter().position(|u| u.id == id) {
         let user = &mut users[idx];
+        println!("✅ 找到用户: {}, 更新权限", user.username);
         user.permissions = Some(permissions.clone());
 
         log_action(&state.audit_logs, &current_user, "UPDATE_PERMISSIONS", &user.username, "Updated user permissions");
 
+        println!("✅ 权限更新成功");
         Ok(Json(user.clone()))
     } else {
+        println!("❌ 用户未找到: {}", id);
         Err((StatusCode::NOT_FOUND, "User not found".to_string()))
     }
 }
@@ -258,10 +276,16 @@ pub async fn update_password_policy(
     
     let mut policy_state = state.password_policy.lock().unwrap();
     *policy_state = policy.clone();
-    
-    log_action(&state.audit_logs, &current_user, "UPDATE_PASSWORD_POLICY", "system", 
-               &format!("Updated password policy: min_length={}, require_uppercase={}, require_number={}", 
+
+    log_action(&state.audit_logs, &current_user, "UPDATE_PASSWORD_POLICY", "system",
+               &format!("Updated password policy: min_length={}, require_uppercase={}, require_number={}",
                        policy.min_length, policy.require_uppercase, policy.require_number));
-    
+
     Ok(Json(policy))
+}
+
+// 获取当前用户信息
+pub async fn get_current_user_info(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<User>, (StatusCode, String)> {
+    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+    Ok(Json(user))
 }

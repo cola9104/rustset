@@ -816,109 +816,191 @@ pub enum Role {
 /// 细化权限位掩码
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Permissions {
-    // 扫描权限
-    pub can_create_scan: bool,
-    pub can_delete_scan: bool,
-    pub can_export_scan: bool,
+    // ========== 通用模块 ==========
+    pub can_access_general: bool,           // 顶级：访问通用模块
 
-    // 资产权限
-    pub can_view_assets: bool,
-    pub can_create_asset: bool,
-    pub can_update_asset: bool,
-    pub can_delete_asset: bool,
+    // 仪表盘
+    pub can_view_dashboard: bool,           // 子级：查看仪表盘
 
-    // 云资产权限
-    pub can_view_cloud: bool,
-    pub can_manage_cloud: bool,
-    pub can_delete_cloud: bool,
-    pub can_sync_cloud: bool,
+    // 任务中心
+    pub can_view_tasks: bool,               // 子级：查看任务中心
+    pub can_create_task: bool,              // 孙级：创建任务
+    pub can_delete_task: bool,              // 孙级：删除任务
+    pub can_update_task: bool,              // 孙级：更新任务
 
-    // 风险权限
-    pub can_view_risks: bool,
-    pub can_resolve_risk: bool,
-    pub can_delete_risk: bool,
+    // 高级扫描
+    pub can_view_advanced_scan: bool,       // 子级：查看高级扫描页面
+    pub can_create_scan: bool,              // 孙级：创建扫描
+    pub can_delete_scan: bool,              // 孙级：删除扫描
+    pub can_export_scan: bool,              // 孙级：导出结果
 
-    // 用户管理权限
-    pub can_view_users: bool,
-    pub can_create_user: bool,
-    pub can_update_user: bool,
-    pub can_delete_user: bool,
-    pub can_manage_permissions: bool,
+    // ========== 资产与风险模块 ==========
+    pub can_access_assets_risks: bool,      // 顶级：访问资产与风险模块
 
-    // 审计权限
-    pub can_view_audit_logs: bool,
+    // 云服务资产
+    pub can_view_cloud_assets: bool,        // 子级：查看云服务资产
+    pub can_create_cloud_asset: bool,       // 孙级：创建云资产
+    pub can_update_cloud_asset: bool,       // 孙级：更新云资产
+    pub can_delete_cloud_asset: bool,       // 孙级：删除云资产
 
-    // 区域管理权限
-    pub can_view_zones: bool,
-    pub can_manage_zones: bool,
+    // 风险监控
+    pub can_view_risks: bool,               // 子级：查看风险监控
+    pub can_resolve_risk: bool,             // 孙级：处置风险
+    pub can_delete_risk: bool,              // 孙级：删除风险
+
+    // 业务流程
+    pub can_view_business_process: bool,    // 子级：查看业务流程
+
+    // ========== Cloud模块 ==========
+    pub can_access_cloud: bool,             // 顶级：访问Cloud模块
+
+    // 云区对接管理
+    pub can_view_cloud_providers: bool,     // 子级：查看云区对接
+    pub can_manage_cloud_providers: bool,   // 孙级：管理云区对接
+
+    // 混合云管理
+    pub can_view_cloud_management: bool,    // 子级：查看混合云管理
+    pub can_manage_cloud: bool,             // 孙级：管理云资产
+    pub can_delete_cloud: bool,             // 孙级：删除云资产
+    pub can_sync_cloud: bool,               // 孙级：同步云资产
+
+    // ========== 用户管理模块 ==========
+    pub can_access_user_management: bool,   // 顶级：访问用户管理模块
+
+    // 用户管理
+    pub can_view_users: bool,               // 子级：查看用户管理
+    pub can_create_user: bool,              // 孙级：创建用户
+    pub can_update_user: bool,              // 孙级：更新用户
+    pub can_delete_user: bool,              // 孙级：删除用户
+    pub can_manage_permissions: bool,       // 孙级：管理权限
+
+    // 密码策略管理
+    pub can_view_password_policy: bool,     // 子级：查看密码策略
+    pub can_manage_password_policy: bool,   // 孙级：管理密码策略
+
+    // ========== 审计模块 ==========
+    pub can_access_audit: bool,             // 顶级：访问审计模块
+
+    // 审计日志
+    pub can_view_audit_logs: bool,          // 子级：查看审计日志
 }
 
 impl Default for Permissions {
     fn default() -> Self {
         Self {
+            can_access_general: false,
+            can_view_dashboard: false,
+            can_view_tasks: false,
+            can_create_task: false,
+            can_delete_task: false,
+            can_update_task: false,
+            can_view_advanced_scan: false,
             can_create_scan: false,
             can_delete_scan: false,
             can_export_scan: false,
-            can_view_assets: false,
-            can_create_asset: false,
-            can_update_asset: false,
-            can_delete_asset: false,
-            can_view_cloud: false,
-            can_manage_cloud: false,
-            can_delete_cloud: false,
-            can_sync_cloud: false,
+            can_access_assets_risks: false,
+            can_view_cloud_assets: false,
+            can_create_cloud_asset: false,
+            can_update_cloud_asset: false,
+            can_delete_cloud_asset: false,
             can_view_risks: false,
             can_resolve_risk: false,
             can_delete_risk: false,
+            can_view_business_process: false,
+            can_access_cloud: false,
+            can_view_cloud_providers: false,
+            can_manage_cloud_providers: false,
+            can_view_cloud_management: false,
+            can_manage_cloud: false,
+            can_delete_cloud: false,
+            can_sync_cloud: false,
+            can_access_user_management: false,
             can_view_users: false,
             can_create_user: false,
             can_update_user: false,
             can_delete_user: false,
             can_manage_permissions: false,
+            can_view_password_policy: false,
+            can_manage_password_policy: false,
+            can_access_audit: false,
             can_view_audit_logs: false,
-            can_view_zones: false,
-            can_manage_zones: false,
         }
     }
 }
 
 impl Permissions {
-    /// SysAdmin 默认权限
+    /// SysAdmin 默认权限 - 拥有所有权限
     pub fn sys_admin() -> Self {
         Self {
+            can_access_general: true,
+            can_view_dashboard: true,
+            can_view_tasks: true,
+            can_create_task: true,
+            can_delete_task: true,
+            can_update_task: true,
+            can_view_advanced_scan: true,
+            can_create_scan: true,
+            can_delete_scan: true,
+            can_export_scan: true,
+            can_access_assets_risks: true,
+            can_view_cloud_assets: true,
+            can_create_cloud_asset: true,
+            can_update_cloud_asset: true,
+            can_delete_cloud_asset: true,
+            can_view_risks: true,
+            can_resolve_risk: true,
+            can_delete_risk: true,
+            can_view_business_process: true,
+            can_access_cloud: true,
+            can_view_cloud_providers: true,
+            can_manage_cloud_providers: true,
+            can_view_cloud_management: true,
+            can_manage_cloud: true,
+            can_delete_cloud: true,
+            can_sync_cloud: true,
+            can_access_user_management: true,
             can_view_users: true,
             can_create_user: true,
             can_update_user: true,
             can_delete_user: true,
             can_manage_permissions: true,
+            can_view_password_policy: true,
+            can_manage_password_policy: true,
+            can_access_audit: true,
             can_view_audit_logs: true,
-            can_view_cloud: true,
-            can_view_assets: true,
-            can_view_zones: true,
-            can_view_risks: true,
-            ..Default::default()
         }
     }
 
     /// SecAdmin 默认权限
     pub fn sec_admin() -> Self {
         Self {
+            can_access_general: true,
+            can_view_dashboard: true,
+            can_view_tasks: true,
+            can_create_task: true,
+            can_delete_task: true,
+            can_update_task: true,
+            can_view_advanced_scan: true,
             can_create_scan: true,
             can_delete_scan: true,
             can_export_scan: true,
-            can_view_assets: true,
-            can_create_asset: true,
-            can_update_asset: true,
-            can_delete_asset: true,
-            can_view_cloud: true,
-            can_manage_cloud: true,
-            can_delete_cloud: true,
-            can_sync_cloud: true,
+            can_access_assets_risks: true,
+            can_view_cloud_assets: true,
+            can_create_cloud_asset: true,
+            can_update_cloud_asset: true,
+            can_delete_cloud_asset: true,
             can_view_risks: true,
             can_resolve_risk: true,
             can_delete_risk: true,
-            can_view_zones: true,
-            can_manage_zones: true,
+            can_view_business_process: true,
+            can_access_cloud: true,
+            can_view_cloud_providers: true,
+            can_manage_cloud_providers: true,
+            can_view_cloud_management: true,
+            can_manage_cloud: true,
+            can_delete_cloud: true,
+            can_sync_cloud: true,
+            can_access_audit: true,
             can_view_audit_logs: true,
             ..Default::default()
         }
@@ -927,12 +1009,23 @@ impl Permissions {
     /// Auditor 默认权限
     pub fn auditor() -> Self {
         Self {
-            can_view_assets: true,
-            can_view_cloud: true,
-            can_view_risks: true,
-            can_view_audit_logs: true,
+            can_access_general: true,
+            can_view_dashboard: true,
+            can_view_tasks: true,
+            can_view_advanced_scan: true,
             can_export_scan: true,
+            can_access_assets_risks: true,
+            can_view_cloud_assets: true,
+            can_view_risks: true,
+            can_view_business_process: true,
+            can_access_cloud: true,
+            can_view_cloud_providers: true,
+            can_view_cloud_management: true,
+            can_access_user_management: true,
             can_view_users: true,
+            can_view_password_policy: true,
+            can_access_audit: true,
+            can_view_audit_logs: true,
             ..Default::default()
         }
     }
