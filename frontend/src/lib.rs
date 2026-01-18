@@ -838,7 +838,7 @@ fn Sidebar(props: &SidebarProps) -> Html {
     };
 
     html! {
-        <aside class="menu p-4" style="height: 100vh; background-color: #f5f5f5;">
+        <aside class="menu p-4" style="height: 100vh; background-color: #f5f5f5; overflow-y: auto; position: sticky; top: 0;">
             <div class="level is-mobile mb-4">
                 <div class="level-left">
                     <h1 class="title is-4">{ "RustSet" }</h1>

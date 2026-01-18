@@ -146,6 +146,7 @@ async fn main() {
         audit_logs: Arc::new(StdMutex::new(vec![])),
         advanced_tasks: Arc::new(StdMutex::new(vec![])),
         cloud_assets: Arc::new(StdMutex::new(vec![])),
+        custom_roles: Arc::new(StdMutex::new(vec![])),
         scan_manager: Arc::new(TokioMutex::new(scan_manager)),
         password_policy: Arc::new(StdMutex::new(PasswordPolicy::default())),
         password_history: Arc::new(StdMutex::new(vec![])),
@@ -161,6 +162,9 @@ async fn main() {
         .route("/api/users/change-password", post(change_password))
         .route("/api/password-policy", get(get_password_policy).put(update_password_policy))
         .route("/api/logs", get(get_audit_logs))
+        // Roles
+        .route("/api/roles", get(handlers::roles::get_roles).post(handlers::roles::create_role))
+        .route("/api/roles/:id", get(handlers::roles::get_role).put(handlers::roles::update_role).delete(handlers::roles::delete_role))
         // Assets
         .route("/api/assets", get(get_assets).post(add_asset))
         .route("/api/assets/:id", delete(delete_asset).put(update_asset))

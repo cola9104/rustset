@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod users;
+pub mod roles;
 pub mod assets;
 pub mod tasks;
 pub mod risks;

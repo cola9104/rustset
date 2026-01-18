@@ -2,6 +2,34 @@
 
 RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫描、监控安全合规，以及混合云多云资产管理。
 
+## 🚀 快速启动
+
+### 使用启动脚本（推荐）
+
+```bash
+# 启动所有服务
+./start.sh
+
+# 查看服务状态
+./start.sh status
+
+# 停止所有服务
+./stop.sh
+```
+
+详细说明请查看 [脚本使用文档](SCRIPTS.md)
+
+### 手动启动
+
+```bash
+# 后端
+cargo run --bin backend
+
+# 前端（需要单独终端窗口）
+cd frontend
+trunk serve
+```
+
 ## 系统架构
 
 - **frontend**: Yew (Rust + WASM) 前端应用

@@ -693,6 +693,33 @@ pub enum Role {
     Custom(String), // Custom role with specific permissions
 }
 
+/// 自定义角色数据结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomRole {
+    pub id: Option<i32>,
+    pub name: String,              // 角色名称
+    pub description: Option<String>, // 角色描述
+    pub permissions: Permissions,   // 角色权限
+    pub created_at: Option<String>, // 创建时间
+    pub updated_at: Option<String>, // 更新时间
+}
+
+/// 创建自定义角色请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateRoleRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub permissions: Permissions,
+}
+
+/// 更新自定义角色请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateRoleRequest {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub permissions: Option<Permissions>,
+}
+
 /// 细化权限位掩码
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Permissions {
