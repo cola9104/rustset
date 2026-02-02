@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RustSet</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link data-trunk rel="rust" href="Cargo.toml" />
+    <!-- Use local Bulma CSS for better performance and reliability -->
+    <link data-trunk rel="css" href="bulma.min.css" />
+    <!-- Use CDNJS for FontAwesome (jsdelivr was unstable) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* Basic loading spinner */
@@ -15,6 +18,25 @@
             transform: translate(-50%, -50%);
             font-size: 1.5rem;
             color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #loading::after {
+            content: "";
+            display: block;
+            width: 40px;
+            height: 40px;
+            margin-top: 10px;
+            border-radius: 50%;
+            border: 3px solid #ccc;
+            border-top-color: #333;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
         /* Sidebar menu hover styles */
@@ -104,69 +126,8 @@
     </style>
 </head>
 <body>
-    <div id="main"></div>
-    <script type="module">
-        import init from './pkg/frontend.js';
-        init('/pkg/frontend_bg.wasm');
-    </script>
-    <script>
-        // Column resize functionality for Excel-like table
-        document.addEventListener('DOMContentLoaded', function() {
-            const table = document.querySelector('.excel-table');
-            if (!table) return;
-
-            let currentResizer = null;
-            let currentTh = null;
-            let startX = 0;
-            let startWidth = 0;
-
-            table.querySelectorAll('.resizer').forEach(resizer => {
-                resizer.addEventListener('mousedown', function(e) {
-                    currentTh = e.target.parentElement;
-                    startX = e.pageX;
-                    startWidth = currentTh.offsetWidth;
-                    currentResizer = e.target;
-                    currentResizer.classList.add('resizing');
-
-                    document.addEventListener('mousemove', handleMouseMove);
-                    document.addEventListener('mouseup', handleMouseUp);
-                    e.preventDefault();
-                });
-            });
-
-            function handleMouseMove(e) {
-                if (currentTh) {
-                    const width = startWidth + (e.pageX - startX);
-                    const minWidth = 60;
-                    const finalWidth = Math.max(width, minWidth);
-
-                    currentTh.style.minWidth = finalWidth + 'px';
-                    currentTh.style.maxWidth = finalWidth + 'px';
-                    currentTh.style.width = finalWidth + 'px';
-
-                    // Update all cells in this column
-                    const colIndex = Array.from(currentTh.parentElement.children).indexOf(currentTh);
-                    table.querySelectorAll('tbody tr').forEach(row => {
-                        const cell = row.children[colIndex];
-                        if (cell) {
-                            cell.style.minWidth = finalWidth + 'px';
-                            cell.style.maxWidth = finalWidth + 'px';
-                            cell.style.width = finalWidth + 'px';
-                        }
-                    });
-                }
-            }
-
-            function handleMouseUp() {
-                if (currentResizer) {
-                    currentResizer.classList.remove('resizing');
-                }
-                currentResizer = null;
-                currentTh = null;
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            }
-        });
-    </script>
+    <div id="main">
+        <div id="loading">Loading RustSet...</div>
+    </div>
 </body>
 </html>

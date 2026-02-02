@@ -3,7 +3,6 @@ name = "frontend"
 version = "0.1.0"
 edition = "2021"
 
-[workspace]
 
 [dependencies]
 # Yew web framework
@@ -24,6 +23,7 @@ shared = { path = "../shared" }
 
 # Logging
 gloo-console = "0.3"
+console_error_panic_hook = "0.1"
 
 # HTTP client
 gloo-net = { version = "0.6", features = ["http"] }

@@ -47,16 +47,7 @@ impl CloudProvider {
     }
 }
 
-/// 云区域/可用区
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudRegion {
-    pub provider: CloudProvider,
-    pub region_id: String,     // 如 cn-hangzhou, ap-guangzhou
-    pub zone_id: Option<String>, // 可用区，如 cn-hangzhou-i
-    pub region_name: String,   // 如 华东1(杭州)
-}
-
-/// 计费模式
+/// 计费模式 (保留用于云服务资产)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BillingMode {
     #[serde(rename = "pay_as_you_go")]
@@ -65,68 +56,6 @@ pub enum BillingMode {
     Subscription,   // 包年包月/订阅
     #[serde(rename = "spot")]
     Spot,          // 抢占式实例
-}
-
-/// 实例状态
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum VMStatus {
-    #[serde(rename = "running")]
-    Running,        // 运行中
-    #[serde(rename = "stopped")]
-    Stopped,        // 已停止
-    #[serde(rename = "starting")]
-    Starting,       // 启动中
-    #[serde(rename = "stopping")]
-    Stopping,       // 停止中
-    #[serde(rename = "rebooting")]
-    Rebooting,      // 重启中
-    #[serde(rename = "deleted")]
-    Deleted,        // 已释放
-    #[serde(rename = "error")]
-    Error,          // 异常
-}
-
-/// 实例规格信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InstanceSpec {
-    pub instance_type: String,   // 如 ecs.g6.large
-    pub cpu_cores: u32,          // CPU核数
-    pub memory_gb: u32,          // 内存GB
-    pub cpu_arch: Option<String>, // CPU架构，如 x86, arm
-    pub gpu_spec: Option<String>, // GPU规格（如果有）
-    pub bandwidth_mbps: Option<u32>, // 公网带宽Mbps
-}
-
-/// 系统盘信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemDisk {
-    pub disk_type: String,       // 如 cloud_ssd, cloud_essd
-    pub size_gb: u32,            // 容量GB
-    pub category: Option<String>, // 如 IOPS, throughput
-    pub performance_level: Option<String>, // ESSD性能级别 PL0/PL1/PL2/PL3
-}
-
-/// 云盘信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudDisk {
-    pub disk_id: String,
-    pub disk_name: String,
-    pub disk_type: String,       // cloud, cloud_ssd, cloud_essd, cloud_efficiency
-    pub size_gb: u32,
-    pub status: String,          // in_use, available, attaching
-    pub category: Option<String>,
-    pub iops: Option<u32>,
-    pub throughput_mb: Option<f32>,
-    pub is_snapshot: bool,       // 是否从快照创建
-}
-
-/// 快照信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SnapshotInfo {
-    pub has_snapshot: bool,
-    pub snapshot_count: u32,
-    pub latest_snapshot_time: Option<DateTime<Utc>>,
-    pub total_snapshot_size_gb: u32,
 }
 
 /// 部门信息
@@ -157,147 +86,7 @@ pub struct ContactPerson {
     pub department: Option<String>,
 }
 
-/// 混合云虚拟机资产
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudAsset {
-    // 基础信息
-    pub id: Option<i32>,
-    pub asset_name: String,          // 资产名称
-
-    // 实例规格
-    pub spec: InstanceSpec,
-
-    // 系统盘
-    pub system_disk: SystemDisk,
-
-    // 云区信息
-    pub cloud_region: CloudRegion,
-
-    // IP地址
-    pub public_ip: Option<String>,   // 公网IP
-    pub private_ip: String,          // 内网IP
-    pub ipv6_address: Option<String>, // IPv6地址
-
-    // 计费与到期
-    pub billing_mode: BillingMode,
-    pub expire_time: Option<DateTime<Utc>>, // 到期时间
-
-    // 状态
-    pub status: VMStatus,
-
-    // 操作系统
-    pub os_type: String,             // 操作系统类型，如 Linux, Windows
-    pub os_name: String,             // 如 CentOS 7.9, Windows Server 2019
-    pub os_arch: Option<String>,     // x86_64, arm64
-    pub image_id: String,            // 镜像ID
-    pub image_name: Option<String>,  // 镜像名称
-
-    // 组织信息
-    pub department: Department,      // 部门
-    pub project: Project,            // 项目
-    pub owner: ContactPerson,        // 负责人
-
-    // 时间信息
-    pub created_at: DateTime<Utc>,   // 虚拟机创建时间
-    pub last_synced: Option<DateTime<Utc>>, // 最后同步时间
-
-    // 云盘信息
-    pub cloud_disks: Vec<CloudDisk>,
-    pub cloud_disk_count: u32,       // 云盘数量
-    pub cloud_disk_total_size_gb: u32, // 云盘数据总量GB
-
-    // 快照信息
-    pub snapshot_info: SnapshotInfo, // 是否有快照等
-
-    // 实例ID（云厂商返回的）
-    pub instance_id: String,         // 实例唯一标识
-
-    // 标签
-    pub tags: Vec<String>,
-    pub charge_type: Option<String>, // 付费类型 PostPaid/PrePaid
-}
-
-/// 创建云资产请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateCloudAssetRequest {
-    pub asset_name: String,
-    pub instance_id: String,
-    pub cloud_provider: CloudProvider,
-    pub region_id: String,
-    pub zone_id: Option<String>,
-    pub instance_type: String,
-    pub cpu_cores: u32,
-    pub memory_gb: u32,
-    pub system_disk_type: String,
-    pub system_disk_size_gb: u32,
-    pub public_ip: Option<String>,
-    pub private_ip: String,
-    pub ipv6_address: Option<String>,
-    pub billing_mode: BillingMode,
-    pub expire_time: Option<DateTime<Utc>>,
-    pub os_type: String,
-    pub os_name: String,
-    pub image_id: String,
-    pub image_name: Option<String>,
-    pub department_id: String,
-    pub department_name: String,
-    pub project_id: String,
-    pub project_name: String,
-    pub project_code: String,
-    pub owner_id: String,
-    pub owner_name: String,
-    pub owner_email: Option<String>,
-    pub owner_phone: Option<String>,
-    pub cloud_disks: Vec<CloudDisk>,
-    pub has_snapshot: bool,
-    pub snapshot_count: u32,
-    pub tags: Vec<String>,
-    pub bandwidth_mbps: Option<u32>,
-    /// 关联的业务资源ID（从业务申请录入时使用）
-    pub business_resource_id: Option<i32>,
-}
-
-/// 更新云资产请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateCloudAssetRequest {
-    pub asset_name: Option<String>,
-    pub status: Option<VMStatus>,
-    pub expire_time: Option<DateTime<Utc>>,
-    pub owner_id: Option<String>,
-    pub owner_name: Option<String>,
-    pub department_id: Option<String>,
-    pub project_id: Option<String>,
-    pub tags: Option<Vec<String>>,
-}
-
-/// 云资产列表查询参数
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudAssetQuery {
-    pub provider: Option<CloudProvider>,
-    pub region_id: Option<String>,
-    pub status: Option<VMStatus>,
-    pub department_id: Option<String>,
-    pub project_id: Option<String>,
-    pub owner_id: Option<String>,
-    pub search_keyword: Option<String>, // 搜索资产名称或实例ID
-    pub expire_soon_days: Option<u32>,  // 即将到期天数
-    pub business_resource_id: Option<i32>, // 按业务资源ID筛选
-}
-
-/// 云资产统计
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudAssetStats {
-    pub total_count: u32,
-    pub running_count: u32,
-    pub stopped_count: u32,
-    pub total_cpu_cores: u32,
-    pub total_memory_gb: u32,
-    pub total_disk_size_gb: u32,
-    pub expiring_soon_count: u32,      // 即将到期数量
-    pub by_provider: Vec<(CloudProvider, u32)>, // 按厂商统计
-    pub by_department: Vec<(String, u32)>,      // 按部门统计
-    pub by_project: Vec<(String, u32)>,         // 按项目统计
-}
+// ============== Business Resource / 业务受理 Types ==============
 
 // ============== Business Resource / 业务受理 Types ==============
 
@@ -781,12 +570,6 @@ pub struct Permissions {
     pub can_view_cloud_providers: bool,     // 子级：查看云区对接
     pub can_manage_cloud_providers: bool,   // 孙级：管理云区对接
 
-    // 混合云管理
-    pub can_view_cloud_management: bool,    // 子级：查看混合云管理
-    pub can_manage_cloud: bool,             // 孙级：管理云资产
-    pub can_delete_cloud: bool,             // 孙级：删除云资产
-    pub can_sync_cloud: bool,               // 孙级：同步云资产
-
     // ========== 用户管理模块 ==========
     pub can_access_user_management: bool,   // 顶级：访问用户管理模块
 
@@ -843,10 +626,6 @@ impl Default for Permissions {
             can_access_cloud: false,
             can_view_cloud_providers: false,
             can_manage_cloud_providers: false,
-            can_view_cloud_management: false,
-            can_manage_cloud: false,
-            can_delete_cloud: false,
-            can_sync_cloud: false,
             can_access_user_management: false,
             can_view_users: false,
             can_create_user: false,
@@ -897,10 +676,6 @@ impl Permissions {
             can_access_cloud: true,
             can_view_cloud_providers: true,
             can_manage_cloud_providers: true,
-            can_view_cloud_management: true,
-            can_manage_cloud: true,
-            can_delete_cloud: true,
-            can_sync_cloud: true,
             can_access_user_management: true,
             can_view_users: true,
             can_create_user: true,
@@ -949,10 +724,6 @@ impl Permissions {
             can_access_cloud: true,
             can_view_cloud_providers: true,
             can_manage_cloud_providers: true,
-            can_view_cloud_management: true,
-            can_manage_cloud: true,
-            can_delete_cloud: true,
-            can_sync_cloud: true,
             can_access_audit: true,
             can_view_audit_logs: true,
             ..Default::default()
@@ -978,7 +749,6 @@ impl Permissions {
             can_delete_business_application: false,
             can_access_cloud: true,
             can_view_cloud_providers: true,
-            can_view_cloud_management: true,
             can_access_user_management: true,
             can_view_users: true,
             can_view_password_policy: true,
@@ -1294,6 +1064,61 @@ pub struct CreateAdvancedScanRequest {
 
 // ============== Cloud Provider Integration / 云区对接管理 Types ==============
 
+/// 云区 - Top level in cloud hierarchy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudZone {
+    pub id: Option<i32>,
+    pub zone_name: String,        // 华北区、华南区、华东区
+    pub zone_code: String,        // north、south、east、west
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// 云平台 - Second level in cloud hierarchy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudPlatform {
+    pub id: Option<i32>,
+    pub zone_id: i32,             // 所属云区
+    pub platform_name: String,    // 公众云、政务云、内外核心云
+    pub platform_code: String,    // public、gov、internal
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// 创建云区请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCloudZoneRequest {
+    pub zone_name: String,
+    pub zone_code: String,
+    pub description: Option<String>,
+}
+
+/// 更新云区请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCloudZoneRequest {
+    pub zone_name: Option<String>,
+    pub zone_code: Option<String>,
+    pub description: Option<String>,
+}
+
+/// 创建云平台请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCloudPlatformRequest {
+    pub zone_id: i32,
+    pub platform_name: String,
+    pub platform_code: String,
+    pub description: Option<String>,
+}
+
+/// 更新云平台请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateCloudPlatformRequest {
+    pub zone_id: Option<i32>,
+    pub platform_name: Option<String>,
+    pub platform_code: Option<String>,
+    pub description: Option<String>,
+}
+
 /// 云区对接配置状态
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CloudProviderConfigStatus {
@@ -1331,9 +1156,14 @@ impl CloudProviderConfigStatus {
 ///
 /// 用于管理已对接的云平台账户和区域信息，
 /// 业务申请时只能选择已配置且启用的云区。
+/// 现在支持云区-云平台两级层级结构。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudProviderConfig {
     pub id: Option<i32>,
+    /// 所属云区ID (CloudZone)
+    pub zone_id: Option<i32>,
+    /// 所属云平台ID (CloudPlatform)
+    pub platform_id: Option<i32>,
     /// 云厂商
     pub provider: CloudProvider,
     /// 区域ID (如 cn-hangzhou, ap-guangzhou)
@@ -1365,6 +1195,8 @@ pub struct CloudProviderConfig {
 /// 创建云区对接配置请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCloudProviderConfigRequest {
+    pub zone_id: Option<i32>,
+    pub platform_id: Option<i32>,
     pub provider: CloudProvider,
     pub region_id: String,
     pub region_name: String,
@@ -1385,6 +1217,8 @@ pub struct UpdateCloudProviderConfigRequest {
     pub access_key_secret: Option<String>,
     pub status: Option<CloudProviderConfigStatus>,
     pub remarks: Option<String>,
+    pub zone_id: Option<i32>,
+    pub platform_id: Option<i32>,
 }
 
 /// 云区对接配置查询参数

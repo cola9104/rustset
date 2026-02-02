@@ -37,8 +37,11 @@ use shared::{
     Asset, NetworkZone, Task, TaskStatus,
     Risk, ZoneConfig, User, Role, LoginRequest, LoginResponse, AuditLog, CreateUserRequest,
     // Multi-Cloud types
-    CloudAsset, CloudAssetStats, CloudProvider, VMStatus, BillingMode,
+    CloudProvider, BillingMode,
     CloudProviderConfigStatus, CloudProviderConfig,
+    CloudZone, CloudPlatform,
+    CreateCloudZoneRequest, UpdateCloudZoneRequest,
+    CreateCloudPlatformRequest, UpdateCloudPlatformRequest,
     // Advanced Scanning types
     ScanStrategy, ScanEngine, AdvancedScanConfig, AdvancedScanTask,
     CreateAdvancedScanRequest, QuickScanResult, Permissions, PasswordPolicy,
@@ -65,7 +68,6 @@ pub enum Page {
     UserManagement,
     PermissionManagement, // 权限管理
     AuditLogs,
-    CloudManagement, // 混合云管理
     CloudProviderManagement, // 云区对接管理
     UserProfile, // 个人中心
     PasswordPolicyManagement, // 密码策略管理
@@ -74,6 +76,8 @@ pub enum Page {
     OperationsManagement, // 运维管理（补充信息、审批）
     AutomationOrchestration, // 自动化资源编排（原运维交付）
     CloudServiceAssetManagement, // 云服务资产管理（统一纳管物理机+云虚拟机）
+    CloudZoneManagement, // 云区管理
+    CloudPlatformManagement, // 云平台管理
 }
 
 // ============== Auth State ==============
@@ -339,8 +343,10 @@ impl Language {
             (Language::En, "no_limit") => "No Limit".to_string(),
 
             // Multi-Cloud Management
-            (Language::Zh, "cloud_management") => "☁️ 混合云管理".to_string(),
-            (Language::En, "cloud_management") => "☁️ Multi-Cloud".to_string(),
+            (Language::Zh, "cloud_zone_management") => "🗺️ 云区管理".to_string(),
+            (Language::En, "cloud_zone_management") => "🗺️ Cloud Zones".to_string(),
+            (Language::Zh, "cloud_platform_management") => "☁️ 云平台管理".to_string(),
+            (Language::En, "cloud_platform_management") => "☁️ Cloud Platforms".to_string(),
             (Language::Zh, "cloud_provider_management") => "🌐 云区对接管理".to_string(),
             (Language::En, "cloud_provider_management") => "🌐 Cloud Providers".to_string(),
             (Language::Zh, "asset_name") => "资产名称".to_string(),
@@ -498,6 +504,34 @@ impl Language {
             (Language::En, "hybrid_cloud") => "Hybrid Cloud".to_string(),
             (Language::Zh, "actions") => "操作".to_string(),
             (Language::En, "actions") => "Actions".to_string(),
+
+            // Cloud Zone & Platform translations
+            (Language::Zh, "zone_name") => "云区名称".to_string(),
+            (Language::En, "zone_name") => "Zone Name".to_string(),
+            (Language::Zh, "zone_code") => "云区代码".to_string(),
+            (Language::En, "zone_code") => "Zone Code".to_string(),
+            (Language::Zh, "platform_name") => "云平台名称".to_string(),
+            (Language::En, "platform_name") => "Platform Name".to_string(),
+            (Language::Zh, "platform_code") => "云平台代码".to_string(),
+            (Language::En, "platform_code") => "Platform Code".to_string(),
+            (Language::Zh, "add_cloud_zone") => "添加云区".to_string(),
+            (Language::En, "add_cloud_zone") => "Add Cloud Zone".to_string(),
+            (Language::Zh, "edit_cloud_zone") => "编辑云区".to_string(),
+            (Language::En, "edit_cloud_zone") => "Edit Cloud Zone".to_string(),
+            (Language::Zh, "delete_cloud_zone") => "删除云区".to_string(),
+            (Language::En, "delete_cloud_zone") => "Delete Cloud Zone".to_string(),
+            (Language::Zh, "add_cloud_platform") => "添加云平台".to_string(),
+            (Language::En, "add_cloud_platform") => "Add Cloud Platform".to_string(),
+            (Language::Zh, "edit_cloud_platform") => "编辑云平台".to_string(),
+            (Language::En, "edit_cloud_platform") => "Edit Cloud Platform".to_string(),
+            (Language::Zh, "delete_cloud_platform") => "删除云平台".to_string(),
+            (Language::En, "delete_cloud_platform") => "Delete Cloud Platform".to_string(),
+            (Language::Zh, "belonging_zone") => "所属云区".to_string(),
+            (Language::En, "belonging_zone") => "Belonging Zone".to_string(),
+            (Language::Zh, "no_cloud_zones") => "暂无云区".to_string(),
+            (Language::En, "no_cloud_zones") => "No cloud zones yet".to_string(),
+            (Language::Zh, "no_cloud_platforms") => "暂无云平台".to_string(),
+            (Language::En, "no_cloud_platforms") => "No cloud platforms yet".to_string(),
 
             _ => key.to_string(),
         }
@@ -880,10 +914,9 @@ fn Sidebar(props: &SidebarProps) -> Html {
                 <p class="menu-label">{ "云管理" }</p>
                 <ul class="menu-list">
                     if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_providers).unwrap_or(false) {
+                        <li><a onclick={navigate(Page::CloudZoneManagement)}>{ lang.t("cloud_zone_management") }</a></li>
+                        <li><a onclick={navigate(Page::CloudPlatformManagement)}>{ lang.t("cloud_platform_management") }</a></li>
                         <li><a onclick={navigate(Page::CloudProviderManagement)}>{ lang.t("cloud_provider_management") }</a></li>
-                    }
-                    if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_management).unwrap_or(false) {
-                        <li><a onclick={navigate(Page::CloudManagement)}>{ lang.t("cloud_management") }</a></li>
                     }
                     if user_role == Some(Role::SecAdmin) || effective_permissions.map(|p| p.can_view_cloud_assets).unwrap_or(false) {
                         <li><a onclick={navigate(Page::CloudServiceAssetManagement)}>{ lang.t("cloud_service_asset_management") }</a></li>
@@ -3887,12 +3920,7 @@ fn UserManagement() -> Html {
                         perms.can_access_cloud = value;
                         if !value {
                             perms.can_view_cloud_providers = false;
-                            perms.can_manage_cloud_providers = false;
-                            perms.can_view_cloud_management = false;
-                            perms.can_manage_cloud = false;
-                            perms.can_delete_cloud = false;
-                            perms.can_sync_cloud = false;
-                        }
+                            perms.can_manage_cloud_providers = false;                        }
                     }
 
                     "can_access_user_management" => {
@@ -3962,15 +3990,6 @@ fn UserManagement() -> Html {
                         }
                     }
 
-                    "can_view_cloud_management" => {
-                        perms.can_view_cloud_management = value;
-                        if !value {
-                            perms.can_manage_cloud = false;
-                            perms.can_delete_cloud = false;
-                            perms.can_sync_cloud = false;
-                        }
-                    }
-
                     "can_view_users" => {
                         perms.can_view_users = value;
                         if !value {
@@ -4002,11 +4021,7 @@ fn UserManagement() -> Html {
                     "can_delete_cloud_asset" => perms.can_delete_cloud_asset = value,
                     "can_resolve_risk" => perms.can_resolve_risk = value,
                     "can_delete_risk" => perms.can_delete_risk = value,
-                    "can_manage_cloud_providers" => perms.can_manage_cloud_providers = value,
-                    "can_manage_cloud" => perms.can_manage_cloud = value,
-                    "can_delete_cloud" => perms.can_delete_cloud = value,
-                    "can_sync_cloud" => perms.can_sync_cloud = value,
-                    "can_create_user" => perms.can_create_user = value,
+                    "can_manage_cloud_providers" => perms.can_manage_cloud_providers = value,                    "can_create_user" => perms.can_create_user = value,
                     "can_update_user" => perms.can_update_user = value,
                     "can_delete_user" => perms.can_delete_user = value,
                     "can_manage_permissions" => perms.can_manage_permissions = value,
@@ -4533,50 +4548,6 @@ fn UserManagement() -> Html {
                                                         style={if !perms.can_view_cloud_providers { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
                                                     >
                                                     { " 管理云区对接" }
-                                                </label>
-                                            </div>
-                                            // 混合云管理
-                                            <label class="checkbox" style="display: block; margin: 0.5rem 0;">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={perms.can_view_cloud_management}
-                                                    onchange={make_toggle_callback(String::from("can_view_cloud_management"))}
-                                                    disabled={!perms.can_access_cloud}
-                                                    style={if !perms.can_access_cloud { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                >
-                                                { " 查看混合云管理" }
-                                            </label>
-                                            // 孙级权限 - 混合云操作
-                                            <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
-                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={perms.can_manage_cloud}
-                                                        onchange={make_toggle_callback(String::from("can_manage_cloud"))}
-                                                        disabled={!perms.can_view_cloud_management}
-                                                        style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                    >
-                                                    { " 管理云资产" }
-                                                </label>
-                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={perms.can_delete_cloud}
-                                                        onchange={make_toggle_callback(String::from("can_delete_cloud"))}
-                                                        disabled={!perms.can_view_cloud_management}
-                                                        style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                    >
-                                                    { " 删除云资产" }
-                                                </label>
-                                                <label class="checkbox" style="display: block; margin: 0.4rem 0;">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={perms.can_sync_cloud}
-                                                        onchange={make_toggle_callback(String::from("can_sync_cloud"))}
-                                                        disabled={!perms.can_view_cloud_management}
-                                                        style={if !perms.can_view_cloud_management { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
-                                                    >
-                                                    { " 同步云资产" }
                                                 </label>
                                             </div>
                                             // 云服务资产
@@ -5236,873 +5207,6 @@ fn AutomationOrchestration() -> Html {
                     }
                 </div>
             </div>
-        </div>
-    }
-}
-
-// ============== Cloud Management Component ==============
-
-#[function_component]
-fn CloudManagement() -> Html {
-    let lang = use_state(|| Language::Zh);
-    let assets = use_state(|| Vec::new());
-    let stats = use_state(|| None as Option<CloudAssetStats>);
-    let loading = use_state(|| true);
-
-    // Edit modal state
-    let editing_asset = use_state(|| None as Option<CloudAsset>);
-    let show_edit_modal = use_state(|| false);
-    let edit_message = use_state(|| None as Option<String>);
-
-    // Filters
-    let filter_provider = use_state(|| String::new());
-    let filter_status = use_state(|| String::new());
-    let filter_search = use_state(|| String::new());
-
-    // Get user role
-    let user_role = get_user_role();
-
-    // Get token from localStorage
-    let token = get_auth_token();
-
-    // Use effect to fetch data only once on mount
-    use_effect_with((), {
-        let assets = assets.clone();
-        let stats = stats.clone();
-        let loading = loading.clone();
-        let token = token.clone();
-
-        move |_| {
-            spawn_local(async move {
-                // Fetch cloud assets
-                if let Ok(resp) = Request::get(&api_url("cloud-assets"))
-                    .header("Authorization", &token)
-                    .send()
-                    .await
-                {
-                    if let Ok(data) = resp.json::<Vec<CloudAsset>>().await {
-                        assets.set(data);
-                    }
-                }
-
-                // Fetch stats
-                if let Ok(resp) = Request::get(&api_url("cloud-assets/stats"))
-                    .header("Authorization", &token)
-                    .send()
-                    .await
-                {
-                    if let Ok(data) = resp.json::<CloudAssetStats>().await {
-                        stats.set(Some(data));
-                    }
-                }
-
-                loading.set(false);
-            });
-            || ()
-        }
-    });
-
-    // Helper functions for display
-    let provider_name = |provider: &CloudProvider| -> String {
-        match provider {
-            CloudProvider::Aliyun => "阿里云".to_string(),
-            CloudProvider::Tencent => "腾讯云".to_string(),
-            CloudProvider::Huawei => "华为云".to_string(),
-            CloudProvider::Aws => "AWS".to_string(),
-            CloudProvider::Azure => "Azure".to_string(),
-            CloudProvider::Gcp => "GCP".to_string(),
-            CloudProvider::Baidu => "百度云".to_string(),
-            CloudProvider::Custom(s) => s.clone(),
-        }
-    };
-
-    let status_text = |status: &VMStatus| -> &'static str {
-        match status {
-            VMStatus::Running => "运行中",
-            VMStatus::Stopped => "已停止",
-            VMStatus::Starting => "启动中",
-            VMStatus::Stopping => "停止中",
-            VMStatus::Rebooting => "重启中",
-            VMStatus::Deleted => "已释放",
-            VMStatus::Error => "异常",
-        }
-    };
-
-    let billing_text = |mode: &BillingMode| -> &'static str {
-        match mode {
-            BillingMode::PayAsYouGo => "按量付费",
-            BillingMode::Subscription => "包年包月",
-            BillingMode::Spot => "抢占式",
-        }
-    };
-
-    // Helper to check provider match with string filter
-    let provider_matches = |provider: &CloudProvider, filter: &str| -> bool {
-        match (provider, filter) {
-            (CloudProvider::Aliyun, "aliyun") => true,
-            (CloudProvider::Tencent, "tencent") => true,
-            (CloudProvider::Huawei, "huawei") => true,
-            (CloudProvider::Aws, "aws") => true,
-            (CloudProvider::Azure, "azure") => true,
-            (CloudProvider::Gcp, "gcp") => true,
-            (CloudProvider::Baidu, "baidu") => true,
-            _ => false,
-        }
-    };
-
-    // Helper to check status match with string filter
-    let status_matches = |status: &VMStatus, filter: &str| -> bool {
-        match (status, filter) {
-            (VMStatus::Running, "running") => true,
-            (VMStatus::Stopped, "stopped") => true,
-            _ => false,
-        }
-    };
-
-    let format_datetime = |dt: &chrono::DateTime<chrono::Utc>| -> String {
-        dt.format("%Y-%m-%d %H:%M").to_string()
-    };
-
-    let format_expire = |dt: &Option<chrono::DateTime<chrono::Utc>>| -> String {
-        match dt {
-            Some(d) => {
-                let now = chrono::Utc::now();
-                let duration = *d - now;
-                let days = duration.num_days();
-                if days <= 7 {
-                    format!("{} ({}天)", d.format("%Y-%m-%d"), days)
-                } else {
-                    d.format("%Y-%m-%d").to_string()
-                }
-            }
-            None => "永久".to_string(),
-        }
-    };
-
-    // Filter assets
-    let filtered_assets = (*assets).iter().filter(|asset| {
-        let provider_match = filter_provider.is_empty()
-            || provider_matches(&asset.cloud_region.provider, &filter_provider);
-        let status_match = filter_status.is_empty()
-            || status_matches(&asset.status, &filter_status);
-        let search_match = filter_search.is_empty()
-            || asset.asset_name.contains(&*filter_search)
-            || asset.instance_id.contains(&*filter_search);
-        provider_match && status_match && search_match
-    }).cloned().collect::<Vec<_>>();
-
-    let on_provider_change = {
-        let filter_provider = filter_provider.clone();
-        Callback::from(move |e: Event| {
-            let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
-            filter_provider.set(select.value());
-        })
-    };
-
-    let on_status_change = {
-        let filter_status = filter_status.clone();
-        Callback::from(move |e: Event| {
-            let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
-            filter_status.set(select.value());
-        })
-    };
-
-    let on_search_input = {
-        let filter_search = filter_search.clone();
-        Callback::from(move |e: InputEvent| {
-            let input: web_sys::HtmlInputElement = e.target_unchecked_into();
-            filter_search.set(input.value());
-        })
-    };
-
-    let on_refresh = {
-        let assets = assets.clone();
-        let stats = stats.clone();
-        let loading = loading.clone();
-        let token = token.clone();
-
-        Callback::from(move |_| {
-            let assets = assets.clone();
-            let stats = stats.clone();
-            let loading = loading.clone();
-            let token = token.clone();
-
-            spawn_local(async move {
-                loading.set(true);
-
-                if let Ok(resp) = Request::get(&api_url("cloud-assets"))
-                    .header("Authorization", &token)
-                    .send()
-                    .await
-                {
-                    if let Ok(data) = resp.json::<Vec<CloudAsset>>().await {
-                        assets.set(data);
-                    }
-                }
-
-                if let Ok(resp) = Request::get(&api_url("cloud-assets/stats"))
-                    .header("Authorization", &token)
-                    .send()
-                    .await
-                {
-                    if let Ok(data) = resp.json::<CloudAssetStats>().await {
-                        stats.set(Some(data));
-                    }
-                }
-
-                loading.set(false);
-            });
-        })
-    };
-
-    // Edit handlers
-    let on_edit_click = {
-        let editing_asset = editing_asset.clone();
-        let show_edit_modal = show_edit_modal.clone();
-
-        Callback::from(move |asset: CloudAsset| {
-            editing_asset.set(Some(asset));
-            show_edit_modal.set(true);
-        })
-    };
-
-    let on_close_modal = {
-        let show_edit_modal = show_edit_modal.clone();
-        let editing_asset = editing_asset.clone();
-        let edit_message = edit_message.clone();
-
-        Callback::from(move |_| {
-            show_edit_modal.set(false);
-            editing_asset.set(None);
-            edit_message.set(None);
-        })
-    };
-
-    let on_save_asset = {
-        let assets = assets.clone();
-        let editing_asset = editing_asset.clone();
-        let show_edit_modal = show_edit_modal.clone();
-        let edit_message = edit_message.clone();
-        let token = token.clone();
-
-        Callback::from(move |_: Event| {
-            if let Some(asset) = (*editing_asset).clone() {
-                let assets = assets.clone();
-                let token = token.clone();
-                let edit_message = edit_message.clone();
-                let show_edit_modal = show_edit_modal.clone();
-                let editing_asset = editing_asset.clone();
-                let asset_id = asset.id.unwrap_or(0);
-
-                spawn_local(async move {
-                    let asset_json = match serde_json::to_string(&asset) {
-                        Ok(json) => json,
-                        Err(e) => {
-                            edit_message.set(Some(format!("序列化失败: {}", e)));
-                            return;
-                        }
-                    };
-
-                    if let Ok(resp) = Request::put(&format!("{}/{}", api_url("cloud-assets"), asset_id))
-                        .header("Authorization", &token)
-                        .header("Content-Type", "application/json")
-                        .body(asset_json)
-                        .unwrap()
-                        .send()
-                        .await
-                    {
-                        if resp.ok() {
-                            edit_message.set(Some("保存成功".to_string()));
-                            // Refresh assets
-                            if let Ok(resp) = Request::get(&api_url("cloud-assets"))
-                                .header("Authorization", &token)
-                                .send()
-                                .await
-                            {
-                                if let Ok(data) = resp.json::<Vec<CloudAsset>>().await {
-                                    assets.set(data);
-                                }
-                            }
-                            // Close modal after a short delay
-                            spawn_local(async move {
-                                Timeout::new(1000, move || {
-                                    show_edit_modal.set(false);
-                                    editing_asset.set(None);
-                                }).forget();
-                            });
-                        } else {
-                            edit_message.set(Some("保存失败".to_string()));
-                        }
-                    }
-                });
-            }
-        })
-    };
-
-    html! {
-        <div class="container p-4">
-            <h1 class="title">{ lang.t("cloud_management") }</h1>
-
-            // 混合云管理说明
-            <div class="notification is-info is-light mb-4">
-                <div class="content">
-                    <p class="heading">{ "☁️ 混合云管理说明" }</p>
-                    <p>
-                        { "本模块统一纳管各云厂商（阿里云/腾讯云/华为云/AWS等）的资源，支持手动录入和API自动同步。" }
-                    </p>
-                    <p class="is-size-7 has-text-grey mt-2">
-                        { "运维流程: 业务申请 → 审批通过 → 云厂商平台创建资源 → 手动录入系统 → API同步状态" }
-                    </p>
-                </div>
-            </div>
-
-            // Statistics Cards
-            if let Some(ref s) = *stats {
-                <div class="columns is-multiline mb-4">
-                    <div class="column is-2">
-                        <div class="box has-background-info-light is-paddingless">
-                            <div class="p-3">
-                                <div class="is-size-7 has-text-grey">{"资产总数"}</div>
-                                <div class="title is-5">{ s.total_count }</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="column is-2">
-                        <div class="box has-background-success-light is-paddingless">
-                            <div class="p-3">
-                                <div class="is-size-7 has-text-grey">{"运行中"}</div>
-                                <div class="title is-5">{ s.running_count }</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="column is-2">
-                        <div class="box has-background-warning-light is-paddingless">
-                            <div class="p-3">
-                                <div class="is-size-7 has-text-grey">{"CPU核心"}</div>
-                                <div class="title is-5">{ s.total_cpu_cores }</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="column is-2">
-                        <div class="box has-background-primary-light is-paddingless">
-                            <div class="p-3">
-                                <div class="is-size-7 has-text-grey">{"内存(GB)"}</div>
-                                <div class="title is-5">{ s.total_memory_gb }</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="column is-2">
-                        <div class="box has-background-danger-light is-paddingless">
-                            <div class="p-3">
-                                <div class="is-size-7 has-text-grey">{"即将到期"}</div>
-                                <div class="title is-5 has-text-danger">{ s.expiring_soon_count }</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            }
-
-            // Filters
-            <div class="box mb-4">
-                <div class="columns">
-                    <div class="column is-2">
-                        <label class="label is-small">{"云厂商"}</label>
-                        <div class="select is-small is-fullwidth">
-                            <select onchange={on_provider_change}>
-                                <option value="">{"全部"}</option>
-                                <option value="aliyun">{"阿里云"}</option>
-                                <option value="tencent">{"腾讯云"}</option>
-                                <option value="huawei">{"华为云"}</option>
-                                <option value="aws">{"AWS"}</option>
-                                <option value="azure">{"Azure"}</option>
-                                <option value="gcp">{"GCP"}</option>
-                                <option value="baidu">{"百度云"}</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="column is-2">
-                        <label class="label is-small">{"状态"}</label>
-                        <div class="select is-small is-fullwidth">
-                            <select onchange={on_status_change}>
-                                <option value="">{"全部"}</option>
-                                <option value="running">{"运行中"}</option>
-                                <option value="stopped">{"已停止"}</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="column is-4">
-                        <label class="label is-small">{"搜索"}</label>
-                        <input
-                            class="input is-small"
-                            type="text"
-                            placeholder="资产名称或实例ID"
-                            value={(*filter_search).clone()}
-                            oninput={on_search_input}
-                        />
-                    </div>
-                    <div class="column is-2">
-                        <label class="label is-small">{"操作"}</label>
-                        <button class="button is-small is-primary is-fullwidth" onclick={on_refresh}>
-                            <span class="icon"><i class="fas fa-sync"></i></span>
-                            <span>{"刷新"}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            // Loading state
-            if *loading {
-                <div class="has-text-centered py-6">
-                    <progress class="progress is-primary is-small" value="100">{ "Loading..." }</progress>
-                </div>
-            } else if filtered_assets.is_empty() {
-                <div class="box has-text-centered py-6">
-                    <p class="has-text-grey">{"暂无云资产数据"}</p>
-                </div>
-            } else {
-                // Cloud Assets Table - Excel-like with resizable columns
-                <div class="box is-paddingless" style="overflow: hidden;">
-                    <div class="excel-table-wrapper" style="overflow-x: auto; position: relative; border: 1px solid #ddd; border-radius: 4px;">
-                        <table class="excel-table" style="border-collapse: collapse; width: 100%; min-width: 3200px; font-size: 14px;">
-                            <thead>
-                                <tr style="background: #f5f5f5;">
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 180px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"\u{1f4c1} 资产名称"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"\u{1f4ca} 规格"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 80px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"CPU"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 80px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"内存"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"系统盘"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 100px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"\u{2601}️ 云厂商"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"\u{1f30e} 云区"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"公网IP"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"内网IP"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 100px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"计费模式"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"到期时间"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 90px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"状态"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 160px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"操作系统"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 160px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"镜像ID"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 120px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"部门"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 120px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"项目"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 100px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"负责人"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"创建时间"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 80px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"云盘数"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 100px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"云盘总量"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 80px; position: relative; text-align: left; font-weight: 600; color: #333;">
-                                        {"快照"}
-                                        <span class="resizer" style="position: absolute; right: 0; top: 0; height: 100%; width: 5px; cursor: col-resize; user-select: none;"></span>
-                                    </th>
-                                    <th style="border: 1px solid #ddd; padding: 16px 10px; min-width: 140px; position: sticky; right: 0; background: #f5f5f5; border-left: 2px solid #ccc; z-index: 10; text-align: left; font-weight: 600; color: #333;">
-                                        {"\u{2699}️ 操作"}
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                { for filtered_assets.iter().enumerate().map(|(idx, asset)| {
-                                    let provider = provider_name(&asset.cloud_region.provider);
-                                    let region = &asset.cloud_region.region_name;
-                                    let status_display = status_text(&asset.status);
-                                    let is_running = asset.status == VMStatus::Running;
-                                    let is_stopped = asset.status == VMStatus::Stopped;
-                                    let asset_for_edit = asset.clone();
-                                    let asset_for_ssh = asset.clone();
-                                    let asset_for_console = asset.clone();
-                                    let row_bg = if idx % 2 == 0 { "#ffffff" } else { "#fafafa" };
-
-                                    html! {
-                                        <tr class="excel-row" style={format!("background: {}; transition: background-color 0.15s ease;", row_bg)}>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">
-                                                <div style="font-weight: 500; color: #2c3e50; margin-bottom: 2px;">{ &asset.asset_name }</div>
-                                                <div style="font-size: 11px; color: #95a5a6;">{ &asset.instance_id }</div>
-                                            </td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-family: monospace; font-size: 12px;">{ &asset.spec.instance_type }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ format!("{}核", asset.spec.cpu_cores) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ format!("{}GB", asset.spec.memory_gb) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-size: 12px;">{ format!("{}GB {}", asset.system_disk.size_gb, asset.system_disk.disk_type) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ provider }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-size: 12px;">{ region }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">
-                                                { if let Some(ref pub_ip) = asset.public_ip {
-                                                    html! { <span style="color: #3273dc; font-family: monospace; font-size: 12px;">{ pub_ip }</span> }
-                                                } else {
-                                                    html! { <span style="color: #bdc3c7;">{"-"}</span> }
-                                                }}
-                                            </td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-family: monospace; font-size: 12px;">{ &asset.private_ip }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ billing_text(&asset.billing_mode) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-size: 12px;">{ format_expire(&asset.expire_time) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">
-                                                <span style={format!("background: {}; color: white; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: 500;",
-                                                    if is_running { "#27ae60" } else if is_stopped { "#e74c3c" } else { "#f39c12" })}>
-                                                    { status_display }
-                                                </span>
-                                            </td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis;">{ &asset.os_name }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-family: monospace; font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis;">{ &asset.image_id }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ &asset.department.name }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ &asset.project.name }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ &asset.owner.name }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; font-size: 12px;">{ format_datetime(&asset.created_at) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; text-align: center;">{ asset.cloud_disk_count }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px;">{ format!("{}GB", asset.cloud_disk_total_size_gb) }</td>
-                                            <td style="border: 1px solid #ddd; padding: 16px 10px; text-align: center;">
-                                                { if asset.snapshot_info.has_snapshot {
-                                                    html! { <span style="color: #27ae60; font-weight: bold;">{"✓"}</span> }
-                                                } else {
-                                                    html! { <span style="color: #bdc3c7;">{"-"}</span> }
-                                                }}
-                                                { if asset.snapshot_info.has_snapshot {
-                                                    html! { <span style="font-size: 11px; color: #7f8c8d; margin-left: 4px;">{ format!("({})", asset.snapshot_info.snapshot_count) }</span> }
-                                                } else {
-                                                    html! {}
-                                                }}
-                                            </td>
-                                            <td style="border: 1px solid #ddd; padding: 6px; position: sticky; right: 0; background: {row_bg}; border-left: 2px solid #ccc; z-index: 10;">
-                                                <div class="select is-small is-fullwidth" style="margin-bottom: 0;">
-                                                    <select style="border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer;" onchange={ {
-                                                        let on_edit_click = on_edit_click.clone();
-                                                        let asset_for_console = asset_for_console.clone();
-                                                        let asset_for_ssh = asset_for_ssh.clone();
-                                                        let user_role = user_role.clone();
-                                                        Callback::from(move |e: Event| {
-                                                            let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
-                                                            match select.value().as_str() {
-                                                                "view" => {
-                                                                    let on_edit_click = on_edit_click.clone();
-                                                                    on_edit_click.emit(asset_for_edit.clone());
-                                                                }
-                                                                "console" => {
-                                                                    if let Some(window) = web_sys::window() {
-                                                                        let _ = window.alert_with_message("控制台链接功能：点击后跳转到对应云厂商控制台");
-                                                                    }
-                                                                }
-                                                                "ssh" => {
-                                                                    if let Some(window) = web_sys::window() {
-                                                                        let _ = window.alert_with_message(&format!("SSH命令: ssh root@{}", &asset_for_ssh.private_ip));
-                                                                    }
-                                                                }
-                                                                "reboot" => {
-                                                                    if let Some(window) = web_sys::window() {
-                                                                        let _ = window.alert_with_message(&format!("重启实例: {}", &asset_for_console.asset_name));
-                                                                    }
-                                                                }
-                                                                "start" => {
-                                                                    if let Some(window) = web_sys::window() {
-                                                                        let _ = window.alert_with_message(&format!("启动实例: {}", &asset_for_console.asset_name));
-                                                                    }
-                                                                }
-                                                                "stop" => {
-                                                                    if let Some(window) = web_sys::window() {
-                                                                        let _ = window.alert_with_message(&format!("停止实例: {}", &asset_for_console.asset_name));
-                                                                    }
-                                                                }
-                                                                "delete" => {
-                                                                    if let Some(window) = web_sys::window() {
-                                                                        let _ = window.alert_with_message(&format!("释放实例: {}", &asset_for_console.asset_name));
-                                                                    }
-                                                                }
-                                                                _ => {}
-                                                            }
-                                                            // Reset select to default
-                                                            select.set_value("");
-                                                        })
-                                                    } }>
-                                                        <option value="">{"\u{1f4cb} 操作..."}</option>
-                                                        <option value="view">{"\u{1f440} 查看详情"}</option>
-                                                        {
-                                                            // SecAdmin 和 SysAdmin 可以看到更多操作
-                                                            if user_role == Some(Role::SecAdmin) || user_role == Some(Role::SysAdmin) {
-                                                                html! {
-                                                                    <>
-                                                                        <option value="console">{"\u{1f5a5} 云控制台"}</option>
-                                                                        <option value="ssh">{"\u{1f4bb} SSH连接"}</option>
-                                                                        <option value="reboot">{"\u{1f504} 重启实例"}</option>
-                                                                        <option value="start">{"\u{25b6} 启动实例"}</option>
-                                                                        <option value="stop">{"\u{23f9} 停止实例"}</option>
-                                                                    </>
-                                                                }
-                                                            } else {
-                                                                html! {}
-                                                            }
-                                                        }
-                                                        {
-                                                            // 只有 SecAdmin 可以删除实例
-                                                            if user_role == Some(Role::SecAdmin) {
-                                                                html! {
-                                                                    <option value="delete" style="color: #e74c3c;">{"\u{1f5d1} 释放实例"}</option>
-                                                                }
-                                                            } else {
-                                                                html! {}
-                                                            }
-                                                        }
-                                                    </select>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
-                                }) }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                // Summary info
-                <div class="box">
-                    <p class="is-size-7">
-                        { format!("共 {} 个云资产", filtered_assets.len()) }
-                    </p>
-                </div>
-            }
-
-            // Edit Modal
-            if *show_edit_modal {
-                if let Some(ref asset) = *editing_asset {
-                    <div class="modal is-active">
-                        <div class="modal-background" onclick={on_close_modal.clone()}></div>
-                        <div class="modal-card" style="width: 800px;">
-                            <header class="modal-card-head">
-                                <p class="modal-card-title">{ format!("编辑: {}", asset.asset_name) }</p>
-                                <button class="delete" aria-label="close" onclick={on_close_modal.clone()}></button>
-                            </header>
-                            <section class="modal-card-body" style="max-height: 60vh; overflow-y: auto;">
-                                // Display message if any
-                                if let Some(ref msg) = *edit_message {
-                                    <div class={classes!("notification", if msg.contains("成功") { "is-success" } else { "is-danger" })}>
-                                        { msg }
-                                    </div>
-                                }
-
-                                <div class="columns is-multiline">
-                                    // Asset Name (readonly - from cloud)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"资产名称"}</label>
-                                        <input class="input is-small" type="text" value={asset.asset_name.clone()} readonly=true />
-                                    </div>
-
-                                    // Instance ID (readonly)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"实例ID"}</label>
-                                        <input class="input is-small" type="text" value={asset.instance_id.clone()} readonly=true />
-                                    </div>
-
-                                    // Department (editable - for internal management)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"部门"}</label>
-                                        <input class="input is-small" type="text" value={asset.department.name.clone()} readonly=true />
-                                        <p class="help is-size-7">{"部门信息同步自组织架构"}</p>
-                                    </div>
-
-                                    // Project (editable)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"项目"}</label>
-                                        <input class="input is-small" type="text" value={asset.project.name.clone()} readonly=true />
-                                    </div>
-
-                                    // Owner Name
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"负责人"}</label>
-                                        <input class="input is-small" type="text" value={asset.owner.name.clone()} readonly=true />
-                                    </div>
-
-                                    // Owner Email
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"负责人邮箱"}</label>
-                                        <input class="input is-small" type="text" value={asset.owner.email.clone()} readonly=true />
-                                    </div>
-
-                                    // Cloud Provider (readonly)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"云厂商"}</label>
-                                        <input class="input is-small" type="text" value={provider_name(&asset.cloud_region.provider)} readonly=true />
-                                    </div>
-
-                                    // Region (readonly)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"云区"}</label>
-                                        <input class="input is-small" type="text" value={asset.cloud_region.region_name.clone()} readonly=true />
-                                    </div>
-
-                                    // Instance Type
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"实例规格"}</label>
-                                        <input class="input is-small" type="text" value={asset.spec.instance_type.clone()} readonly=true />
-                                    </div>
-
-                                    // Status (readonly - from cloud)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"状态"}</label>
-                                        <input class="input is-small" type="text" value={status_text(&asset.status)} readonly=true />
-                                    </div>
-
-                                    // CPU
-                                    <div class="column is-4">
-                                        <label class="label is-small">{"CPU核心"}</label>
-                                        <input class="input is-small" type="text" value={format!("{}", asset.spec.cpu_cores)} readonly=true />
-                                    </div>
-
-                                    // Memory
-                                    <div class="column is-4">
-                                        <label class="label is-small">{"内存(GB)"}</label>
-                                        <input class="input is-small" type="text" value={format!("{}", asset.spec.memory_gb)} readonly=true />
-                                    </div>
-
-                                    // System Disk
-                                    <div class="column is-4">
-                                        <label class="label is-small">{"系统盘(GB)"}</label>
-                                        <input class="input is-small" type="text" value={format!("{}", asset.system_disk.size_gb)} readonly=true />
-                                    </div>
-
-                                    // IPs (readonly)
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"公网IP"}</label>
-                                        <input class="input is-small" type="text" value={asset.public_ip.clone().unwrap_or_else(|| "无".to_string())} readonly=true />
-                                    </div>
-
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"内网IP"}</label>
-                                        <input class="input is-small" type="text" value={asset.private_ip.clone()} readonly=true />
-                                    </div>
-
-                                    // Billing Mode
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"计费模式"}</label>
-                                        <input class="input is-small" type="text" value={billing_text(&asset.billing_mode)} readonly=true />
-                                    </div>
-
-                                    // Expire Time
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"到期时间"}</label>
-                                        <input class="input is-small" type="text" value={format_expire(&asset.expire_time)} readonly=true />
-                                    </div>
-
-                                    // OS Info
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"操作系统"}</label>
-                                        <input class="input is-small" type="text" value={asset.os_name.clone()} readonly=true />
-                                    </div>
-
-                                    // Image ID
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"镜像ID"}</label>
-                                        <input class="input is-small" type="text" value={asset.image_id.clone()} readonly=true />
-                                    </div>
-
-                                    // Created Time
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"创建时间"}</label>
-                                        <input class="input is-small" type="text" value={format_datetime(&asset.created_at)} readonly=true />
-                                    </div>
-
-                                    // Cloud Disks
-                                    <div class="column is-6">
-                                        <label class="label is-small">{"云盘"}</label>
-                                        <input class="input is-small" type="text" value={format!("{}个 / {}GB", asset.cloud_disk_count, asset.cloud_disk_total_size_gb)} readonly=true />
-                                    </div>
-
-                                    // Snapshots
-                                    <div class="column is-12">
-                                        <label class="label is-small">{"快照信息"}</label>
-                                        <div class="box is-small">
-                                            { if asset.snapshot_info.has_snapshot {
-                                                html! {
-                                                    <>
-                                                        <p>{ format!("快照数量: {}", asset.snapshot_info.snapshot_count) }</p>
-                                                        <p>{ format!("快照总量: {}GB", asset.snapshot_info.total_snapshot_size_gb) }</p>
-                                                        {
-                                                            if let Some(ref snap_time) = asset.snapshot_info.latest_snapshot_time {
-                                                                html! { <p>{ format!("最新快照: {}", format_datetime(snap_time)) }</p> }
-                                                            } else {
-                                                                html! {}
-                                                            }
-                                                        }
-                                                    </>
-                                                }
-                                            } else {
-                                                html! { <p class="has-text-grey">{"无快照"}</p> }
-                                            }}
-                                        </div>
-                                    </div>
-
-                                    // Tags
-                                    <div class="column is-12">
-                                        <label class="label is-small">{"标签"}</label>
-                                        <div class="tags">
-                                            { for asset.tags.iter().map(|tag| {
-                                                html! { <span class="tag is-light">{ tag }</span> }
-                                            }) }
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="notification is-info is-light">
-                                    <p class="is-size-7">{"注意：云资产的基础信息（如规格、IP、状态等）由云平台同步，只读。组织信息（部门、项目、负责人）可通过云平台控制台修改。"}</p>
-                                </div>
-                            </section>
-                            <footer class="modal-card-foot" style="justify-content: flex-end;">
-                                <button class="button" onclick={on_close_modal.clone()}>{"关闭"}</button>
-                            </footer>
-                        </div>
-                    </div>
-                }
-            }
         </div>
     }
 }
@@ -6896,6 +6000,1143 @@ fn CloudProviderManagement() -> Html {
     }
 }
 
+// ============== Cloud Zone Management Component ==============
+
+#[function_component]
+fn CloudZoneManagement() -> Html {
+    let zones = use_state(|| Vec::new());
+    let loading = use_state(|| true);
+    let error_message = use_state(|| None as Option<String>);
+    let success_message = use_state(|| None as Option<String>);
+
+    let show_create_modal = use_state(|| false);
+    let show_edit_modal = use_state(|| false);
+    let editing_zone_id = use_state(|| None as Option<i32>);
+
+    let form_zone_name = use_state(|| String::new());
+    let form_zone_code = use_state(|| String::new());
+    let form_description = use_state(|| None as Option<String>);
+
+    let token = get_auth_token();
+
+    let fetch_zones = {
+        let zones = zones.clone();
+        let loading = loading.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let zones = zones.clone();
+            let loading = loading.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                loading.set(true);
+                error_message.set(None);
+
+                match Request::get(&api_url("cloud-zones"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<Vec<CloudZone>>().await {
+                            Ok(data) => {
+                                zones.set(data);
+                            }
+                            Err(e) => {
+                                error_message.set(Some(format!("解析响应失败: {}", e)));
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("获取云区列表失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+
+                loading.set(false);
+            });
+        })
+    };
+
+    use_effect_with((), {
+        let fetch_zones = fetch_zones.clone();
+        move |_| {
+            fetch_zones.emit(());
+            || ()
+        }
+    });
+
+    let on_open_create_modal = Callback::from({
+        let show_create_modal = show_create_modal.clone();
+        move |_| show_create_modal.set(true)
+    });
+
+    let on_close_create_modal = {
+        let show_create_modal = show_create_modal.clone();
+        let form_zone_name = form_zone_name.clone();
+        let form_zone_code = form_zone_code.clone();
+        let form_description = form_description.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            show_create_modal.set(false);
+            form_zone_name.set(String::new());
+            form_zone_code.set(String::new());
+            form_description.set(None);
+        })
+    };
+
+    let on_create_zone = {
+        let fetch_zones = fetch_zones.clone();
+        let show_create_modal = show_create_modal.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+        let form_zone_name = form_zone_name.clone();
+        let form_zone_code = form_zone_code.clone();
+        let form_description = form_description.clone();
+        let on_close_create_modal = on_close_create_modal.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            let zone_name = (*form_zone_name).clone();
+            let zone_code = (*form_zone_code).clone();
+            let description = (*form_description).clone();
+
+            if zone_name.is_empty() || zone_code.is_empty() {
+                error_message.set(Some("请填写必填字段".to_string()));
+                return;
+            }
+
+            let fetch_zones = fetch_zones.clone();
+            let show_create_modal = show_create_modal.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                let request = CreateCloudZoneRequest {
+                    zone_name: zone_name.clone(),
+                    zone_code: zone_code.clone(),
+                    description,
+                };
+
+                match Request::post(&api_url("cloud-zones"))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&request).unwrap())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some(format!("云区「{}」创建成功", zone_name)));
+                        fetch_zones.emit(());
+                        show_create_modal.set(false);
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        if let Ok(text) = resp.text().await {
+                            error_message.set(Some(format!("创建失败 (HTTP {}): {}", status, text)));
+                        } else {
+                            error_message.set(Some(format!("创建失败: HTTP {}", status)));
+                        }
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+
+            // Reset form after submit
+            form_zone_name.set(String::new());
+            form_zone_code.set(String::new());
+            form_description.set(None);
+        })
+    };
+
+    let on_delete_zone = {
+        let fetch_zones = fetch_zones.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |id: i32| {
+            let fetch_zones = fetch_zones.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                match Request::delete(&format!("{}/{}", api_url("cloud-zones"), id))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some(format!("云区 {} 删除成功", id)));
+                        fetch_zones.emit(());
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        if let Ok(text) = resp.text().await {
+                            error_message.set(Some(format!("删除失败 (HTTP {}): {}", status, text)));
+                        } else {
+                            error_message.set(Some(format!("删除失败: HTTP {}", status)));
+                        }
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    let on_open_edit_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        let editing_zone_id = editing_zone_id.clone();
+        let form_zone_name = form_zone_name.clone();
+        let form_zone_code = form_zone_code.clone();
+        let form_description = form_description.clone();
+
+        Callback::from(move |zone: CloudZone| {
+            editing_zone_id.set(zone.id);
+            form_zone_name.set(zone.zone_name.clone());
+            form_zone_code.set(zone.zone_code.clone());
+            form_description.set(zone.description);
+            show_edit_modal.set(true);
+        })
+    };
+
+    let on_close_edit_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        Callback::from(move |_: web_sys::MouseEvent| {
+            show_edit_modal.set(false);
+        })
+    };
+
+    let on_update_zone = {
+        let fetch_zones = fetch_zones.clone();
+        let show_edit_modal = show_edit_modal.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+        let editing_zone_id = editing_zone_id.clone();
+        let form_zone_name = form_zone_name.clone();
+        let form_zone_code = form_zone_code.clone();
+        let form_description = form_description.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            let id = (*editing_zone_id).unwrap();
+            let zone_name = (*form_zone_name).clone();
+            let zone_code = (*form_zone_code).clone();
+            let description = (*form_description).clone();
+
+            let fetch_zones = fetch_zones.clone();
+            let show_edit_modal = show_edit_modal.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                let request = UpdateCloudZoneRequest {
+                    zone_name: if zone_name.is_empty() { None } else { Some(zone_name) },
+                    zone_code: if zone_code.is_empty() { None } else { Some(zone_code) },
+                    description,
+                };
+
+                match Request::put(&format!("{}/{}", api_url("cloud-zones"), id))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&request).unwrap())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some(format!("云区 {} 更新成功", id)));
+                        fetch_zones.emit(());
+                        show_edit_modal.set(false);
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        if let Ok(text) = resp.text().await {
+                            error_message.set(Some(format!("更新失败 (HTTP {}): {}", status, text)));
+                        } else {
+                            error_message.set(Some(format!("更新失败: HTTP {}", status)));
+                        }
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    html! {
+        <div class="container" style="margin-top: 20px;">
+            <h1 class="title">{ "🗺️ 云区管理" }</h1>
+
+            if let Some(ref error) = *error_message {
+                <div class="notification is-danger is-light">
+                    <button class="delete" onclick={
+                        let error_message = error_message.clone();
+                        Callback::from(move |_| error_message.set(None))
+                    }></button>
+                    { error }
+                </div>
+            }
+
+            if let Some(ref success) = *success_message {
+                <div class="notification is-success is-light">
+                    <button class="delete" onclick={
+                        let success_message = success_message.clone();
+                        Callback::from(move |_| success_message.set(None))
+                    }></button>
+                    { success }
+                </div>
+            }
+
+            <div class="level">
+                <div class="level-left">
+                    <button class="button is-primary" onclick={on_open_create_modal}>
+                        <span class="icon"><span class="fas fa-plus"></span></span>
+                        <span>{ "新建云区" }</span>
+                    </button>
+                </div>
+            </div>
+
+            if *loading {
+                <progress class="progress is-small is-info" max="100">{ "Loading..." }</progress>
+            } else {
+                <div class="table-container">
+                    <table class="table is-fullwidth is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{ "ID" }</th>
+                                <th>{ "云区名称" }</th>
+                                <th>{ "云区代码" }</th>
+                                <th>{ "描述" }</th>
+                                <th>{ "创建时间" }</th>
+                                <th>{ "操作" }</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            { for zones.iter().map(|zone| {
+                                let zone_clone = zone.clone();
+                                let on_edit = on_open_edit_modal.clone();
+                                let id = zone.id.unwrap();
+                                let on_delete = on_delete_zone.clone();
+                                html! {
+                                    <tr key={zone.id.unwrap()}>
+                                        <td>{ zone.id.unwrap() }</td>
+                                        <td><strong>{ &zone.zone_name }</strong></td>
+                                        <td><code>{ &zone.zone_code }</code></td>
+                                        <td>{ zone.description.clone().unwrap_or_else(|| "-".to_string()) }</td>
+                                        <td>{ zone.created_at.format("%Y-%m-%d %H:%M:%S").to_string() }</td>
+                                        <td>
+                                            <button class="button is-small is-info" onclick={
+                                                let on_edit = on_edit.clone();
+                                                Callback::from(move |_| on_edit.emit(zone_clone.clone()))
+                                            }>{ "编辑" }</button>
+                                            <button class="button is-small is-danger" onclick={
+                                                let on_delete = on_delete.clone();
+                                                Callback::from(move |_| on_delete.emit(id))
+                                            }>{ "删除" }</button>
+                                        </td>
+                                    </tr>
+                                }
+                            }) }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            // Create Modal
+            if *show_create_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_create_modal.clone()}></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "新建云区" }</p>
+                            <button class="delete" onclick={on_close_create_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ "云区名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="例如：华北区、华南区"
+                                        value={(*form_zone_name).clone()}
+                                        oninput={
+                                            let form_zone_name = form_zone_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_zone_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云区代码" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="例如：north、south"
+                                        value={(*form_zone_code).clone()}
+                                        oninput={
+                                            let form_zone_code = form_zone_code.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_zone_code.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "描述" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="选填"
+                                        value={(*form_description).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_description = form_description.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_description.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_create_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_create_zone}>{ "创建" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            // Edit Modal
+            if *show_edit_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_edit_modal.clone()}></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "编辑云区" }</p>
+                            <button class="delete" onclick={on_close_edit_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ "云区名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_zone_name).clone()}
+                                        oninput={
+                                            let form_zone_name = form_zone_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_zone_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云区代码" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_zone_code).clone()}
+                                        oninput={
+                                            let form_zone_code = form_zone_code.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_zone_code.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "描述" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_description).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_description = form_description.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_description.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_edit_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_update_zone}>{ "更新" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            <div class="box mt-5">
+                <p class="heading">{ "🗺️ 云区管理说明" }</p>
+                <ul>
+                    <li>{ "云区是最高级别的资源划分单位，用于管理不同地域的云资源" }</li>
+                    <li>{ "每个云区下可以有多个云平台（如公众云、政务云等）" }</li>
+                    <li>{ "云区代码用于系统内部标识，建议使用英文简写" }</li>
+                </ul>
+            </div>
+        </div>
+    }
+}
+
+// ============== Cloud Platform Management Component ==============
+
+#[function_component]
+fn CloudPlatformManagement() -> Html {
+    let platforms = use_state(|| Vec::new());
+    let zones = use_state(|| Vec::new());
+    let loading = use_state(|| true);
+    let error_message = use_state(|| None as Option<String>);
+    let success_message = use_state(|| None as Option<String>);
+
+    let show_create_modal = use_state(|| false);
+    let show_edit_modal = use_state(|| false);
+    let editing_platform_id = use_state(|| None as Option<i32>);
+
+    let form_zone_id = use_state(|| 0);
+    let form_platform_name = use_state(|| String::new());
+    let form_platform_code = use_state(|| String::new());
+    let form_description = use_state(|| None as Option<String>);
+
+    let token = get_auth_token();
+
+    let fetch_zones = {
+        let zones = zones.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let zones = zones.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                match Request::get(&api_url("cloud-zones"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<Vec<CloudZone>>().await {
+                            Ok(data) => {
+                                zones.set(data);
+                            }
+                            Err(e) => {
+                                error_message.set(Some(format!("解析云区列表失败: {}", e)));
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("获取云区列表失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    let fetch_platforms = {
+        let platforms = platforms.clone();
+        let loading = loading.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let platforms = platforms.clone();
+            let loading = loading.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                loading.set(true);
+                error_message.set(None);
+
+                match Request::get(&api_url("cloud-platforms"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<Vec<CloudPlatform>>().await {
+                            Ok(data) => {
+                                platforms.set(data);
+                            }
+                            Err(e) => {
+                                error_message.set(Some(format!("解析响应失败: {}", e)));
+                            }
+                        }
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        error_message.set(Some(format!("获取云平台列表失败: HTTP {}", status)));
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+
+                loading.set(false);
+            });
+        })
+    };
+
+    use_effect_with((), {
+        let fetch_zones = fetch_zones.clone();
+        let fetch_platforms = fetch_platforms.clone();
+        move |_| {
+            fetch_zones.emit(());
+            fetch_platforms.emit(());
+            || ()
+        }
+    });
+
+    let get_zone_name = {
+        let zones = zones.clone();
+        move |zone_id: i32| -> String {
+            (*zones).iter()
+                .find(|z| z.id == Some(zone_id))
+                .map(|z| z.zone_name.clone())
+                .unwrap_or_else(|| format!("Zone {}", zone_id))
+        }
+    };
+
+    let on_open_create_modal = Callback::from({
+        let show_create_modal = show_create_modal.clone();
+        let zones = zones.clone();
+        let form_zone_id = form_zone_id.clone();
+        move |_| {
+            show_create_modal.set(true);
+            if !zones.is_empty() && zones[0].id.is_some() {
+                form_zone_id.set(zones[0].id.unwrap());
+            }
+        }
+    });
+
+    let on_close_create_modal = {
+        let show_create_modal = show_create_modal.clone();
+        let form_zone_id = form_zone_id.clone();
+        let form_platform_name = form_platform_name.clone();
+        let form_platform_code = form_platform_code.clone();
+        let form_description = form_description.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            show_create_modal.set(false);
+            form_zone_id.set(0);
+            form_platform_name.set(String::new());
+            form_platform_code.set(String::new());
+            form_description.set(None);
+        })
+    };
+
+    let on_create_platform = {
+        let fetch_platforms = fetch_platforms.clone();
+        let show_create_modal = show_create_modal.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+        let form_zone_id = form_zone_id.clone();
+        let form_platform_name = form_platform_name.clone();
+        let form_platform_code = form_platform_code.clone();
+        let form_description = form_description.clone();
+        let on_close_create_modal = on_close_create_modal.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            let zone_id = (*form_zone_id).clone();
+            let platform_name = (*form_platform_name).clone();
+            let platform_code = (*form_platform_code).clone();
+            let description = (*form_description).clone();
+
+            if zone_id == 0 || platform_name.is_empty() || platform_code.is_empty() {
+                error_message.set(Some("请填写必填字段".to_string()));
+                return;
+            }
+
+            let fetch_platforms = fetch_platforms.clone();
+            let show_create_modal = show_create_modal.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                let request = CreateCloudPlatformRequest {
+                    zone_id,
+                    platform_name: platform_name.clone(),
+                    platform_code: platform_code.clone(),
+                    description,
+                };
+
+                match Request::post(&api_url("cloud-platforms"))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&request).unwrap())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some(format!("云平台「{}」创建成功", platform_name)));
+                        fetch_platforms.emit(());
+                        show_create_modal.set(false);
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        if let Ok(text) = resp.text().await {
+                            error_message.set(Some(format!("创建失败 (HTTP {}): {}", status, text)));
+                        } else {
+                            error_message.set(Some(format!("创建失败: HTTP {}", status)));
+                        }
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+
+            // Reset form after submit
+            form_zone_id.set(0);
+            form_platform_name.set(String::new());
+            form_platform_code.set(String::new());
+            form_description.set(None);
+        })
+    };
+
+    let on_delete_platform = {
+        let fetch_platforms = fetch_platforms.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+
+        Callback::from(move |id: i32| {
+            let fetch_platforms = fetch_platforms.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                match Request::delete(&format!("{}/{}", api_url("cloud-platforms"), id))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some(format!("云平台 {} 删除成功", id)));
+                        fetch_platforms.emit(());
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        if let Ok(text) = resp.text().await {
+                            error_message.set(Some(format!("删除失败 (HTTP {}): {}", status, text)));
+                        } else {
+                            error_message.set(Some(format!("删除失败: HTTP {}", status)));
+                        }
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    let on_open_edit_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        let editing_platform_id = editing_platform_id.clone();
+        let form_zone_id = form_zone_id.clone();
+        let form_platform_name = form_platform_name.clone();
+        let form_platform_code = form_platform_code.clone();
+        let form_description = form_description.clone();
+
+        Callback::from(move |platform: CloudPlatform| {
+            editing_platform_id.set(platform.id);
+            form_zone_id.set(platform.zone_id);
+            form_platform_name.set(platform.platform_name.clone());
+            form_platform_code.set(platform.platform_code.clone());
+            form_description.set(platform.description);
+            show_edit_modal.set(true);
+        })
+    };
+
+    let on_close_edit_modal = {
+        let show_edit_modal = show_edit_modal.clone();
+        Callback::from(move |_: web_sys::MouseEvent| {
+            show_edit_modal.set(false);
+        })
+    };
+
+    let on_update_platform = {
+        let fetch_platforms = fetch_platforms.clone();
+        let show_edit_modal = show_edit_modal.clone();
+        let success_message = success_message.clone();
+        let error_message = error_message.clone();
+        let token = token.clone();
+        let editing_platform_id = editing_platform_id.clone();
+        let form_zone_id = form_zone_id.clone();
+        let form_platform_name = form_platform_name.clone();
+        let form_platform_code = form_platform_code.clone();
+        let form_description = form_description.clone();
+
+        Callback::from(move |_: web_sys::MouseEvent| {
+            let id = (*editing_platform_id).unwrap();
+            let zone_id = (*form_zone_id).clone();
+            let platform_name = (*form_platform_name).clone();
+            let platform_code = (*form_platform_code).clone();
+            let description = (*form_description).clone();
+
+            let fetch_platforms = fetch_platforms.clone();
+            let show_edit_modal = show_edit_modal.clone();
+            let success_message = success_message.clone();
+            let error_message = error_message.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                let request = UpdateCloudPlatformRequest {
+                    zone_id: Some(zone_id),
+                    platform_name: if platform_name.is_empty() { None } else { Some(platform_name) },
+                    platform_code: if platform_code.is_empty() { None } else { Some(platform_code) },
+                    description,
+                };
+
+                match Request::put(&format!("{}/{}", api_url("cloud-platforms"), id))
+                    .header("Authorization", &token)
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_string(&request).unwrap())
+                    .unwrap()
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        success_message.set(Some(format!("云平台 {} 更新成功", id)));
+                        fetch_platforms.emit(());
+                        show_edit_modal.set(false);
+                    }
+                    Ok(resp) => {
+                        let status = resp.status();
+                        if let Ok(text) = resp.text().await {
+                            error_message.set(Some(format!("更新失败 (HTTP {}): {}", status, text)));
+                        } else {
+                            error_message.set(Some(format!("更新失败: HTTP {}", status)));
+                        }
+                    }
+                    Err(e) => {
+                        error_message.set(Some(format!("网络错误: {}", e)));
+                    }
+                }
+            });
+        })
+    };
+
+    let zone_options = (*zones).iter().map(|z| {
+        (z.id.unwrap(), z.zone_name.clone())
+    }).collect::<Vec<_>>();
+
+    html! {
+        <div class="container" style="margin-top: 20px;">
+            <h1 class="title">{ "☁️ 云平台管理" }</h1>
+
+            if let Some(ref error) = *error_message {
+                <div class="notification is-danger is-light">
+                    <button class="delete" onclick={
+                        let error_message = error_message.clone();
+                        Callback::from(move |_| error_message.set(None))
+                    }></button>
+                    { error }
+                </div>
+            }
+
+            if let Some(ref success) = *success_message {
+                <div class="notification is-success is-light">
+                    <button class="delete" onclick={
+                        let success_message = success_message.clone();
+                        Callback::from(move |_| success_message.set(None))
+                    }></button>
+                    { success }
+                </div>
+            }
+
+            <div class="level">
+                <div class="level-left">
+                    <button class="button is-primary" onclick={on_open_create_modal}>
+                        <span class="icon"><span class="fas fa-plus"></span></span>
+                        <span>{ "新建云平台" }</span>
+                    </button>
+                </div>
+            </div>
+
+            if *loading {
+                <progress class="progress is-small is-info" max="100">{ "Loading..." }</progress>
+            } else {
+                <div class="table-container">
+                    <table class="table is-fullwidth is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{ "ID" }</th>
+                                <th>{ "所属云区" }</th>
+                                <th>{ "云平台名称" }</th>
+                                <th>{ "云平台代码" }</th>
+                                <th>{ "描述" }</th>
+                                <th>{ "创建时间" }</th>
+                                <th>{ "操作" }</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            { for platforms.iter().map(|platform| {
+                                let platform_clone = platform.clone();
+                                let on_edit = on_open_edit_modal.clone();
+                                let id = platform.id.unwrap();
+                                let on_delete = on_delete_platform.clone();
+                                let zone_name = get_zone_name(platform.zone_id);
+                                html! {
+                                    <tr key={platform.id.unwrap()}>
+                                        <td>{ platform.id.unwrap() }</td>
+                                        <td><span class="tag is-info">{ zone_name }</span></td>
+                                        <td><strong>{ &platform.platform_name }</strong></td>
+                                        <td><code>{ &platform.platform_code }</code></td>
+                                        <td>{ platform.description.clone().unwrap_or_else(|| "-".to_string()) }</td>
+                                        <td>{ platform.created_at.format("%Y-%m-%d %H:%M:%S").to_string() }</td>
+                                        <td>
+                                            <button class="button is-small is-info" onclick={
+                                                let on_edit = on_edit.clone();
+                                                Callback::from(move |_| on_edit.emit(platform_clone.clone()))
+                                            }>{ "编辑" }</button>
+                                            <button class="button is-small is-danger" onclick={
+                                                let on_delete = on_delete.clone();
+                                                Callback::from(move |_| on_delete.emit(id))
+                                            }>{ "删除" }</button>
+                                        </td>
+                                    </tr>
+                                }
+                            }) }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            // Create Modal
+            if *show_create_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_create_modal.clone()}></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "新建云平台" }</p>
+                            <button class="delete" onclick={on_close_create_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ "所属云区" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            value={(*form_zone_id).to_string()}
+                                            onchange={
+                                                let form_zone_id = form_zone_id.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                    form_zone_id.set(select.value().parse().unwrap_or(0));
+                                                })
+                                            }
+                                        >
+                                            <option value="0">{ "请选择云区" }</option>
+                                            { for zone_options.iter().map(|(id, name)| {
+                                                html! {
+                                                    <option value={id.to_string()}>{ name }</option>
+                                                }
+                                            }) }
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云平台名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="例如：公众云、政务云"
+                                        value={(*form_platform_name).clone()}
+                                        oninput={
+                                            let form_platform_name = form_platform_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_platform_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云平台代码" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="例如：public、gov"
+                                        value={(*form_platform_code).clone()}
+                                        oninput={
+                                            let form_platform_code = form_platform_code.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_platform_code.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "描述" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="选填"
+                                        value={(*form_description).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_description = form_description.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_description.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_create_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_create_platform}>{ "创建" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            // Edit Modal
+            if *show_edit_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_edit_modal.clone()}></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "编辑云平台" }</p>
+                            <button class="delete" onclick={on_close_edit_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ "所属云区" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            value={(*form_zone_id).to_string()}
+                                            onchange={
+                                                let form_zone_id = form_zone_id.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                    form_zone_id.set(select.value().parse().unwrap_or(0));
+                                                })
+                                            }
+                                        >
+                                            <option value="0">{ "请选择云区" }</option>
+                                            { for zone_options.iter().map(|(id, name)| {
+                                                html! {
+                                                    <option value={id.to_string()}>{ name }</option>
+                                                }
+                                            }) }
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云平台名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_platform_name).clone()}
+                                        oninput={
+                                            let form_platform_name = form_platform_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_platform_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云平台代码" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_platform_code).clone()}
+                                        oninput={
+                                            let form_platform_code = form_platform_code.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_platform_code.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "描述" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_description).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_description = form_description.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_description.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_edit_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_update_platform}>{ "更新" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            <div class="box mt-5">
+                <p class="heading">{ "☁️ 云平台管理说明" }</p>
+                <ul>
+                    <li>{ "云平台属于某个云区，如「华北区」下的「公众云」「政务云」" }</li>
+                    <li>{ "每个云平台可以对接多个云厂商配置" }</li>
+                    <li>{ "云平台代码用于系统内部标识，建议使用英文简写" }</li>
+                </ul>
+            </div>
+        </div>
+    }
+}
+
 // ============== Main App Component ==============
 
 #[function_component]
@@ -6935,8 +7176,9 @@ pub fn App() -> Html {
                                 Page::UserManagement => html! { <UserManagement /> },
                                 Page::PermissionManagement => html! { <PermissionManagement /> },
                                 Page::AuditLogs => html! { <AuditLogs /> },
-                                Page::CloudManagement => html! { <CloudManagement /> },
                                 Page::CloudProviderManagement => html! { <CloudProviderManagement /> },
+                                Page::CloudZoneManagement => html! { <CloudZoneManagement /> },
+                                Page::CloudPlatformManagement => html! { <CloudPlatformManagement /> },
                                 Page::CloudServiceAssetManagement => html! { <CloudServiceAssetManagement /> },
                                 Page::UserProfile => html! { <UserProfile current_page={current_page.clone()} /> },
                                 Page::PasswordPolicyManagement => html! { <PasswordPolicyManagement /> },
@@ -7570,12 +7812,7 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                 if p.can_update_cloud_asset { count += 1; }
                 if p.can_delete_cloud_asset { count += 1; }
                 if p.can_view_cloud_providers { count += 1; }
-                if p.can_manage_cloud_providers { count += 1; }
-                if p.can_view_cloud_management { count += 1; }
-                if p.can_manage_cloud { count += 1; }
-                if p.can_delete_cloud { count += 1; }
-                if p.can_sync_cloud { count += 1; }
-                if p.can_view_risks { count += 1; }
+                if p.can_manage_cloud_providers { count += 1; }                if p.can_view_risks { count += 1; }
                 if p.can_resolve_risk { count += 1; }
                 if p.can_delete_risk { count += 1; }
                 if p.can_view_users { count += 1; }
@@ -7786,39 +8023,6 @@ fn UserProfile(UserProfileProps { current_page }: &UserProfileProps) -> Html {
                                         </div>
 
                                         // 混合云管理权限
-                                        <div class="column is-6">
-                                            <div class="card">
-                                                <div class="card-header">
-                                                    <p class="card-header-title">
-                                                        <span class="icon mr-2"><i class="fas fa-cloud-upload-alt has-text-primary"></i></span>
-                                                        {"混合云管理权限"}
-                                                    </p>
-                                                    <span class="card-header-icon">
-                                                        <span class="tag is-light">{
-                                                            format!("{}/4",
-                                                                [permissions.can_view_cloud_management, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
-                                                                .iter().filter(|&&x| x).count())
-                                                            }</span>
-                                                    </span>
-                                                </div>
-                                                <div class="card-content">
-                                                    <div class="tags are-small">
-                                                        { for [permissions.can_view_cloud_management, permissions.can_manage_cloud, permissions.can_delete_cloud, permissions.can_sync_cloud]
-                                                            .iter()
-                                                            .zip(["查看混合云", "管理云资产", "删除云资产", "同步云资产"].iter())
-                                                            .map(|(&enabled, name)| {
-                                                                if enabled {
-                                                                    html! { <span class="tag is-success is-light">{"✓ "}{ name }</span> }
-                                                                } else {
-                                                                    html! { <span class="tag is-danger is-light">{"✗ "}{ name }</span> }
-                                                                }
-                                                            })
-                                                        }
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
                                         // 风险权限
                                         <div class="column is-6">
                                             <div class="card">
@@ -8172,7 +8376,6 @@ fn PermissionManagement() -> Html {
                     "can_manage_orchestration" => perms.can_manage_orchestration = value,
                     // 子级权限 - 云管理
                     "can_view_cloud_providers" => perms.can_view_cloud_providers = value,
-                    "can_view_cloud_management" => perms.can_view_cloud_management = value,
                     "can_view_cloud_assets" => perms.can_view_cloud_assets = value,
                     // 子级权限 - 用户管理
                     "can_view_users" => perms.can_view_users = value,
@@ -8553,18 +8756,6 @@ fn PermissionManagement() -> Html {
                                                             }}
                                                         />
                                                         { " 云服务商管理查看" }
-                                                    </label>
-                                                </div>
-                                                <div class="field" style="margin-bottom: 0.5rem;">
-                                                    <label class="checkbox">
-                                                        <input type="checkbox"
-                                                            checked={current_perms.can_view_cloud_management}
-                                                            onchange={let on_toggle = on_toggle_permission.clone(); move |e: Event| {
-                                                                let input = e.target_unchecked_into::<HtmlInputElement>();
-                                                                on_toggle.emit(("can_view_cloud_management".to_string(), input.checked()))
-                                                            }}
-                                                        />
-                                                        { " 云管理查看" }
                                                     </label>
                                                 </div>
                                                 <div class="field" style="margin-bottom: 0.5rem;">

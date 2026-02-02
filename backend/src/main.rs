@@ -36,6 +36,18 @@ use handlers::{
         cancel_advanced_scan, delete_advanced_scan, export_scan_results,
         get_scan_engines_status, scan_progress_stream,
     },
+    cloud_providers::{
+        get_cloud_provider_configs, get_cloud_provider_config, create_cloud_provider_config,
+        update_cloud_provider_config, delete_cloud_provider_config, test_cloud_provider_connection,
+        get_cloud_provider_options, get_active_cloud_provider_configs,
+    },
+    cloud_zones::{
+        get_cloud_zones, get_cloud_zone, create_cloud_zone, update_cloud_zone, delete_cloud_zone,
+    },
+    cloud_platforms::{
+        get_cloud_platforms, get_cloud_platform, create_cloud_platform, update_cloud_platform,
+        delete_cloud_platform, get_platforms_by_zone,
+    },
 };
 
 #[tokio::main]
@@ -145,7 +157,6 @@ async fn main() {
         users: Arc::new(StdMutex::new(initial_users)),
         audit_logs: Arc::new(StdMutex::new(vec![])),
         advanced_tasks: Arc::new(StdMutex::new(vec![])),
-        cloud_assets: Arc::new(StdMutex::new(vec![])),
         custom_roles: Arc::new(StdMutex::new(vec![])),
         scan_manager: Arc::new(TokioMutex::new(scan_manager)),
         password_policy: Arc::new(StdMutex::new(PasswordPolicy::default())),
@@ -191,6 +202,19 @@ async fn main() {
         .route("/api/scan/advanced/tasks/:id/export", get(export_scan_results))
         .route("/api/scan/advanced/engines/status", get(get_scan_engines_status))
         .route("/api/scan/advanced/tasks/:id/progress", get(scan_progress_stream))
+        // Cloud Provider Configuration (云区对接管理)
+        .route("/api/cloud-provider-configs", get(get_cloud_provider_configs).post(create_cloud_provider_config))
+        .route("/api/cloud-provider-configs/options", get(get_cloud_provider_options))
+        .route("/api/cloud-provider-configs/active", get(get_active_cloud_provider_configs))
+        .route("/api/cloud-provider-configs/:id", get(get_cloud_provider_config).put(update_cloud_provider_config).delete(delete_cloud_provider_config))
+        .route("/api/cloud-provider-configs/:id/test", post(test_cloud_provider_connection))
+        // Cloud Zones (云区管理)
+        .route("/api/cloud-zones", get(get_cloud_zones).post(create_cloud_zone))
+        .route("/api/cloud-zones/:id", get(get_cloud_zone).put(update_cloud_zone).delete(delete_cloud_zone))
+        // Cloud Platforms (云平台管理)
+        .route("/api/cloud-platforms", get(get_cloud_platforms).post(create_cloud_platform))
+        .route("/api/cloud-platforms/:id", get(get_cloud_platform).put(update_cloud_platform).delete(delete_cloud_platform))
+        .route("/api/cloud-platforms/zone/:zone_id", get(get_platforms_by_zone))
         // IP Zones (TODO: implement handlers)
         // .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
         // .route("/api/ip-zones/:id", get(get_ip_zone).delete(delete_ip_zone).put(update_ip_zone))

@@ -12,8 +12,8 @@ use shared::{
     Role,
 };
 
-// 简单的内存存储
-static BUSINESS_RESOURCES: Mutex<Vec<BusinessResource>> = Mutex::new(Vec::new());
+// 简单的内存存储（pub 以便其他模块访问）
+pub static BUSINESS_RESOURCES: Mutex<Vec<BusinessResource>> = Mutex::new(Vec::new());
 
 /// 获取业务资源列表
 pub async fn get_business_resources(

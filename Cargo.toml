@@ -2,6 +2,7 @@
 members = [
     "backend",
     "shared",
+    "frontend",
 ]
 resolver = "2"
 

@@ -3,19 +3,15 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use std::sync::Arc;
-
-use crate::{
-    state::AppState,
-    shared::{CustomRole, CreateRoleRequest, UpdateRoleRequest},
-};
+use shared::{CustomRole, CreateRoleRequest, UpdateRoleRequest};
+use crate::state::AppState;
 
 /// 获取所有角色(包括系统预定义角色和自定义角色)
 pub async fn get_roles(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
 ) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
     // 获取自定义角色
-    let custom_roles = state.custom_roles.lock().await;
+    let custom_roles = state.custom_roles.lock().unwrap();
 
     // 构建角色列表,包括系统角色和自定义角色
     let mut roles = vec![
@@ -60,7 +56,7 @@ pub async fn get_roles(
 
 /// 获取单个角色
 pub async fn get_role(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // 检查系统角色
@@ -96,7 +92,7 @@ pub async fn get_role(
     }
 
     // 查找自定义角色
-    let custom_roles = state.custom_roles.lock().await;
+    let custom_roles = state.custom_roles.lock().unwrap();
     if let Ok(role_id) = id.parse::<i32>() {
         if let Some(role) = custom_roles.iter().find(|r| r.id == Some(role_id)) {
             return Ok(Json(serde_json::json!({
@@ -116,10 +112,10 @@ pub async fn get_role(
 
 /// 创建自定义角色
 pub async fn create_role(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Json(req): Json<CreateRoleRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let mut custom_roles = state.custom_roles.lock().await;
+    let mut custom_roles = state.custom_roles.lock().unwrap();
 
     // 检查角色名称是否已存在
     if custom_roles.iter().any(|r| r.name == req.name) {
@@ -151,7 +147,7 @@ pub async fn create_role(
 
 /// 更新自定义角色
 pub async fn update_role(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<UpdateRoleRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -167,8 +163,9 @@ pub async fn update_role(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let mut custom_roles = state.custom_roles.lock().await;
-    let role = custom_roles.iter_mut().find(|r| r.id == role_id.ok());
+    let mut custom_roles = state.custom_roles.lock().unwrap();
+    let target_id = role_id.ok();
+    let role = custom_roles.iter_mut().find(|r| r.id == target_id);
 
     if let Some(role) = role {
         if let Some(name) = req.name {
@@ -193,7 +190,7 @@ pub async fn update_role(
 
 /// 删除自定义角色
 pub async fn delete_role(
-    State(state): State<Arc<AppState>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // 不允许删除系统角色
@@ -208,8 +205,9 @@ pub async fn delete_role(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let mut custom_roles = state.custom_roles.lock().await;
-    if let Some(pos) = custom_roles.iter().position(|r| r.id == role_id.ok()) {
+    let mut custom_roles = state.custom_roles.lock().unwrap();
+    let target_id = role_id.ok();
+    if let Some(pos) = custom_roles.iter().position(|r| r.id == target_id) {
         custom_roles.remove(pos);
 
         Ok(Json(serde_json::json!({

@@ -7,5 +7,7 @@ pub mod risks;
 pub mod zones;
 pub mod business_resources;
 pub mod logs;
-// pub mod cloud_assets;  // 暂时禁用，有编译错误
 pub mod advanced_scan;
+pub mod cloud_providers;
+pub mod cloud_zones;
+pub mod cloud_platforms;
