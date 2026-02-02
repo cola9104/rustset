@@ -202,7 +202,7 @@ async fn main() {
         .route("/api/scan/advanced/tasks/:id/export", get(export_scan_results))
         .route("/api/scan/advanced/engines/status", get(get_scan_engines_status))
         .route("/api/scan/advanced/tasks/:id/progress", get(scan_progress_stream))
-        // Cloud Provider Configuration (云区对接管理)
+        // Cloud Provider Configuration (云厂商对接)
         .route("/api/cloud-provider-configs", get(get_cloud_provider_configs).post(create_cloud_provider_config))
         .route("/api/cloud-provider-configs/options", get(get_cloud_provider_options))
         .route("/api/cloud-provider-configs/active", get(get_active_cloud_provider_configs))

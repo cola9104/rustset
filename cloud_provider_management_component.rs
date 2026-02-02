@@ -1,5 +1,5 @@
 // ============== Cloud Provider Management Component ==============
-// 云区对接管理组件
+// 云厂商对接组件
 //
 // 功能：
 // 1. 管理已对接的云平台账户和区域配置
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use shared::{
     CloudProvider, CloudProviderConfigStatus,
     CreateCloudProviderConfigRequest, UpdateCloudProviderConfigRequest,
+    CloudZone, CloudPlatform,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +47,8 @@ pub fn CloudProviderManagement() -> Html {
 
     // Form states
     let form_provider = use_state(|| CloudProvider::Aliyun);
+    let form_zone_id = use_state(|| None as Option<i32>);
+    let form_platform_id = use_state(|| None as Option<i32>);
     let form_region_id = use_state(|| String::new());
     let form_region_name = use_state(|| String::new());
     let form_account_name = use_state(|| String::new());
@@ -53,6 +56,11 @@ pub fn CloudProviderManagement() -> Html {
     let form_access_key_secret = use_state(|| String::new());
     let form_remarks = use_state(|| None as Option<String>);
     let form_status = use_state(|| CloudProviderConfigStatus::Active);
+
+    // Cloud zones and platforms for dropdowns
+    let cloud_zones = use_state(|| Vec::<CloudZone>::new());
+    let cloud_platforms = use_state(|| Vec::<CloudPlatform>::new());
+    let zones_loading = use_state(|| false);
 
     // Filter states
     let filter_provider = use_state(|| String::new());
@@ -111,7 +119,88 @@ pub fn CloudProviderManagement() -> Html {
         })
     };
 
-    // Initial fetch
+    // Fetch cloud zones
+    let fetch_cloud_zones = {
+        let cloud_zones = cloud_zones.clone();
+        let zones_loading = zones_loading.clone();
+        let token = token.clone();
+
+        Callback::from(move |_| {
+            let cloud_zones = cloud_zones.clone();
+            let zones_loading = zones_loading.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                zones_loading.set(true);
+
+                match Request::get(&api_url("cloud-zones"))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<Vec<CloudZone>>().await {
+                            Ok(data) => {
+                                cloud_zones.set(data);
+                            }
+                            Err(e) => {
+                                gloo_console::error!(format!("获取云区列表失败: {}", e));
+                            }
+                        }
+                    }
+                    _ => {
+                        gloo_console::error!("获取云区列表失败");
+                    }
+                }
+
+                zones_loading.set(false);
+            });
+        })
+    };
+
+    // Fetch cloud platforms by zone
+    let fetch_cloud_platforms = {
+        let cloud_platforms = cloud_platforms.clone();
+        let token = token.clone();
+
+        Callback::from(move |zone_id: i32| {
+            let cloud_platforms = cloud_platforms.clone();
+            let token = token.clone();
+
+            spawn_local(async move {
+                match Request::get(&format!("{}cloud-platforms/zone/{}", api_url(""), zone_id))
+                    .header("Authorization", &token)
+                    .send()
+                    .await
+                {
+                    Ok(resp) if resp.ok() => {
+                        match resp.json::<Vec<CloudPlatform>>().await {
+                            Ok(data) => {
+                                cloud_platforms.set(data);
+                            }
+                            Err(e) => {
+                                gloo_console::error!(format!("获取云平台列表失败: {}", e));
+                            }
+                        }
+                    }
+                    _ => {
+                        gloo_console::error!("获取云平台列表失败");
+                    }
+                }
+            });
+        })
+    };
+
+    // Initial fetch configs and zones
+    use_effect_with((), {
+        let fetch_configs = fetch_configs.clone();
+        let fetch_cloud_zones = fetch_cloud_zones.clone();
+        move |_| {
+            fetch_configs.emit(());
+            fetch_cloud_zones.emit(());
+            || ()
+        }
+    });
     use_effect_with((), {
         let fetch_configs = fetch_configs.clone();
         move |_| {
@@ -201,6 +290,8 @@ pub fn CloudProviderManagement() -> Html {
             show_create_modal.set(false);
             // Reset form
             form_provider.set(CloudProvider::Aliyun);
+            form_zone_id.set(None);
+            form_platform_id.set(None);
             form_region_id.set(String::new());
             form_region_name.set(String::new());
             form_account_name.set(String::new());
@@ -218,6 +309,8 @@ pub fn CloudProviderManagement() -> Html {
         let error_message = error_message.clone();
         let token = token.clone();
         let form_provider = form_provider.clone();
+        let form_zone_id = form_zone_id.clone();
+        let form_platform_id = form_platform_id.clone();
         let form_region_id = form_region_id.clone();
         let form_region_name = form_region_name.clone();
         let form_account_name = form_account_name.clone();
@@ -228,6 +321,8 @@ pub fn CloudProviderManagement() -> Html {
 
         Callback::from(move |_: Event| {
             let request = CreateCloudProviderConfigRequest {
+                zone_id: (*form_zone_id).clone(),
+                platform_id: (*form_platform_id).clone(),
                 provider: (*form_provider).clone(),
                 region_id: (*form_region_id).clone(),
                 region_name: (*form_region_name).clone(),
@@ -452,7 +547,7 @@ pub fn CloudProviderManagement() -> Html {
             <div class="level mb-4">
                 <div class="level-left">
                     <div class="level-item">
-                        <h1 class="title is-4">{ "🌐 云区对接管理" }</h1>
+                        <h1 class="title is-4">{ "🌐 云厂商对接" }</h1>
                     </div>
                 </div>
                 <div class="level-right">
@@ -697,6 +792,80 @@ pub fn CloudProviderManagement() -> Html {
                             </div>
 
                             <div class="field">
+                                <label class="label">{ "云区" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select onchange={
+                                            let form_zone_id = form_zone_id.clone();
+                                            let fetch_cloud_platforms = fetch_cloud_platforms.clone();
+                                            let form_platform_id = form_platform_id.clone();
+                                            Callback::from(move |e: Event| {
+                                                let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                let zone_id: i32 = select.value().parse().unwrap_or(0);
+                                                if zone_id > 0 {
+                                                    form_zone_id.set(Some(zone_id));
+                                                    // Reset platform selection
+                                                    form_platform_id.set(None);
+                                                    // Fetch platforms for this zone
+                                                    fetch_cloud_platforms.emit(zone_id);
+                                                } else {
+                                                    form_zone_id.set(None);
+                                                    form_platform_id.set(None);
+                                                }
+                                            })
+                                        }>
+                                            <option value="">{ "请选择云区" }</option>
+                                            { for (*cloud_zones).iter().map(|zone| {
+                                                let selected = (*form_zone_id).map(|z| z == zone.id).unwrap_or(false);
+                                                html! {
+                                                    <option value={zone.id.unwrap_or(0).to_string()}
+                                                        {selected}>
+                                                        { &zone.zone_name }
+                                                    </option>
+                                                }
+                                            })}
+                                        </select>
+                                    </div>
+                                    if *zones_loading {
+                                        <p class="help is-loading">{ "加载云区中..." }</p>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云平台" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            disabled={(*form_zone_id).is_none()}
+                                            onchange={
+                                                let form_platform_id = form_platform_id.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                    let platform_id: i32 = select.value().parse().unwrap_or(0);
+                                                    if platform_id > 0 {
+                                                        form_platform_id.set(Some(platform_id));
+                                                    } else {
+                                                        form_platform_id.set(None);
+                                                    }
+                                                })
+                                            }>
+                                            <option value="">{ if (*form_zone_id).is_none() { "请先选择云区" } else { "请选择云平台" } }</option>
+                                            { for (*cloud_platforms).iter().map(|platform| {
+                                                let selected = (*form_platform_id).map(|p| p == platform.id).unwrap_or(false);
+                                                html! {
+                                                    <option value={platform.id.unwrap_or(0).to_string()}
+                                                        {selected}>
+                                                        { &platform.platform_name }
+                                                    </option>
+                                                }
+                                            })}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
                                 <label class="label">{ "区域ID" }</label>
                                 <div class="control">
                                     <input type="text" class="input"
@@ -816,9 +985,10 @@ pub fn CloudProviderManagement() -> Html {
 
             // Info box
             <div class="box mt-5">
-                <p class="heading">{ "🌐 云区对接管理说明" }</p>
+                <p class="heading">{ "🌐 云厂商对接说明" }</p>
                 <ul>
-                    <li>{ "云区对接配置用于管理已对接的云平台账户和区域信息" }</li>
+                    <li>{ "云厂商对接用于配置使用厂商SDK搭建的本地云平台" }</li>
+                    <li>{ "对接流程：选择云厂商 → 添加云区 → 选择云平台" }</li>
                     <li>{ "业务申请时只能选择已配置且启用的云区" }</li>
                     <li>{ "创建配置后请先进行「测试连接」，确认凭证正确后再启用" }</li>
                     <li>{ "停用配置不会删除数据，业务申请时将不会显示该配置" }</li>

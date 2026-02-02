@@ -566,9 +566,9 @@ pub struct Permissions {
     // ========== Cloud模块 ==========
     pub can_access_cloud: bool,             // 顶级：访问Cloud模块
 
-    // 云区对接管理
-    pub can_view_cloud_providers: bool,     // 子级：查看云区对接
-    pub can_manage_cloud_providers: bool,   // 孙级：管理云区对接
+    // 云厂商对接
+    pub can_view_cloud_providers: bool,     // 子级：查看云厂商对接
+    pub can_manage_cloud_providers: bool,   // 孙级：管理云厂商对接
 
     // ========== 用户管理模块 ==========
     pub can_access_user_management: bool,   // 顶级：访问用户管理模块
@@ -1062,7 +1062,7 @@ pub struct CreateAdvancedScanRequest {
     pub cloud_tag_sync: Option<bool>,
 }
 
-// ============== Cloud Provider Integration / 云区对接管理 Types ==============
+// ============== Cloud Provider Integration / 云厂商对接 Types ==============
 
 /// 云区 - Top level in cloud hierarchy
 #[derive(Debug, Clone, Serialize, Deserialize)]
