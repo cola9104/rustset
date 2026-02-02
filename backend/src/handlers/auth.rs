@@ -7,7 +7,10 @@ use crate::state::AppState;
 use crate::utils::log_action;
 use chrono::Utc;
 
-pub async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>) -> Result<Json<LoginResponse>, (StatusCode, String)> {
+pub async fn login(
+    State(state): State<AppState>,
+    Json(req): Json<LoginRequest>
+) -> Result<Json<LoginResponse>, (StatusCode, String)> {
     let policy = state.password_policy.lock().unwrap().clone();
     let mut users = state.users.lock().unwrap();
 

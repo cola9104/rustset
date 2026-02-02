@@ -5,13 +5,28 @@ use axum::{
 use shared::{Task, CreateTaskRequest, TaskStatus, ScanRequest, PortInfo, Role};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
+use crate::database::{get_tasks as db_get_tasks, insert_task_wrapper as db_insert_task, update_task as db_update_task, delete_task as db_delete_task, db_task_to_shared};
 use uuid::Uuid;
 use chrono::Utc;
 
 pub async fn get_tasks(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<Task>>, (StatusCode, String)> {
     let _user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    let tasks = state.tasks.lock().unwrap();
-    Ok(Json(tasks.clone()))
+
+    // Try to load from database first
+    match db_get_tasks().await {
+        Ok(db_tasks) => {
+            let tasks: Vec<Task> = db_tasks.into_iter().map(db_task_to_shared).collect();
+            // Update in-memory cache
+            *state.tasks.lock().unwrap() = tasks.clone();
+            return Ok(Json(tasks));
+        }
+        Err(e) => {
+            eprintln!("Error loading tasks from database: {}", e);
+            // Fallback to memory cache
+            let tasks = state.tasks.lock().unwrap();
+            Ok(Json(tasks.clone()))
+        }
+    }
 }
 
 pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, (StatusCode, String)> {
@@ -20,7 +35,6 @@ pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut tasks = state.tasks.lock().unwrap();
     let new_task = Task {
         id: Uuid::new_v4().to_string(),
         name: req.name.clone(),
@@ -37,9 +51,18 @@ pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json
         site_identify: req.site_identify,
         created_by: Some(user.username.clone()),
     };
-    tasks.push(new_task.clone());
+
+    // Add to in-memory storage
+    {
+        let mut tasks = state.tasks.lock().unwrap();
+        tasks.push(new_task.clone());
+    }
+
+    // Persist to database
+    let _ = db_insert_task(&new_task).await;
+
     log_action(&state.audit_logs, &user, "CREATE_TASK", &req.name, "Created new scan task");
-    
+
     Ok(Json(new_task))
 }
 
@@ -48,21 +71,47 @@ pub async fn update_task(State(state): State<AppState>, headers: HeaderMap, Path
     if user.role != Role::SecAdmin {
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
-    
-    let mut tasks = state.tasks.lock().unwrap();
-    if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
-        task.name = req.name;
-        task.target = req.target;
-        task.port_policy = req.port_policy;
-        task.domain_brute = req.domain_brute;
-        task.service_detection = req.service_detection;
-        task.os_detection = req.os_detection;
-        task.site_identify = req.site_identify;
-        
-        log_action(&state.audit_logs, &user, "UPDATE_TASK", &task.name, "Updated task config");
-        return Ok(Json(Some(task.clone())));
+
+    let (found, updated_task) = {
+        let mut tasks = state.tasks.lock().unwrap();
+        if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
+            task.name = req.name.clone();
+            task.target = req.target;
+            task.port_policy = req.port_policy;
+            task.domain_brute = req.domain_brute;
+            task.service_detection = req.service_detection;
+            task.os_detection = req.os_detection;
+            task.site_identify = req.site_identify;
+            (true, task.clone())
+        } else {
+            (false, Task {
+                id: id.clone(),
+                name: req.name.clone(),
+                target: req.target,
+                status: TaskStatus::Pending,
+                start_time: None,
+                end_time: None,
+                found_assets: 0,
+                found_risks: 0,
+                port_policy: req.port_policy,
+                domain_brute: req.domain_brute,
+                service_detection: req.service_detection,
+                os_detection: req.os_detection,
+                site_identify: req.site_identify,
+                created_by: Some(user.username.clone()),
+            })
+        }
+    };
+
+    if found {
+        // Persist to database (after releasing lock)
+        let _ = db_update_task(&id, &updated_task).await;
+
+        log_action(&state.audit_logs, &user, "UPDATE_TASK", &updated_task.name, "Updated task config");
+        Ok(Json(Some(updated_task)))
+    } else {
+        Ok(Json(None))
     }
-    Ok(Json(None))
 }
 
 pub async fn delete_task(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, (StatusCode, String)> {
@@ -71,8 +120,15 @@ pub async fn delete_task(State(state): State<AppState>, headers: HeaderMap, Path
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut tasks = state.tasks.lock().unwrap();
-    tasks.retain(|t| t.id != id);
+    // Remove from in-memory storage
+    {
+        let mut tasks = state.tasks.lock().unwrap();
+        tasks.retain(|t| t.id != id);
+    }
+
+    // Persist to database (after releasing lock)
+    let _ = db_delete_task(&id).await;
+
     log_action(&state.audit_logs, &user, "DELETE_TASK", &id, "Deleted task");
     Ok(Json("Deleted".to_string()))
 }

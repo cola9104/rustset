@@ -24,8 +24,7 @@ pub fn log_action(
     target: &str,
     details: &str,
 ) {
-    let mut logs_guard = logs.lock().unwrap();
-    logs_guard.push(AuditLog {
+    let log_entry = AuditLog {
         id: Uuid::new_v4().to_string(),
         user_id: user.id.clone(),
         username: user.username.clone(),
@@ -33,6 +32,18 @@ pub fn log_action(
         target: target.to_string(),
         details: details.to_string(),
         timestamp: Utc::now(),
+    };
+
+    // Add to in-memory storage
+    {
+        let mut logs_guard = logs.lock().unwrap();
+        logs_guard.push(log_entry.clone());
+    }
+
+    // Try to persist to database asynchronously (don't block if it fails)
+    let log_entry_for_db = log_entry;
+    tokio::spawn(async move {
+        let _ = crate::database::insert_audit_log_wrapper(&log_entry_for_db).await;
     });
 }
 

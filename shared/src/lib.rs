@@ -144,6 +144,8 @@ pub struct BusinessResource {
     pub cloud_region: String,            // 云区域 (如 华东1-杭州) 或 机房位置
     pub cloud_category: String,          // 云类别 (阿里云/腾讯云/华为云/AWS等) 或 机房名称
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
+    pub zone_name: Option<String>,       // 云区名称 (如 华北区、华南区、华东区)
+    pub platform_name: Option<String>,   // 云平台名称 (如 公众云、政务云、内外核心云)
     pub county_city: Option<String>,     // 县市区
     pub vdc_name: Option<String>,        // VDC名称
 
@@ -206,6 +208,8 @@ pub struct CreateBusinessResourceRequest {
     pub cloud_region: String,
     pub cloud_category: String,
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
+    pub zone_name: Option<String>,       // 云区名称
+    pub platform_name: Option<String>,   // 云平台名称
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: String,
@@ -247,6 +251,8 @@ pub struct UpdateBusinessResourceRequest {
     pub cloud_region: Option<String>,
     pub cloud_category: Option<String>,
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
+    pub zone_name: Option<String>,       // 云区名称
+    pub platform_name: Option<String>,   // 云平台名称
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: Option<String>,
@@ -288,6 +294,8 @@ impl Default for UpdateBusinessResourceRequest {
             cloud_region: None,
             cloud_category: None,
             cloud_provider_config_id: None,
+            zone_name: None,
+            platform_name: None,
             county_city: None,
             vdc_name: None,
             customer_name: None,
@@ -665,7 +673,7 @@ impl Permissions {
             can_view_business_process: true,
             can_view_business_applications: true,
             can_create_business_application: true,
-            can_approve_business_application: true,
+            can_approve_business_application: false,
             can_supplement_business_application: true,
             can_delete_business_application: true,
             can_view_operations_management: true,
@@ -713,7 +721,7 @@ impl Permissions {
             can_view_business_process: true,
             can_view_business_applications: true,
             can_create_business_application: true,
-            can_approve_business_application: true,
+            can_approve_business_application: false,
             can_supplement_business_application: true,
             can_delete_business_application: true,
             can_view_operations_management: true,
@@ -743,10 +751,7 @@ impl Permissions {
             can_view_risks: true,
             can_view_business_process: true,
             can_view_business_applications: true,  // 审计员可以查看但不能操作
-            can_create_business_application: false,
-            can_approve_business_application: false,
             can_supplement_business_application: false,
-            can_delete_business_application: false,
             can_access_cloud: true,
             can_view_cloud_providers: true,
             can_access_user_management: true,

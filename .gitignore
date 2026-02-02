@@ -8,3 +8,12 @@ dist/
 .DS_Store
 .idea
 .vscode
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env
+.env.local

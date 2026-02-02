@@ -15,6 +15,11 @@ use crate::state::AppState;
 use shared::{
     AdvancedScanTask, AdvancedScanConfig, CreateAdvancedScanRequest, TaskStatus,
 };
+use crate::database::{
+    get_advanced_scan_tasks, insert_advanced_scan_task_wrapper, update_advanced_scan_task,
+    delete_advanced_scan_task, insert_quick_scan_result_wrapper, get_quick_scan_results,
+    db_advanced_scan_task_to_shared, db_quick_scan_result_to_shared,
+};
 
 /// Execute advanced scan
 pub async fn execute_advanced_scan(
@@ -43,7 +48,7 @@ pub async fn execute_advanced_scan(
     // Create initial task
     let task = AdvancedScanTask {
         id: task_id.clone(),
-        name: req.name,
+        name: req.name.clone(),
         targets: req.targets.clone(),
         config: config.clone(),
         status: TaskStatus::Running,
@@ -59,30 +64,49 @@ pub async fn execute_advanced_scan(
         created_by: None, // Will be set from auth context in production
     };
 
-    // Store task
+    // Persist to database
+    let _ = insert_advanced_scan_task_wrapper(&task).await;
+
+    // Store task in memory
     state.advanced_tasks.lock().unwrap().push(task.clone());
 
-    // Spawn background scan task
+    // Spawn background scan task using spawn_blocking for scan operations
     let state_clone = state.clone();
     let task_id_clone = task_id.clone();
-    tokio::spawn(async move {
-        // Get scan manager
-        let scan_manager_guard = state_clone.scan_manager.lock().await;
-        if let Some(ref scan_manager) = *scan_manager_guard {
-            // Execute scan
-            let result = scan_manager.execute_advanced_scan(
-                task_id_clone.clone(),
-                req.targets,
-                config,
-            ).await;
+    tokio::task::spawn_blocking(move || {
+        // Get scan manager inside blocking context
+        let rt = tokio::runtime::Runtime::new().unwrap();
 
-            if let Ok(completed_task) = result {
-                // Update task in state
-                let mut tasks = state_clone.advanced_tasks.lock().unwrap();
-                if let Some(task) = tasks.iter_mut().find(|t| t.id == task_id_clone) {
-                    *task = completed_task;
-                }
+        let result = rt.block_on(async {
+            let scan_manager_guard = state_clone.scan_manager.lock().await;
+            if let Some(ref scan_manager) = *scan_manager_guard {
+                scan_manager.execute_advanced_scan(
+                    task_id_clone.clone(),
+                    req.targets,
+                    config,
+                ).await
+            } else {
+                Err("Scan manager not available".into())
             }
+        });
+
+        // Handle result
+        if let Ok(completed_task) = result {
+            let rt2 = tokio::runtime::Runtime::new().unwrap();
+            rt2.block_on(async {
+                {
+                    let mut tasks = state_clone.advanced_tasks.lock().unwrap();
+                    if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_clone) {
+                        *t = completed_task.clone();
+                    }
+                }
+
+                let _ = update_advanced_scan_task(&completed_task).await;
+
+                for scan_result in &completed_task.results {
+                    let _ = insert_quick_scan_result_wrapper(scan_result, &task_id_clone).await;
+                }
+            })
         }
     });
 
@@ -93,7 +117,29 @@ pub async fn execute_advanced_scan(
 pub async fn get_advanced_tasks(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let tasks = state.advanced_tasks.lock().unwrap().clone();
+    // Try to load from database first
+    let tasks = match get_advanced_scan_tasks().await {
+        Ok(db_tasks) => {
+            let mut tasks_with_results = Vec::new();
+            for db_task in db_tasks {
+                let mut task = db_advanced_scan_task_to_shared(db_task);
+                // Load results for each task
+                if let Ok(results) = get_quick_scan_results(&task.id).await {
+                    task.results = results.into_iter().map(db_quick_scan_result_to_shared).collect();
+                }
+                tasks_with_results.push(task);
+            }
+            // Update in-memory cache
+            *state.advanced_tasks.lock().unwrap() = tasks_with_results.clone();
+            tasks_with_results
+        }
+        Err(e) => {
+            eprintln!("Error loading advanced scan tasks from database: {}", e);
+            // Fallback to memory cache
+            state.advanced_tasks.lock().unwrap().clone()
+        }
+    };
+
     Json(tasks)
 }
 
@@ -102,6 +148,19 @@ pub async fn get_advanced_task(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    // Try to load from database first
+    if let Ok(db_tasks) = get_advanced_scan_tasks().await {
+        if let Some(db_task) = db_tasks.iter().find(|t| t.id == id) {
+            let mut task = db_advanced_scan_task_to_shared(db_task.clone());
+            // Load results
+            if let Ok(results) = get_quick_scan_results(&id).await {
+                task.results = results.into_iter().map(db_quick_scan_result_to_shared).collect();
+            }
+            return Ok(Json(task));
+        }
+    }
+
+    // Fallback to memory cache
     let tasks = state.advanced_tasks.lock().unwrap();
     let task = tasks.iter().find(|t| t.id == id)
         .cloned()
@@ -114,10 +173,17 @@ pub async fn delete_advanced_scan(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let mut tasks = state.advanced_tasks.lock().unwrap();
-    let idx = tasks.iter().position(|t| t.id == id)
-        .ok_or(StatusCode::NOT_FOUND)?;
-    tasks.remove(idx);
+    // Remove from in-memory storage
+    {
+        let mut tasks = state.advanced_tasks.lock().unwrap();
+        let idx = tasks.iter().position(|t| t.id == id)
+            .ok_or(StatusCode::NOT_FOUND)?;
+        tasks.remove(idx);
+    }
+
+    // Persist to database
+    let _ = delete_advanced_scan_task(&id).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -127,17 +193,46 @@ pub async fn cancel_advanced_scan(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Update task status
-    let mut tasks = state.advanced_tasks.lock().unwrap();
-    if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
-        if task.status == TaskStatus::Running {
-            task.status = TaskStatus::Failed;
-            task.error_message = Some("Cancelled by user".to_string());
-            task.end_time = Some(Utc::now());
+    let (found, task_to_update) = {
+        let mut tasks = state.advanced_tasks.lock().unwrap();
+        if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
+            if task.status == TaskStatus::Running {
+                task.status = TaskStatus::Failed;
+                task.error_message = Some("Cancelled by user".to_string());
+                task.end_time = Some(Utc::now());
+                (true, task.clone())
+            } else {
+                (true, task.clone())
+            }
+        } else {
+            (false, shared::AdvancedScanTask {
+                id: String::new(),
+                name: String::new(),
+                targets: vec![],
+                config: shared::AdvancedScanConfig::default(),
+                status: TaskStatus::Failed,
+                progress: 0.0,
+                current_target: None,
+                scanned_count: 0,
+                total_count: 0,
+                start_time: None,
+                end_time: None,
+                results: vec![],
+                cloud_mappings: vec![],
+                error_message: None,
+                created_by: None,
+            })
         }
-        Ok(StatusCode::OK)
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    };
+
+    if !found {
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    // Persist to database (after releasing lock)
+    let _ = update_advanced_scan_task(&task_to_update).await;
+
+    Ok(StatusCode::OK)
 }
 
 /// Export scan results
@@ -145,14 +240,24 @@ pub async fn export_scan_results(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let tasks = state.advanced_tasks.lock().unwrap();
-    let task = tasks.iter().find(|t| t.id == id)
-        .ok_or(StatusCode::NOT_FOUND)?;
+    // Try to get results from database first
+    let results = match get_quick_scan_results(&id).await {
+        Ok(db_results) => {
+            db_results.into_iter().map(db_quick_scan_result_to_shared).collect()
+        }
+        Err(_) => {
+            // Fallback to memory cache
+            let tasks = state.advanced_tasks.lock().unwrap();
+            let task = tasks.iter().find(|t| t.id == id)
+                .ok_or(StatusCode::NOT_FOUND)?;
+            task.results.clone()
+        }
+    };
 
     // Generate CSV report
     let mut csv = String::from("IP,Is Alive,Open Ports,Scan Time\n");
 
-    for result in &task.results {
+    for result in &results {
         let ports: Vec<String> = result.open_ports.iter()
             .filter(|p| p.is_open)
             .map(|p| p.port.to_string())
@@ -167,7 +272,7 @@ pub async fn export_scan_results(
         ));
     }
 
-    let headers = [( "content-type", "text/csv" )];
+    let headers = [("content-type", "text/csv")];
     Ok((headers, csv))
 }
 

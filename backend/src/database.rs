@@ -1,0 +1,1405 @@
+//! Database module using SeaORM
+//!
+//! This module provides database connectivity and CRUD operations using SeaORM.
+
+use sea_orm::{Database as SeaDatabase, DatabaseConnection, DbErr, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, Statement, QuerySelect, QueryOrder, ColumnTrait};
+use crate::entities::{
+    cloud_zone, cloud_platform, cloud_provider_config, business_resource,
+    user, audit_log, asset, task, risk, network_zone, custom_role, advanced_scan_task, quick_scan_result,
+    CloudZone, CloudPlatform, CloudProviderConfig, BusinessResource,
+    User, AuditLog, Asset, Task, Risk, NetworkZone, CustomRole, AdvancedScanTask, QuickScanResult,
+};
+use shared::{User as SharedUser, Role, Permissions, PasswordPolicy};
+use std::sync::Arc;
+use chrono::Utc;
+use uuid;
+
+// Re-export entities for convenience
+pub use crate::entities::prelude::*;
+
+// Legacy type aliases for compatibility with handlers
+pub type DbUser = user::Model;
+pub type DbAuditLog = audit_log::Model;
+pub type DbBusinessResource = business_resource::Model;
+pub type DbAsset = asset::Model;
+pub type DbTask = task::Model;
+pub type DbRisk = risk::Model;
+pub type DbZone = network_zone::Model;
+
+/// Global database connection (Arc-wrapped for sharing across threads)
+pub static DB: std::sync::OnceLock<Arc<DatabaseConnection>> = std::sync::OnceLock::new();
+
+/// Initialize the global database connection
+pub async fn init_db(connection_string: &str) -> Result<(), DbErr> {
+    let conn = SeaDatabase::connect(connection_string).await?;
+
+    // Run migrations
+    use sea_orm_migration::prelude::*;
+    use crate::migration::{Migrator, MigratorTrait};
+    Migrator::up(&conn, None).await?;
+
+    DB.set(Arc::new(conn))
+        .map_err(|_| DbErr::Custom("Database already initialized".to_string()))?;
+    Ok(())
+}
+
+/// Get the global database connection
+pub fn get_db() -> Option<Arc<DatabaseConnection>> {
+    DB.get().cloned()
+}
+
+/// Database type
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseType {
+    SQLite,
+    PostgreSQL,
+    MySQL,
+}
+
+impl DatabaseType {
+    /// From connection string
+    pub fn from_connection_string(conn_str: &str) -> Self {
+        let lower = conn_str.to_lowercase();
+        if lower.starts_with("sqlite://") || lower.starts_with("sqlite:") {
+            DatabaseType::SQLite
+        } else if lower.starts_with("postgres://") || lower.starts_with("postgresql://") {
+            DatabaseType::PostgreSQL
+        } else if lower.starts_with("mysql://") || lower.starts_with("mariadb://") {
+            DatabaseType::MySQL
+        } else {
+            DatabaseType::SQLite
+        }
+    }
+}
+
+pub struct Database {
+    conn: DatabaseConnection,
+    db_type: DatabaseType,
+}
+
+impl Database {
+    pub async fn new(connection_string: &str) -> Result<Self, DbErr> {
+        let db_type = DatabaseType::from_connection_string(connection_string);
+
+        // Create connection
+        let conn = SeaDatabase::connect(connection_string).await?;
+
+        let db = Database { conn, db_type };
+
+        // Run migrations
+        db.run_migrations().await?;
+
+        Ok(db)
+    }
+
+    pub fn conn(&self) -> &DatabaseConnection {
+        &self.conn
+    }
+
+    pub fn db_type(&self) -> DatabaseType {
+        self.db_type
+    }
+
+    async fn run_migrations(&self) -> Result<(), DbErr> {
+        // Run SeaORM migrations
+        use sea_orm_migration::prelude::*;
+        use crate::migration::{Migrator, MigratorTrait};
+
+        Migrator::up(&self.conn, None).await?;
+        Ok(())
+    }
+
+    /// Execute a raw SQL query
+    pub async fn execute(&self, sql: &str) -> Result<u64, DbErr> {
+        let stmt = Statement::from_string(self.conn.get_database_backend(), sql.to_string());
+        let result = self.conn.execute(stmt).await?;
+        Ok(result.rows_affected())
+    }
+}
+
+// ============== Helper functions for converting between entities and shared types ==============
+
+/// Convert DbUser (entity) to shared User
+pub fn db_user_to_shared(db: user::Model) -> SharedUser {
+    use shared::Role;
+    use chrono::{TimeZone, Utc};
+
+    let role = match db.role.as_str() {
+        "SysAdmin" => Role::SysAdmin,
+        "SecAdmin" => Role::SecAdmin,
+        "Auditor" => Role::Auditor,
+        "Custom" => Role::Custom("Custom".to_string()),
+        _ => Role::Custom(db.role),
+    };
+
+    let permissions = db.permissions.as_ref().and_then(|p| serde_json::from_str(p).ok());
+
+    SharedUser {
+        id: db.id,
+        username: db.username,
+        password: db.password,
+        role,
+        permissions,
+        created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|_| Utc::now()),
+        password_changed_at: db.password_changed_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        password_strength: db.password_strength,
+        force_password_change: Some(db.force_password_change != 0),
+        last_login_at: db.last_login_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        email: db.email,
+        phone: db.phone,
+        status: db.status,
+        failed_login_attempts: db.failed_login_attempts.map(|v| v as u32),
+        locked_until: db.locked_until.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+    }
+}
+
+/// Convert shared User to DbUser active model
+pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
+    let permissions_json = user.permissions.as_ref().map(|p| serde_json::to_string(p).ok()).flatten();
+
+    user::ActiveModel {
+        id: Set(user.id.clone()),
+        username: Set(user.username.clone()),
+        password: Set(user.password.clone()),
+        role: Set(format!("{:?}", user.role)),
+        permissions: Set(permissions_json),
+        created_at: Set(user.created_at.to_rfc3339()),
+        password_changed_at: Set(user.password_changed_at.map(|d| d.to_rfc3339())),
+        password_strength: Set(user.password_strength.clone()),
+        force_password_change: Set(user.force_password_change.unwrap_or(false) as i32),
+        last_login_at: Set(user.last_login_at.map(|d| d.to_rfc3339())),
+        email: Set(user.email.clone()),
+        phone: Set(user.phone.clone()),
+        status: Set(user.status.clone()),
+        failed_login_attempts: Set(user.failed_login_attempts.map(|v| v as i32)),
+        locked_until: Set(user.locked_until.map(|d| d.to_rfc3339())),
+    }
+}
+
+/// Convert DbAsset (entity) to shared Asset
+pub fn db_asset_to_shared(db: asset::Model) -> shared::Asset {
+    use shared::{Asset, NetworkZone, PortInfo};
+    use std::string::String as String;
+
+    let zone = match db.zone.as_str() {
+        "Intranet" => NetworkZone::Intranet,
+        "DMZ" => NetworkZone::DMZ,
+        "Internet" => NetworkZone::Internet,
+        _ => NetworkZone::Intranet,
+    };
+
+    let ports: Vec<PortInfo> = serde_json::from_str(&db.ports).unwrap_or_default();
+    let labels: Vec<String> = db.labels.as_deref().map(|s| serde_json::from_str(s).unwrap_or_default()).unwrap_or_default();
+
+    Asset {
+        id: Some(db.id),
+        name: db.name,
+        ip: db.ip,
+        zone,
+        ports,
+        last_scanned: db.last_scanned.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        contact_person: db.contact_person,
+        contact_phone: db.contact_phone,
+        created_by: db.created_by,
+        updated_by: db.updated_by,
+        owner: db.owner,
+        weight: db.weight,
+        labels,
+        os: db.os,
+        device_type: db.device_type,
+    }
+}
+
+/// Convert DbNetworkZone (entity) to shared ZoneConfig
+pub fn db_zone_to_shared(db: network_zone::Model) -> shared::ZoneConfig {
+    shared::ZoneConfig {
+        id: db.id,
+        name: db.name,
+        cidr: db.cidr,
+        priority: db.priority,
+    }
+}
+
+/// Convert DbRisk (entity) to shared Risk
+pub fn db_risk_to_shared(db: risk::Model) -> shared::Risk {
+    use shared::{Risk, RiskStatus};
+
+    let status = match db.status.as_str() {
+        "Open" => RiskStatus::Open,
+        "Resolved" => RiskStatus::Resolved,
+        "Verified" => RiskStatus::Verified,
+        "Ignored" => RiskStatus::Ignored,
+        "FalsePositive" => RiskStatus::FalsePositive,
+        "PendingReview" => RiskStatus::PendingReview,
+        _ => RiskStatus::Open,
+    };
+
+    Risk {
+        id: db.id,
+        asset_ip: db.asset_ip,
+        port: db.port as u16,
+        severity: db.severity,
+        description: db.description,
+        solution: db.solution,
+        status,
+        created_at: db.created_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        assigned_to: db.assigned_to,
+    }
+}
+
+/// Convert DbTask (entity) to shared Task
+pub fn db_task_to_shared(db: task::Model) -> shared::Task {
+    use shared::{Task, TaskStatus};
+
+    let status = match db.status.as_str() {
+        "Pending" => TaskStatus::Pending,
+        "Running" => TaskStatus::Running,
+        "Completed" => TaskStatus::Completed,
+        "Failed" => TaskStatus::Failed,
+        _ => TaskStatus::Pending,
+    };
+
+    Task {
+        id: db.id,
+        name: db.name,
+        target: db.target,
+        status,
+        start_time: db.start_time,
+        end_time: db.end_time,
+        found_assets: db.found_assets as usize,
+        found_risks: db.found_risks as usize,
+        port_policy: db.port_policy,
+        domain_brute: db.domain_brute != 0,
+        service_detection: db.service_detection != 0,
+        os_detection: db.os_detection != 0,
+        site_identify: db.site_identify != 0,
+        created_by: db.created_by,
+    }
+}
+
+// ============== User CRUD ==============
+
+pub async fn get_users_with_conn(conn: &DatabaseConnection) -> Result<Vec<SharedUser>, DbErr> {
+    let users = User::find().all(conn).await?;
+    Ok(users.into_iter().map(db_user_to_shared).collect())
+}
+
+pub async fn insert_user_with_conn(conn: &DatabaseConnection, user: &SharedUser) -> Result<(), DbErr> {
+    let db_user = shared_to_db_user(user);
+    db_user.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn update_user_by_id(conn: &DatabaseConnection, user: &SharedUser) -> Result<(), DbErr> {
+    let db_user = shared_to_db_user(user);
+    User::update(db_user).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_user_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
+    let user = User::find_by_id(id.to_string()).one(conn).await?;
+    if let Some(user) = user {
+        user.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_user_by_id(conn: &DatabaseConnection, id: &str) -> Result<Option<SharedUser>, DbErr> {
+    let user = User::find_by_id(id.to_string()).one(conn).await?;
+    Ok(user.map(db_user_to_shared))
+}
+
+pub async fn get_user_by_username(conn: &DatabaseConnection, username: &str) -> Result<Option<SharedUser>, DbErr> {
+    let user = User::find()
+        .filter(user::Column::Username.eq(username))
+        .one(conn)
+        .await?;
+    Ok(user.map(db_user_to_shared))
+}
+
+// ============== AuditLog CRUD ==============
+
+pub async fn insert_audit_log(conn: &DatabaseConnection, log: &shared::AuditLog) -> Result<(), DbErr> {
+    let db_log = audit_log::ActiveModel {
+        id: Set(log.id.clone()),
+        user_id: Set(log.user_id.clone()),
+        username: Set(log.username.clone()),
+        action: Set(log.action.clone()),
+        target: Set(log.target.clone()),
+        details: Set(log.details.clone()),
+        timestamp: Set(log.timestamp.to_rfc3339()),
+    };
+    db_log.insert(conn).await?;
+    Ok(())
+}
+
+// ============== Asset CRUD ==============
+
+pub async fn insert_asset(conn: &DatabaseConnection, asset: &shared::Asset) -> Result<i64, DbErr> {
+    let ports_json = serde_json::to_string(&asset.ports).unwrap_or_default();
+    let labels_json = serde_json::to_string(&asset.labels).unwrap_or_default();
+
+    let db_asset = asset::ActiveModel {
+        id: NotSet,
+        name: Set(asset.name.clone()),
+        ip: Set(asset.ip.clone()),
+        zone: Set(format!("{:?}", asset.zone)),
+        ports: Set(ports_json),
+        last_scanned: Set(asset.last_scanned.map(|d| d.to_rfc3339())),
+        contact_person: Set(asset.contact_person.clone()),
+        contact_phone: Set(asset.contact_phone.clone()),
+        created_by: Set(asset.created_by.clone()),
+        updated_by: Set(asset.updated_by.clone()),
+        owner: Set(asset.owner.clone()),
+        weight: Set(asset.weight),
+        labels: Set(Some(labels_json)),
+        os: Set(asset.os.clone()),
+        device_type: Set(asset.device_type.clone()),
+    };
+
+    let result = db_asset.insert(conn).await?;
+    Ok(result.id as i64)
+}
+
+pub async fn update_asset_by_id(conn: &DatabaseConnection, id: i32, asset: &shared::Asset) -> Result<(), DbErr> {
+    let ports_json = serde_json::to_string(&asset.ports).unwrap_or_default();
+    let labels_json = serde_json::to_string(&asset.labels).unwrap_or_default();
+
+    let db_asset = asset::ActiveModel {
+        id: Set(id),
+        name: Set(asset.name.clone()),
+        ip: Set(asset.ip.clone()),
+        zone: Set(format!("{:?}", asset.zone)),
+        ports: Set(ports_json),
+        last_scanned: Set(asset.last_scanned.map(|d| d.to_rfc3339())),
+        contact_person: Set(asset.contact_person.clone()),
+        contact_phone: Set(asset.contact_phone.clone()),
+        updated_by: Set(asset.updated_by.clone()),
+        owner: Set(asset.owner.clone()),
+        weight: Set(asset.weight),
+        labels: Set(Some(labels_json)),
+        os: Set(asset.os.clone()),
+        device_type: Set(asset.device_type.clone()),
+        ..Default::default()
+    };
+
+    Asset::update(db_asset).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_asset_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    let asset = Asset::find_by_id(id).one(conn).await?;
+    if let Some(asset) = asset {
+        asset.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_assets(conn: &DatabaseConnection) -> Result<Vec<asset::Model>, DbErr> {
+    Asset::find().order_by_desc(asset::Column::Id).all(conn).await
+}
+
+pub async fn get_asset_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<asset::Model>, DbErr> {
+    Asset::find_by_id(id).one(conn).await
+}
+
+// ============== Task CRUD ==============
+
+pub async fn insert_task(conn: &DatabaseConnection, task: &shared::Task) -> Result<(), DbErr> {
+    let db_task = task::ActiveModel {
+        id: Set(task.id.clone()),
+        name: Set(task.name.clone()),
+        target: Set(task.target.clone()),
+        status: Set(format!("{:?}", task.status)),
+        start_time: Set(task.start_time.clone()),
+        end_time: Set(task.end_time.clone()),
+        found_assets: Set(task.found_assets as i32),
+        found_risks: Set(task.found_risks as i32),
+        port_policy: Set(task.port_policy.clone()),
+        domain_brute: Set(task.domain_brute as i32),
+        service_detection: Set(task.service_detection as i32),
+        os_detection: Set(task.os_detection as i32),
+        site_identify: Set(task.site_identify as i32),
+        created_by: Set(task.created_by.clone()),
+    };
+    db_task.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn update_task_by_id(conn: &DatabaseConnection, id: &str, task: &shared::Task) -> Result<(), DbErr> {
+    let db_task = task::ActiveModel {
+        id: Set(id.to_string()),
+        name: Set(task.name.clone()),
+        target: Set(task.target.clone()),
+        status: Set(format!("{:?}", task.status)),
+        start_time: Set(task.start_time.clone()),
+        end_time: Set(task.end_time.clone()),
+        found_assets: Set(task.found_assets as i32),
+        found_risks: Set(task.found_risks as i32),
+        ..Default::default()
+    };
+    Task::update(db_task).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_task_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
+    let task = Task::find_by_id(id.to_string()).one(conn).await?;
+    if let Some(task) = task {
+        task.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_tasks(conn: &DatabaseConnection) -> Result<Vec<task::Model>, DbErr> {
+    Task::find().order_by_desc(task::Column::Id).all(conn).await
+}
+
+// ============== Risk CRUD ==============
+
+pub async fn insert_risk(conn: &DatabaseConnection, risk: &shared::Risk) -> Result<(), DbErr> {
+    let db_risk = risk::ActiveModel {
+        id: Set(risk.id.clone()),
+        asset_ip: Set(risk.asset_ip.clone()),
+        port: Set(risk.port as i32),
+        severity: Set(risk.severity.clone()),
+        description: Set(risk.description.clone()),
+        solution: Set(risk.solution.clone()),
+        status: Set(format!("{:?}", risk.status)),
+        created_at: Set(risk.created_at.map(|d| d.to_rfc3339())),
+        updated_at: Set(risk.updated_at.map(|d| d.to_rfc3339())),
+        assigned_to: Set(risk.assigned_to.clone()),
+    };
+    db_risk.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn update_risk_by_id(conn: &DatabaseConnection, id: &str, risk: &shared::Risk) -> Result<(), DbErr> {
+    let db_risk = risk::ActiveModel {
+        id: Set(id.to_string()),
+        severity: Set(risk.severity.clone()),
+        description: Set(risk.description.clone()),
+        solution: Set(risk.solution.clone()),
+        status: Set(format!("{:?}", risk.status)),
+        updated_at: Set(risk.updated_at.map(|d| d.to_rfc3339())),
+        assigned_to: Set(risk.assigned_to.clone()),
+        ..Default::default()
+    };
+    Risk::update(db_risk).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_risk_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
+    let risk = Risk::find_by_id(id.to_string()).one(conn).await?;
+    if let Some(risk) = risk {
+        risk.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_risks(conn: &DatabaseConnection) -> Result<Vec<risk::Model>, DbErr> {
+    Risk::find().order_by_desc(risk::Column::CreatedAt).all(conn).await
+}
+
+// ============== NetworkZone CRUD ==============
+
+pub async fn insert_zone(conn: &DatabaseConnection, zone: &shared::ZoneConfig) -> Result<(), DbErr> {
+    let db_zone = network_zone::ActiveModel {
+        id: Set(zone.id.clone()),
+        name: Set(zone.name.clone()),
+        cidr: Set(zone.cidr.clone()),
+        priority: Set(zone.priority),
+    };
+    db_zone.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn update_zone_by_id(conn: &DatabaseConnection, id: &str, zone: &shared::ZoneConfig) -> Result<(), DbErr> {
+    let db_zone = network_zone::ActiveModel {
+        id: Set(id.to_string()),
+        name: Set(zone.name.clone()),
+        cidr: Set(zone.cidr.clone()),
+        priority: Set(zone.priority),
+    };
+    NetworkZone::update(db_zone).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_zone_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
+    let zone = NetworkZone::find_by_id(id.to_string()).one(conn).await?;
+    if let Some(zone) = zone {
+        zone.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_zones(conn: &DatabaseConnection) -> Result<Vec<network_zone::Model>, DbErr> {
+    NetworkZone::find().order_by_asc(network_zone::Column::Priority).all(conn).await
+}
+
+// ============== CloudZone CRUD ==============
+
+pub async fn insert_cloud_zone(
+    conn: &DatabaseConnection,
+    zone_name: &str,
+    zone_code: &str,
+    description: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let db_zone = cloud_zone::ActiveModel {
+        id: NotSet,
+        zone_name: Set(zone_name.to_string()),
+        zone_code: Set(zone_code.to_string()),
+        description: Set(description.map(|s| s.to_string())),
+        created_at: Set(created_at.to_string()),
+    };
+    let result = db_zone.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_cloud_zone_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+    zone_name: Option<&str>,
+    zone_code: Option<&str>,
+    description: Option<&str>,
+) -> Result<(), DbErr> {
+    let mut db_zone = cloud_zone::ActiveModel {
+        id: Set(id),
+        ..Default::default()
+    };
+
+    if let Some(name) = zone_name {
+        db_zone.zone_name = Set(name.to_string());
+    }
+    if let Some(code) = zone_code {
+        db_zone.zone_code = Set(code.to_string());
+    }
+    if let Some(desc) = description {
+        db_zone.description = Set(Some(desc.to_string()));
+    }
+
+    CloudZone::update(db_zone).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_cloud_zone_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    let zone = CloudZone::find_by_id(id).one(conn).await?;
+    if let Some(zone) = zone {
+        zone.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_cloud_zones(conn: &DatabaseConnection) -> Result<Vec<cloud_zone::Model>, DbErr> {
+    CloudZone::find().order_by_asc(cloud_zone::Column::Id).all(conn).await
+}
+
+pub async fn get_cloud_zone_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_zone::Model>, DbErr> {
+    CloudZone::find_by_id(id).one(conn).await
+}
+
+// ============== CloudPlatform CRUD ==============
+
+pub async fn insert_cloud_platform(
+    conn: &DatabaseConnection,
+    zone_id: i32,
+    platform_name: &str,
+    platform_code: &str,
+    description: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let db_platform = cloud_platform::ActiveModel {
+        id: NotSet,
+        zone_id: Set(zone_id),
+        platform_name: Set(platform_name.to_string()),
+        platform_code: Set(platform_code.to_string()),
+        description: Set(description.map(|s| s.to_string())),
+        created_at: Set(created_at.to_string()),
+    };
+    let result = db_platform.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_cloud_platform_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+    zone_id: Option<i32>,
+    platform_name: Option<&str>,
+    platform_code: Option<&str>,
+    description: Option<&str>,
+) -> Result<(), DbErr> {
+    let mut db_platform = cloud_platform::ActiveModel {
+        id: Set(id),
+        ..Default::default()
+    };
+
+    if let Some(zid) = zone_id {
+        db_platform.zone_id = Set(zid);
+    }
+    if let Some(name) = platform_name {
+        db_platform.platform_name = Set(name.to_string());
+    }
+    if let Some(code) = platform_code {
+        db_platform.platform_code = Set(code.to_string());
+    }
+    if let Some(desc) = description {
+        db_platform.description = Set(Some(desc.to_string()));
+    }
+
+    CloudPlatform::update(db_platform).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    let platform = CloudPlatform::find_by_id(id).one(conn).await?;
+    if let Some(platform) = platform {
+        platform.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_cloud_platforms(conn: &DatabaseConnection) -> Result<Vec<cloud_platform::Model>, DbErr> {
+    CloudPlatform::find().order_by_asc(cloud_platform::Column::Id).all(conn).await
+}
+
+pub async fn get_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_platform::Model>, DbErr> {
+    CloudPlatform::find_by_id(id).one(conn).await
+}
+
+pub async fn get_platforms_by_zone_id(conn: &DatabaseConnection, zone_id: i32) -> Result<Vec<cloud_platform::Model>, DbErr> {
+    CloudPlatform::find()
+        .filter(cloud_platform::Column::ZoneId.eq(zone_id))
+        .order_by_asc(cloud_platform::Column::Id)
+        .all(conn)
+        .await
+}
+
+// ============== CloudProviderConfig CRUD ==============
+
+pub async fn insert_cloud_provider_config(
+    conn: &DatabaseConnection,
+    zone_id: i32,
+    platform_id: i32,
+    provider: &str,
+    region_id: &str,
+    region_name: &str,
+    account_name: &str,
+    access_key_id: &str,
+    access_key_secret: &str,
+    remarks: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let db_config = cloud_provider_config::ActiveModel {
+        id: NotSet,
+        zone_id: Set(zone_id),
+        platform_id: Set(platform_id),
+        provider: Set(provider.to_string()),
+        region_id: Set(region_id.to_string()),
+        region_name: Set(region_name.to_string()),
+        account_name: Set(account_name.to_string()),
+        access_key_id: Set(access_key_id.to_string()),
+        access_key_secret: Set(access_key_secret.to_string()),
+        remarks: Set(remarks.map(|s| s.to_string())),
+        status: Set("active".to_string()),
+        last_test_time: Set(None),
+        last_test_result: Set(None),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    let result = db_config.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_cloud_provider_config_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+    zone_id: i32,
+    platform_id: i32,
+    region_id: &str,
+    region_name: &str,
+    account_name: &str,
+    access_key_id: &str,
+    access_key_secret: &str,
+    remarks: Option<&str>,
+    status: &str,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    let db_config = cloud_provider_config::ActiveModel {
+        id: Set(id),
+        zone_id: Set(zone_id),
+        platform_id: Set(platform_id),
+        region_id: Set(region_id.to_string()),
+        region_name: Set(region_name.to_string()),
+        account_name: Set(account_name.to_string()),
+        access_key_id: Set(access_key_id.to_string()),
+        access_key_secret: Set(access_key_secret.to_string()),
+        remarks: Set(remarks.map(|s| s.to_string())),
+        status: Set(status.to_string()),
+        updated_at: Set(updated_at.map(|s| s.to_string())),
+        ..Default::default()
+    };
+    CloudProviderConfig::update(db_config).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_cloud_provider_config_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    let config = CloudProviderConfig::find_by_id(id).one(conn).await?;
+    if let Some(config) = config {
+        config.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_cloud_provider_configs(conn: &DatabaseConnection) -> Result<Vec<cloud_provider_config::Model>, DbErr> {
+    CloudProviderConfig::find().order_by_desc(cloud_provider_config::Column::Id).all(conn).await
+}
+
+pub async fn get_cloud_provider_config_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_provider_config::Model>, DbErr> {
+    CloudProviderConfig::find_by_id(id).one(conn).await
+}
+
+pub async fn get_active_cloud_provider_configs(conn: &DatabaseConnection) -> Result<Vec<cloud_provider_config::Model>, DbErr> {
+    CloudProviderConfig::find()
+        .filter(cloud_provider_config::Column::Status.eq("active"))
+        .order_by_desc(cloud_provider_config::Column::Id)
+        .all(conn)
+        .await
+}
+
+// ============== BusinessResource CRUD ==============
+
+pub async fn insert_business_resource(
+    conn: &DatabaseConnection,
+    req: &shared::CreateBusinessResourceRequest,
+    created_at: &str,
+    created_by: &str,
+) -> Result<i32, DbErr> {
+    let db_resource = business_resource::ActiveModel {
+        id: NotSet,
+        resource_type: Set(req.resource_type.clone()),
+        ecs_name: Set(req.ecs_name.clone()),
+        ecs_status: Set(req.ecs_status.clone()),
+        resource_id: Set(req.resource_id.clone()),
+        cloud_region: Set(req.cloud_region.clone()),
+        cloud_category: Set(req.cloud_category.clone()),
+        cloud_provider_config_id: Set(req.cloud_provider_config_id),
+        zone_name: Set(req.zone_name.clone()),
+        platform_name: Set(req.platform_name.clone()),
+        county_city: Set(req.county_city.clone()),
+        vdc_name: Set(req.vdc_name.clone()),
+        customer_name: Set(req.customer_name.clone()),
+        application_name: Set(req.application_name.clone()),
+        contract_name: Set(req.contract_name.clone()),
+        instance_id: Set(req.instance_id.clone()),
+        ecs_type: Set(req.ecs_type.clone()),
+        ecs_os: Set(req.ecs_os.clone()),
+        cpu_cores: Set(req.cpu_cores as i32),
+        memory_gb: Set(req.memory_gb as i32),
+        system_disk: Set(req.system_disk.clone()),
+        system_disk_size_gb: Set(req.system_disk_size_gb as i32),
+        data_disk: Set(req.data_disk.clone()),
+        completion_time: Set(req.completion_time.map(|d| d.to_rfc3339())),
+        release_time: Set(req.release_time.map(|d| d.to_rfc3339())),
+        has_security_product: Set(req.has_security_product as i32),
+        ip_address: Set(req.ip_address.clone()),
+        ecs_login_method: Set(req.ecs_login_method.clone()),
+        ecs_login_username: Set(req.ecs_login_username.clone()),
+        ecs_initial_password: Set(req.ecs_initial_password.clone()),
+        bastion_address: Set(req.bastion_address.clone()),
+        bastion_admin_account: Set(req.bastion_admin_account.clone()),
+        bastion_initial_password: Set(req.bastion_initial_password.clone()),
+        serial_number: Set(req.serial_number.clone()),
+        rack_location: Set(req.rack_location.clone()),
+        hardware_model: Set(req.hardware_model.clone()),
+        warranty_expiry: Set(req.warranty_expiry.map(|d| d.to_rfc3339())),
+        agent_status: Set(None), // Default value for new resources
+        ipmi_address: Set(req.ipmi_address.clone()),
+        remarks: Set(req.remarks.clone()),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+        created_by: Set(Some(created_by.to_string())),
+        updated_by: Set(None),
+    };
+    let result = db_resource.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_business_resource_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+    req: &shared::UpdateBusinessResourceRequest,
+    updated_by: &str,
+) -> Result<(), DbErr> {
+    let mut db_resource = business_resource::ActiveModel {
+        id: Set(id),
+        updated_at: Set(Some(chrono::Utc::now().to_rfc3339())),
+        updated_by: Set(Some(updated_by.to_string())),
+        ..Default::default()
+    };
+
+    // Update fields that are Some
+    if let Some(v) = &req.resource_type { db_resource.resource_type = Set(v.clone()); }
+    if let Some(v) = &req.ecs_name { db_resource.ecs_name = Set(v.clone()); }
+    if let Some(v) = &req.ecs_status { db_resource.ecs_status = Set(v.clone()); }
+    if let Some(v) = &req.cloud_region { db_resource.cloud_region = Set(v.clone()); }
+    if let Some(v) = &req.cloud_category { db_resource.cloud_category = Set(v.clone()); }
+    if let Some(v) = req.cloud_provider_config_id { db_resource.cloud_provider_config_id = Set(Some(v)); }
+    if let Some(v) = &req.zone_name { db_resource.zone_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.platform_name { db_resource.platform_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.county_city { db_resource.county_city = Set(Some(v.clone())); }
+    if let Some(v) = &req.vdc_name { db_resource.vdc_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.customer_name { db_resource.customer_name = Set(v.clone()); }
+    if let Some(v) = &req.application_name { db_resource.application_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.contract_name { db_resource.contract_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.ecs_type { db_resource.ecs_type = Set(v.clone()); }
+    if let Some(v) = &req.ecs_os { db_resource.ecs_os = Set(v.clone()); }
+    if let Some(v) = req.cpu_cores { db_resource.cpu_cores = Set(v as i32); }
+    if let Some(v) = req.memory_gb { db_resource.memory_gb = Set(v as i32); }
+    if let Some(v) = &req.system_disk { db_resource.system_disk = Set(v.clone()); }
+    if let Some(v) = req.system_disk_size_gb { db_resource.system_disk_size_gb = Set(v as i32); }
+    if let Some(v) = &req.data_disk { db_resource.data_disk = Set(Some(v.clone())); }
+    if let Some(v) = &req.completion_time { db_resource.completion_time = Set(Some(v.to_rfc3339())); }
+    if let Some(v) = &req.release_time { db_resource.release_time = Set(Some(v.to_rfc3339())); }
+    if let Some(v) = req.has_security_product { db_resource.has_security_product = Set(v as i32); }
+    if let Some(v) = &req.ip_address { db_resource.ip_address = Set(v.clone()); }
+    if let Some(v) = &req.ecs_login_method { db_resource.ecs_login_method = Set(Some(v.clone())); }
+    if let Some(v) = &req.ecs_login_username { db_resource.ecs_login_username = Set(Some(v.clone())); }
+    if let Some(v) = &req.ecs_initial_password { db_resource.ecs_initial_password = Set(Some(v.clone())); }
+    if let Some(v) = &req.bastion_address { db_resource.bastion_address = Set(Some(v.clone())); }
+    if let Some(v) = &req.bastion_admin_account { db_resource.bastion_admin_account = Set(Some(v.clone())); }
+    if let Some(v) = &req.bastion_initial_password { db_resource.bastion_initial_password = Set(Some(v.clone())); }
+    if let Some(v) = &req.serial_number { db_resource.serial_number = Set(Some(v.clone())); }
+    if let Some(v) = &req.rack_location { db_resource.rack_location = Set(Some(v.clone())); }
+    if let Some(v) = &req.hardware_model { db_resource.hardware_model = Set(Some(v.clone())); }
+    if let Some(v) = &req.warranty_expiry { db_resource.warranty_expiry = Set(Some(v.to_rfc3339())); }
+    if let Some(v) = &req.agent_status { db_resource.agent_status = Set(Some(v.clone())); }
+    if let Some(v) = &req.ipmi_address { db_resource.ipmi_address = Set(Some(v.clone())); }
+    if let Some(v) = &req.remarks { db_resource.remarks = Set(Some(v.clone())); }
+
+    BusinessResource::update(db_resource).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_business_resource_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    let resource = BusinessResource::find_by_id(id).one(conn).await?;
+    if let Some(resource) = resource {
+        resource.delete(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn get_all_business_resources(conn: &DatabaseConnection) -> Result<Vec<business_resource::Model>, DbErr> {
+    BusinessResource::find().order_by_desc(business_resource::Column::Id).all(conn).await
+}
+
+pub async fn get_business_resource_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<business_resource::Model>, DbErr> {
+    BusinessResource::find_by_id(id).one(conn).await
+}
+
+// ============== Legacy wrapper functions for handlers ==============
+// These provide compatibility with the old sqlx-based API by using the global DB connection
+
+// User wrappers (for handlers/users.rs)
+pub async fn get_users() -> Result<Vec<SharedUser>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_users_with_conn(&conn).await
+}
+
+pub async fn insert_user(user: &SharedUser) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_user_with_conn(&conn, user).await
+}
+
+pub async fn delete_user(id: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_user_by_id(&conn, id).await
+}
+
+pub async fn update_user(id: &str, user: &SharedUser) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_user_by_id(&conn, user).await
+}
+
+// Business resource wrappers
+pub async fn get_business_resources() -> Result<Vec<business_resource::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_business_resources(&conn).await
+}
+
+pub async fn insert_business_resource_wrapper(req: &shared::CreateBusinessResourceRequest, created_at: &str, created_by: &str) -> Result<i32, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_business_resource(&conn, req, created_at, created_by).await
+}
+
+pub async fn update_business_resource(id: i32, req: &shared::UpdateBusinessResourceRequest, updated_by: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_business_resource_by_id(&conn, id, req, updated_by).await
+}
+
+pub async fn delete_business_resource(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_business_resource_by_id(&conn, id).await
+}
+
+// Cloud provider config wrappers
+pub async fn insert_provider_config(
+    zone_id: i32,
+    platform_id: i32,
+    provider: &str,
+    region_id: &str,
+    region_name: &str,
+    account_name: &str,
+    access_key_id: &str,
+    access_key_secret: &str,
+    remarks: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_cloud_provider_config(&conn, zone_id, platform_id, provider, region_id, region_name, account_name, access_key_id, access_key_secret, remarks, created_at).await
+}
+
+pub async fn update_provider_config(
+    id: i32,
+    zone_id: i32,
+    platform_id: i32,
+    region_id: &str,
+    region_name: &str,
+    account_name: &str,
+    access_key_id: &str,
+    access_key_secret: &str,
+    remarks: Option<&str>,
+    status: &str,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_cloud_provider_config_by_id(&conn, id, zone_id, platform_id, region_id, region_name, account_name, access_key_id, access_key_secret, remarks, status, updated_at).await
+}
+
+pub async fn delete_provider_config(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_cloud_provider_config_by_id(&conn, id).await
+}
+
+// Cloud zone wrappers
+pub async fn update_cloud_zone(
+    id: i32,
+    zone_name: Option<&str>,
+    zone_code: Option<&str>,
+    description: Option<&str>,
+) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_cloud_zone_by_id(&conn, id, zone_name, zone_code, description).await
+}
+
+pub async fn delete_cloud_zone(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_cloud_zone_by_id(&conn, id).await
+}
+
+// Cloud platform wrappers
+pub async fn update_cloud_platform(
+    id: i32,
+    zone_id: Option<i32>,
+    platform_name: Option<&str>,
+    platform_code: Option<&str>,
+    description: Option<&str>,
+) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_cloud_platform_by_id(&conn, id, zone_id, platform_name, platform_code, description).await
+}
+
+pub async fn delete_cloud_platform(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_cloud_platform_by_id(&conn, id).await
+}
+
+// Insert wrappers
+pub async fn insert_cloud_zone_wrapper(
+    zone_name: &str,
+    zone_code: &str,
+    description: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_cloud_zone(&conn, zone_name, zone_code, description, created_at).await
+}
+
+pub async fn insert_cloud_platform_wrapper(
+    zone_id: i32,
+    platform_name: &str,
+    platform_code: &str,
+    description: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_cloud_platform(&conn, zone_id, platform_name, platform_code, description, created_at).await
+}
+
+// AuditLog wrapper
+pub async fn get_audit_logs(limit: Option<u64>) -> Result<Vec<audit_log::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_audit_logs_with_conn(&conn, limit).await
+}
+
+pub async fn get_audit_logs_with_conn(conn: &DatabaseConnection, limit: Option<u64>) -> Result<Vec<audit_log::Model>, DbErr> {
+    let mut query = AuditLog::find();
+    if let Some(limit) = limit {
+        query = query.limit(limit);
+    }
+    query.order_by_desc(audit_log::Column::Timestamp).all(conn).await
+}
+
+pub async fn insert_audit_log_wrapper(log: &shared::AuditLog) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_audit_log(&conn, log).await
+}
+
+// Asset wrappers
+pub async fn get_assets() -> Result<Vec<asset::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_assets(&conn).await
+}
+
+pub async fn insert_asset_wrapper(asset: &shared::Asset) -> Result<i64, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_asset(&conn, asset).await
+}
+
+pub async fn update_asset(id: i32, asset: &shared::Asset) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_asset_by_id(&conn, id, asset).await
+}
+
+pub async fn delete_asset(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_asset_by_id(&conn, id).await
+}
+
+// Task wrappers
+pub async fn get_tasks() -> Result<Vec<task::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_tasks(&conn).await
+}
+
+pub async fn insert_task_wrapper(task: &shared::Task) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_task(&conn, task).await
+}
+
+pub async fn update_task(id: &str, task: &shared::Task) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_task_by_id(&conn, id, task).await
+}
+
+pub async fn delete_task(id: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_task_by_id(&conn, id).await
+}
+
+// Risk wrappers
+pub async fn get_risks() -> Result<Vec<risk::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_risks(&conn).await
+}
+
+pub async fn insert_risk_wrapper(risk: &shared::Risk) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_risk(&conn, risk).await
+}
+
+pub async fn update_risk(id: &str, risk: &shared::Risk) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_risk_by_id(&conn, id, risk).await
+}
+
+pub async fn delete_risk(id: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_risk_by_id(&conn, id).await
+}
+
+// NetworkZone wrappers (ZoneConfig)
+pub async fn get_zones() -> Result<Vec<network_zone::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_zones(&conn).await
+}
+
+pub async fn insert_zone_wrapper(zone: &shared::ZoneConfig) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_zone(&conn, zone).await
+}
+
+pub async fn update_zone(id: &str, zone: &shared::ZoneConfig) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_zone_by_id(&conn, id, zone).await
+}
+
+pub async fn delete_zone(id: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_zone_by_id(&conn, id).await
+}
+
+// ============== Custom Role CRUD ==============
+
+pub async fn get_all_custom_roles(conn: &DatabaseConnection) -> Result<Vec<custom_role::Model>, DbErr> {
+    CustomRole::find().order_by_asc(custom_role::Column::Id).all(conn).await
+}
+
+pub async fn get_custom_role_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<custom_role::Model>, DbErr> {
+    CustomRole::find_by_id(id).one(conn).await
+}
+
+pub async fn insert_custom_role(conn: &DatabaseConnection, role: &shared::CustomRole) -> Result<i32, DbErr> {
+    let permissions_json = serde_json::to_string(&role.permissions).unwrap_or_default();
+
+    let db_role = custom_role::ActiveModel {
+        id: NotSet,
+        name: Set(role.name.clone()),
+        description: Set(role.description.clone()),
+        permissions: Set(permissions_json),
+        created_at: Set(role.created_at.clone()),
+        updated_at: Set(role.updated_at.clone()),
+    };
+
+    let result = db_role.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_custom_role_by_id(conn: &DatabaseConnection, id: i32, role: &shared::CustomRole) -> Result<(), DbErr> {
+    let permissions_json = serde_json::to_string(&role.permissions).unwrap_or_default();
+
+    let db_role = custom_role::ActiveModel {
+        id: Set(id),
+        name: Set(role.name.clone()),
+        description: Set(role.description.clone()),
+        permissions: Set(permissions_json),
+        created_at: Set(role.created_at.clone()),
+        updated_at: Set(role.updated_at.clone()),
+    };
+
+    CustomRole::update(db_role).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_custom_role_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    let role = CustomRole::find_by_id(id).one(conn).await?
+        .ok_or_else(|| DbErr::Custom("Role not found".to_string()))?;
+    role.delete(conn).await?;
+    Ok(())
+}
+
+// Convert DbCustomRole to shared CustomRole
+pub fn db_custom_role_to_shared(db: custom_role::Model) -> shared::CustomRole {
+    let permissions = serde_json::from_str(&db.permissions).ok();
+
+    shared::CustomRole {
+        id: Some(db.id),
+        name: db.name,
+        description: db.description,
+        permissions: permissions.unwrap_or_default(),
+        created_at: db.created_at,
+        updated_at: db.updated_at,
+    }
+}
+
+// CustomRole wrappers for handlers
+pub async fn get_custom_roles() -> Result<Vec<custom_role::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_custom_roles(&conn).await
+}
+
+pub async fn insert_custom_role_wrapper(role: &shared::CustomRole) -> Result<i32, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_custom_role(&conn, role).await
+}
+
+pub async fn update_custom_role(id: i32, role: &shared::CustomRole) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_custom_role_by_id(&conn, id, role).await
+}
+
+pub async fn delete_custom_role(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_custom_role_by_id(&conn, id).await
+}
+
+// ============== Advanced Scan Task CRUD ==============
+
+pub async fn get_all_advanced_scan_tasks(conn: &DatabaseConnection) -> Result<Vec<advanced_scan_task::Model>, DbErr> {
+    AdvancedScanTask::find().order_by_desc(advanced_scan_task::Column::CreatedAt).all(conn).await
+}
+
+pub async fn get_advanced_scan_task_by_id(conn: &DatabaseConnection, id: &str) -> Result<Option<advanced_scan_task::Model>, DbErr> {
+    AdvancedScanTask::find_by_id(id).one(conn).await
+}
+
+pub async fn insert_advanced_scan_task(conn: &DatabaseConnection, task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+    let targets_json = serde_json::to_string(&task.targets).unwrap_or_default();
+    let config_json = serde_json::to_string(&task.config).unwrap_or_default();
+    let now = Utc::now().to_rfc3339();
+
+    let db_task = advanced_scan_task::ActiveModel {
+        id: Set(task.id.clone()),
+        name: Set(task.name.clone()),
+        targets: Set(targets_json),
+        config: Set(config_json),
+        status: Set(format!("{:?}", task.status)),
+        progress: Set(task.progress),
+        current_target: Set(task.current_target.clone()),
+        scanned_count: Set(task.scanned_count as i32),
+        total_count: Set(task.total_count as i32),
+        start_time: Set(task.start_time.map(|d| d.to_rfc3339())),
+        end_time: Set(task.end_time.map(|d| d.to_rfc3339())),
+        created_by: Set(task.created_by.clone()),
+        error_message: Set(task.error_message.clone()),
+        created_at: Set(Some(now.clone())),
+        updated_at: Set(Some(now)),
+    };
+
+    db_task.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn update_advanced_scan_task_by_id(conn: &DatabaseConnection, task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+    let targets_json = serde_json::to_string(&task.targets).unwrap_or_default();
+    let config_json = serde_json::to_string(&task.config).unwrap_or_default();
+    let now = Utc::now().to_rfc3339();
+
+    let db_task = advanced_scan_task::ActiveModel {
+        id: Set(task.id.clone()),
+        name: Set(task.name.clone()),
+        targets: Set(targets_json),
+        config: Set(config_json),
+        status: Set(format!("{:?}", task.status)),
+        progress: Set(task.progress),
+        current_target: Set(task.current_target.clone()),
+        scanned_count: Set(task.scanned_count as i32),
+        total_count: Set(task.total_count as i32),
+        start_time: Set(task.start_time.map(|d| d.to_rfc3339())),
+        end_time: Set(task.end_time.map(|d| d.to_rfc3339())),
+        created_by: Set(task.created_by.clone()),
+        error_message: Set(task.error_message.clone()),
+        created_at: NotSet,
+        updated_at: Set(Some(now)),
+    };
+
+    AdvancedScanTask::update(db_task).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn delete_advanced_scan_task_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
+    let task = AdvancedScanTask::find_by_id(id).one(conn).await?
+        .ok_or_else(|| DbErr::Custom("Scan task not found".to_string()))?;
+    task.delete(conn).await?;
+    Ok(())
+}
+
+pub fn db_advanced_scan_task_to_shared(db: advanced_scan_task::Model) -> shared::AdvancedScanTask {
+    use shared::{TaskStatus, AdvancedScanConfig};
+
+    let targets: Vec<String> = serde_json::from_str(&db.targets).unwrap_or_default();
+    let config: AdvancedScanConfig = serde_json::from_str(&db.config).ok().unwrap_or_default();
+
+    let status = match db.status.as_str() {
+        "Pending" => TaskStatus::Pending,
+        "Running" => TaskStatus::Running,
+        "Completed" => TaskStatus::Completed,
+        "Failed" => TaskStatus::Failed,
+        _ => TaskStatus::Pending,
+    };
+
+    shared::AdvancedScanTask {
+        id: db.id,
+        name: db.name,
+        targets,
+        config,
+        status,
+        progress: db.progress,
+        current_target: db.current_target,
+        scanned_count: db.scanned_count as u32,
+        total_count: db.total_count as u32,
+        start_time: db.start_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        end_time: db.end_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        results: vec![], // Loaded separately
+        cloud_mappings: vec![],
+        error_message: db.error_message,
+        created_by: db.created_by,
+    }
+}
+
+// ============== Quick Scan Result CRUD ==============
+
+pub async fn insert_quick_scan_result(conn: &DatabaseConnection, result: &shared::QuickScanResult, task_id: &str) -> Result<(), DbErr> {
+    let ports_json = serde_json::to_string(&result.open_ports).unwrap_or_default();
+
+    let db_result = quick_scan_result::ActiveModel {
+        id: Set(uuid::Uuid::new_v4().to_string()),
+        task_id: Set(task_id.to_string()),
+        ip: Set(result.ip.clone()),
+        is_alive: Set(result.is_alive),
+        open_ports: Set(ports_json),
+        fingerprint: Set(result.fingerprint.clone()),
+        scanned_at: Set(result.scanned_at.to_rfc3339()),
+    };
+
+    db_result.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn get_quick_scan_results_by_task(conn: &DatabaseConnection, task_id: &str) -> Result<Vec<quick_scan_result::Model>, DbErr> {
+    quick_scan_result::Entity::find()
+        .filter(quick_scan_result::Column::TaskId.eq(task_id))
+        .order_by_asc(quick_scan_result::Column::ScannedAt)
+        .all(conn)
+        .await
+}
+
+pub fn db_quick_scan_result_to_shared(db: quick_scan_result::Model) -> shared::QuickScanResult {
+    let open_ports: Vec<shared::PortInfo> = serde_json::from_str(&db.open_ports).unwrap_or_default();
+
+    let scanned_at: chrono::DateTime<Utc> = chrono::DateTime::parse_from_rfc3339(&db.scanned_at)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+        .unwrap_or_else(Utc::now);
+
+    shared::QuickScanResult {
+        ip: db.ip,
+        is_alive: db.is_alive,
+        open_ports,
+        fingerprint: db.fingerprint,
+        scanned_at,
+    }
+}
+
+// Advanced scan wrappers for handlers
+pub async fn get_advanced_scan_tasks() -> Result<Vec<advanced_scan_task::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_all_advanced_scan_tasks(&conn).await
+}
+
+pub async fn insert_advanced_scan_task_wrapper(task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_advanced_scan_task(&conn, task).await
+}
+
+pub async fn update_advanced_scan_task(task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    update_advanced_scan_task_by_id(&conn, task).await
+}
+
+pub async fn delete_advanced_scan_task(id: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_advanced_scan_task_by_id(&conn, id).await
+}
+
+pub async fn insert_quick_scan_result_wrapper(result: &shared::QuickScanResult, task_id: &str) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_quick_scan_result(&conn, result, task_id).await
+}
+
+pub async fn get_quick_scan_results(task_id: &str) -> Result<Vec<quick_scan_result::Model>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    get_quick_scan_results_by_task(&conn, task_id).await
+}

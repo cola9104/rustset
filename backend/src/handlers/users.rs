@@ -6,8 +6,10 @@ use serde::{Deserialize, Serialize};
 use shared::{User, CreateUserRequest, Role, Permissions, PasswordPolicy};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
+use crate::database::{db_user_to_shared, get_users as db_get_users, insert_user as db_insert_user, delete_user as db_delete_user, update_user as db_update_user};
 use uuid::Uuid;
 use chrono::Utc;
+use std::sync::Mutex;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChangePasswordRequest {
@@ -92,8 +94,21 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
     if user.role != Role::SysAdmin {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
-    let users = state.users.lock().unwrap();
-    Ok(Json(users.clone()))
+
+    // 使用新的 database API
+    match db_get_users().await {
+        Ok(db_users) => {
+            // Update in-memory cache
+            *state.users.lock().unwrap() = db_users.clone();
+            return Ok(Json(db_users));
+        }
+        Err(e) => {
+            eprintln!("Error loading users from database: {}", e);
+            // Fallback to memory cache
+            let users = state.users.lock().unwrap();
+            Ok(Json(users.clone()))
+        }
+    }
 }
 
 pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateUserRequest>) -> Result<Json<User>, (StatusCode, String)> {
@@ -102,9 +117,12 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
 
-    let mut users = state.users.lock().unwrap();
-    if users.iter().any(|u| u.username == req.username) {
-        return Err((StatusCode::BAD_REQUEST, "Username exists".to_string()));
+    // Check if username exists in memory
+    {
+        let users = state.users.lock().unwrap();
+        if users.iter().any(|u| u.username == req.username) {
+            return Err((StatusCode::BAD_REQUEST, "Username exists".to_string()));
+        }
     }
 
     // Set default permissions based on role
@@ -133,7 +151,17 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
         locked_until: None,
     };
 
-    users.push(new_user.clone());
+    // Add to in-memory storage
+    {
+        let mut users = state.users.lock().unwrap();
+        users.push(new_user.clone());
+    }
+
+    // Persist to database
+    if let Err(e) = db_insert_user(&new_user).await {
+        eprintln!("Error inserting user to database: {}", e);
+    }
+
     log_action(&state.audit_logs, &current_user, "CREATE_USER", &new_user.username, "Created new user");
 
     Ok(Json(new_user))
@@ -145,10 +173,18 @@ pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
 
-    let mut users = state.users.lock().unwrap();
-    if let Some(idx) = users.iter().position(|u| u.id == id) {
-        let removed = users.remove(idx);
-        log_action(&state.audit_logs, &current_user, "DELETE_USER", &removed.username, "Deleted user");
+    let removed = {
+        let mut users = state.users.lock().unwrap();
+        users.iter().position(|u| u.id == id).map(|idx| users.remove(idx))
+    };
+
+    if let Some(removed_user) = removed {
+        // Persist to database
+        if let Err(e) = db_delete_user(&id).await {
+            eprintln!("Error deleting user from database: {}", e);
+        }
+
+        log_action(&state.audit_logs, &current_user, "DELETE_USER", &removed_user.username, "Deleted user");
         Ok(Json("Deleted".to_string()))
     } else {
         Err((StatusCode::NOT_FOUND, "User not found".to_string()))
@@ -184,18 +220,42 @@ pub async fn update_user_permissions(
         return Err((StatusCode::FORBIDDEN, "Permission denied".to_string()));
     }
 
-    let mut users = state.users.lock().unwrap();
-    if let Some(idx) = users.iter().position(|u| u.id == id) {
-        let user = &mut users[idx];
-        println!("✅ 找到用户: {}, 更新权限", user.username);
-        user.permissions = Some(permissions.clone());
+    // Find the user and clone necessary data before async operations
+    let (user_id, username) = {
+        let mut users = state.users.lock().unwrap();
+        if let Some(idx) = users.iter().position(|u| u.id == id) {
+            let user = &mut users[idx];
+            println!("✅ 找到用户: {}, 更新权限", user.username);
+            user.permissions = Some(permissions.clone());
+            (user.id.clone(), user.username.clone())
+        } else {
+            println!("❌ 用户未找到: {}", id);
+            return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
+        }
+    };
 
-        log_action(&state.audit_logs, &current_user, "UPDATE_PERMISSIONS", &user.username, "Updated user permissions");
+    // Persist to database (after releasing the lock)
+    let user_for_db = {
+        let users = state.users.lock().unwrap();
+        users.iter().find(|u| u.id == user_id).cloned()
+    };
 
+    if let Some(user) = user_for_db {
+        if let Err(e) = db_update_user(&user.id, &user).await {
+            eprintln!("Error updating user permissions in database: {}", e);
+        }
+
+        log_action(&state.audit_logs, &current_user, "UPDATE_PERMISSIONS", &username, "Updated user permissions");
         println!("✅ 权限更新成功");
-        Ok(Json(user.clone()))
+
+        // Get updated user for response
+        let users = state.users.lock().unwrap();
+        if let Some(user) = users.iter().find(|u| u.id == user_id) {
+            Ok(Json(user.clone()))
+        } else {
+            Err((StatusCode::NOT_FOUND, "User not found".to_string()))
+        }
     } else {
-        println!("❌ 用户未找到: {}", id);
         Err((StatusCode::NOT_FOUND, "User not found".to_string()))
     }
 }
@@ -216,46 +276,70 @@ pub async fn change_password(
         return Err((StatusCode::BAD_REQUEST, e));
     }
 
-    let mut users = state.users.lock().unwrap();
-    if let Some(idx) = users.iter().position(|u| u.id == current_user.id) {
-        let user = &mut users[idx];
+    // 计算密码强度
+    let (strength, _) = calculate_password_strength(&req.new_password);
 
-        // 验证当前密码
-        if user.password != req.current_password {
-            return Err((StatusCode::BAD_REQUEST, "Current password is incorrect".to_string()));
+    // Find user and validate current password
+    let (user_id, username) = {
+        let users = state.users.lock().unwrap();
+        if let Some(user) = users.iter().find(|u| u.id == current_user.id) {
+            // 验证当前密码
+            if user.password != req.current_password {
+                return Err((StatusCode::BAD_REQUEST, "Current password is incorrect".to_string()));
+            }
+            (user.id.clone(), user.username.clone())
+        } else {
+            return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
         }
+    };
 
-        // 计算密码强度
-        let (strength, _) = calculate_password_strength(&req.new_password);
+    // Update password (release lock before async operation)
+    let new_password = req.new_password.clone();
+    let password_changed_at = Utc::now();
 
-        // 更新密码和相关字段
-        user.password = req.new_password;
-        user.password_changed_at = Some(Utc::now());
-        user.password_strength = Some(strength.clone());
-
-        // 记录密码历史
-        let mut history = state.password_history.lock().unwrap();
-        history.push((user.id.clone(), user.password.clone(), Utc::now()));
-
-        log_action(&state.audit_logs, &current_user, "CHANGE_PASSWORD", &user.username,
-                   &format!("Password changed, strength: {}", strength));
-
-        Ok(Json("Password changed successfully".to_string()))
-    } else {
-        Err((StatusCode::NOT_FOUND, "User not found".to_string()))
+    {
+        let mut users = state.users.lock().unwrap();
+        if let Some(user) = users.iter_mut().find(|u| u.id == user_id) {
+            user.password = new_password.clone();
+            user.password_changed_at = Some(password_changed_at);
+            user.password_strength = Some(strength.clone());
+        }
     }
+
+    // Persist to database (after releasing the lock)
+    let user_for_db = {
+        let users = state.users.lock().unwrap();
+        users.iter().find(|u| u.id == user_id).cloned()
+    };
+
+    if let Some(user) = user_for_db {
+        if let Err(e) = db_update_user(&user.id, &user).await {
+            eprintln!("Error updating user password in database: {}", e);
+        }
+    }
+
+    // 记录密码历史
+    {
+        let mut history = state.password_history.lock().unwrap();
+        history.push((user_id.clone(), new_password, Utc::now()));
+    }
+
+    log_action(&state.audit_logs, &current_user, "CHANGE_PASSWORD", &username,
+               &format!("Password changed, strength: {}", strength));
+
+    Ok(Json("Password changed successfully".to_string()))
 }
 
 // 获取密码策略
 pub async fn get_password_policy(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
     let user = get_current_user(&headers, &state.users)
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    
+
     // 只有 admin 可以查看密码策略
     if user.role != Role::SysAdmin {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
-    
+
     let policy = state.password_policy.lock().unwrap();
     Ok(Json(policy.clone()))
 }
@@ -268,12 +352,12 @@ pub async fn update_password_policy(
 ) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    
+
     // 只有 admin 可以修改密码策略
     if current_user.role != Role::SysAdmin {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
-    
+
     let mut policy_state = state.password_policy.lock().unwrap();
     *policy_state = policy.clone();
 

@@ -6,11 +6,26 @@ use std::net::IpAddr;
 use shared::{Asset, PortInfo, PortBindingRequest, Role};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action, determine_zone};
+use crate::database::{get_assets as db_get_assets, insert_asset_wrapper as db_insert_asset, update_asset as db_update_asset, delete_asset as db_delete_asset, db_asset_to_shared};
 
 pub async fn get_assets(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<Asset>>, (StatusCode, String)> {
     let _user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    let assets = state.assets.lock().unwrap();
-    Ok(Json(assets.clone()))
+
+    // Try to load from database first
+    match db_get_assets().await {
+        Ok(db_assets) => {
+            let assets: Vec<Asset> = db_assets.into_iter().map(db_asset_to_shared).collect();
+            // Update in-memory cache
+            *state.assets.lock().unwrap() = assets.clone();
+            return Ok(Json(assets));
+        }
+        Err(e) => {
+            eprintln!("Error loading assets from database: {}", e);
+            // Fallback to memory cache
+            let assets = state.assets.lock().unwrap();
+            Ok(Json(assets.clone()))
+        }
+    }
 }
 
 pub async fn add_asset(State(state): State<AppState>, headers: HeaderMap, Json(mut asset): Json<Asset>) -> Result<Json<Asset>, (StatusCode, String)> {
@@ -28,15 +43,21 @@ pub async fn add_asset(State(state): State<AppState>, headers: HeaderMap, Json(m
         asset.zone = determine_zone(&asset.ip, &zones);
     }
 
-    let mut assets = state.assets.lock().unwrap();
-    let new_id = assets.len() as i32 + 1;
-    asset.id = Some(new_id);
-    asset.created_by = Some(user.username.clone());
-    assets.push(asset.clone());
+    let new_asset = {
+        let mut assets = state.assets.lock().unwrap();
+        let new_id = assets.len() as i32 + 1;
+        asset.id = Some(new_id);
+        asset.created_by = Some(user.username.clone());
+        assets.push(asset.clone());
+        asset
+    };
 
-    log_action(&state.audit_logs, &user, "CREATE_ASSET", &asset.name, &format!("IP: {}", asset.ip));
+    // Persist to database (after releasing lock)
+    let _ = db_insert_asset(&new_asset).await;
 
-    Ok(Json(asset))
+    log_action(&state.audit_logs, &user, "CREATE_ASSET", &new_asset.name, &format!("IP: {}", new_asset.ip));
+
+    Ok(Json(new_asset))
 }
 
 pub async fn update_asset(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<i32>, Json(req): Json<Asset>) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
@@ -49,28 +70,44 @@ pub async fn update_asset(State(state): State<AppState>, headers: HeaderMap, Pat
         return Err((StatusCode::BAD_REQUEST, "Invalid IP address format".to_string()));
     }
 
-    let zones = state.zones.lock().unwrap();
-    let mut assets = state.assets.lock().unwrap();
-    
-    if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
-        asset.name = req.name;
-        if asset.ip != req.ip {
-             asset.ip = req.ip.clone();
-             asset.zone = determine_zone(&asset.ip, &zones);
-        }
-        asset.contact_person = req.contact_person;
-        asset.contact_phone = req.contact_phone;
-        asset.owner = req.owner;
-        asset.weight = req.weight;
-        asset.labels = req.labels;
-        asset.os = req.os;
-        asset.device_type = req.device_type;
-        asset.updated_by = Some(user.username.clone());
+    // Clone zones data before acquiring assets lock
+    let zones = {
+        let zones_lock = state.zones.lock().unwrap();
+        zones_lock.clone()
+    };
 
-        log_action(&state.audit_logs, &user, "UPDATE_ASSET", &asset.name, "Updated asset details");
-        return Ok(Json(Some(asset.clone())));
+    // Find and update asset, then release lock before async operations
+    let (found, updated_asset) = {
+        let mut assets = state.assets.lock().unwrap();
+        if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
+            asset.name = req.name.clone();
+            if asset.ip != req.ip {
+                 asset.ip = req.ip.clone();
+                 asset.zone = determine_zone(&asset.ip, &zones);
+            }
+            asset.contact_person = req.contact_person.clone();
+            asset.contact_phone = req.contact_phone.clone();
+            asset.owner = req.owner;
+            asset.weight = req.weight;
+            asset.labels = req.labels.clone();
+            asset.os = req.os.clone();
+            asset.device_type = req.device_type.clone();
+            asset.updated_by = Some(user.username.clone());
+            (true, asset.clone())
+        } else {
+            (false, req)
+        }
+    };
+
+    if found {
+        // Persist to database (after releasing lock)
+        let _ = db_update_asset(id, &updated_asset).await;
+
+        log_action(&state.audit_logs, &user, "UPDATE_ASSET", &updated_asset.name, "Updated asset details");
+        Ok(Json(Some(updated_asset)))
+    } else {
+        Ok(Json(None))
     }
-    Ok(Json(None))
 }
 
 pub async fn delete_asset(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<i32>) -> Result<Json<String>, (StatusCode, String)> {
@@ -79,9 +116,15 @@ pub async fn delete_asset(State(state): State<AppState>, headers: HeaderMap, Pat
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut assets = state.assets.lock().unwrap();
-    assets.retain(|a| a.id != Some(id));
-    
+    // Remove from in-memory storage
+    {
+        let mut assets = state.assets.lock().unwrap();
+        assets.retain(|a| a.id != Some(id));
+    }
+
+    // Persist to database (after releasing lock)
+    let _ = db_delete_asset(id).await;
+
     log_action(&state.audit_logs, &user, "DELETE_ASSET", &id.to_string(), "Deleted asset");
     Ok(Json("Deleted".to_string()))
 }

@@ -13,13 +13,17 @@ use shared::{
     Asset, NetworkZone, PortInfo, ZoneConfig,
     User, Role, PasswordPolicy,
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 mod state;
 mod utils;
 mod handlers;
 mod scanners;
+mod database;
+mod config;
+mod entities;
+mod migration;
 
 use state::AppState;
 use handlers::{
@@ -47,6 +51,10 @@ use handlers::{
     cloud_platforms::{
         get_cloud_platforms, get_cloud_platform, create_cloud_platform, update_cloud_platform,
         delete_cloud_platform, get_platforms_by_zone,
+    },
+    cloud_service_assets::{
+        get_cloud_service_assets,
+        get_cloud_service_stats,
     },
 };
 
@@ -143,6 +151,27 @@ async fn main() {
         },
     ];
 
+    // 初始化数据库 (使用 SeaORM)
+    let db_config = config::DatabaseConfig::from_env();
+    database::init_db(&db_config.connection_string)
+        .await
+        .expect("Failed to initialize database");
+    println!("Database initialized: type={}, url={}",
+        db_config.db_type,
+        db_config.connection_string.chars().take(50).collect::<String>() // 只显示前50个字符避免泄露密码
+    );
+
+    // 获取数据库连接
+    let db_conn = database::get_db().expect("Database not initialized");
+
+    // 从数据库加载数据 (使用 SeaORM)
+    let loaded_users = load_users_from_db(&db_conn).await;
+    println!("Loaded {} users from database", loaded_users.len());
+    let initial_users = if loaded_users.is_empty() { initial_users } else { loaded_users };
+
+    let loaded_audit_logs = load_audit_logs_from_db(&db_conn).await;
+    println!("Loaded {} audit logs from database", loaded_audit_logs.len());
+
     // 初始化扫描管理器
     let scan_manager = scanners::engine::ScanManager::new().await.ok();
 
@@ -155,13 +184,47 @@ async fn main() {
             ZoneConfig { id: "2".to_string(), name: "DMZ".to_string(), cidr: "10.0.0.0/8".to_string(), priority: 20 },
         ])),
         users: Arc::new(StdMutex::new(initial_users)),
-        audit_logs: Arc::new(StdMutex::new(vec![])),
+        audit_logs: Arc::new(StdMutex::new(loaded_audit_logs)),
         advanced_tasks: Arc::new(StdMutex::new(vec![])),
         custom_roles: Arc::new(StdMutex::new(vec![])),
         scan_manager: Arc::new(TokioMutex::new(scan_manager)),
         password_policy: Arc::new(StdMutex::new(PasswordPolicy::default())),
         password_history: Arc::new(StdMutex::new(vec![])),
     };
+
+    // 数据加载辅助函数 (使用 SeaORM)
+    async fn load_users_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::User> {
+        match database::get_users_with_conn(conn).await {
+            Ok(users) => users,
+            Err(e) => {
+                eprintln!("Error loading users from database: {}", e);
+                vec![]
+            }
+        }
+    }
+
+    async fn load_audit_logs_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::AuditLog> {
+        use crate::database::get_audit_logs_with_conn as get_audit_logs_db;
+        match get_audit_logs_db(conn, Some(1000)).await {
+            Ok(logs) => logs.into_iter().map(|db_log| {
+                shared::AuditLog {
+                    id: db_log.id,
+                    user_id: db_log.user_id,
+                    username: db_log.username,
+                    action: db_log.action,
+                    target: db_log.target,
+                    details: db_log.details,
+                    timestamp: chrono::DateTime::parse_from_rfc3339(&db_log.timestamp)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                }
+            }).collect(),
+            Err(e) => {
+                eprintln!("Error loading audit logs from database: {}", e);
+                vec![]
+            }
+        }
+    }
 
     let app = Router::new()
         // Auth
@@ -215,6 +278,9 @@ async fn main() {
         .route("/api/cloud-platforms", get(get_cloud_platforms).post(create_cloud_platform))
         .route("/api/cloud-platforms/:id", get(get_cloud_platform).put(update_cloud_platform).delete(delete_cloud_platform))
         .route("/api/cloud-platforms/zone/:zone_id", get(get_platforms_by_zone))
+        // Cloud Service Assets (云服务资产 - 统一视图)
+        .route("/api/cloud-service-assets", get(get_cloud_service_assets))
+        .route("/api/cloud-service-assets/stats", get(get_cloud_service_stats))
         // IP Zones (TODO: implement handlers)
         // .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
         // .route("/api/ip-zones/:id", get(get_ip_zone).delete(delete_ip_zone).put(update_ip_zone))
@@ -235,9 +301,9 @@ async fn main() {
         // .route("/api/cloud-assets/:id", get(get_cloud_asset).put(update_cloud_asset).delete(delete_cloud_asset))
         // Scan
         .route("/api/scan", post(trigger_scan))
+        .with_state(state)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+        .layer(CorsLayer::permissive());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3003));
     println!("Backend listening on {}", addr);

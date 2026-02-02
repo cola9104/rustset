@@ -11,3 +11,4 @@ pub mod advanced_scan;
 pub mod cloud_providers;
 pub mod cloud_zones;
 pub mod cloud_platforms;
+pub mod cloud_service_assets;
