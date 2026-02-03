@@ -52,8 +52,8 @@ start_backend() {
         cargo build --bin backend
     fi
 
-    # 启动后端
-    nohup ./target/debug/backend > /tmp/rustset-backend.log 2>&1 &
+    # 启动后端 (使用相对路径)
+    DATABASE_URL="sqlite:data/rustset.db" nohup ./target/debug/backend > /tmp/rustset-backend.log 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > /tmp/rustset-backend.pid
 

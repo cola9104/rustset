@@ -119,14 +119,83 @@ impl ResourceType {
 /// 物理机特有信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicalMachineInfo {
-    pub serial_number: String,           // 设备序列号
+    pub id: Option<i32>,
+    pub business_resource_id: Option<i32>,
+    pub serial_number: Option<String>,           // 设备序列号
     pub rack_location: Option<String>,    // 机架位置 (如: A区-03机柜-U12)
     pub hardware_model: Option<String>,   // 硬件型号 (如: Dell PowerEdge R740)
     pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
     pub agent_status: Option<String>,     // Agent 状态 (installed/online/offline/none)
     pub ipmi_address: Option<String>,     // IPMI/iDRAC 地址
-    pub ipmi_username: Option<String>,    // IPMI 用户名
-    pub ipmi_password: Option<String>,    // IPMI 密码
+}
+
+/// 云虚拟机特有信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudVirtualMachineInfo {
+    pub id: Option<i32>,
+    pub business_resource_id: Option<i32>,
+    pub billing_mode: Option<String>,         // 计费模式 (按量付费/包年包月)
+    pub expire_time: Option<DateTime<Utc>>,   // 到期时间
+    pub charge_type: Option<String>,          // 付费类型
+    pub instance_charge_type: Option<String>, // 实例计费类型
+    pub internet_charge_type: Option<String>, // 网络计费类型
+    pub internet_max_bandwidth_out: Option<i32>, // 公网带宽出带宽最大值
+    pub image_id: Option<String>,             // 镜像ID
+    pub v_switch_id: Option<String>,          // 虚拟交换机ID
+    pub vpc_id: Option<String>,               // VPC ID
+    pub security_group_ids: Option<Vec<String>>, // 安全组ID列表
+}
+
+/// 创建物理机详情请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreatePhysicalMachineInfo {
+    pub serial_number: Option<String>,
+    pub rack_location: Option<String>,
+    pub hardware_model: Option<String>,
+    pub warranty_expiry: Option<DateTime<Utc>>,
+    pub agent_status: Option<String>,
+    pub ipmi_address: Option<String>,
+}
+
+/// 创建云虚拟机详情请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCloudVirtualMachineInfo {
+    pub billing_mode: Option<String>,
+    pub expire_time: Option<DateTime<Utc>>,
+    pub charge_type: Option<String>,
+    pub instance_charge_type: Option<String>,
+    pub internet_charge_type: Option<String>,
+    pub internet_max_bandwidth_out: Option<i32>,
+    pub image_id: Option<String>,
+    pub v_switch_id: Option<String>,
+    pub vpc_id: Option<String>,
+    pub security_group_ids: Option<Vec<String>>,
+}
+
+/// 更新物理机详情请求
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UpdatePhysicalMachineInfo {
+    pub serial_number: Option<String>,
+    pub rack_location: Option<String>,
+    pub hardware_model: Option<String>,
+    pub warranty_expiry: Option<DateTime<Utc>>,
+    pub agent_status: Option<String>,
+    pub ipmi_address: Option<String>,
+}
+
+/// 更新云虚拟机详情请求
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UpdateCloudVirtualMachineInfo {
+    pub billing_mode: Option<String>,
+    pub expire_time: Option<DateTime<Utc>>,
+    pub charge_type: Option<String>,
+    pub instance_charge_type: Option<String>,
+    pub internet_charge_type: Option<String>,
+    pub internet_max_bandwidth_out: Option<i32>,
+    pub image_id: Option<String>,
+    pub v_switch_id: Option<String>,
+    pub vpc_id: Option<String>,
+    pub security_group_ids: Option<Vec<String>>,
 }
 
 /// 业务受理单 - 云资源管理 & 物理机管理
@@ -182,13 +251,9 @@ pub struct BusinessResource {
     pub bastion_admin_account: Option<String>, // 堡垒机管理员账号
     pub bastion_initial_password: Option<String>, // 堡垒机初始密码
 
-    // 物理机特有信息 (仅当 resource_type = physical 时使用)
-    pub serial_number: Option<String>,         // 设备序列号
-    pub rack_location: Option<String>,         // 机架位置
-    pub hardware_model: Option<String>,        // 硬件型号
-    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
-    pub agent_status: Option<String>,          // Agent 状态
-    pub ipmi_address: Option<String>,          // IPMI/iDRAC 地址
+    // 资源类型特有信息 (根据 resource_type 选择其一)
+    pub physical_machine_info: Option<PhysicalMachineInfo>,    // 物理机特有信息
+    pub cloud_vm_info: Option<CloudVirtualMachineInfo>,        // 云虚拟机特有信息
 
     // 其他
     pub remarks: Option<String>,         // 备注
@@ -233,12 +298,9 @@ pub struct CreateBusinessResourceRequest {
     pub bastion_address: Option<String>,
     pub bastion_admin_account: Option<String>,
     pub bastion_initial_password: Option<String>,
-    // 物理机特有字段
-    pub serial_number: Option<String>,         // 设备序列号
-    pub rack_location: Option<String>,         // 机架位置
-    pub hardware_model: Option<String>,        // 硬件型号
-    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
-    pub ipmi_address: Option<String>,          // IPMI/iDRAC 地址
+    // 资源类型特有信息 (根据 resource_type 选择其一)
+    pub physical_machine_info: Option<CreatePhysicalMachineInfo>,    // 物理机特有信息
+    pub cloud_vm_info: Option<CreateCloudVirtualMachineInfo>,        // 云虚拟机特有信息
     pub remarks: Option<String>,
 }
 
@@ -275,13 +337,9 @@ pub struct UpdateBusinessResourceRequest {
     pub bastion_address: Option<String>,
     pub bastion_admin_account: Option<String>,
     pub bastion_initial_password: Option<String>,
-    // 物理机特有字段
-    pub serial_number: Option<String>,         // 设备序列号
-    pub rack_location: Option<String>,         // 机架位置
-    pub hardware_model: Option<String>,        // 硬件型号
-    pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
-    pub agent_status: Option<String>,          // Agent 状态
-    pub ipmi_address: Option<String>,          // IPMI/iDRAC 地址
+    // 资源类型特有信息更新 (根据 resource_type 选择其一)
+    pub physical_machine_info: Option<UpdatePhysicalMachineInfo>,    // 物理机特有信息更新
+    pub cloud_vm_info: Option<UpdateCloudVirtualMachineInfo>,        // 云虚拟机特有信息更新
     pub remarks: Option<String>,
 }
 
@@ -318,12 +376,8 @@ impl Default for UpdateBusinessResourceRequest {
             bastion_address: None,
             bastion_admin_account: None,
             bastion_initial_password: None,
-            serial_number: None,
-            rack_location: None,
-            hardware_model: None,
-            warranty_expiry: None,
-            agent_status: None,
-            ipmi_address: None,
+            physical_machine_info: None,
+            cloud_vm_info: None,
             remarks: None,
         }
     }

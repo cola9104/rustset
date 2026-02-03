@@ -1233,6 +1233,9 @@ fn BusinessApplication() -> Html {
     let resources = use_state(|| Vec::new());
     let loading = use_state(|| true);
 
+    // Active tab state: "all", "cloud", "physical"
+    let active_tab = use_state(|| "all".to_string());
+
     // Active cloud provider configs (from cloud-provider-configs/active API)
     let active_configs = use_state(|| Vec::<CloudProviderConfig>::new());
 
@@ -1278,12 +1281,8 @@ fn BusinessApplication() -> Html {
         bastion_address: None,
         bastion_admin_account: None,
         bastion_initial_password: None,
-        // 物理机特有字段
-        serial_number: None,
-        rack_location: None,
-        hardware_model: None,
-        warranty_expiry: None,
-        ipmi_address: None,
+        physical_machine_info: None,
+        cloud_vm_info: None,
         remarks: None,
     });
 
@@ -1473,13 +1472,32 @@ fn BusinessApplication() -> Html {
                         bastion_address: data.bastion_address.clone(),
                         bastion_admin_account: data.bastion_admin_account.clone(),
                         bastion_initial_password: data.bastion_initial_password.clone(),
-                        // 物理机特有字段
-                        serial_number: data.serial_number.clone(),
-                        rack_location: data.rack_location.clone(),
-                        hardware_model: data.hardware_model.clone(),
-                        warranty_expiry: data.warranty_expiry,
-                        agent_status: None,
-                        ipmi_address: data.ipmi_address.clone(),
+                        // 物理机特有字段 - 使用嵌套结构
+                        physical_machine_info: data.physical_machine_info.as_ref().map(|info| {
+                            shared::UpdatePhysicalMachineInfo {
+                                serial_number: info.serial_number.clone(),
+                                rack_location: info.rack_location.clone(),
+                                hardware_model: info.hardware_model.clone(),
+                                warranty_expiry: info.warranty_expiry,
+                                agent_status: info.agent_status.clone(),
+                                ipmi_address: info.ipmi_address.clone(),
+                            }
+                        }),
+                        // 云虚拟机特有字段 - 使用嵌套结构
+                        cloud_vm_info: data.cloud_vm_info.as_ref().map(|info| {
+                            shared::UpdateCloudVirtualMachineInfo {
+                                billing_mode: info.billing_mode.clone(),
+                                expire_time: info.expire_time,
+                                charge_type: info.charge_type.clone(),
+                                instance_charge_type: info.instance_charge_type.clone(),
+                                internet_charge_type: info.internet_charge_type.clone(),
+                                internet_max_bandwidth_out: info.internet_max_bandwidth_out,
+                                image_id: info.image_id.clone(),
+                                v_switch_id: info.v_switch_id.clone(),
+                                vpc_id: info.vpc_id.clone(),
+                                security_group_ids: info.security_group_ids.clone(),
+                            }
+                        }),
                         remarks: data.remarks.clone(),
                     };
                     let url = format!("{}/{}", api_url("business-resources"), id);
@@ -1517,6 +1535,34 @@ fn BusinessApplication() -> Html {
         let form_data = form_data.clone();
 
         Callback::from(move |resource: BusinessResource| {
+            // Convert PhysicalMachineInfo to CreatePhysicalMachineInfo for editing
+            let physical_machine_info = resource.physical_machine_info.as_ref().map(|pm| {
+                shared::CreatePhysicalMachineInfo {
+                    serial_number: pm.serial_number.clone(),
+                    rack_location: pm.rack_location.clone(),
+                    hardware_model: pm.hardware_model.clone(),
+                    warranty_expiry: pm.warranty_expiry,
+                    agent_status: pm.agent_status.clone(),
+                    ipmi_address: pm.ipmi_address.clone(),
+                }
+            });
+
+            // Convert CloudVirtualMachineInfo to CreateCloudVirtualMachineInfo for editing
+            let cloud_vm_info = resource.cloud_vm_info.as_ref().map(|cvm| {
+                shared::CreateCloudVirtualMachineInfo {
+                    billing_mode: cvm.billing_mode.clone(),
+                    expire_time: cvm.expire_time,
+                    charge_type: cvm.charge_type.clone(),
+                    instance_charge_type: cvm.instance_charge_type.clone(),
+                    internet_charge_type: cvm.internet_charge_type.clone(),
+                    internet_max_bandwidth_out: cvm.internet_max_bandwidth_out,
+                    image_id: cvm.image_id.clone(),
+                    v_switch_id: cvm.v_switch_id.clone(),
+                    vpc_id: cvm.vpc_id.clone(),
+                    security_group_ids: cvm.security_group_ids.clone(),
+                }
+            });
+
             let edit_data = CreateBusinessResourceRequest {
                 resource_type: resource.resource_type.clone(),
                 ecs_name: resource.ecs_name.clone(),
@@ -1550,12 +1596,8 @@ fn BusinessApplication() -> Html {
                 bastion_address: resource.bastion_address.clone(),
                 bastion_admin_account: resource.bastion_admin_account.clone(),
                 bastion_initial_password: resource.bastion_initial_password.clone(),
-                // 物理机特有字段
-                serial_number: resource.serial_number.clone(),
-                rack_location: resource.rack_location.clone(),
-                hardware_model: resource.hardware_model.clone(),
-                warranty_expiry: resource.warranty_expiry,
-                ipmi_address: resource.ipmi_address.clone(),
+                physical_machine_info,
+                cloud_vm_info,
                 remarks: resource.remarks.clone(),
             };
 
@@ -1630,12 +1672,8 @@ fn BusinessApplication() -> Html {
                 bastion_address: None,
                 bastion_admin_account: None,
                 bastion_initial_password: None,
-                // 物理机特有字段
-                serial_number: None,
-                rack_location: None,
-                hardware_model: None,
-                warranty_expiry: None,
-                ipmi_address: None,
+                physical_machine_info: None,
+                cloud_vm_info: None,
                 remarks: None,
             });
             editing_id.set(None);
@@ -1743,6 +1781,16 @@ fn BusinessApplication() -> Html {
         })
     };
 
+    // 根据选中的标签过滤资源列表 - 在 html! 宏之外计算
+    let filtered_resources: Vec<&BusinessResource> = (*resources).iter().filter(|resource| {
+        match (*active_tab).as_str() {
+            "all" => true,
+            "cloud" => resource.resource_type == "cloud",
+            "physical" => resource.resource_type == "physical",
+            _ => true,
+        }
+    }).collect();
+
     html! {
         <div class="container p-4">
             <h1 class="title">{ lang.t("business_application") }</h1>
@@ -1754,11 +1802,50 @@ fn BusinessApplication() -> Html {
                             let show_form = show_form.clone();
                             let selected_zone_id = selected_zone_id.clone();
                             let selected_platform_id = selected_platform_id.clone();
+                            let active_tab = active_tab.clone();
+                            let form_data = form_data.clone();
                             Callback::from(move |_| {
                                 show_form.set(true);
                                 // 打开新表单时重置云区和云平台选择
                                 selected_zone_id.set(None);
                                 selected_platform_id.set(None);
+
+                                // 根据当前选中的标签预设资源类型
+                                let mut data = (*form_data).clone();
+                                match (*active_tab).as_str() {
+                                    "cloud" => {
+                                        data.resource_type = "cloud".to_string();
+                                        data.cloud_vm_info = Some(shared::CreateCloudVirtualMachineInfo {
+                                            billing_mode: None,
+                                            expire_time: None,
+                                            charge_type: None,
+                                            instance_charge_type: None,
+                                            internet_charge_type: None,
+                                            internet_max_bandwidth_out: None,
+                                            image_id: None,
+                                            v_switch_id: None,
+                                            vpc_id: None,
+                                            security_group_ids: None,
+                                        });
+                                        data.physical_machine_info = None;
+                                    }
+                                    "physical" => {
+                                        data.resource_type = "physical".to_string();
+                                        data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                            serial_number: None,
+                                            rack_location: None,
+                                            hardware_model: None,
+                                            warranty_expiry: None,
+                                            agent_status: None,
+                                            ipmi_address: None,
+                                        });
+                                        data.cloud_vm_info = None;
+                                    }
+                                    _ => {
+                                        // "all" tab - don't pre-select
+                                    }
+                                }
+                                form_data.set(data);
                             })
                         }>
                             <span class="icon"><i class="fas fa-plus"></i></span>
@@ -1780,6 +1867,42 @@ fn BusinessApplication() -> Html {
                             <span>{ lang.t("export") }</span>
                         </button>
                     </div>
+                </div>
+
+                // 标签页：全部 | 云服务器 | 物理机
+                <div class="tabs is-boxed mb-4">
+                    <ul>
+                        <li class={if (*active_tab) == "all" { "is-active" } else { "" }}>
+                            <a onclick={
+                                let active_tab = active_tab.clone();
+                                Callback::from(move |_| {
+                                    active_tab.set("all".to_string());
+                                })
+                            }>
+                                { "全部" }
+                            </a>
+                        </li>
+                        <li class={if (*active_tab) == "cloud" { "is-active" } else { "" }}>
+                            <a onclick={
+                                let active_tab = active_tab.clone();
+                                Callback::from(move |_| {
+                                    active_tab.set("cloud".to_string());
+                                })
+                            }>
+                                { "云服务器" }
+                            </a>
+                        </li>
+                        <li class={if (*active_tab) == "physical" { "is-active" } else { "" }}>
+                            <a onclick={
+                                let active_tab = active_tab.clone();
+                                Callback::from(move |_| {
+                                    active_tab.set("physical".to_string());
+                                })
+                            }>
+                                { "物理机" }
+                            </a>
+                        </li>
+                    </ul>
                 </div>
 
                 if *show_form {
@@ -2302,6 +2425,216 @@ fn BusinessApplication() -> Html {
                                         </label>
                                     </div>
 
+                                    // 物理机专用字段 - 只有选择物理机时才显示
+                                    if (*form_data).resource_type == "physical" {
+                                        <div class="column is-12">
+                                            <div class="message is-info">
+                                                <div class="message-body">
+                                                    <strong>{ "物理机信息" }</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 设备序列号
+                                        <div class="column is-6">
+                                            <label class="label">{ "设备序列号" }</label>
+                                            <input
+                                                type="text"
+                                                class="input"
+                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.serial_number.clone()).unwrap_or_default()}
+                                                placeholder="SN: xxxxxx"
+                                                onchange={
+                                                    let form_data = form_data.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                        let mut data = (*form_data).clone();
+                                                        if data.physical_machine_info.is_none() {
+                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                                                serial_number: None,
+                                                                rack_location: None,
+                                                                hardware_model: None,
+                                                                warranty_expiry: None,
+                                                                agent_status: None,
+                                                                ipmi_address: None,
+                                                            });
+                                                        }
+                                                        if let Some(ref mut pm) = data.physical_machine_info {
+                                                            pm.serial_number = if input.value().is_empty() { None } else { Some(input.value()) };
+                                                        }
+                                                        form_data.set(data);
+                                                    })
+                                                }
+                                            />
+                                        </div>
+
+                                        // 机架位置
+                                        <div class="column is-6">
+                                            <label class="label">{ "机架位置" }</label>
+                                            <input
+                                                type="text"
+                                                class="input"
+                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.rack_location.clone()).unwrap_or_default()}
+                                                placeholder="A区-03机柜-U12"
+                                                onchange={
+                                                    let form_data = form_data.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                        let mut data = (*form_data).clone();
+                                                        if data.physical_machine_info.is_none() {
+                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                                                serial_number: None,
+                                                                rack_location: None,
+                                                                hardware_model: None,
+                                                                warranty_expiry: None,
+                                                                agent_status: None,
+                                                                ipmi_address: None,
+                                                            });
+                                                        }
+                                                        if let Some(ref mut pm) = data.physical_machine_info {
+                                                            pm.rack_location = if input.value().is_empty() { None } else { Some(input.value()) };
+                                                        }
+                                                        form_data.set(data);
+                                                    })
+                                                }
+                                            />
+                                        </div>
+
+                                        // 硬件型号
+                                        <div class="column is-6">
+                                            <label class="label">{ "硬件型号" }</label>
+                                            <input
+                                                type="text"
+                                                class="input"
+                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.hardware_model.clone()).unwrap_or_default()}
+                                                placeholder="Dell PowerEdge R740"
+                                                onchange={
+                                                    let form_data = form_data.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                        let mut data = (*form_data).clone();
+                                                        if data.physical_machine_info.is_none() {
+                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                                                serial_number: None,
+                                                                rack_location: None,
+                                                                hardware_model: None,
+                                                                warranty_expiry: None,
+                                                                agent_status: None,
+                                                                ipmi_address: None,
+                                                            });
+                                                        }
+                                                        if let Some(ref mut pm) = data.physical_machine_info {
+                                                            pm.hardware_model = if input.value().is_empty() { None } else { Some(input.value()) };
+                                                        }
+                                                        form_data.set(data);
+                                                    })
+                                                }
+                                            />
+                                        </div>
+
+                                        // Agent 状态
+                                        <div class="column is-6">
+                                            <label class="label">{ "Agent 状态" }</label>
+                                            <div class="select is-fullwidth">
+                                                <select
+                                                    value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.agent_status.clone()).unwrap_or_else(|| "none".to_string())}
+                                                    onchange={
+                                                        let form_data = form_data.clone();
+                                                        Callback::from(move |e: Event| {
+                                                            let select: HtmlSelectElement = e.target_unchecked_into();
+                                                            let mut data = (*form_data).clone();
+                                                            if data.physical_machine_info.is_none() {
+                                                                data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                                                    serial_number: None,
+                                                                    rack_location: None,
+                                                                    hardware_model: None,
+                                                                    warranty_expiry: None,
+                                                                    agent_status: None,
+                                                                    ipmi_address: None,
+                                                                });
+                                                            }
+                                                            if let Some(ref mut pm) = data.physical_machine_info {
+                                                                pm.agent_status = if select.value().is_empty() { None } else { Some(select.value()) };
+                                                            }
+                                                            form_data.set(data);
+                                                        })
+                                                    }
+                                                >
+                                                    <option value="none">{ "未安装" }</option>
+                                                    <option value="installed">{ "已安装" }</option>
+                                                    <option value="online">{ "在线" }</option>
+                                                    <option value="offline">{ "离线" }</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        // IPMI/iDRAC 地址
+                                        <div class="column is-6">
+                                            <label class="label">{ "IPMI/iDRAC 地址" }</label>
+                                            <input
+                                                type="text"
+                                                class="input"
+                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.ipmi_address.clone()).unwrap_or_default()}
+                                                placeholder="https://192.168.1.100"
+                                                onchange={
+                                                    let form_data = form_data.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                        let mut data = (*form_data).clone();
+                                                        if data.physical_machine_info.is_none() {
+                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                                                serial_number: None,
+                                                                rack_location: None,
+                                                                hardware_model: None,
+                                                                warranty_expiry: None,
+                                                                agent_status: None,
+                                                                ipmi_address: None,
+                                                            });
+                                                        }
+                                                        if let Some(ref mut pm) = data.physical_machine_info {
+                                                            pm.ipmi_address = if input.value().is_empty() { None } else { Some(input.value()) };
+                                                        }
+                                                        form_data.set(data);
+                                                    })
+                                                }
+                                            />
+                                        </div>
+
+                                        // 维保到期时间
+                                        <div class="column is-6">
+                                            <label class="label">{ "维保到期时间" }</label>
+                                            <input
+                                                type="date"
+                                                class="input"
+                                                placeholder="YYYY-MM-DD"
+                                                onchange={
+                                                    let form_data = form_data.clone();
+                                                    Callback::from(move |e: Event| {
+                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                        if !input.value().is_empty() {
+                                                            if let Ok(date) = chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", input.value())) {
+                                                                let mut data = (*form_data).clone();
+                                                                if data.physical_machine_info.is_none() {
+                                                                    data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
+                                                                        serial_number: None,
+                                                                        rack_location: None,
+                                                                        hardware_model: None,
+                                                                        warranty_expiry: None,
+                                                                        agent_status: None,
+                                                                        ipmi_address: None,
+                                                                    });
+                                                                }
+                                                                if let Some(ref mut pm) = data.physical_machine_info {
+                                                                    pm.warranty_expiry = Some(date.with_timezone(&chrono::Utc));
+                                                                }
+                                                                form_data.set(data);
+                                                            }
+                                                        }
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    }
+
                                     // Remarks
                                     <div class="column is-12">
                                         <label class="label">{ lang.t("remarks") }</label>
@@ -2328,10 +2661,10 @@ fn BusinessApplication() -> Html {
                     </div>
                 }
 
-                if (*resources).is_empty() && *loading {
-                    <p class="has-text-centered has-text-grey">{ "Loading..." }</p>
-                } else if (*resources).is_empty() {
+                if filtered_resources.is_empty() && !*loading {
                     <p class="has-text-centered has-text-grey">{ "暂无业务资源" }</p>
+                } else if filtered_resources.is_empty() && *loading {
+                    <p class="has-text-centered has-text-grey">{ "Loading..." }</p>
                 } else {
                     <div class="table-container" style="overflow-x: auto;">
                         <table class="table is-fullwidth is-hoverable is-striped" style="min-width: max-content;">
@@ -2357,7 +2690,7 @@ fn BusinessApplication() -> Html {
                                 </tr>
                             </thead>
                             <tbody>
-                                { for resources.iter().map(|resource| {
+                                { for filtered_resources.iter().map(|resource| {
                                     let resource_clone = resource.clone();
                                     let resource_for_delete = resource.clone();
                                     let on_edit = on_edit.clone();

@@ -15,15 +15,123 @@ use crate::database::{
     update_business_resource as db_update_business_resource,
     delete_business_resource as db_delete_business_resource,
     get_business_resource_by_id as db_get_business_resource_by_id,
+    get_physical_machine_by_business_resource_id,
+    get_cloud_virtual_machine_by_business_resource_id,
+    DbPhysicalMachine, DbCloudVirtualMachine,
 };
 use shared::{
     BusinessResource, CreateBusinessResourceRequest, UpdateBusinessResourceRequest,
+    PhysicalMachineInfo, CloudVirtualMachineInfo,
 };
 
 // 业务资源存储 (内存缓存 + 数据库持久化)
 pub static BUSINESS_RESOURCES: Mutex<Vec<BusinessResource>> = Mutex::new(Vec::new());
 
-/// 辅助函数：将 DbBusinessResource 转换为 BusinessResource
+/// 辅助函数：将 DbPhysicalMachine 转换为 PhysicalMachineInfo
+fn db_to_physical_machine_info(db: DbPhysicalMachine) -> PhysicalMachineInfo {
+    PhysicalMachineInfo {
+        id: Some(db.id),
+        business_resource_id: Some(db.business_resource_id),
+        serial_number: db.serial_number,
+        rack_location: db.rack_location,
+        hardware_model: db.hardware_model,
+        warranty_expiry: db.warranty_expiry.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        agent_status: db.agent_status,
+        ipmi_address: db.ipmi_address,
+    }
+}
+
+/// 辅助函数：将 DbCloudVirtualMachine 转换为 CloudVirtualMachineInfo
+fn db_to_cloud_vm_info(db: DbCloudVirtualMachine) -> CloudVirtualMachineInfo {
+    CloudVirtualMachineInfo {
+        id: Some(db.id),
+        business_resource_id: Some(db.business_resource_id),
+        billing_mode: db.billing_mode,
+        expire_time: db.expire_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        charge_type: db.charge_type,
+        instance_charge_type: db.instance_charge_type,
+        internet_charge_type: db.internet_charge_type,
+        internet_max_bandwidth_out: db.internet_max_bandwidth_out,
+        image_id: db.image_id,
+        v_switch_id: db.v_switch_id,
+        vpc_id: db.vpc_id,
+        security_group_ids: db.security_group_ids.and_then(|s| serde_json::from_str(&s).ok()),
+    }
+}
+
+/// 辅助函数：将 DbBusinessResource 转换为 BusinessResource（包含详情信息）
+async fn db_to_business_resource_with_details(
+    db: crate::database::DbBusinessResource,
+    conn: &sea_orm::DatabaseConnection,
+) -> BusinessResource {
+    use chrono::TimeZone;
+
+    // Load detail information based on resource type
+    let physical_machine_info = if db.resource_type == "physical" {
+        if let Ok(Some(pm)) = get_physical_machine_by_business_resource_id(conn, db.id).await {
+            Some(db_to_physical_machine_info(pm))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let cloud_vm_info = if db.resource_type == "cloud" {
+        if let Ok(Some(cvm)) = get_cloud_virtual_machine_by_business_resource_id(conn, db.id).await {
+            Some(db_to_cloud_vm_info(cvm))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    BusinessResource {
+        id: Some(db.id),
+        resource_type: db.resource_type,
+        ecs_name: db.ecs_name,
+        ecs_status: db.ecs_status,
+        resource_id: db.resource_id,
+        cloud_region: db.cloud_region,
+        cloud_category: db.cloud_category,
+        cloud_provider_config_id: db.cloud_provider_config_id,
+        zone_name: db.zone_name,
+        platform_name: db.platform_name,
+        county_city: db.county_city,
+        vdc_name: db.vdc_name,
+        customer_name: db.customer_name,
+        application_name: db.application_name,
+        contract_name: db.contract_name,
+        instance_id: db.instance_id,
+        ecs_type: db.ecs_type,
+        ecs_os: db.ecs_os,
+        cpu_cores: db.cpu_cores as u32,
+        memory_gb: db.memory_gb as u32,
+        system_disk: db.system_disk,
+        system_disk_size_gb: db.system_disk_size_gb as u32,
+        data_disk: db.data_disk,
+        completion_time: db.completion_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        release_time: db.release_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        has_security_product: db.has_security_product != 0,
+        ip_address: db.ip_address,
+        ecs_login_method: db.ecs_login_method,
+        ecs_login_username: db.ecs_login_username,
+        ecs_initial_password: db.ecs_initial_password,
+        bastion_address: db.bastion_address,
+        bastion_admin_account: db.bastion_admin_account,
+        bastion_initial_password: db.bastion_initial_password,
+        physical_machine_info,
+        cloud_vm_info,
+        remarks: db.remarks,
+        created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at).ok().map(|dt| dt.with_timezone(&Utc)),
+        updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        created_by: db.created_by,
+        updated_by: db.updated_by,
+    }
+}
+
+/// 简化版本：不包含详情信息的转换（用于兼容旧代码）
 fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessResource {
     use chrono::TimeZone;
     BusinessResource {
@@ -60,12 +168,8 @@ fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessR
         bastion_address: db.bastion_address,
         bastion_admin_account: db.bastion_admin_account,
         bastion_initial_password: db.bastion_initial_password,
-        serial_number: db.serial_number,
-        rack_location: db.rack_location,
-        hardware_model: db.hardware_model,
-        warranty_expiry: db.warranty_expiry.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
-        agent_status: db.agent_status,
-        ipmi_address: db.ipmi_address,
+        physical_machine_info: None,
+        cloud_vm_info: None,
         remarks: db.remarks,
         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at).ok().map(|dt| dt.with_timezone(&Utc)),
         updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
@@ -85,20 +189,26 @@ pub async fn get_business_resources(
     };
 
     // 先尝试从数据库加载
-    match db_get_business_resources().await {
-        Ok(db_resources) => {
-            let resources: Vec<BusinessResource> = db_resources
-                .into_iter()
-                .map(db_to_business_resource)
-                .collect();
+    if let Some(conn) = crate::database::get_db() {
+        match db_get_business_resources().await {
+            Ok(db_resources) => {
+                // Load with details
+                let mut resources = Vec::new();
+                for db_res in db_resources {
+                    match db_to_business_resource_with_details(db_res, &conn).await {
+                        Ok(res) => resources.push(res),
+                        Err(_) => continue,
+                    }
+                }
 
-            // 更新内存缓存
-            *BUSINESS_RESOURCES.lock().unwrap() = resources.clone();
+                // 更新内存缓存
+                *BUSINESS_RESOURCES.lock().unwrap() = resources.clone();
 
-            return Json(resources).into_response();
-        }
-        Err(_) => {
-            // 数据库查询失败，回退到内存缓存
+                return Json(resources).into_response();
+            }
+            Err(_) => {
+                // 数据库查询失败，回退到内存缓存
+            }
         }
     }
 
@@ -139,6 +249,38 @@ pub async fn create_business_resource(
         }
     };
 
+    // Convert CreatePhysicalMachineInfo to PhysicalMachineInfo
+    let physical_machine_info = req.physical_machine_info.as_ref().map(|info| {
+        shared::PhysicalMachineInfo {
+            id: None,
+            business_resource_id: Some(db_id),
+            serial_number: info.serial_number.clone(),
+            rack_location: info.rack_location.clone(),
+            hardware_model: info.hardware_model.clone(),
+            warranty_expiry: info.warranty_expiry,
+            agent_status: info.agent_status.clone(),
+            ipmi_address: info.ipmi_address.clone(),
+        }
+    });
+
+    // Convert CreateCloudVirtualMachineInfo to CloudVirtualMachineInfo
+    let cloud_vm_info = req.cloud_vm_info.as_ref().map(|info| {
+        shared::CloudVirtualMachineInfo {
+            id: None,
+            business_resource_id: Some(db_id),
+            billing_mode: info.billing_mode.clone(),
+            expire_time: info.expire_time,
+            charge_type: info.charge_type.clone(),
+            instance_charge_type: info.instance_charge_type.clone(),
+            internet_charge_type: info.internet_charge_type.clone(),
+            internet_max_bandwidth_out: info.internet_max_bandwidth_out,
+            image_id: info.image_id.clone(),
+            v_switch_id: info.v_switch_id.clone(),
+            vpc_id: info.vpc_id.clone(),
+            security_group_ids: info.security_group_ids.clone(),
+        }
+    });
+
     // 使用数据库生成的ID创建资源对象
     let new_resource = BusinessResource {
         id: Some(db_id),
@@ -174,12 +316,8 @@ pub async fn create_business_resource(
         bastion_address: req.bastion_address.clone(),
         bastion_admin_account: req.bastion_admin_account.clone(),
         bastion_initial_password: req.bastion_initial_password.clone(),
-        serial_number: req.serial_number.clone(),
-        rack_location: req.rack_location.clone(),
-        hardware_model: req.hardware_model.clone(),
-        warranty_expiry: req.warranty_expiry,
-        agent_status: None,
-        ipmi_address: req.ipmi_address.clone(),
+        physical_machine_info,
+        cloud_vm_info,
         remarks: req.remarks.clone(),
         created_at: Some(now),
         updated_at: Some(now),
@@ -274,12 +412,60 @@ pub async fn update_business_resource(
             if let Some(v) = req.bastion_address { resource.bastion_address = Some(v); }
             if let Some(v) = req.bastion_admin_account { resource.bastion_admin_account = Some(v); }
             if let Some(v) = req.bastion_initial_password { resource.bastion_initial_password = Some(v); }
-            if let Some(v) = req.serial_number { resource.serial_number = Some(v); }
-            if let Some(v) = req.rack_location { resource.rack_location = Some(v); }
-            if let Some(v) = req.hardware_model { resource.hardware_model = Some(v); }
-            if let Some(v) = req.warranty_expiry { resource.warranty_expiry = Some(v); }
-            if let Some(v) = req.agent_status { resource.agent_status = Some(v); }
-            if let Some(v) = req.ipmi_address { resource.ipmi_address = Some(v); }
+
+            // 更新详情信息
+            if let Some(pm_info) = &req.physical_machine_info {
+                if resource.physical_machine_info.is_none() {
+                    resource.physical_machine_info = Some(shared::PhysicalMachineInfo {
+                        id: None,
+                        business_resource_id: Some(id),
+                        serial_number: pm_info.serial_number.clone(),
+                        rack_location: pm_info.rack_location.clone(),
+                        hardware_model: pm_info.hardware_model.clone(),
+                        warranty_expiry: pm_info.warranty_expiry,
+                        agent_status: pm_info.agent_status.clone(),
+                        ipmi_address: pm_info.ipmi_address.clone(),
+                    });
+                } else if let Some(ref mut existing) = resource.physical_machine_info {
+                    if let Some(v) = &pm_info.serial_number { existing.serial_number = Some(v.clone()); }
+                    if let Some(v) = &pm_info.rack_location { existing.rack_location = Some(v.clone()); }
+                    if let Some(v) = &pm_info.hardware_model { existing.hardware_model = Some(v.clone()); }
+                    if let Some(v) = pm_info.warranty_expiry { existing.warranty_expiry = Some(v); }
+                    if let Some(v) = &pm_info.agent_status { existing.agent_status = Some(v.clone()); }
+                    if let Some(v) = &pm_info.ipmi_address { existing.ipmi_address = Some(v.clone()); }
+                }
+            }
+
+            if let Some(cvm_info) = &req.cloud_vm_info {
+                if resource.cloud_vm_info.is_none() {
+                    resource.cloud_vm_info = Some(shared::CloudVirtualMachineInfo {
+                        id: None,
+                        business_resource_id: Some(id),
+                        billing_mode: cvm_info.billing_mode.clone(),
+                        expire_time: cvm_info.expire_time,
+                        charge_type: cvm_info.charge_type.clone(),
+                        instance_charge_type: cvm_info.instance_charge_type.clone(),
+                        internet_charge_type: cvm_info.internet_charge_type.clone(),
+                        internet_max_bandwidth_out: cvm_info.internet_max_bandwidth_out,
+                        image_id: cvm_info.image_id.clone(),
+                        v_switch_id: cvm_info.v_switch_id.clone(),
+                        vpc_id: cvm_info.vpc_id.clone(),
+                        security_group_ids: cvm_info.security_group_ids.clone(),
+                    });
+                } else if let Some(ref mut existing) = resource.cloud_vm_info {
+                    if let Some(v) = &cvm_info.billing_mode { existing.billing_mode = Some(v.clone()); }
+                    if let Some(v) = cvm_info.expire_time { existing.expire_time = Some(v); }
+                    if let Some(v) = &cvm_info.charge_type { existing.charge_type = Some(v.clone()); }
+                    if let Some(v) = &cvm_info.instance_charge_type { existing.instance_charge_type = Some(v.clone()); }
+                    if let Some(v) = &cvm_info.internet_charge_type { existing.internet_charge_type = Some(v.clone()); }
+                    if let Some(v) = cvm_info.internet_max_bandwidth_out { existing.internet_max_bandwidth_out = Some(v); }
+                    if let Some(v) = &cvm_info.image_id { existing.image_id = Some(v.clone()); }
+                    if let Some(v) = &cvm_info.v_switch_id { existing.v_switch_id = Some(v.clone()); }
+                    if let Some(v) = &cvm_info.vpc_id { existing.vpc_id = Some(v.clone()); }
+                    if let Some(v) = &cvm_info.security_group_ids { existing.security_group_ids = v.clone(); }
+                }
+            }
+
             if let Some(v) = req.remarks { resource.remarks = Some(v); }
             resource.updated_at = Some(now);
             resource.updated_by = Some(user.username.clone());
@@ -292,6 +478,16 @@ pub async fn update_business_resource(
     if let Some(resource) = updated_resource {
         // 持久化到数据库
         let _ = db_update_business_resource(id, &req_clone, &user.username).await;
+
+        // 同时更新详情表
+        if let Some(conn) = crate::database::get_db() {
+            if let Some(pm_info) = &req_clone.physical_machine_info {
+                let _ = crate::database::update_physical_machine(&conn, id, pm_info, &now.to_rfc3339()).await;
+            }
+            if let Some(cvm_info) = &req_clone.cloud_vm_info {
+                let _ = crate::database::update_cloud_virtual_machine(&conn, id, cvm_info, &now.to_rfc3339()).await;
+            }
+        }
 
         // 记录日志
         log_action(

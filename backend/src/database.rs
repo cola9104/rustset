@@ -5,8 +5,10 @@
 use sea_orm::{Database as SeaDatabase, DatabaseConnection, DbErr, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, Statement, QuerySelect, QueryOrder, ColumnTrait};
 use crate::entities::{
     cloud_zone, cloud_platform, cloud_provider_config, business_resource,
+    physical_machine, cloud_virtual_machine,
     user, audit_log, asset, task, risk, network_zone, custom_role, advanced_scan_task, quick_scan_result,
     CloudZone, CloudPlatform, CloudProviderConfig, BusinessResource,
+    PhysicalMachine, CloudVirtualMachine,
     User, AuditLog, Asset, Task, Risk, NetworkZone, CustomRole, AdvancedScanTask, QuickScanResult,
 };
 use shared::{User as SharedUser, Role, Permissions, PasswordPolicy};
@@ -21,6 +23,8 @@ pub use crate::entities::prelude::*;
 pub type DbUser = user::Model;
 pub type DbAuditLog = audit_log::Model;
 pub type DbBusinessResource = business_resource::Model;
+pub type DbPhysicalMachine = physical_machine::Model;
+pub type DbCloudVirtualMachine = cloud_virtual_machine::Model;
 pub type DbAsset = asset::Model;
 pub type DbTask = task::Model;
 pub type DbRisk = risk::Model;
@@ -811,12 +815,12 @@ pub async fn insert_business_resource(
         bastion_address: Set(req.bastion_address.clone()),
         bastion_admin_account: Set(req.bastion_admin_account.clone()),
         bastion_initial_password: Set(req.bastion_initial_password.clone()),
-        serial_number: Set(req.serial_number.clone()),
-        rack_location: Set(req.rack_location.clone()),
-        hardware_model: Set(req.hardware_model.clone()),
-        warranty_expiry: Set(req.warranty_expiry.map(|d| d.to_rfc3339())),
-        agent_status: Set(None), // Default value for new resources
-        ipmi_address: Set(req.ipmi_address.clone()),
+        serial_number: Set(None),     // Legacy field - kept for compatibility but not used
+        rack_location: Set(None),     // Legacy field - kept for compatibility but not used
+        hardware_model: Set(None),    // Legacy field - kept for compatibility but not used
+        warranty_expiry: Set(None),   // Legacy field - kept for compatibility but not used
+        agent_status: Set(None),      // Legacy field - kept for compatibility but not used
+        ipmi_address: Set(None),      // Legacy field - kept for compatibility but not used
         remarks: Set(req.remarks.clone()),
         created_at: Set(created_at.to_string()),
         updated_at: Set(None),
@@ -824,7 +828,24 @@ pub async fn insert_business_resource(
         updated_by: Set(None),
     };
     let result = db_resource.insert(conn).await?;
-    Ok(result.id)
+    let business_resource_id = result.id;
+
+    // Insert detail record based on resource type
+    match req.resource_type.as_str() {
+        "physical" => {
+            if let Some(info) = &req.physical_machine_info {
+                insert_physical_machine(conn, business_resource_id, info, created_at).await?;
+            }
+        }
+        "cloud" => {
+            if let Some(info) = &req.cloud_vm_info {
+                insert_cloud_virtual_machine(conn, business_resource_id, info, created_at).await?;
+            }
+        }
+        _ => {}
+    }
+
+    Ok(business_resource_id)
 }
 
 pub async fn update_business_resource_by_id(
@@ -1403,3 +1424,153 @@ pub async fn get_quick_scan_results(task_id: &str) -> Result<Vec<quick_scan_resu
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     get_quick_scan_results_by_task(&conn, task_id).await
 }
+
+// ============== PhysicalMachine CRUD ==============
+
+pub async fn insert_physical_machine(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+    info: &shared::CreatePhysicalMachineInfo,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let db_pm = physical_machine::ActiveModel {
+        id: NotSet,
+        business_resource_id: Set(business_resource_id),
+        serial_number: Set(info.serial_number.clone()),
+        rack_location: Set(info.rack_location.clone()),
+        hardware_model: Set(info.hardware_model.clone()),
+        warranty_expiry: Set(info.warranty_expiry.map(|d| d.to_rfc3339())),
+        agent_status: Set(info.agent_status.clone()),
+        ipmi_address: Set(info.ipmi_address.clone()),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    let result = db_pm.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn get_physical_machine_by_business_resource_id(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+) -> Result<Option<physical_machine::Model>, DbErr> {
+    let pm = PhysicalMachine::find()
+        .filter(physical_machine::Column::BusinessResourceId.eq(business_resource_id))
+        .one(conn)
+        .await?;
+    Ok(pm)
+}
+
+pub async fn update_physical_machine(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+    info: &shared::UpdatePhysicalMachineInfo,
+    updated_at: &str,
+) -> Result<(), DbErr> {
+    if let Some(pm) = get_physical_machine_by_business_resource_id(conn, business_resource_id).await? {
+        let mut pm_active: physical_machine::ActiveModel = pm.into();
+
+        if let Some(v) = &info.serial_number { pm_active.serial_number = Set(Some(v.clone())); }
+        if let Some(v) = &info.rack_location { pm_active.rack_location = Set(Some(v.clone())); }
+        if let Some(v) = &info.hardware_model { pm_active.hardware_model = Set(Some(v.clone())); }
+        if let Some(v) = info.warranty_expiry { pm_active.warranty_expiry = Set(Some(v.to_rfc3339())); }
+        if let Some(v) = &info.agent_status { pm_active.agent_status = Set(Some(v.clone())); }
+        if let Some(v) = &info.ipmi_address { pm_active.ipmi_address = Set(Some(v.clone())); }
+        pm_active.updated_at = Set(Some(updated_at.to_string()));
+
+        pm_active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_physical_machine(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+) -> Result<(), DbErr> {
+    PhysicalMachine::delete_many()
+        .filter(physical_machine::Column::BusinessResourceId.eq(business_resource_id))
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+
+// ============== CloudVirtualMachine CRUD ==============
+
+pub async fn insert_cloud_virtual_machine(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+    info: &shared::CreateCloudVirtualMachineInfo,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let security_group_ids_json = info.security_group_ids.as_ref()
+        .map(|ids| serde_json::to_string(ids).unwrap_or_default());
+
+    let db_cvm = cloud_virtual_machine::ActiveModel {
+        id: NotSet,
+        business_resource_id: Set(business_resource_id),
+        billing_mode: Set(info.billing_mode.clone()),
+        expire_time: Set(info.expire_time.map(|d| d.to_rfc3339())),
+        charge_type: Set(info.charge_type.clone()),
+        instance_charge_type: Set(info.instance_charge_type.clone()),
+        internet_charge_type: Set(info.internet_charge_type.clone()),
+        internet_max_bandwidth_out: Set(info.internet_max_bandwidth_out),
+        image_id: Set(info.image_id.clone()),
+        v_switch_id: Set(info.v_switch_id.clone()),
+        vpc_id: Set(info.vpc_id.clone()),
+        security_group_ids: Set(security_group_ids_json),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    let result = db_cvm.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn get_cloud_virtual_machine_by_business_resource_id(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+) -> Result<Option<cloud_virtual_machine::Model>, DbErr> {
+    let cvm = CloudVirtualMachine::find()
+        .filter(cloud_virtual_machine::Column::BusinessResourceId.eq(business_resource_id))
+        .one(conn)
+        .await?;
+    Ok(cvm)
+}
+
+pub async fn update_cloud_virtual_machine(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+    info: &shared::UpdateCloudVirtualMachineInfo,
+    updated_at: &str,
+) -> Result<(), DbErr> {
+    if let Some(cvm) = get_cloud_virtual_machine_by_business_resource_id(conn, business_resource_id).await? {
+        let mut cvm_active: cloud_virtual_machine::ActiveModel = cvm.into();
+
+        if let Some(v) = &info.billing_mode { cvm_active.billing_mode = Set(Some(v.clone())); }
+        if let Some(v) = info.expire_time { cvm_active.expire_time = Set(Some(v.to_rfc3339())); }
+        if let Some(v) = &info.charge_type { cvm_active.charge_type = Set(Some(v.clone())); }
+        if let Some(v) = &info.instance_charge_type { cvm_active.instance_charge_type = Set(Some(v.clone())); }
+        if let Some(v) = &info.internet_charge_type { cvm_active.internet_charge_type = Set(Some(v.clone())); }
+        if let Some(v) = info.internet_max_bandwidth_out { cvm_active.internet_max_bandwidth_out = Set(Some(v)); }
+        if let Some(v) = &info.image_id { cvm_active.image_id = Set(Some(v.clone())); }
+        if let Some(v) = &info.v_switch_id { cvm_active.v_switch_id = Set(Some(v.clone())); }
+        if let Some(v) = &info.vpc_id { cvm_active.vpc_id = Set(Some(v.clone())); }
+        if let Some(v) = &info.security_group_ids {
+            cvm_active.security_group_ids = Set(Some(serde_json::to_string(v).unwrap_or_default()));
+        }
+        cvm_active.updated_at = Set(Some(updated_at.to_string()));
+
+        cvm_active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_cloud_virtual_machine(
+    conn: &DatabaseConnection,
+    business_resource_id: i32,
+) -> Result<(), DbErr> {
+    CloudVirtualMachine::delete_many()
+        .filter(cloud_virtual_machine::Column::BusinessResourceId.eq(business_resource_id))
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+
