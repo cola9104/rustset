@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex as TokioMutex;
 use chrono::{DateTime, Utc};
-use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, AdvancedScanTask, PasswordPolicy, CustomRole};
+use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, AdvancedScanTask, PasswordPolicy, CustomRole, CloudZone, CloudPlatform};
 use crate::scanners::engine::ScanManager;
 
 #[derive(Clone)]
@@ -17,4 +17,6 @@ pub struct AppState {
     pub scan_manager: Arc<TokioMutex<Option<ScanManager>>>,
     pub password_policy: Arc<StdMutex<PasswordPolicy>>,
     pub password_history: Arc<StdMutex<Vec<(String, String, DateTime<Utc>)>>>,
+    pub cloud_zones: Arc<StdMutex<Vec<CloudZone>>>,
+    pub cloud_platforms: Arc<StdMutex<Vec<CloudPlatform>>>,
 }

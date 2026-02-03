@@ -4,23 +4,23 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde_json::json;
-use std::sync::Mutex;
 use chrono::Utc;
 
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
-use crate::database::insert_cloud_zone_wrapper as db_insert_cloud_zone;
-use crate::database::update_cloud_zone as db_update_cloud_zone;
-use crate::database::delete_cloud_zone as db_delete_cloud_zone;
+use crate::database::{
+    get_all_cloud_zones as db_get_all_cloud_zones,
+    get_cloud_zone_by_id as db_get_cloud_zone_by_id,
+    insert_cloud_zone_wrapper as db_insert_cloud_zone,
+    update_cloud_zone as db_update_cloud_zone,
+    delete_cloud_zone as db_delete_cloud_zone,
+};
 use shared::{
     CloudZone, CreateCloudZoneRequest, UpdateCloudZoneRequest,
     Role,
 };
 
-// 云区存储 (内存)
-pub static CLOUD_ZONES: Mutex<Vec<CloudZone>> = Mutex::new(Vec::new());
-
-/// 获取云区列表
+/// 获取云区列表 (直接从数据库读取)
 pub async fn get_cloud_zones(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -30,11 +30,34 @@ pub async fn get_cloud_zones(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
     };
 
-    let zones = CLOUD_ZONES.lock().unwrap();
-    Json(zones.clone()).into_response()
+    match crate::database::get_db() {
+        Some(conn) => {
+            match db_get_all_cloud_zones(&conn).await {
+                Ok(db_zones) => {
+                    let zones: Vec<CloudZone> = db_zones.into_iter().map(|db| CloudZone {
+                        id: Some(db.id),
+                        zone_name: db.zone_name.clone(),
+                        zone_code: db.zone_code.clone(),
+                        description: db.description.clone(),
+                        created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .unwrap_or_else(|_| Utc::now()),
+                    }).collect();
+                    Json(zones).into_response()
+                }
+                Err(e) => {
+                    eprintln!("Error loading cloud zones from database: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                }
+            }
+        }
+        None => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+        }
+    }
 }
 
-/// 获取单个云区
+/// 获取单个云区 (直接从数据库读取)
 pub async fn get_cloud_zone(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -45,15 +68,37 @@ pub async fn get_cloud_zone(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
     };
 
-    let zones = CLOUD_ZONES.lock().unwrap();
-    if let Some(zone) = zones.iter().find(|z| z.id == Some(id)) {
-        Json(zone.clone()).into_response()
-    } else {
-        (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response()
+    match crate::database::get_db() {
+        Some(conn) => {
+            match db_get_cloud_zone_by_id(&conn, id).await {
+                Ok(Some(db)) => {
+                    let zone = CloudZone {
+                        id: Some(db.id),
+                        zone_name: db.zone_name.clone(),
+                        zone_code: db.zone_code.clone(),
+                        description: db.description.clone(),
+                        created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .unwrap_or_else(|_| Utc::now()),
+                    };
+                    Json(zone).into_response()
+                }
+                Ok(None) => {
+                    (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response()
+                }
+                Err(e) => {
+                    eprintln!("Error loading cloud zone from database: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                }
+            }
+        }
+        None => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+        }
     }
 }
 
-/// 创建云区
+/// 创建云区 (直接写入数据库)
 #[axum::debug_handler]
 pub async fn create_cloud_zone(
     State(state): State<AppState>,
@@ -70,57 +115,66 @@ pub async fn create_cloud_zone(
         return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
     }
 
-    // 检查zone_code是否重复并生成新ID
-    let (new_id, zone_code_exists) = {
-        let zones = CLOUD_ZONES.lock().unwrap();
-        let exists = zones.iter().any(|z| z.zone_code == req.zone_code);
-        let max_id = zones.iter().filter_map(|z| z.id).max().map_or(1, |m| m + 1);
-        (max_id, exists)
-    };
+    match crate::database::get_db() {
+        Some(conn) => {
+            // 检查zone_code是否已存在
+            match db_get_all_cloud_zones(&conn).await {
+                Ok(existing_zones) => {
+                    if existing_zones.iter().any(|z| z.zone_code == req.zone_code) {
+                        return (StatusCode::BAD_REQUEST, "Zone code already exists".to_string()).into_response();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error checking zone code: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                }
+            }
 
-    if zone_code_exists {
-        return (StatusCode::BAD_REQUEST, "Zone code already exists".to_string()).into_response();
+            // 持久化到数据库
+            let now = Utc::now();
+            let created_at_str = now.to_rfc3339();
+            match db_insert_cloud_zone(
+                &req.zone_name,
+                &req.zone_code,
+                req.description.as_deref(),
+                &created_at_str,
+            ).await {
+                Ok(id) => {
+                    let zone = CloudZone {
+                        id: Some(id),
+                        zone_name: req.zone_name.clone(),
+                        zone_code: req.zone_code.clone(),
+                        description: req.description.clone(),
+                        created_at: now,
+                    };
+
+                    // 记录日志
+                    log_action(
+                        &state.audit_logs,
+                        &user,
+                        "CREATE_CLOUD_ZONE",
+                        &req.zone_name,
+                        &format!("Created cloud zone: {}", req.zone_name),
+                    );
+
+                    Json(json!({
+                        "message": "云区创建成功",
+                        "data": zone
+                    })).into_response()
+                }
+                Err(e) => {
+                    eprintln!("Error inserting cloud zone: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create cloud zone".to_string()).into_response()
+                }
+            }
+        }
+        None => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+        }
     }
-
-    let now = Utc::now();
-    let zone = CloudZone {
-        id: Some(new_id),
-        zone_name: req.zone_name.clone(),
-        zone_code: req.zone_code.clone(),
-        description: req.description.clone(),
-        created_at: now,
-    };
-
-    {
-        let mut zones = CLOUD_ZONES.lock().unwrap();
-        zones.push(zone.clone());
-    }
-
-    // 持久化到数据库（在锁释放后）
-    let created_at_str = now.to_rfc3339();
-    let _ = db_insert_cloud_zone(
-        &req.zone_name,
-        &req.zone_code,
-        req.description.as_deref(),
-        &created_at_str,
-    ).await;
-
-    // 记录日志
-    log_action(
-        &state.audit_logs,
-        &user,
-        "CREATE_CLOUD_ZONE",
-        &req.zone_name,
-        &format!("Created cloud zone: {}", req.zone_name),
-    );
-
-    Json(json!({
-        "message": "云区创建成功",
-        "data": zone
-    })).into_response()
 }
 
-/// 更新云区
+/// 更新云区 (直接更新数据库)
 #[axum::debug_handler]
 pub async fn update_cloud_zone(
     State(state): State<AppState>,
@@ -137,70 +191,86 @@ pub async fn update_cloud_zone(
         return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
     }
 
-    // 先进行所有验证检查（只读操作）
-    {
-        let zones = CLOUD_ZONES.lock().unwrap();
-        if zones.iter().find(|z| z.id == Some(id)).is_none() {
-            return (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response();
-        }
-
-        // 验证zone_code唯一性
-        if let Some(ref new_code) = req.zone_code {
-            if zones.iter().any(|z| z.id != Some(id) && z.zone_code == *new_code) {
-                return (StatusCode::BAD_REQUEST, "Zone code already exists".to_string()).into_response();
+    match crate::database::get_db() {
+        Some(conn) => {
+            // 检查zone是否存在
+            match db_get_cloud_zone_by_id(&conn, id).await {
+                Ok(Some(_)) => {
+                    // 验证zone_code唯一性
+                    if let Some(ref new_code) = req.zone_code {
+                        match db_get_all_cloud_zones(&conn).await {
+                            Ok(existing_zones) => {
+                                if existing_zones.iter().any(|z| z.id != id && z.zone_code == *new_code) {
+                                    return (StatusCode::BAD_REQUEST, "Zone code already exists".to_string()).into_response();
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Error checking zone code: {}", e);
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {
+                    return (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response();
+                }
+                Err(e) => {
+                    eprintln!("Error checking zone existence: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                }
             }
+
+            // 持久化到数据库
+            match db_update_cloud_zone(
+                id,
+                req.zone_name.as_deref(),
+                req.zone_code.as_deref(),
+                req.description.as_deref(),
+            ).await {
+                Ok(_) => {
+                    // 记录日志
+                    log_action(
+                        &state.audit_logs,
+                        &user,
+                        "UPDATE_CLOUD_ZONE",
+                        &format!("{}", id),
+                        &format!("Updated cloud zone: {}", id),
+                    );
+
+                    // 返回更新后的数据
+                    match db_get_cloud_zone_by_id(&conn, id).await {
+                        Ok(Some(db)) => {
+                            let zone = CloudZone {
+                                id: Some(db.id),
+                                zone_name: db.zone_name.clone(),
+                                zone_code: db.zone_code.clone(),
+                                description: db.description.clone(),
+                                created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                                    .unwrap_or_else(|_| Utc::now()),
+                            };
+                            Json(json!({
+                                "message": "云区更新成功",
+                                "data": zone
+                            })).into_response()
+                        }
+                        _ => {
+                            Json(json!({ "message": "云区更新成功" })).into_response()
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error updating cloud zone: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update cloud zone".to_string()).into_response()
+                }
+            }
+        }
+        None => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
         }
     }
-
-    // 验证通过后，进行更新
-    let (zone_data, db_zone_name, db_zone_code, db_description) = {
-        let mut zones = CLOUD_ZONES.lock().unwrap();
-        if let Some(zone) = zones.iter_mut().find(|z| z.id == Some(id)) {
-            // Clone values for database before moving
-            let db_zone_name = req.zone_name.as_ref().map(|s| s.clone());
-            let db_zone_code = req.zone_code.as_ref().map(|s| s.clone());
-            let db_description = req.description.as_ref().map(|s| s.clone());
-
-            if let Some(name) = req.zone_name {
-                zone.zone_name = name;
-            }
-            if let Some(code) = req.zone_code {
-                zone.zone_code = code;
-            }
-            if let Some(desc) = req.description {
-                zone.description = Some(desc);
-            }
-
-            (zone.clone(), db_zone_name, db_zone_code, db_description)
-        } else {
-            return (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response();
-        }
-    };
-
-    // 持久化到数据库
-    let _ = db_update_cloud_zone(
-        id,
-        db_zone_name.as_deref(),
-        db_zone_code.as_deref(),
-        db_description.as_deref(),
-    ).await;
-
-    // 记录日志
-    log_action(
-        &state.audit_logs,
-        &user,
-        "UPDATE_CLOUD_ZONE",
-        &format!("{}", id),
-        &format!("Updated cloud zone: {}", zone_data.zone_name),
-    );
-
-    Json(json!({
-        "message": "云区更新成功",
-        "data": zone_data
-    })).into_response()
 }
 
-/// 删除云区
+/// 删除云区 (直接从数据库删除)
 #[axum::debug_handler]
 pub async fn delete_cloud_zone(
     State(state): State<AppState>,
@@ -216,32 +286,42 @@ pub async fn delete_cloud_zone(
         return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
     }
 
-    let found_pos = {
-        let mut zones = CLOUD_ZONES.lock().unwrap();
-        zones.iter().position(|z| z.id == Some(id))
-    };
+    match crate::database::get_db() {
+        Some(conn) => {
+            // 检查是否存在
+            match db_get_cloud_zone_by_id(&conn, id).await {
+                Ok(Some(_)) => {
+                    // 持久化到数据库
+                    match db_delete_cloud_zone(id).await {
+                        Ok(_) => {
+                            // 记录日志
+                            log_action(
+                                &state.audit_logs,
+                                &user,
+                                "DELETE_CLOUD_ZONE",
+                                &format!("{}", id),
+                                &format!("Deleted cloud zone: {}", id),
+                            );
 
-    if let Some(pos) = found_pos {
-        // Remove the zone
-        {
-            let mut zones = CLOUD_ZONES.lock().unwrap();
-            zones.remove(pos);
+                            Json(json!({ "message": "云区删除成功" })).into_response()
+                        }
+                        Err(e) => {
+                            eprintln!("Error deleting cloud zone: {}", e);
+                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete cloud zone".to_string()).into_response()
+                        }
+                    }
+                }
+                Ok(None) => {
+                    (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response()
+                }
+                Err(e) => {
+                    eprintln!("Error checking zone existence: {}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                }
+            }
         }
-
-        // 持久化到数据库
-        let _ = db_delete_cloud_zone(id).await;
-
-        // 记录日志
-        log_action(
-            &state.audit_logs,
-            &user,
-            "DELETE_CLOUD_ZONE",
-            &format!("{}", id),
-            &format!("Deleted cloud zone: {}", id),
-        );
-
-        return Json(json!({ "message": "云区删除成功" })).into_response();
+        None => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+        }
     }
-
-    (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response()
 }

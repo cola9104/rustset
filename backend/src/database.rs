@@ -786,7 +786,7 @@ pub async fn insert_business_resource(
         resource_type: Set(req.resource_type.clone()),
         ecs_name: Set(req.ecs_name.clone()),
         ecs_status: Set(req.ecs_status.clone()),
-        resource_id: Set(req.resource_id.clone()),
+        resource_id: Set(req.resource_id.clone().unwrap_or_else(|| "".to_string())),
         cloud_region: Set(req.cloud_region.clone()),
         cloud_category: Set(req.cloud_category.clone()),
         cloud_provider_config_id: Set(req.cloud_provider_config_id),
@@ -797,7 +797,7 @@ pub async fn insert_business_resource(
         customer_name: Set(req.customer_name.clone()),
         application_name: Set(req.application_name.clone()),
         contract_name: Set(req.contract_name.clone()),
-        instance_id: Set(req.instance_id.clone()),
+        instance_id: Set(req.instance_id.clone().unwrap_or_else(|| "".to_string())),
         ecs_type: Set(req.ecs_type.clone()),
         ecs_os: Set(req.ecs_os.clone()),
         cpu_cores: Set(req.cpu_cores as i32),
@@ -892,12 +892,15 @@ pub async fn update_business_resource_by_id(
     if let Some(v) = &req.bastion_address { db_resource.bastion_address = Set(Some(v.clone())); }
     if let Some(v) = &req.bastion_admin_account { db_resource.bastion_admin_account = Set(Some(v.clone())); }
     if let Some(v) = &req.bastion_initial_password { db_resource.bastion_initial_password = Set(Some(v.clone())); }
-    if let Some(v) = &req.serial_number { db_resource.serial_number = Set(Some(v.clone())); }
-    if let Some(v) = &req.rack_location { db_resource.rack_location = Set(Some(v.clone())); }
-    if let Some(v) = &req.hardware_model { db_resource.hardware_model = Set(Some(v.clone())); }
-    if let Some(v) = &req.warranty_expiry { db_resource.warranty_expiry = Set(Some(v.to_rfc3339())); }
-    if let Some(v) = &req.agent_status { db_resource.agent_status = Set(Some(v.clone())); }
-    if let Some(v) = &req.ipmi_address { db_resource.ipmi_address = Set(Some(v.clone())); }
+    // Physical machine specific fields
+    if let Some(ref pm_info) = req.physical_machine_info {
+        if let Some(v) = &pm_info.serial_number { db_resource.serial_number = Set(Some(v.clone())); }
+        if let Some(v) = &pm_info.rack_location { db_resource.rack_location = Set(Some(v.clone())); }
+        if let Some(v) = &pm_info.hardware_model { db_resource.hardware_model = Set(Some(v.clone())); }
+        if let Some(v) = &pm_info.warranty_expiry { db_resource.warranty_expiry = Set(Some(v.to_rfc3339())); }
+        if let Some(v) = &pm_info.agent_status { db_resource.agent_status = Set(Some(v.clone())); }
+        if let Some(v) = &pm_info.ipmi_address { db_resource.ipmi_address = Set(Some(v.clone())); }
+    }
     if let Some(v) = &req.remarks { db_resource.remarks = Set(Some(v.clone())); }
 
     BusinessResource::update(db_resource).exec(conn).await?;

@@ -75,7 +75,7 @@ pub enum Page {
     BusinessApplication, // 云资源申请
     OperationsManagement, // 运维管理（交付信息、审批）
     AutomationOrchestration, // 自动化资源编排（原运维交付）
-    CloudServiceAssetManagement, // 云服务资产管理（统一纳管物理机+云虚拟机）
+    CloudServiceAssetManagement, // 云服务资产管理（带Tab标签区分物理机/云资源）
     CloudZoneManagement, // 云区管理
     CloudPlatformManagement, // 云平台管理
 }
@@ -1252,7 +1252,7 @@ fn BusinessApplication() -> Html {
         resource_type: "cloud".to_string(),
         ecs_name: String::new(),
         ecs_status: "待交付".to_string(),
-        resource_id: String::new(),
+        resource_id: None,
         cloud_region: String::new(),
         cloud_category: String::new(),
         cloud_provider_config_id: None,
@@ -1263,7 +1263,7 @@ fn BusinessApplication() -> Html {
         customer_name: String::new(),
         application_name: None,
         contract_name: None,
-        instance_id: String::new(),
+        instance_id: None,
         ecs_type: String::new(),
         ecs_os: String::new(),
         cpu_cores: 2,
@@ -1445,6 +1445,7 @@ fn BusinessApplication() -> Html {
                         resource_type: Some(data.resource_type.clone()),
                         ecs_name: Some(data.ecs_name.clone()),
                         ecs_status: Some(data.ecs_status.clone()),
+                        resource_id: data.resource_id.clone(),
                         cloud_region: Some(data.cloud_region.clone()),
                         cloud_category: Some(data.cloud_category.clone()),
                         cloud_provider_config_id: data.cloud_provider_config_id,
@@ -1455,6 +1456,7 @@ fn BusinessApplication() -> Html {
                         customer_name: Some(data.customer_name.clone()),
                         application_name: data.application_name.clone(),
                         contract_name: data.contract_name.clone(),
+                        instance_id: data.instance_id.clone(),
                         ecs_type: Some(data.ecs_type.clone()),
                         ecs_os: Some(data.ecs_os.clone()),
                         cpu_cores: Some(data.cpu_cores),
@@ -1567,7 +1569,7 @@ fn BusinessApplication() -> Html {
                 resource_type: resource.resource_type.clone(),
                 ecs_name: resource.ecs_name.clone(),
                 ecs_status: resource.ecs_status.clone(),
-                resource_id: resource.resource_id.clone(),
+                resource_id: Some(resource.resource_id.clone()),
                 cloud_region: resource.cloud_region.clone(),
                 cloud_category: resource.cloud_category.clone(),
                 cloud_provider_config_id: resource.cloud_provider_config_id,
@@ -1578,7 +1580,7 @@ fn BusinessApplication() -> Html {
                 customer_name: resource.customer_name.clone(),
                 application_name: resource.application_name.clone(),
                 contract_name: resource.contract_name.clone(),
-                instance_id: resource.instance_id.clone(),
+                instance_id: Some(resource.instance_id.clone()),
                 ecs_type: resource.ecs_type.clone(),
                 ecs_os: resource.ecs_os.clone(),
                 cpu_cores: resource.cpu_cores,
@@ -1643,7 +1645,7 @@ fn BusinessApplication() -> Html {
                 resource_type: "cloud".to_string(),
                 ecs_name: String::new(),
                 ecs_status: "待交付".to_string(),
-                resource_id: String::new(),
+                resource_id: None,
                 cloud_region: String::new(),
                 cloud_category: String::new(),
                 cloud_provider_config_id: None,
@@ -1654,7 +1656,7 @@ fn BusinessApplication() -> Html {
                 customer_name: String::new(),
                 application_name: None,
                 contract_name: None,
-                instance_id: String::new(),
+                instance_id: None,
                 ecs_type: String::new(),
                 ecs_os: String::new(),
                 cpu_cores: 2,
@@ -1693,7 +1695,7 @@ fn BusinessApplication() -> Html {
             match field.as_str() {
                 "ecs_name" => data.ecs_name = value,
                 "ecs_status" => data.ecs_status = value,
-                "resource_id" => data.resource_id = value,
+                "resource_id" => data.resource_id = if value.is_empty() { None } else { Some(value) },
                 "resource_type" => data.resource_type = value,
                 "cloud_region" => data.cloud_region = value,
                 "cloud_category" => data.cloud_category = value,
@@ -1702,7 +1704,7 @@ fn BusinessApplication() -> Html {
                 "customer_name" => data.customer_name = value,
                 "application_name" => data.application_name = if value.is_empty() { None } else { Some(value) },
                 "contract_name" => data.contract_name = if value.is_empty() { None } else { Some(value) },
-                "instance_id" => data.instance_id = value,
+                "instance_id" => data.instance_id = if value.is_empty() { None } else { Some(value) },
                 "ecs_type" => data.ecs_type = value,
                 "ecs_os" => data.ecs_os = value,
                 "system_disk" => data.system_disk = value,
@@ -1957,30 +1959,24 @@ fn BusinessApplication() -> Html {
                                         <input
                                             type="text"
                                             class="input"
+                                            readonly=true
+                                            placeholder="待分配（由运维/编排自动填写）"
                                             value={(*form_data).resource_id.clone()}
-                                            onchange={
-                                                let on_input_change = on_input_change.clone();
-                                                Callback::from(move |e: Event| {
-                                                    let input: HtmlInputElement = e.target_unchecked_into();
-                                                    on_input_change.emit(("resource_id".to_string(), input.value()));
-                                                })
-                                            }
+                                            style="background-color: #f5f5f5; cursor: not-allowed;"
                                         />
+                                        <p class="help">{"此字段由运维人员或自动化编排分配"}</p>
                                     </div>
                                     <div class="column is-6">
                                         <label class="label">{ lang.t("instance_id") }</label>
                                         <input
                                             type="text"
-                                            class="input"
+ class="input"
+                                            readonly=true
+                                            placeholder="待分配（由运维/编排自动填写）"
                                             value={(*form_data).instance_id.clone()}
-                                            onchange={
-                                                let on_input_change = on_input_change.clone();
-                                                Callback::from(move |e: Event| {
-                                                    let input: HtmlInputElement = e.target_unchecked_into();
-                                                    on_input_change.emit(("instance_id".to_string(), input.value()));
-                                                })
-                                            }
+                                            style="background-color: #f5f5f5; cursor: not-allowed;"
                                         />
+                                        <p class="help">{"此字段由运维人员或自动化编排分配"}</p>
                                     </div>
 
                                     // Cloud Zone Selection - 资源类型选择
@@ -2425,213 +2421,62 @@ fn BusinessApplication() -> Html {
                                         </label>
                                     </div>
 
-                                    // 物理机专用字段 - 只有选择物理机时才显示
+                                    // 物理机专用字段 - 由运维人员填写
                                     if (*form_data).resource_type == "physical" {
                                         <div class="column is-12">
-                                            <div class="message is-info">
-                                                <div class="message-body">
-                                                    <strong>{ "物理机信息" }</strong>
-                                                </div>
+                                            <div class="notification is-info is-light">
+                                                <p class="has-text-weight-bold">{"物理机详细信息"}</p>
+                                                <p>{"物理机的序列号、机架位置、硬件型号、Agent状态、IPMI地址等信息由运维人员在交付时填写"}</p>
                                             </div>
                                         </div>
+                                    }
 
-                                        // 设备序列号
+                                    // 云虚拟机专用字段 - 只有选择云资源时才显示
+                                    if (*form_data).resource_type == "cloud" {
                                         <div class="column is-6">
-                                            <label class="label">{ "设备序列号" }</label>
-                                            <input
-                                                type="text"
-                                                class="input"
-                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.serial_number.clone()).unwrap_or_default()}
-                                                placeholder="SN: xxxxxx"
-                                                onchange={
-                                                    let form_data = form_data.clone();
-                                                    Callback::from(move |e: Event| {
-                                                        let input: HtmlInputElement = e.target_unchecked_into();
-                                                        let mut data = (*form_data).clone();
-                                                        if data.physical_machine_info.is_none() {
-                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
-                                                                serial_number: None,
-                                                                rack_location: None,
-                                                                hardware_model: None,
-                                                                warranty_expiry: None,
-                                                                agent_status: None,
-                                                                ipmi_address: None,
-                                                            });
-                                                        }
-                                                        if let Some(ref mut pm) = data.physical_machine_info {
-                                                            pm.serial_number = if input.value().is_empty() { None } else { Some(input.value()) };
-                                                        }
-                                                        form_data.set(data);
-                                                    })
-                                                }
-                                            />
-                                        </div>
-
-                                        // 机架位置
-                                        <div class="column is-6">
-                                            <label class="label">{ "机架位置" }</label>
-                                            <input
-                                                type="text"
-                                                class="input"
-                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.rack_location.clone()).unwrap_or_default()}
-                                                placeholder="A区-03机柜-U12"
-                                                onchange={
-                                                    let form_data = form_data.clone();
-                                                    Callback::from(move |e: Event| {
-                                                        let input: HtmlInputElement = e.target_unchecked_into();
-                                                        let mut data = (*form_data).clone();
-                                                        if data.physical_machine_info.is_none() {
-                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
-                                                                serial_number: None,
-                                                                rack_location: None,
-                                                                hardware_model: None,
-                                                                warranty_expiry: None,
-                                                                agent_status: None,
-                                                                ipmi_address: None,
-                                                            });
-                                                        }
-                                                        if let Some(ref mut pm) = data.physical_machine_info {
-                                                            pm.rack_location = if input.value().is_empty() { None } else { Some(input.value()) };
-                                                        }
-                                                        form_data.set(data);
-                                                    })
-                                                }
-                                            />
-                                        </div>
-
-                                        // 硬件型号
-                                        <div class="column is-6">
-                                            <label class="label">{ "硬件型号" }</label>
-                                            <input
-                                                type="text"
-                                                class="input"
-                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.hardware_model.clone()).unwrap_or_default()}
-                                                placeholder="Dell PowerEdge R740"
-                                                onchange={
-                                                    let form_data = form_data.clone();
-                                                    Callback::from(move |e: Event| {
-                                                        let input: HtmlInputElement = e.target_unchecked_into();
-                                                        let mut data = (*form_data).clone();
-                                                        if data.physical_machine_info.is_none() {
-                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
-                                                                serial_number: None,
-                                                                rack_location: None,
-                                                                hardware_model: None,
-                                                                warranty_expiry: None,
-                                                                agent_status: None,
-                                                                ipmi_address: None,
-                                                            });
-                                                        }
-                                                        if let Some(ref mut pm) = data.physical_machine_info {
-                                                            pm.hardware_model = if input.value().is_empty() { None } else { Some(input.value()) };
-                                                        }
-                                                        form_data.set(data);
-                                                    })
-                                                }
-                                            />
-                                        </div>
-
-                                        // Agent 状态
-                                        <div class="column is-6">
-                                            <label class="label">{ "Agent 状态" }</label>
+                                            <label class="label">{ "计费模式" }</label>
                                             <div class="select is-fullwidth">
                                                 <select
-                                                    value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.agent_status.clone()).unwrap_or_else(|| "none".to_string())}
+                                                    value={(*form_data).cloud_vm_info.as_ref().map(|i| i.billing_mode.clone()).unwrap_or_default()}
                                                     onchange={
+                                                        let on_input_change = on_input_change.clone();
                                                         let form_data = form_data.clone();
                                                         Callback::from(move |e: Event| {
-                                                            let select: HtmlSelectElement = e.target_unchecked_into();
+                                                            let input: HtmlSelectElement = e.target_unchecked_into();
+                                                            let value = input.value();
                                                             let mut data = (*form_data).clone();
-                                                            if data.physical_machine_info.is_none() {
-                                                                data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
-                                                                    serial_number: None,
-                                                                    rack_location: None,
-                                                                    hardware_model: None,
-                                                                    warranty_expiry: None,
-                                                                    agent_status: None,
-                                                                    ipmi_address: None,
-                                                                });
-                                                            }
-                                                            if let Some(ref mut pm) = data.physical_machine_info {
-                                                                pm.agent_status = if select.value().is_empty() { None } else { Some(select.value()) };
-                                                            }
+                                                            data.cloud_vm_info = Some(shared::CreateCloudVirtualMachineInfo {
+                                                                billing_mode: if value.is_empty() { None } else { Some(value.clone()) },
+                                                                ..data.cloud_vm_info.clone().unwrap_or_else(|| shared::CreateCloudVirtualMachineInfo {
+                                                                    billing_mode: None,
+                                                                    expire_time: None,
+                                                                    charge_type: None,
+                                                                    instance_charge_type: None,
+                                                                    internet_charge_type: None,
+                                                                    internet_max_bandwidth_out: None,
+                                                                    image_id: None,
+                                                                    v_switch_id: None,
+                                                                    vpc_id: None,
+                                                                    security_group_ids: None,
+                                                                })
+                                                            });
                                                             form_data.set(data);
+                                                            on_input_change.emit(("cloud_vm_info.billing_mode".to_string(), value));
                                                         })
                                                     }
                                                 >
-                                                    <option value="none">{ "未安装" }</option>
-                                                    <option value="installed">{ "已安装" }</option>
-                                                    <option value="online">{ "在线" }</option>
-                                                    <option value="offline">{ "离线" }</option>
+                                                    <option value="">{ "请选择" }</option>
+                                                    <option value="PostPaid">{ "按量付费" }</option>
+                                                    <option value="PrePaid">{ "包年包月" }</option>
                                                 </select>
                                             </div>
                                         </div>
-
-                                        // IPMI/iDRAC 地址
-                                        <div class="column is-6">
-                                            <label class="label">{ "IPMI/iDRAC 地址" }</label>
-                                            <input
-                                                type="text"
-                                                class="input"
-                                                value={(*form_data).physical_machine_info.as_ref().and_then(|p| p.ipmi_address.clone()).unwrap_or_default()}
-                                                placeholder="https://192.168.1.100"
-                                                onchange={
-                                                    let form_data = form_data.clone();
-                                                    Callback::from(move |e: Event| {
-                                                        let input: HtmlInputElement = e.target_unchecked_into();
-                                                        let mut data = (*form_data).clone();
-                                                        if data.physical_machine_info.is_none() {
-                                                            data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
-                                                                serial_number: None,
-                                                                rack_location: None,
-                                                                hardware_model: None,
-                                                                warranty_expiry: None,
-                                                                agent_status: None,
-                                                                ipmi_address: None,
-                                                            });
-                                                        }
-                                                        if let Some(ref mut pm) = data.physical_machine_info {
-                                                            pm.ipmi_address = if input.value().is_empty() { None } else { Some(input.value()) };
-                                                        }
-                                                        form_data.set(data);
-                                                    })
-                                                }
-                                            />
-                                        </div>
-
-                                        // 维保到期时间
-                                        <div class="column is-6">
-                                            <label class="label">{ "维保到期时间" }</label>
-                                            <input
-                                                type="date"
-                                                class="input"
-                                                placeholder="YYYY-MM-DD"
-                                                onchange={
-                                                    let form_data = form_data.clone();
-                                                    Callback::from(move |e: Event| {
-                                                        let input: HtmlInputElement = e.target_unchecked_into();
-                                                        if !input.value().is_empty() {
-                                                            if let Ok(date) = chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", input.value())) {
-                                                                let mut data = (*form_data).clone();
-                                                                if data.physical_machine_info.is_none() {
-                                                                    data.physical_machine_info = Some(shared::CreatePhysicalMachineInfo {
-                                                                        serial_number: None,
-                                                                        rack_location: None,
-                                                                        hardware_model: None,
-                                                                        warranty_expiry: None,
-                                                                        agent_status: None,
-                                                                        ipmi_address: None,
-                                                                    });
-                                                                }
-                                                                if let Some(ref mut pm) = data.physical_machine_info {
-                                                                    pm.warranty_expiry = Some(date.with_timezone(&chrono::Utc));
-                                                                }
-                                                                form_data.set(data);
-                                                            }
-                                                        }
-                                                    })
-                                                }
-                                            />
+                                        // 云虚拟机其他技术字段 - 由运维人员填写
+                                        <div class="column is-12">
+                                            <div class="notification is-info is-light">
+                                                <p class="has-text-weight-bold">{"云虚拟机详细信息"}</p>
+                                                <p>{"云虚拟机的到期时间、镜像ID、VPC ID、交换机ID、安全组ID、公网带宽等技术信息由运维人员在交付时填写"}</p>
+                                            </div>
                                         </div>
                                     }
 
@@ -2773,6 +2618,9 @@ fn OperationsManagement() -> Html {
     let resources = use_state(|| Vec::new());
     let loading = use_state(|| true);
 
+    // Tab state for resource type filtering: "all", "cloud", "physical"
+    let active_tab = use_state(|| "all".to_string());
+
     // Modal states
     let show_detail_modal = use_state(|| false);
     let show_supplement_modal = use_state(|| false);
@@ -2836,6 +2684,15 @@ fn OperationsManagement() -> Html {
         }
     };
 
+    // Resource type label and class
+    let resource_type_display = |resource_type: String| -> (String, &'static str) {
+        match resource_type.as_str() {
+            "physical" => ("物理机".to_string(), "is-primary"),
+            "cloud" => ("云服务器".to_string(), "is-link"),
+            _ => (resource_type, "is-light"),
+        }
+    };
+
     // Handle view detail
     let on_view_detail = {
         let selected_resource = selected_resource.clone();
@@ -2859,6 +2716,8 @@ fn OperationsManagement() -> Html {
 
             // Pre-fill form with current resource data
             supplement_form.set(UpdateBusinessResourceRequest {
+                resource_id: if resource_clone.resource_id.is_empty() { None } else { Some(resource_clone.resource_id.clone()) },
+                instance_id: if resource_clone.instance_id.is_empty() { None } else { Some(resource_clone.instance_id.clone()) },
                 ip_address: if resource_clone.ip_address.is_empty() { None } else { Some(resource_clone.ip_address.clone()) },
                 ecs_login_method: resource_clone.ecs_login_method.clone(),
                 ecs_login_username: resource_clone.ecs_login_username.clone(),
@@ -2867,6 +2726,27 @@ fn OperationsManagement() -> Html {
                 bastion_admin_account: resource_clone.bastion_admin_account.clone(),
                 bastion_initial_password: resource_clone.bastion_initial_password.clone(),
                 remarks: resource_clone.remarks.clone(),
+                // Include physical machine and cloud VM info
+                physical_machine_info: resource_clone.physical_machine_info.as_ref().map(|pm| shared::UpdatePhysicalMachineInfo {
+                    serial_number: pm.serial_number.clone(),
+                    rack_location: pm.rack_location.clone(),
+                    hardware_model: pm.hardware_model.clone(),
+                    warranty_expiry: pm.warranty_expiry,
+                    agent_status: pm.agent_status.clone(),
+                    ipmi_address: pm.ipmi_address.clone(),
+                }),
+                cloud_vm_info: resource_clone.cloud_vm_info.as_ref().map(|cvm| shared::UpdateCloudVirtualMachineInfo {
+                    billing_mode: cvm.billing_mode.clone(),
+                    expire_time: cvm.expire_time,
+                    charge_type: cvm.charge_type.clone(),
+                    instance_charge_type: cvm.instance_charge_type.clone(),
+                    internet_charge_type: cvm.internet_charge_type.clone(),
+                    internet_max_bandwidth_out: cvm.internet_max_bandwidth_out,
+                    image_id: cvm.image_id.clone(),
+                    v_switch_id: cvm.v_switch_id.clone(),
+                    vpc_id: cvm.vpc_id.clone(),
+                    security_group_ids: cvm.security_group_ids.clone(),
+                }),
                 ..Default::default()
             });
 
@@ -2919,6 +2799,8 @@ fn OperationsManagement() -> Html {
         Callback::from(move |(field, value): (String, String)| {
             let mut data = (*supplement_form).clone();
             match field.as_str() {
+                "resource_id" => data.resource_id = Some(value),
+                "instance_id" => data.instance_id = Some(value),
                 "ip_address" => data.ip_address = Some(value),
                 "ecs_login_method" => data.ecs_login_method = if value.is_empty() { None } else { Some(value) },
                 "ecs_login_username" => data.ecs_login_username = if value.is_empty() { None } else { Some(value) },
@@ -2927,17 +2809,200 @@ fn OperationsManagement() -> Html {
                 "bastion_admin_account" => data.bastion_admin_account = if value.is_empty() { None } else { Some(value) },
                 "bastion_initial_password" => data.bastion_initial_password = if value.is_empty() { None } else { Some(value) },
                 "remarks" => data.remarks = if value.is_empty() { None } else { Some(value) },
+                // Physical machine fields
+                "pm_serial_number" => {
+                    if let Some(ref mut pm) = data.physical_machine_info {
+                        pm.serial_number = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.physical_machine_info = Some(shared::UpdatePhysicalMachineInfo {
+                            serial_number: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "pm_rack_location" => {
+                    if let Some(ref mut pm) = data.physical_machine_info {
+                        pm.rack_location = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.physical_machine_info = Some(shared::UpdatePhysicalMachineInfo {
+                            rack_location: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "pm_hardware_model" => {
+                    if let Some(ref mut pm) = data.physical_machine_info {
+                        pm.hardware_model = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.physical_machine_info = Some(shared::UpdatePhysicalMachineInfo {
+                            hardware_model: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "pm_agent_status" => {
+                    if let Some(ref mut pm) = data.physical_machine_info {
+                        pm.agent_status = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.physical_machine_info = Some(shared::UpdatePhysicalMachineInfo {
+                            agent_status: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "pm_warranty_expiry" => {
+                    let expiry = if value.is_empty() {
+                        None
+                    } else {
+                        chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", value)).ok().map(|dt| dt.with_timezone(&chrono::Utc))
+                    };
+                    if let Some(ref mut pm) = data.physical_machine_info {
+                        pm.warranty_expiry = expiry;
+                    } else {
+                        data.physical_machine_info = Some(shared::UpdatePhysicalMachineInfo {
+                            warranty_expiry: expiry,
+                            ..Default::default()
+                        });
+                    }
+                }
+                "pm_ipmi_address" => {
+                    if let Some(ref mut pm) = data.physical_machine_info {
+                        pm.ipmi_address = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.physical_machine_info = Some(shared::UpdatePhysicalMachineInfo {
+                            ipmi_address: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                // Cloud VM fields
+                "cvm_billing_mode" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.billing_mode = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            billing_mode: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_expire_time" => {
+                    let expiry = if value.is_empty() {
+                        None
+                    } else {
+                        chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", value)).ok().map(|dt| dt.with_timezone(&chrono::Utc))
+                    };
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.expire_time = expiry;
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            expire_time: expiry,
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_charge_type" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.charge_type = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            charge_type: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_instance_charge_type" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.instance_charge_type = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            instance_charge_type: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_internet_charge_type" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.internet_charge_type = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            internet_charge_type: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_image_id" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.image_id = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            image_id: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_vpc_id" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.vpc_id = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            vpc_id: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_v_switch_id" => {
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.v_switch_id = if value.is_empty() { None } else { Some(value) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            v_switch_id: if value.is_empty() { None } else { Some(value) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_security_group_ids" => {
+                    let ids: Vec<String> = value.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.security_group_ids = if ids.is_empty() { None } else { Some(ids) };
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            security_group_ids: if ids.is_empty() { None } else { Some(ids) },
+                            ..Default::default()
+                        });
+                    }
+                }
+                "cvm_internet_max_bandwidth_out" => {
+                    let bandwidth = value.parse::<i32>().ok();
+                    if let Some(ref mut cvm) = data.cloud_vm_info {
+                        cvm.internet_max_bandwidth_out = bandwidth;
+                    } else {
+                        data.cloud_vm_info = Some(shared::UpdateCloudVirtualMachineInfo {
+                            internet_max_bandwidth_out: bandwidth,
+                            ..Default::default()
+                        });
+                    }
+                }
                 _ => {}
             }
             supplement_form.set(data);
         })
     };
 
-    // Stats
-    let total_count = (*resources).len();
-    let pending_count = (*resources).iter().filter(|r| r.ecs_status == "待交付").count();
-    let running_count = (*resources).iter().filter(|r| r.ecs_status == "运行中").count();
-    let stopped_count = (*resources).iter().filter(|r| r.ecs_status == "已停止").count();
+    // Stats - based on filtered resources
+    let filtered_resources: Vec<&BusinessResource> = (*resources).iter().filter(|resource| {
+        match (*active_tab).as_str() {
+            "all" => true,
+            "cloud" => resource.resource_type == "cloud",
+            "physical" => resource.resource_type == "physical",
+            _ => true,
+        }
+    }).collect();
+
+    let total_count = filtered_resources.len();
+    let pending_count = filtered_resources.iter().filter(|r| r.ecs_status == "待交付").count();
+    let running_count = filtered_resources.iter().filter(|r| r.ecs_status == "运行中").count();
+    let stopped_count = filtered_resources.iter().filter(|r| r.ecs_status == "已停止").count();
 
     html! {
         <div class="container p-4">
@@ -2971,20 +3036,33 @@ fn OperationsManagement() -> Html {
                 </div>
             </div>
 
-            // Filter tabs
+            // Resource type filter tabs: 全部 | 云服务器 | 物理机
             <div class="tabs is-boxed mb-4">
                 <ul>
-                    <li class={Classes::from(&*active_tab_filter(|_| true, &resources))}>
+                    <li class={if *active_tab == "all" { "is-active" } else { "" }}>
                         <a onclick={
-                            let resources = resources.clone();
+                            let active_tab = active_tab.clone();
                             Callback::from(move |_| {
-                                // Show all
+                                active_tab.set("all".to_string());
                             })
                         }>{"全部"}</a>
                     </li>
-                    <li><a>{"待交付"}</a></li>
-                    <li><a>{"运行中"}</a></li>
-                    <li><a>{"已停止"}</a></li>
+                    <li class={if *active_tab == "cloud" { "is-active" } else { "" }}>
+                        <a onclick={
+                            let active_tab = active_tab.clone();
+                            Callback::from(move |_| {
+                                active_tab.set("cloud".to_string());
+                            })
+                        }>{"云服务器"}</a>
+                    </li>
+                    <li class={if *active_tab == "physical" { "is-active" } else { "" }}>
+                        <a onclick={
+                            let active_tab = active_tab.clone();
+                            Callback::from(move |_| {
+                                active_tab.set("physical".to_string());
+                            })
+                        }>{"物理机"}</a>
+                    </li>
                 </ul>
             </div>
 
@@ -2996,9 +3074,9 @@ fn OperationsManagement() -> Html {
                     </span>
                     <p>{"加载中..."}</p>
                 </div>
-            } else if (*resources).is_empty() {
+            } else if filtered_resources.is_empty() {
                 <div class="box has-background-white-bis has-text-centered py-6">
-                    <p class="is-size-5 has-text-grey">{"暂无待处理云资源申请"}</p>
+                    <p class="is-size-5 has-text-grey">{"暂无数据"}</p>
                 </div>
             } else {
                 <div class="box">
@@ -3006,25 +3084,31 @@ fn OperationsManagement() -> Html {
                         <thead>
                             <tr>
                                 <th>{"ID"}</th>
-                                <th>{"ECS名称"}</th>
+                                <th>{"资源类型"}</th>
+                                <th>{"名称"}</th>
                                 <th>{"云平台"}</th>
                                 <th>{"区域"}</th>
                                 <th>{"客户"}</th>
                                 <th>{"状态"}</th>
-                                <th>{"申请时间"}</th>
                                 <th>{"操作"}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {
-                                (*resources).iter().map(|resource| {
+                                filtered_resources.iter().map(|resource| {
                                     let on_view_detail = on_view_detail.clone();
                                     let on_supplement_click = on_supplement_click.clone();
                                     let resource_clone = resource.clone();
+                                    let (rt_label, rt_class) = resource_type_display(resource_clone.resource_type.clone());
 
                                     html! {
                                         <tr key={resource.id.unwrap_or(0)}>
                                             <td>{ resource.id.unwrap_or(0) }</td>
+                                            <td>
+                                                <span class={classes!("tag", rt_class)}>
+                                                    { rt_label }
+                                                </span>
+                                            </td>
                                             <td>{ &resource_clone.ecs_name }</td>
                                             <td>{ &resource_clone.cloud_category }</td>
                                             <td>{ &resource_clone.cloud_region }</td>
@@ -3034,11 +3118,6 @@ fn OperationsManagement() -> Html {
                                                     { &resource_clone.ecs_status }
                                                 </span>
                                             </td>
-                                            <td>{
-                                                resource_clone.created_at
-                                                    .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
-                                                    .unwrap_or_default()
-                                            }</td>
                                             <td>
                                                 <div class="buttons are-small">
                                                     <button class="button is-info is-light"
@@ -3058,7 +3137,7 @@ fn OperationsManagement() -> Html {
                                                                         Callback::from(move |_| on_supplement_click.emit(resource_clone.clone()))
                                                                     }>
                                                                     <span class="icon"><i class="fas fa-edit"></i></span>
-                                                                    <span>{ if resource_clone.ecs_status == "待交付" { "录入云资源" } else { "交付信息" } }</span>
+                                                                    <span>{ if resource_clone.ecs_status == "待交付" { "录入信息" } else { "交付信息" } }</span>
                                                                 </button>
                                                             }
                                                         } else {
@@ -3121,6 +3200,41 @@ fn OperationsManagement() -> Html {
                                                     resource.created_at.map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default()
                                                 }</td></tr>
                                             </table>
+
+                                            // 物理机特定信息
+                                            if resource.resource_type == "physical" {
+                                                if let Some(ref pm_info) = resource.physical_machine_info {
+                                                    <div class="box has-background-light mt-4">
+                                                        <h4 class="title is-6 has-text-primary">{"物理机详细信息"}</h4>
+                                                        <table class="table is-fullwidth">
+                                                            <tr><td><strong>{"序列号"}</strong></td><td>{ pm_info.serial_number.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                            <tr><td><strong>{"机架位置"}</strong></td><td>{ pm_info.rack_location.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                            <tr><td><strong>{"硬件型号"}</strong></td><td>{ pm_info.hardware_model.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                            <tr><td><strong>{"保修到期"}</strong></td><td>{ pm_info.warranty_expiry.map(|d| d.format("%Y-%m-%d").to_string()).unwrap_or_else(|| "-".to_string()) }</td></tr>
+                                                            <tr><td><strong>{"Agent状态"}</strong></td><td>{ pm_info.agent_status.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                            <tr><td><strong>{"IPMI地址"}</strong></td><td>{ pm_info.ipmi_address.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                        </table>
+                                                    </div>
+                                                }
+                                            }
+
+                                            // 云虚拟机特定信息
+                                            if resource.resource_type == "cloud" {
+                                                if let Some(ref cvm_info) = resource.cloud_vm_info {
+                                                    <div class="box has-background-light mt-4">
+                                                        <h4 class="title is-6 has-text-info">{"云虚拟机详细信息"}</h4>
+                                                        <table class="table is-fullwidth">
+                                                            <tr><td><strong>{"计费模式"}</strong></td><td>{ cvm_info.billing_mode.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
+                                                            <tr><td><strong>{"到期时间"}</strong></td><td>{ cvm_info.expire_time.map(|d| d.format("%Y-%m-%d %H:%M").to_string()).unwrap_or_else(|| "-".to_string()) }</td></tr>
+                                                            <tr><td><strong>{"镜像ID"}</strong></td><td><code>{ cvm_info.image_id.as_ref().map(|s| s.as_str()).unwrap_or("-") }</code></td></tr>
+                                                            <tr><td><strong>{"VPC ID"}</strong></td><td><code>{ cvm_info.vpc_id.as_ref().map(|s| s.as_str()).unwrap_or("-") }</code></td></tr>
+                                                            <tr><td><strong>{"交换机ID"}</strong></td><td><code>{ cvm_info.v_switch_id.as_ref().map(|s| s.as_str()).unwrap_or("-") }</code></td></tr>
+                                                            <tr><td><strong>{"安全组ID"}</strong></td><td><code>{ cvm_info.security_group_ids.as_ref().map(|ids| ids.first().map(|s| s.as_str()).unwrap_or("-")).unwrap_or("-") }</code></td></tr>
+                                                            <tr><td><strong>{"公网带宽"}</strong></td><td>{ cvm_info.internet_max_bandwidth_out.map(|v| format!("{} Mbps", v)).unwrap_or_else(|| "-".to_string()) }</td></tr>
+                                                        </table>
+                                                    </div>
+                                                }
+                                            }
                                         </div>
                                     </section>
                                     <footer class="modal-card-foot">
@@ -3157,6 +3271,65 @@ fn OperationsManagement() -> Html {
                                         }></button>
                                     </header>
                                     <section class="modal-card-body">
+                                        // 重要提示
+                                        <div class="notification is-warning is-light" style="margin-bottom: 20px;">
+                                            <p class="has-text-weight-bold">{"📋 云资源交付信息录入"}</p>
+                                            <p>{"请在云平台上创建资源后，将云平台返回的资源ID和实例ID填写到下方。"}</p>
+                                        </div>
+
+                                        // 关键信息：资源ID和实例ID
+                                        <div class="box has-background-primary-light" style="margin-bottom: 20px; border-left: 4px solid #3e8ed0;">
+                                            <p class="has-text-weight-bold mb-3">{"🔑 必填：云平台资源信息"}</p>
+                                            <div class="columns">
+                                                <div class="column is-6">
+                                                    <div class="field">
+                                                        <label class="label has-text-primary">{"资源ID"}</label>
+                                                        <div class="control has-icons-left">
+                                                            <input class="input is-primary" type="text"
+                                                                value={(*supplement_form).resource_id.clone().unwrap_or_default()}
+                                                                placeholder="从云平台复制的资源ID"
+                                                                onchange={
+                                                                    let on_form_input = on_form_input.clone();
+                                                                    Callback::from(move |e: Event| {
+                                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                                        on_form_input.emit(("resource_id".to_string(), input.value()));
+                                                                    })
+                                                                }
+                                                            />
+                                                            <span class="icon is-small is-left">
+                                                                <i class="fas fa-key"></i>
+                                                            </span>
+                                                        </div>
+                                                        <p class="help is-primary">{"必填 - 云平台分配的资源唯一标识"}</p>
+                                                    </div>
+                                                </div>
+                                                <div class="column is-6">
+                                                    <div class="field">
+                                                        <label class="label has-text-primary">{"实例ID"}</label>
+                                                        <div class="control has-icons-left">
+                                                            <input class="input is-primary" type="text"
+                                                                value={(*supplement_form).instance_id.clone().unwrap_or_default()}
+                                                                placeholder="从云平台复制的实例ID"
+                                                                onchange={
+                                                                    let on_form_input = on_form_input.clone();
+                                                                    Callback::from(move |e: Event| {
+                                                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                                                        on_form_input.emit(("instance_id".to_string(), input.value()));
+                                                                    })
+                                                                }
+                                                            />
+                                                            <span class="icon is-small is-left">
+                                                                <i class="fas fa-server"></i>
+                                                            </span>
+                                                        </div>
+                                                        <p class="help is-primary">{"必填 - 云主机实例的唯一标识"}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        // 连接信息
+                                        <p class="has-text-weight-bold mb-2">{"🔐 连接信息"}</p>
                                         <div class="columns">
                                             <div class="column is-6">
                                                 <div class="field">
@@ -3173,29 +3346,6 @@ fn OperationsManagement() -> Html {
                                                                 })
                                                             }
                                                         />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="column is-6">
-                                                <div class="field">
-                                                    <label class="label">{"登录方式"}</label>
-                                                    <div class="control">
-                                                        <div class="select is-fullwidth">
-                                                            <select
-                                                                onchange={
-                                                                    let on_form_input = on_form_input.clone();
-                                                                    Callback::from(move |e: Event| {
-                                                                        let select: HtmlSelectElement = e.target_unchecked_into();
-                                                                        on_form_input.emit(("ecs_login_method".to_string(), select.value()));
-                                                                    })
-                                                                }
-                                                            >
-                                                                <option value="" selected={(*supplement_form).ecs_login_method.is_none()}>{"请选择"}</option>
-                                                                <option value="SSH" selected={(*supplement_form).ecs_login_method.as_ref() == Some(&"SSH".to_string())}>{"SSH"}</option>
-                                                                <option value="RDP" selected={(*supplement_form).ecs_login_method.as_ref() == Some(&"RDP".to_string())}>{"RDP"}</option>
-                                                                <option value="堡垒机" selected={(*supplement_form).ecs_login_method.as_ref() == Some(&"堡垒机".to_string())}>{"堡垒机"}</option>
-                                                            </select>
-                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -3278,7 +3428,351 @@ fn OperationsManagement() -> Html {
                                                     </div>
                                                 </div>
                                             </div>
+                                            <div class="column is-6">
+                                                <div class="field">
+                                                    <label class="label">{"堡垒机密码"}</label>
+                                                    <div class="control">
+                                                        <input class="input" type="password"
+                                                            value={(*supplement_form).bastion_initial_password.clone().unwrap_or_default()}
+                                                            placeholder="••••••••"
+                                                            onchange={
+                                                                let on_form_input = on_form_input.clone();
+                                                                Callback::from(move |e: Event| {
+                                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                                    on_form_input.emit(("bastion_initial_password".to_string(), input.value()));
+                                                                })
+                                                            }
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
+
+                                        // 物理机特定字段
+                                        if resource.resource_type == "physical" {
+                                            <div class="box has-background-light" style="margin-bottom: 20px;">
+                                                <p class="has-text-weight-bold mb-3">{"🖥️ 物理机信息"}</p>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"序列号"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.serial_number.clone()).unwrap_or_default()}
+                                                                    placeholder="SN-XXXXXX"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("pm_serial_number".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"机架位置"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.rack_location.clone()).unwrap_or_default()}
+                                                                    placeholder="机架-机箱-U位置"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("pm_rack_location".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"硬件型号"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.hardware_model.clone()).unwrap_or_default()}
+                                                                    placeholder="Dell R740"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("pm_hardware_model".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"Agent状态"}</label>
+                                                            <div class="control">
+                                                                <div class="select is-fullwidth">
+                                                                    <select
+                                                                        onchange={
+                                                                            let on_form_input = on_form_input.clone();
+                                                                            Callback::from(move |e: Event| {
+                                                                                let select: HtmlSelectElement = e.target_unchecked_into();
+                                                                                on_form_input.emit(("pm_agent_status".to_string(), select.value()));
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        <option value="" selected={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.agent_status.clone()).is_none()}>{"请选择"}</option>
+                                                                        <option value="online" selected={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.agent_status.clone()) == Some("online".to_string())}>{"在线"}</option>
+                                                                        <option value="offline" selected={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.agent_status.clone()) == Some("offline".to_string())}>{"离线"}</option>
+                                                                        <option value="none" selected={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.agent_status.clone()) == Some("none".to_string())}>{"未安装"}</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"保修到期"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="date"
+                                                                    value={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.warranty_expiry.map(|d| d.format("%Y-%m-%d").to_string())).unwrap_or_default()}
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("pm_warranty_expiry".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"IPMI地址"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).physical_machine_info.as_ref().and_then(|p| p.ipmi_address.clone()).unwrap_or_default()}
+                                                                    placeholder="https://192.168.1.1"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("pm_ipmi_address".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+
+                                        // 云虚拟机特定字段
+                                        if resource.resource_type == "cloud" {
+                                            <div class="box has-background-light" style="margin-bottom: 20px;">
+                                                <p class="has-text-weight-bold mb-3">{"☁️ 云虚拟机信息"}</p>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"计费模式"}</label>
+                                                            <div class="control">
+                                                                <div class="select is-fullwidth">
+                                                                    <select
+                                                                        onchange={
+                                                                            let on_form_input = on_form_input.clone();
+                                                                            Callback::from(move |e: Event| {
+                                                                                let select: HtmlSelectElement = e.target_unchecked_into();
+                                                                                on_form_input.emit(("cvm_billing_mode".to_string(), select.value()));
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        <option value="" selected={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.billing_mode.clone()).is_none()}>{"请选择"}</option>
+                                                                        <option value="PostPaid" selected={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.billing_mode.clone()) == Some("PostPaid".to_string())}>{"按量付费"}</option>
+                                                                        <option value="PrePaid" selected={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.billing_mode.clone()) == Some("PrePaid".to_string())}>{"包年包月"}</option>
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"公网带宽"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="number"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.internet_max_bandwidth_out.map(|v| v.to_string())).unwrap_or_default()}
+                                                                    placeholder="Mbps"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_internet_max_bandwidth_out".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"到期时间"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="date"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.expire_time.map(|d| d.format("%Y-%m-%d").to_string())).unwrap_or_default()}
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_expire_time".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"付费类型"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.charge_type.clone()).unwrap_or_default()}
+                                                                    placeholder="PostPaid/PrePaid"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_charge_type".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"实例计费类型"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.instance_charge_type.clone()).unwrap_or_default()}
+                                                                    placeholder="SpotTC/PrePaid/PostPaid"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_instance_charge_type".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"网络计费类型"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.internet_charge_type.clone()).unwrap_or_default()}
+                                                                    placeholder="PayByBandwidth/PayByTraffic"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_internet_charge_type".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"镜像ID"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.image_id.clone()).unwrap_or_default()}
+                                                                    placeholder="img-xxxx"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_image_id".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"VPC ID"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.vpc_id.clone()).unwrap_or_default()}
+                                                                    placeholder="vpc-xxxx"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_vpc_id".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="columns">
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"交换机ID"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.v_switch_id.clone()).unwrap_or_default()}
+                                                                    placeholder="vsw-xxxx"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_v_switch_id".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="column is-6">
+                                                        <div class="field">
+                                                            <label class="label">{"安全组ID"}</label>
+                                                            <div class="control">
+                                                                <input class="input" type="text"
+                                                                    value={(*supplement_form).cloud_vm_info.as_ref().and_then(|c| c.security_group_ids.as_ref().map(|v| v.join(", "))).unwrap_or_default()}
+                                                                    placeholder="sg-xxxx, sg-yyyy"
+                                                                    onchange={
+                                                                        let on_form_input = on_form_input.clone();
+                                                                        Callback::from(move |e: Event| {
+                                                                            let input: HtmlInputElement = e.target_unchecked_into();
+                                                                            on_form_input.emit(("cvm_security_group_ids".to_string(), input.value()));
+                                                                        })
+                                                                    }
+                                                                />
+                                                                <p class="help">{"多个安全组用逗号分隔"}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
 
                                         <div class="field">
                                             <label class="label">{"备注"}</label>
@@ -3353,8 +3847,10 @@ fn CloudServiceAssetManagement() -> Html {
     let stats = use_state(|| None::<CloudServiceAssetStats>);
     let loading = use_state(|| true);
 
-    // 过滤条件
-    let filter_asset_type = use_state(|| None::<String>);
+    // Tab 过滤: 全部/云服务器/物理机
+    let active_tab = use_state(|| "all".to_string()); // "all", "virtual", "physical"
+
+    // 其他过滤条件
     let filter_status = use_state(|| None::<String>);
     let filter_provider = use_state(|| None::<String>);
     let search_keyword = use_state(|| String::new());
@@ -3386,7 +3882,7 @@ fn CloudServiceAssetManagement() -> Html {
         let assets = assets.clone();
         let loading = loading.clone();
         let token = token.clone();
-        let filter_asset_type = filter_asset_type.clone();
+        let active_tab = active_tab.clone();
         let filter_status = filter_status.clone();
         let filter_provider = filter_provider.clone();
         let search_keyword = search_keyword.clone();
@@ -3395,7 +3891,7 @@ fn CloudServiceAssetManagement() -> Html {
             let assets = assets.clone();
             let loading = loading.clone();
             let token = token.clone();
-            let filter_asset_type = filter_asset_type.clone();
+            let active_tab = active_tab.clone();
             let filter_status = filter_status.clone();
             let filter_provider = filter_provider.clone();
             let search_keyword = search_keyword.clone();
@@ -3405,7 +3901,14 @@ fn CloudServiceAssetManagement() -> Html {
                 let mut url = api_url("cloud-service-assets");
                 let mut has_params = false;
 
-                if let Some(t) = &*filter_asset_type {
+                // 根据Tab设置资产类型过滤
+                let asset_type_filter = match (*active_tab).as_str() {
+                    "virtual" => Some("virtual".to_string()),
+                    "physical" => Some("physical".to_string()),
+                    _ => None,
+                };
+
+                if let Some(t) = &asset_type_filter {
                     url.push_str(&format!("?asset_type={}", t));
                     has_params = true;
                 }
@@ -3461,6 +3964,16 @@ fn CloudServiceAssetManagement() -> Html {
         }
     }
 
+    // Tab 切换处理
+    let on_tab_click = {
+        let active_tab = active_tab.clone();
+        let fetch_assets_fn = fetch_assets_fn.clone();
+        Callback::from(move |tab: String| {
+            active_tab.set(tab.clone());
+            fetch_assets_fn();
+        })
+    };
+
     // 克隆 fetch_assets_fn 供各个事件使用
     let fetch_assets_onclick = {
         let fetch_assets_fn = fetch_assets_fn.clone();
@@ -3470,14 +3983,12 @@ fn CloudServiceAssetManagement() -> Html {
     };
 
     let on_clear_filters = {
-        let filter_asset_type = filter_asset_type.clone();
         let filter_status = filter_status.clone();
         let filter_provider = filter_provider.clone();
         let search_keyword = search_keyword.clone();
         let fetch_assets_fn = fetch_assets_fn.clone();
 
         Callback::from(move |_| {
-            filter_asset_type.set(None);
             filter_status.set(None);
             filter_provider.set(None);
             search_keyword.set(String::new());
@@ -3487,8 +3998,40 @@ fn CloudServiceAssetManagement() -> Html {
 
     html! {
         <div class="container" style="margin-top: 20px;">
-            <h1 class="title">{ "云服务资产管理" }</h1>
-            <p class="subtitle">{ "统一纳管物理机和云虚拟机资产" }</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h1 class="title">{ "云服务资产管理" }</h1>
+                    <p class="subtitle">{ "统一纳管物理机和云虚拟机资产" }</p>
+                </div>
+                <div class="buttons">
+                    <button class="button is-primary">{ "添加资产" }</button>
+                    <button class="button is-info is-light">{ "导出" }</button>
+                </div>
+            </div>
+
+            // Tab 标签过滤
+            <div class="tabs is-boxed" style="margin-top: 20px;">
+                <ul>
+                    <li class={if *active_tab == "all" { "is-active" } else { "" }}>
+                        <a onclick={
+                            let on_tab_click = on_tab_click.clone();
+                            Callback::from(move |_| on_tab_click.emit("all".to_string()))
+                        }>{ "全部" }</a>
+                    </li>
+                    <li class={if *active_tab == "virtual" { "is-active" } else { "" }}>
+                        <a onclick={
+                            let on_tab_click = on_tab_click.clone();
+                            Callback::from(move |_| on_tab_click.emit("virtual".to_string()))
+                        }>{ "云服务器" }</a>
+                    </li>
+                    <li class={if *active_tab == "physical" { "is-active" } else { "" }}>
+                        <a onclick={
+                            let on_tab_click = on_tab_click.clone();
+                            Callback::from(move |_| on_tab_click.emit("physical".to_string()))
+                        }>{ "物理机" }</a>
+                    </li>
+                </ul>
+            </div>
 
             // 统计卡片
             if let Some(s) = (*stats).clone() {
@@ -3536,27 +4079,6 @@ fn CloudServiceAssetManagement() -> Html {
             <div class="box" style="margin-top: 20px;">
                 <div class="columns">
                     <div class="column is-2">
-                        <label class="label">{ "资产类型" }</label>
-                        <div class="select is-fullwidth">
-                            <select
-                                onchange={
-                                    let filter_asset_type = filter_asset_type.clone();
-                                    let fetch_assets_fn = fetch_assets_fn.clone();
-                                    Callback::from(move |e: Event| {
-                                        let select: HtmlSelectElement = e.target_unchecked_into();
-                                        let value = select.value();
-                                        filter_asset_type.set(if value.is_empty() { None } else { Some(value) });
-                                        fetch_assets_fn();
-                                    })
-                                }
-                            >
-                                <option value="" selected={(*filter_asset_type).is_none()}>{ "全部" }</option>
-                                <option value="physical" selected={(*filter_asset_type).as_ref() == Some(&"physical".to_string())}>{ "物理机" }</option>
-                                <option value="virtual" selected={(*filter_asset_type).as_ref() == Some(&"virtual".to_string())}>{ "云虚拟机" }</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="column is-2">
                         <label class="label">{ "状态" }</label>
                         <div class="select is-fullwidth">
                             <select
@@ -3600,7 +4122,7 @@ fn CloudServiceAssetManagement() -> Html {
                             </select>
                         </div>
                     </div>
-                    <div class="column is-4">
+                    <div class="column is-6">
                         <label class="label">{ "搜索" }</label>
                         <input class="input"
                             type="text"
@@ -3635,44 +4157,125 @@ fn CloudServiceAssetManagement() -> Html {
                     <progress class="progress is-small is-primary" max="100">{ "30%" }</progress>
                 </div>
             } else {
-                <div class="table-container" style="margin-top: 20px;">
-                    <table class="table is-fullwidth is-hoverable">
+                <div class="table-container" style="margin-top: 20px; overflow-x: auto;">
+                    <table class="table is-fullwidth is-hoverable is-striped" style="min-width: max-content;">
                         <thead>
                             <tr>
                                 <th>{ "ID" }</th>
-                                <th>{ "ECS名称" }</th>
-                                <th>{ "云平台" }</th>
-                                <th>{ "区域" }</th>
-                                <th>{ "客户" }</th>
-                                <th>{ "状态" }</th>
                                 <th>{ "来源" }</th>
+                                <th>{ "类型" }</th>
+                                <th>{ "名称" }</th>
+                                <th>{ "实例ID" }</th>
+                                <th>{ "云平台" }</th>
+                                <th>{ "云区" }</th>
+                                <th>{ "供应商" }</th>
+                                <th>{ "实例类型" }</th>
+                                <th>{ "CPU" }</th>
+                                <th>{ "内存GB" }</th>
+                                <th>{ "系统盘" }</th>
+                                <th>{ "数据盘" }</th>
+                                <th>{ "操作系统" }</th>
+                                <th>{ "内网IP" }</th>
+                                <th>{ "公网IP" }</th>
+                                <th>{ "IPv6" }</th>
+                                <th>{ "客户" }</th>
+                                <th>{ "部门" }</th>
+                                <th>{ "项目" }</th>
+                                <th>{ "应用" }</th>
+                                <th>{ "合同" }</th>
+                                <th>{ "负责人" }</th>
+                                <th>{ "登录方式" }</th>
+                                <th>{ "登录用户" }</th>
+                                <th>{ "堡垒机地址" }</th>
+                                <th>{ "堡垒机账号" }</th>
+                                <th>{ "堡垒机密码" }</th>
+                                <th>{ "序列号" }</th>
+                                <th>{ "机架位置" }</th>
+                                <th>{ "硬件型号" }</th>
+                                <th>{ "维保到期" }</th>
+                                <th>{ "Agent状态" }</th>
+                                <th>{ "IPMI地址" }</th>
+                                <th>{ "计费模式" }</th>
+                                <th>{ "付费类型" }</th>
+                                <th>{ "到期时间" }</th>
+                                <th>{ "创建时间" }</th>
+                                <th>{ "更新时间" }</th>
+                                <th>{ "标签" }</th>
+                                <th>{ "备注" }</th>
+                                <th>{ "业务资源ID" }</th>
+                                <th>{ "云资产ID" }</th>
+                                <th>{ "状态" }</th>
                                 <th>{ "操作" }</th>
                             </tr>
                         </thead>
                         <tbody>
                             { for (*assets).iter().map(|asset| {
-                                let source_label = if asset.source_type == "business_resource" { "业务受理" } else { "混合云" };
+                                // 资产类型显示
+                                let asset_type_label = match asset.asset_type.as_str() {
+                                    "physical" => "物理机",
+                                    "virtual" => "云虚拟机",
+                                    _ => &asset.asset_type,
+                                };
+                                let asset_type_class = match asset.asset_type.as_str() {
+                                    "physical" => "is-primary",
+                                    "virtual" => "is-link",
+                                    _ => "is-light",
+                                };
+
+                                // 来源类型显示
+                                let source_type_label = match asset.source_type.as_str() {
+                                    "business_resource" => "业务受理",
+                                    "cloud_asset" => "混合云",
+                                    _ => &asset.source_type,
+                                };
 
                                 html! {
                                     <tr>
                                         <td>{ &asset.id }</td>
-                                        <td>{ &asset.name }</td>
-                                        <td>{ &asset.cloud_provider }</td>
-                                        <td>{ &asset.region }</td>
+                                        <td><span class={classes!("tag", "is-light")}>{ source_type_label }</span></td>
+                                        <td><span class={classes!("tag", asset_type_class)}>{ asset_type_label }</span></td>
+                                        <td><strong>{ &asset.name }</strong></td>
+                                        <td><code>{ &asset.instance_id }</code></td>
+                                        <td>{ &asset.cloud_platform }</td>
+                                        <td>{ &asset.cloud_zone }</td>
+                                        <td>{ asset.supplier_name.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ &asset.instance_type }</td>
+                                        <td>{ asset.cpu_cores }</td>
+                                        <td>{ asset.memory_gb }</td>
+                                        <td>{ format!("{} {}GB", asset.system_disk_type, asset.system_disk_size_gb) }</td>
+                                        <td>{ asset.data_disk_info.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ format!("{} {}", asset.os_type, asset.os_name) }</td>
+                                        <td><code>{ &asset.ip_address }</code></td>
+                                        <td>{ asset.public_ip.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td>
+                                        <td>{ asset.ipv6_address.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td>
                                         <td>{ &asset.customer_name }</td>
-                                        <td>
-                                            <span class={classes!("tag", status_class(&asset.status))}>
-                                                { &asset.status }
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="tag is-light">{ source_label }</span>
-                                        </td>
-                                        <td>
-                                            <button class="button is-small is-info is-light">
-                                                { "查看" }
-                                            </button>
-                                        </td>
+                                        <td>{ asset.department.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.project.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.application_name.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.contract_name.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.owner_name.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.login_method.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.login_username.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.bastion_address.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.bastion_account.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.bastion_initial_password.as_ref().map(|_| "••••••").unwrap_or("-") }</td>
+                                        <td>{ asset.serial_number.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.rack_location.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.hardware_model.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.warranty_expiry.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.agent_status.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.ipmi_address.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.billing_mode.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.charge_type.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.expire_time.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ &asset.created_at }</td>
+                                        <td>{ asset.updated_at.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.tags.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.remarks.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ asset.business_resource_id.map(|v| v.to_string()).unwrap_or_else(|| String::from("-")) }</td>
+                                        <td>{ asset.cloud_asset_id.map(|v| v.to_string()).unwrap_or_else(|| String::from("-")) }</td>
+                                        <td><span class={classes!("tag", status_class(&asset.status))}>{ &asset.status }</span></td>
+                                        <td><button class="button is-small is-info is-light">{ "查看" }</button></td>
                                     </tr>
                                 }
                             }).collect::<Vec<_>>() }

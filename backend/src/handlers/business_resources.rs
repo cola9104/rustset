@@ -195,10 +195,8 @@ pub async fn get_business_resources(
                 // Load with details
                 let mut resources = Vec::new();
                 for db_res in db_resources {
-                    match db_to_business_resource_with_details(db_res, &conn).await {
-                        Ok(res) => resources.push(res),
-                        Err(_) => continue,
-                    }
+                    let res = db_to_business_resource_with_details(db_res, &conn).await;
+                    resources.push(res);
                 }
 
                 // 更新内存缓存
@@ -287,7 +285,7 @@ pub async fn create_business_resource(
         resource_type: req.resource_type.clone(),
         ecs_name: req.ecs_name.clone(),
         ecs_status: req.ecs_status.clone(),
-        resource_id: req.resource_id.clone(),
+        resource_id: req.resource_id.clone().unwrap_or_else(|| "".to_string()),
         cloud_region: req.cloud_region.clone(),
         cloud_category: req.cloud_category.clone(),
         cloud_provider_config_id: req.cloud_provider_config_id,
@@ -298,7 +296,7 @@ pub async fn create_business_resource(
         customer_name: req.customer_name.clone(),
         application_name: req.application_name.clone(),
         contract_name: req.contract_name.clone(),
-        instance_id: req.instance_id.clone(),
+        instance_id: req.instance_id.clone().unwrap_or_else(|| "".to_string()),
         ecs_type: req.ecs_type.clone(),
         ecs_os: req.ecs_os.clone(),
         cpu_cores: req.cpu_cores,
@@ -395,6 +393,9 @@ pub async fn update_business_resource(
             if let Some(v) = req.customer_name { resource.customer_name = v; }
             if let Some(v) = req.application_name { resource.application_name = Some(v); }
             if let Some(v) = req.contract_name { resource.contract_name = Some(v); }
+            // 云平台资源ID和实例ID - 由运维或自动化编排分配
+            if let Some(v) = req.resource_id { resource.resource_id = v; }
+            if let Some(v) = req.instance_id { resource.instance_id = v; }
             if let Some(v) = req.ecs_type { resource.ecs_type = v; }
             if let Some(v) = req.ecs_os { resource.ecs_os = v; }
             if let Some(v) = req.cpu_cores { resource.cpu_cores = v; }
@@ -462,7 +463,7 @@ pub async fn update_business_resource(
                     if let Some(v) = &cvm_info.image_id { existing.image_id = Some(v.clone()); }
                     if let Some(v) = &cvm_info.v_switch_id { existing.v_switch_id = Some(v.clone()); }
                     if let Some(v) = &cvm_info.vpc_id { existing.vpc_id = Some(v.clone()); }
-                    if let Some(v) = &cvm_info.security_group_ids { existing.security_group_ids = v.clone(); }
+                    if let Some(v) = &cvm_info.security_group_ids { existing.security_group_ids = Some(v.clone()); }
                 }
             }
 

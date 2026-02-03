@@ -30,28 +30,19 @@ pub async fn get_cloud_service_assets(
     let provider_configs = PROVIDER_CONFIGS.lock().unwrap().clone();
 
     let mut assets: Vec<CloudServiceAsset> = business_resources.into_iter().map(|br| {
-        // Look up cloud provider name from config
-        let cloud_provider = if let Some(config_id) = br.cloud_provider_config_id {
-            provider_configs.iter()
-                .find(|c| c.id == Some(config_id))
-                .map(|c| c.provider.as_str().to_string())
-                .unwrap_or_else(|| "Unknown".to_string())
-        } else {
-            "Unknown".to_string()
-        };
-
         CloudServiceAsset {
             // 基础标识
-            id: format!("physical-{}", br.id),
-            asset_type: "physical".to_string(),
+            id: format!("{}-{}", br.resource_type, br.id),
+            asset_type: if br.resource_type == "cloud" { "virtual".to_string() } else { br.resource_type.clone() },
             source_type: "business_resource".to_string(),
 
             // 基本信息
             name: br.ecs_name,
             instance_id: br.instance_id,
             status: br.ecs_status,
-            cloud_provider,
-            region: br.cloud_region,
+            cloud_platform: br.cloud_category,
+            cloud_zone: br.platform_name.clone().unwrap_or_else(|| "-".to_string()),
+            supplier_name: br.zone_name,
 
             // 实例配置
             instance_type: br.ecs_type,
@@ -83,6 +74,7 @@ pub async fn get_cloud_service_assets(
             login_username: br.ecs_login_username,
             bastion_address: br.bastion_address,
             bastion_account: br.bastion_admin_account,
+            bastion_initial_password: br.bastion_initial_password,
 
             // 物理机特有信息
             serial_number: br.serial_number,
@@ -119,8 +111,8 @@ pub async fn get_cloud_service_assets(
     if let Some(source_type) = &query.source_type {
         assets.retain(|a| &a.source_type == source_type);
     }
-    if let Some(cloud_provider) = &query.cloud_provider {
-        assets.retain(|a| &a.cloud_provider == cloud_provider);
+    if let Some(cloud_platform) = &query.cloud_platform {
+        assets.retain(|a| &a.cloud_platform == cloud_platform);
     }
     if let Some(status) = &query.status {
         assets.retain(|a| &a.status == status);

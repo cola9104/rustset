@@ -9,10 +9,10 @@ dist/
 .idea
 .vscode
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
+# Database (commented out to allow upload)
+# *.db
+# *.sqlite
+# *.sqlite3
 
 # Environment files
 .env

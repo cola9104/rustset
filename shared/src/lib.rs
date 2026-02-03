@@ -269,7 +269,8 @@ pub struct CreateBusinessResourceRequest {
     pub resource_type: String,         // 资源类型: cloud / physical
     pub ecs_name: String,
     pub ecs_status: String,
-    pub resource_id: String,
+    #[serde(default)]  // 默认为空字符串，由运维/编排分配
+    pub resource_id: Option<String>,
     pub cloud_region: String,
     pub cloud_category: String,
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
@@ -280,7 +281,8 @@ pub struct CreateBusinessResourceRequest {
     pub customer_name: String,
     pub application_name: Option<String>,
     pub contract_name: Option<String>,
-    pub instance_id: String,
+    #[serde(default)]  // 默认为空字符串，由运维/编排分配
+    pub instance_id: Option<String>,
     pub ecs_type: String,
     pub ecs_os: String,
     pub cpu_cores: u32,
@@ -310,6 +312,7 @@ pub struct UpdateBusinessResourceRequest {
     pub resource_type: Option<String>,         // 资源类型
     pub ecs_name: Option<String>,
     pub ecs_status: Option<String>,
+    pub resource_id: Option<String>,            // 云平台资源ID（由运维/编排分配）
     pub cloud_region: Option<String>,
     pub cloud_category: Option<String>,
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
@@ -320,6 +323,7 @@ pub struct UpdateBusinessResourceRequest {
     pub customer_name: Option<String>,
     pub application_name: Option<String>,
     pub contract_name: Option<String>,
+    pub instance_id: Option<String>,         // 实例ID（由运维/编排分配）
     pub ecs_type: Option<String>,
     pub ecs_os: Option<String>,
     pub cpu_cores: Option<u32>,
@@ -349,6 +353,7 @@ impl Default for UpdateBusinessResourceRequest {
             resource_type: None,
             ecs_name: None,
             ecs_status: None,
+            resource_id: None,
             cloud_region: None,
             cloud_category: None,
             cloud_provider_config_id: None,
@@ -359,6 +364,7 @@ impl Default for UpdateBusinessResourceRequest {
             customer_name: None,
             application_name: None,
             contract_name: None,
+            instance_id: None,
             ecs_type: None,
             ecs_os: None,
             cpu_cores: None,
@@ -1312,8 +1318,9 @@ pub struct CloudServiceAsset {
     pub name: String,                    // 资产名称
     pub instance_id: String,             // 实例ID / 设备序列号
     pub status: String,                  // 状态: 运行中/已停止/已释放等
-    pub cloud_provider: String,          // 云厂商 (阿里云/腾讯云/华为云/AWS) 或 机房名称
-    pub region: String,                  // 区域/机房位置
+    pub cloud_platform: String,           // 云平台 (阿里云/腾讯云/华为云/AWS)
+    pub cloud_zone: String,               // 云区 (公有云区域/政务区域/本地机房)
+    pub supplier_name: Option<String>,    // 供应商名称 (电信/移动/联通等)
 
     // 实例配置
     pub instance_type: String,           // 实例类型 (如 ecs.g6.large) 或 物理机型号
@@ -1345,6 +1352,7 @@ pub struct CloudServiceAsset {
     pub login_username: Option<String>,  // 登录用户名
     pub bastion_address: Option<String>, // 堡垒机地址
     pub bastion_account: Option<String>, // 堡垒机账号
+    pub bastion_initial_password: Option<String>, // 堡垒机密码
 
     // 物理机特有信息
     pub serial_number: Option<String>,   // 设备序列号
@@ -1378,7 +1386,7 @@ pub struct CloudServiceAsset {
 pub struct CloudServiceAssetQuery {
     pub asset_type: Option<String>,      // 资产类型筛选
     pub source_type: Option<String>,     // 来源类型筛选
-    pub cloud_provider: Option<String>,  // 云厂商筛选
+    pub cloud_platform: Option<String>,  // 云平台筛选
     pub status: Option<String>,          // 状态筛选
     pub customer_name: Option<String>,   // 客户筛选
     pub department: Option<String>,      // 部门筛选
