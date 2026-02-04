@@ -347,8 +347,8 @@ impl Language {
             (Language::En, "cloud_zone_management") => "🏢 Providers/Vendors".to_string(),
             (Language::Zh, "cloud_platform_management") => "☁️ 云服务管理".to_string(),
             (Language::En, "cloud_platform_management") => "☁️ Cloud Services".to_string(),
-            (Language::Zh, "cloud_provider_management") => "🌐 云厂商对接".to_string(),
-            (Language::En, "cloud_provider_management") => "🌐 Cloud Providers".to_string(),
+            (Language::Zh, "cloud_provider_management") => "🔧 云平台（技术底座）".to_string(),
+            (Language::En, "cloud_provider_management") => "🔧 Cloud Platforms".to_string(),
             (Language::Zh, "asset_name") => "资产名称".to_string(),
             (Language::En, "asset_name") => "Asset Name".to_string(),
             (Language::Zh, "spec") => "规格".to_string(),
@@ -2178,10 +2178,10 @@ fn BusinessApplication() -> Html {
                                         <p class="help">{ "填写云服务运营商或设备厂家名称" }</p>
                                     </div>
 
-                                    // 云厂商对接配置选择 - 只有选择云资源且已选择云区、云平台时才显示
+                                    // 云平台（技术底座）选择 - 只有选择云资源且已选择运营商、云服务时才显示
                                     if (*form_data).resource_type == "cloud" && (*selected_platform_id).is_some() {
                                         <div class="column is-12">
-                                            <label class="label">{ "云厂商对接配置" }</label>
+                                            <label class="label">{ "云平台（技术底座）" }</label>
                                             <div class="select is-fullwidth">
                                                 <select
                                                     onchange={
@@ -2192,10 +2192,10 @@ fn BusinessApplication() -> Html {
                                                         })
                                                     }
                                                 >
-                                                    <option value="">{ "选择对接配置..." }</option>
+                                                    <option value="">{ "选择技术底座..." }</option>
                                                     {
                                                         (*active_configs).iter().filter(|c| {
-                                                            // 过滤条件：云区和云平台匹配
+                                                            // 过滤条件：运营商和云服务匹配
                                                             let zone_match = (*selected_zone_id).and_then(|z| c.zone_id.map(|cz| z == cz)).unwrap_or(false);
                                                             let platform_match = (*selected_platform_id).and_then(|p| c.platform_id.map(|cp| p == cp)).unwrap_or(false);
                                                             zone_match && platform_match
@@ -2216,15 +2216,15 @@ fn BusinessApplication() -> Html {
                                                 </select>
                                             </div>
                                             <p class="help">
-                                                { "选择该云平台下的云厂商对接配置" }
+                                                { "选择该云服务的技术底座（如阿里云、腾讯云等）" }
                                             </p>
                                         </div>
                                     } else if (*form_data).resource_type == "cloud" {
                                         <div class="column is-12">
-                                            <label class="label">{ "云厂商对接配置" }</label>
+                                            <label class="label">{ "云平台（技术底座）" }</label>
                                             <div class="select is-fullwidth">
                                                 <select disabled={true}>
-                                                    <option>{ if (*selected_platform_id).is_none() { "请先选择云平台" } else { "暂无可用配置" } }</option>
+                                                    <option>{ if (*selected_platform_id).is_none() { "请先选择云服务" } else { "暂无可用配置" } }</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -6826,11 +6826,11 @@ fn CloudProviderManagement() -> Html {
             }
 
             <div class="box mt-5">
-                <p class="heading">{ "🌐 云厂商对接说明" }</p>
+                <p class="heading">{ "🔧 云平台（技术底座）说明" }</p>
                 <ul>
-                    <li>{ "云厂商对接用于配置使用厂商SDK搭建的本地云平台" }</li>
-                    <li>{ "对接流程：选择云厂商 → 添加云区 → 选择云平台" }</li>
-                    <li>{ "云资源申请时只能选择已配置且启用的云区" }</li>
+                    <li>{ "云平台（技术底座）是云服务的实际技术实现，如使用阿里云、腾讯云、华为云等厂商SDK搭建的平台" }</li>
+                    <li>{ "层级关系：地区 → 运营商/厂家 → 云服务 → 云平台（技术底座）" }</li>
+                    <li>{ "一个云服务可以有多个技术底座，如「对外服务」可以用阿里云或腾讯云实现" }</li>
                     <li>{ "创建配置后请先进行「测试连接」，确认凭证正确后再启用" }</li>
                     <li>{ "停用配置不会删除数据，云资源申请时将不会显示该配置" }</li>
                 </ul>
