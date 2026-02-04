@@ -40,9 +40,11 @@ pub async fn get_cloud_service_assets(
             name: br.ecs_name,
             instance_id: br.instance_id,
             status: br.ecs_status,
+            region: br.county_city,
+            cloud_zone: br.zone_name.clone().unwrap_or_else(|| "-".to_string()),
+            cloud_service: br.platform_name.clone(),
             cloud_platform: br.cloud_category,
-            cloud_zone: br.platform_name.clone().unwrap_or_else(|| "-".to_string()),
-            supplier_name: br.zone_name,
+            supplier_name: br.provider_vendor.clone(),
 
             // 实例配置
             instance_type: br.ecs_type,

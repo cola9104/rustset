@@ -1322,9 +1322,11 @@ pub struct CloudServiceAsset {
     pub name: String,                    // 资产名称
     pub instance_id: String,             // 实例ID / 设备序列号
     pub status: String,                  // 状态: 运行中/已停止/已释放等
+    pub region: Option<String>,           // 地区 (华北/华南/华东等)
     pub cloud_platform: String,           // 云平台 (阿里云/腾讯云/华为云/AWS)
-    pub cloud_zone: String,               // 云区 (公有云区域/政务区域/本地机房)
-    pub supplier_name: Option<String>,    // 供应商名称 (电信/移动/联通等)
+    pub cloud_zone: String,               // 运营商/厂家 (云服务商或设备厂家)
+    pub cloud_service: Option<String>,    // 云服务 (对外服务/内部核心服务等)
+    pub supplier_name: Option<String>,    // 供应商名称 (云厂商/设备厂家)
 
     // 实例配置
     pub instance_type: String,           // 实例类型 (如 ecs.g6.large) 或 物理机型号

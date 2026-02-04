@@ -4194,8 +4194,10 @@ fn CloudServiceAssetManagement() -> Html {
                                 <th>{ "类型" }</th>
                                 <th>{ "名称" }</th>
                                 <th>{ "实例ID" }</th>
-                                <th>{ "云平台" }</th>
-                                <th>{ "云区" }</th>
+                                <th>{ "地区" }</th>
+                                <th>{ "运营商/厂家" }</th>
+                                <th>{ "云服务" }</th>
+                                <th>{ "云平台（技术底座）" }</th>
                                 <th>{ "供应商" }</th>
                                 <th>{ "实例类型" }</th>
                                 <th>{ "CPU" }</th>
@@ -4264,8 +4266,10 @@ fn CloudServiceAssetManagement() -> Html {
                                         <td><span class={classes!("tag", asset_type_class)}>{ asset_type_label }</span></td>
                                         <td><strong>{ &asset.name }</strong></td>
                                         <td><code>{ &asset.instance_id }</code></td>
-                                        <td>{ &asset.cloud_platform }</td>
+                                        <td>{ asset.region.as_ref().unwrap_or(&String::from("-")) }</td>
                                         <td>{ &asset.cloud_zone }</td>
+                                        <td>{ asset.cloud_service.as_ref().unwrap_or(&String::from("-")) }</td>
+                                        <td>{ &asset.cloud_platform }</td>
                                         <td>{ asset.supplier_name.as_ref().unwrap_or(&String::from("-")) }</td>
                                         <td>{ &asset.instance_type }</td>
                                         <td>{ asset.cpu_cores }</td>
