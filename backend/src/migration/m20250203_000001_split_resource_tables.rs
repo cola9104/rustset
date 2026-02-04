@@ -66,45 +66,8 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Step 3: Migrate existing data from business_resources to physical_machines
-        // First, migrate records with resource_type = "physical"
-        manager
-            .execute_stmt(
-                sea_query::Query::insert()
-                    .into_table(PhysicalMachines::Table)
-                    .columns([
-                        PhysicalMachines::BusinessResourceId,
-                        PhysicalMachines::SerialNumber,
-                        PhysicalMachines::RackLocation,
-                        PhysicalMachines::HardwareModel,
-                        PhysicalMachines::WarrantyExpiry,
-                        PhysicalMachines::AgentStatus,
-                        PhysicalMachines::IpmiAddress,
-                        PhysicalMachines::CreatedAt,
-                    ])
-                    .query_from(
-                        sea_query::Query::select()
-                            .column(BusinessResources::Id)
-                            .column(BusinessResources::SerialNumber)
-                            .column(BusinessResources::RackLocation)
-                            .column(BusinessResources::HardwareModel)
-                            .column(BusinessResources::WarrantyExpiry)
-                            .column(BusinessResources::AgentStatus)
-                            .column(BusinessResources::IpmiAddress)
-                            .column(BusinessResources::CreatedAt)
-                            .from(BusinessResources::Table)
-                            .and_where(Expr::col(BusinessResources::ResourceType).eq("physical"))
-                            .and_where(Expr::col(BusinessResources::SerialNumber).is_not_null())
-                            .to_owned(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        // Step 4: Remove physical machine specific columns from business_resources table
-        // Note: SQLite doesn't support DROP COLUMN directly, so we need to recreate the table
-        // For now, we'll just leave them as NULL and ignore them in the application layer
-        // In a production environment with PostgreSQL/MySQL, we would use ALTER TABLE ... DROP COLUMN
+        // Note: Data migration is handled separately by the application
+        // This migration only creates the new tables
 
         Ok(())
     }

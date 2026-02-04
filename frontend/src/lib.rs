@@ -512,6 +512,8 @@ impl Language {
             (Language::En, "zone_code") => "Zone Code".to_string(),
             (Language::Zh, "platform_name") => "云平台名称".to_string(),
             (Language::En, "platform_name") => "Platform Name".to_string(),
+            (Language::Zh, "provider_vendor") => "运营商/厂家".to_string(),
+            (Language::En, "provider_vendor") => "Provider/Vendor".to_string(),
             (Language::Zh, "platform_code") => "云平台代码".to_string(),
             (Language::En, "platform_code") => "Platform Code".to_string(),
             (Language::Zh, "add_cloud_zone") => "添加云区".to_string(),
@@ -1258,6 +1260,7 @@ fn BusinessApplication() -> Html {
         cloud_provider_config_id: None,
         zone_name: None,
         platform_name: None,
+        provider_vendor: None,
         county_city: None,
         vdc_name: None,
         customer_name: String::new(),
@@ -1451,6 +1454,7 @@ fn BusinessApplication() -> Html {
                         cloud_provider_config_id: data.cloud_provider_config_id,
                         zone_name: data.zone_name.clone(),
                         platform_name: data.platform_name.clone(),
+                        provider_vendor: data.provider_vendor.clone(),
                         county_city: data.county_city.clone(),
                         vdc_name: data.vdc_name.clone(),
                         customer_name: Some(data.customer_name.clone()),
@@ -1575,6 +1579,7 @@ fn BusinessApplication() -> Html {
                 cloud_provider_config_id: resource.cloud_provider_config_id,
                 zone_name: resource.zone_name.clone(),
                 platform_name: resource.platform_name.clone(),
+                provider_vendor: resource.provider_vendor.clone(),
                 county_city: resource.county_city.clone(),
                 vdc_name: resource.vdc_name.clone(),
                 customer_name: resource.customer_name.clone(),
@@ -1651,6 +1656,7 @@ fn BusinessApplication() -> Html {
                 cloud_provider_config_id: None,
                 zone_name: None,
                 platform_name: None,
+                provider_vendor: None,
                 county_city: None,
                 vdc_name: None,
                 customer_name: String::new(),
@@ -1717,6 +1723,7 @@ fn BusinessApplication() -> Html {
                 "bastion_admin_account" => data.bastion_admin_account = if value.is_empty() { None } else { Some(value) },
                 "bastion_initial_password" => data.bastion_initial_password = if value.is_empty() { None } else { Some(value) },
                 "remarks" => data.remarks = if value.is_empty() { None } else { Some(value) },
+                "provider_vendor" => data.provider_vendor = if value.is_empty() { None } else { Some(value) },
                 _ => {}
             }
 
@@ -2019,9 +2026,9 @@ fn BusinessApplication() -> Html {
                                         </p>
                                     </div>
 
-                                    // 云区选择 - 云资源和物理机都需要选择
+                                    // 地区选择 - 云资源和物理机都需要选择
                                     <div class="column is-6">
-                                        <label class="label">{ "云区" }</label>
+                                        <label class="label">{ "地区" }</label>
                                         <div class="select is-fullwidth">
                                             <select
                                                 onchange={
@@ -2151,6 +2158,25 @@ fn BusinessApplication() -> Html {
                                             </div>
                                         </div>
                                     }
+
+                                    // 运营商/厂家 - 文本输入字段
+                                    <div class="column is-6">
+                                        <label class="label">{ "运营商/厂家" }</label>
+                                        <input
+                                            type="text"
+                                            class="input"
+                                            value={(*form_data).provider_vendor.clone().unwrap_or_default()}
+                                            placeholder="如：阿里云、腾讯云、华为云、戴尔、惠普等"
+                                            onchange={
+                                                let on_input_change = on_input_change.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let input: HtmlInputElement = e.target_unchecked_into();
+                                                    on_input_change.emit(("provider_vendor".to_string(), input.value()));
+                                                })
+                                            }
+                                        />
+                                        <p class="help">{ "填写云服务运营商或设备厂家名称" }</p>
+                                    </div>
 
                                     // 云厂商对接配置选择 - 只有选择云资源且已选择云区、云平台时才显示
                                     if (*form_data).resource_type == "cloud" && (*selected_platform_id).is_some() {
@@ -2518,8 +2544,9 @@ fn BusinessApplication() -> Html {
                                     <th>{ lang.t("ecs_name") }</th>
                                     <th>{ "资源类型" }</th>
                                     <th>{ lang.t("ecs_status") }</th>
-                                    <th>{ "云区" }</th>
+                                    <th>{ "地区" }</th>
                                     <th>{ "云平台" }</th>
+                                    <th>{ "运营商/厂家" }</th>
                                     <th>{ lang.t("resource_id") }</th>
                                     <th>{ lang.t("cloud_region") }</th>
                                     <th>{ lang.t("cloud_category") }</th>
@@ -2556,6 +2583,7 @@ fn BusinessApplication() -> Html {
                                             </td>
                                             <td>{ resource_clone.zone_name.as_ref().unwrap_or(&String::new()) }</td>
                                             <td>{ resource_clone.platform_name.as_ref().unwrap_or(&String::new()) }</td>
+                                            <td>{ resource_clone.provider_vendor.as_ref().unwrap_or(&String::new()) }</td>
                                             <td><code>{ &resource_clone.resource_id }</code></td>
                                             <td>{ &resource_clone.cloud_region }</td>
                                             <td>{ &resource_clone.cloud_category }</td>

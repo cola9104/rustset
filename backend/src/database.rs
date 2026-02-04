@@ -792,6 +792,7 @@ pub async fn insert_business_resource(
         cloud_provider_config_id: Set(req.cloud_provider_config_id),
         zone_name: Set(req.zone_name.clone()),
         platform_name: Set(req.platform_name.clone()),
+        provider_vendor: Set(req.provider_vendor.clone()),
         county_city: Set(req.county_city.clone()),
         vdc_name: Set(req.vdc_name.clone()),
         customer_name: Set(req.customer_name.clone()),
@@ -870,6 +871,7 @@ pub async fn update_business_resource_by_id(
     if let Some(v) = req.cloud_provider_config_id { db_resource.cloud_provider_config_id = Set(Some(v)); }
     if let Some(v) = &req.zone_name { db_resource.zone_name = Set(Some(v.clone())); }
     if let Some(v) = &req.platform_name { db_resource.platform_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.provider_vendor { db_resource.provider_vendor = Set(Some(v.clone())); }
     if let Some(v) = &req.county_city { db_resource.county_city = Set(Some(v.clone())); }
     if let Some(v) = &req.vdc_name { db_resource.vdc_name = Set(Some(v.clone())); }
     if let Some(v) = &req.customer_name { db_resource.customer_name = Set(v.clone()); }

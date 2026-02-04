@@ -15,6 +15,7 @@ pub struct Model {
     pub cloud_provider_config_id: Option<i32>,
     pub zone_name: Option<String>,
     pub platform_name: Option<String>,
+    pub provider_vendor: Option<String>,
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: String,
