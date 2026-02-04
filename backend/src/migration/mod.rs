@@ -5,6 +5,7 @@ mod m20250203_000002_make_resource_fields_nullable;
 mod m20250203_000001_split_resource_tables;
 mod m20250204_000001_add_provider_vendor;
 mod m20250204_000002_rename_cloud_platforms_to_cloud_services;
+mod m20250204_000003_add_regions;
 
 pub struct Migrator;
 
@@ -17,6 +18,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250203_000001_split_resource_tables::Migration),
             Box::new(m20250204_000001_add_provider_vendor::Migration),
             Box::new(m20250204_000002_rename_cloud_platforms_to_cloud_services::Migration),
+            Box::new(m20250204_000003_add_regions::Migration),
         ]
     }
 }

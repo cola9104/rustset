@@ -343,8 +343,8 @@ impl Language {
             (Language::En, "no_limit") => "No Limit".to_string(),
 
             // Multi-Cloud Management
-            (Language::Zh, "cloud_zone_management") => "🗺️ 云区管理".to_string(),
-            (Language::En, "cloud_zone_management") => "🗺️ Cloud Zones".to_string(),
+            (Language::Zh, "cloud_zone_management") => "🏢 运营商/厂家管理".to_string(),
+            (Language::En, "cloud_zone_management") => "🏢 Providers/Vendors".to_string(),
             (Language::Zh, "cloud_platform_management") => "☁️ 云服务管理".to_string(),
             (Language::En, "cloud_platform_management") => "☁️ Cloud Services".to_string(),
             (Language::Zh, "cloud_provider_management") => "🌐 云厂商对接".to_string(),
@@ -506,34 +506,34 @@ impl Language {
             (Language::En, "actions") => "Actions".to_string(),
 
             // Cloud Zone & Platform translations
-            (Language::Zh, "zone_name") => "云区名称".to_string(),
-            (Language::En, "zone_name") => "Zone Name".to_string(),
-            (Language::Zh, "zone_code") => "云区代码".to_string(),
-            (Language::En, "zone_code") => "Zone Code".to_string(),
-            (Language::Zh, "platform_name") => "云平台名称".to_string(),
-            (Language::En, "platform_name") => "Platform Name".to_string(),
-            (Language::Zh, "provider_vendor") => "运营商/厂家".to_string(),
-            (Language::En, "provider_vendor") => "Provider/Vendor".to_string(),
-            (Language::Zh, "platform_code") => "云平台代码".to_string(),
-            (Language::En, "platform_code") => "Platform Code".to_string(),
-            (Language::Zh, "add_cloud_zone") => "添加云区".to_string(),
-            (Language::En, "add_cloud_zone") => "Add Cloud Zone".to_string(),
-            (Language::Zh, "edit_cloud_zone") => "编辑云区".to_string(),
-            (Language::En, "edit_cloud_zone") => "Edit Cloud Zone".to_string(),
-            (Language::Zh, "delete_cloud_zone") => "删除云区".to_string(),
-            (Language::En, "delete_cloud_zone") => "Delete Cloud Zone".to_string(),
-            (Language::Zh, "add_cloud_platform") => "添加云平台".to_string(),
-            (Language::En, "add_cloud_platform") => "Add Cloud Platform".to_string(),
-            (Language::Zh, "edit_cloud_platform") => "编辑云平台".to_string(),
-            (Language::En, "edit_cloud_platform") => "Edit Cloud Platform".to_string(),
-            (Language::Zh, "delete_cloud_platform") => "删除云平台".to_string(),
-            (Language::En, "delete_cloud_platform") => "Delete Cloud Platform".to_string(),
-            (Language::Zh, "belonging_zone") => "所属云区".to_string(),
-            (Language::En, "belonging_zone") => "Belonging Zone".to_string(),
-            (Language::Zh, "no_cloud_zones") => "暂无云区".to_string(),
-            (Language::En, "no_cloud_zones") => "No cloud zones yet".to_string(),
-            (Language::Zh, "no_cloud_platforms") => "暂无云平台".to_string(),
-            (Language::En, "no_cloud_platforms") => "No cloud platforms yet".to_string(),
+            (Language::Zh, "zone_name") => "运营商/厂家名称".to_string(),
+            (Language::En, "zone_name") => "Provider/Vendor Name".to_string(),
+            (Language::Zh, "zone_code") => "运营商/厂家代码".to_string(),
+            (Language::En, "zone_code") => "Provider/Vendor Code".to_string(),
+            (Language::Zh, "platform_name") => "云服务名称".to_string(),
+            (Language::En, "platform_name") => "Service Name".to_string(),
+            (Language::Zh, "provider_vendor") => "云厂商/设备厂家".to_string(),
+            (Language::En, "provider_vendor") => "Cloud Provider/Vendor".to_string(),
+            (Language::Zh, "platform_code") => "云服务代码".to_string(),
+            (Language::En, "platform_code") => "Service Code".to_string(),
+            (Language::Zh, "add_cloud_zone") => "添加运营商/厂家".to_string(),
+            (Language::En, "add_cloud_zone") => "Add Provider/Vendor".to_string(),
+            (Language::Zh, "edit_cloud_zone") => "编辑运营商/厂家".to_string(),
+            (Language::En, "edit_cloud_zone") => "Edit Provider/Vendor".to_string(),
+            (Language::Zh, "delete_cloud_zone") => "删除运营商/厂家".to_string(),
+            (Language::En, "delete_cloud_zone") => "Delete Provider/Vendor".to_string(),
+            (Language::Zh, "add_cloud_platform") => "添加云服务".to_string(),
+            (Language::En, "add_cloud_platform") => "Add Cloud Service".to_string(),
+            (Language::Zh, "edit_cloud_platform") => "编辑云服务".to_string(),
+            (Language::En, "edit_cloud_platform") => "Edit Cloud Service".to_string(),
+            (Language::Zh, "delete_cloud_platform") => "删除云服务".to_string(),
+            (Language::En, "delete_cloud_platform") => "Delete Cloud Service".to_string(),
+            (Language::Zh, "belonging_zone") => "所属运营商/厂家".to_string(),
+            (Language::En, "belonging_zone") => "Belonging Provider/Vendor".to_string(),
+            (Language::Zh, "no_cloud_zones") => "暂无运营商/厂家".to_string(),
+            (Language::En, "no_cloud_zones") => "No providers/vendors yet".to_string(),
+            (Language::Zh, "no_cloud_platforms") => "暂无云服务".to_string(),
+            (Language::En, "no_cloud_platforms") => "No cloud services yet".to_string(),
 
             _ => key.to_string(),
         }
@@ -7333,11 +7333,11 @@ fn CloudZoneManagement() -> Html {
             }
 
             <div class="box mt-5">
-                <p class="heading">{ "🗺️ 云区管理说明" }</p>
+                <p class="heading">{ "🏢 运营商/厂家管理说明" }</p>
                 <ul>
-                    <li>{ "云区是最高级别的资源划分单位，用于管理不同地域的云资源" }</li>
-                    <li>{ "每个云区下可以有多个云平台（如公众云、政务云等）" }</li>
-                    <li>{ "云区代码用于系统内部标识，建议使用英文简写" }</li>
+                    <li>{ "运营商/厂家用于管理不同的云服务提供商（如阿里云、腾讯云、华为云等）或设备厂家" }</li>
+                    <li>{ "每个运营商/厂家下可以有多个云服务（如对外服务、内部核心服务等）" }</li>
+                    <li>{ "运营商/厂家代码用于系统内部标识，建议使用英文简写" }</li>
                 </ul>
             </div>
         </div>
