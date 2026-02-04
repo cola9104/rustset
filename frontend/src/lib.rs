@@ -1325,7 +1325,7 @@ fn BusinessApplication() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                if let Ok(resp) = Request::get(&api_url("cloud-zones"))
+                if let Ok(resp) = Request::get(&api_url("providers"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -1348,7 +1348,7 @@ fn BusinessApplication() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                if let Ok(resp) = Request::get(&format!("{}cloud-platforms/zone/{}", api_url(""), zone_id))
+                if let Ok(resp) = Request::get(&format!("{}cloud-services/zone/{}", api_url(""), zone_id))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -6033,7 +6033,7 @@ fn CloudProviderManagement() -> Html {
             spawn_local(async move {
                 zones_loading.set(true);
 
-                match Request::get(&api_url("cloud-zones"))
+                match Request::get(&api_url("providers"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -6068,7 +6068,7 @@ fn CloudProviderManagement() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                match Request::get(&format!("{}cloud-platforms/zone/{}", api_url(""), zone_id))
+                match Request::get(&format!("{}cloud-services/zone/{}", api_url(""), zone_id))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -6874,7 +6874,7 @@ fn CloudZoneManagement() -> Html {
                 loading.set(true);
                 error_message.set(None);
 
-                match Request::get(&api_url("cloud-zones"))
+                match Request::get(&api_url("providers"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -6964,7 +6964,7 @@ fn CloudZoneManagement() -> Html {
                     description,
                 };
 
-                match Request::post(&api_url("cloud-zones"))
+                match Request::post(&api_url("providers"))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(serde_json::to_string(&request).unwrap())
@@ -7011,7 +7011,7 @@ fn CloudZoneManagement() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                match Request::delete(&format!("{}/{}", api_url("cloud-zones"), id))
+                match Request::delete(&format!("{}/{}", api_url("providers"), id))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -7089,7 +7089,7 @@ fn CloudZoneManagement() -> Html {
                     description,
                 };
 
-                match Request::put(&format!("{}/{}", api_url("cloud-zones"), id))
+                match Request::put(&format!("{}/{}", api_url("providers"), id))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(serde_json::to_string(&request).unwrap())
@@ -7376,7 +7376,7 @@ fn CloudPlatformManagement() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                match Request::get(&api_url("cloud-zones"))
+                match Request::get(&api_url("providers"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -7419,7 +7419,7 @@ fn CloudPlatformManagement() -> Html {
                 loading.set(true);
                 error_message.set(None);
 
-                match Request::get(&api_url("cloud-platforms"))
+                match Request::get(&api_url("cloud-services"))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -7533,7 +7533,7 @@ fn CloudPlatformManagement() -> Html {
                     description,
                 };
 
-                match Request::post(&api_url("cloud-platforms"))
+                match Request::post(&api_url("cloud-services"))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(serde_json::to_string(&request).unwrap())
@@ -7581,7 +7581,7 @@ fn CloudPlatformManagement() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                match Request::delete(&format!("{}/{}", api_url("cloud-platforms"), id))
+                match Request::delete(&format!("{}/{}", api_url("cloud-services"), id))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -7664,7 +7664,7 @@ fn CloudPlatformManagement() -> Html {
                     description,
                 };
 
-                match Request::put(&format!("{}/{}", api_url("cloud-platforms"), id))
+                match Request::put(&format!("{}/{}", api_url("cloud-services"), id))
                     .header("Authorization", &token)
                     .header("Content-Type", "application/json")
                     .body(serde_json::to_string(&request).unwrap())
