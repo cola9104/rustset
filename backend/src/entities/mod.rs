@@ -5,6 +5,7 @@
 
 pub mod cloud_zone;
 pub mod cloud_platform;
+pub mod cloud_service;
 pub mod cloud_provider_config;
 pub mod business_resource;
 pub mod physical_machine;
@@ -21,6 +22,7 @@ pub mod quick_scan_result;
 
 pub use cloud_zone::Entity as CloudZone;
 pub use cloud_platform::Entity as CloudPlatform;
+pub use cloud_service::Entity as CloudService;
 pub use cloud_provider_config::Entity as CloudProviderConfig;
 pub use business_resource::Entity as BusinessResource;
 pub use physical_machine::Entity as PhysicalMachine;

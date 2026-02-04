@@ -345,8 +345,8 @@ impl Language {
             // Multi-Cloud Management
             (Language::Zh, "cloud_zone_management") => "🗺️ 云区管理".to_string(),
             (Language::En, "cloud_zone_management") => "🗺️ Cloud Zones".to_string(),
-            (Language::Zh, "cloud_platform_management") => "☁️ 云平台管理".to_string(),
-            (Language::En, "cloud_platform_management") => "☁️ Cloud Platforms".to_string(),
+            (Language::Zh, "cloud_platform_management") => "☁️ 云服务管理".to_string(),
+            (Language::En, "cloud_platform_management") => "☁️ Cloud Services".to_string(),
             (Language::Zh, "cloud_provider_management") => "🌐 云厂商对接".to_string(),
             (Language::En, "cloud_provider_management") => "🌐 Cloud Providers".to_string(),
             (Language::Zh, "asset_name") => "资产名称".to_string(),
@@ -7699,7 +7699,7 @@ fn CloudPlatformManagement() -> Html {
 
     html! {
         <div class="container" style="margin-top: 20px;">
-            <h1 class="title">{ "☁️ 云平台管理" }</h1>
+            <h1 class="title">{ "☁️ 云服务管理" }</h1>
 
             if let Some(ref error) = *error_message {
                 <div class="notification is-danger is-light">
@@ -7965,11 +7965,11 @@ fn CloudPlatformManagement() -> Html {
             }
 
             <div class="box mt-5">
-                <p class="heading">{ "☁️ 云平台管理说明" }</p>
+                <p class="heading">{ "☁️ 云服务管理说明" }</p>
                 <ul>
-                    <li>{ "云平台属于某个云区，如「华北区」下的「公众云」「政务云」" }</li>
-                    <li>{ "每个云平台可以对接多个云厂商配置" }</li>
-                    <li>{ "云平台代码用于系统内部标识，建议使用英文简写" }</li>
+                    <li>{ "云服务属于某个云区，如「华北区」下的「对外服务」「内部核心服务」" }</li>
+                    <li>{ "每个云服务可以对接多个云厂商配置" }</li>
+                    <li>{ "云服务代码用于系统内部标识，建议使用英文简写" }</li>
                 </ul>
             </div>
         </div>
