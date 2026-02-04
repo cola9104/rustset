@@ -512,8 +512,6 @@ impl Language {
             (Language::En, "zone_code") => "Provider/Vendor Code".to_string(),
             (Language::Zh, "platform_name") => "云服务名称".to_string(),
             (Language::En, "platform_name") => "Service Name".to_string(),
-            (Language::Zh, "provider_vendor") => "云厂商/设备厂家".to_string(),
-            (Language::En, "provider_vendor") => "Cloud Provider/Vendor".to_string(),
             (Language::Zh, "platform_code") => "云服务代码".to_string(),
             (Language::En, "platform_code") => "Service Code".to_string(),
             (Language::Zh, "add_cloud_zone") => "添加运营商/厂家".to_string(),
@@ -549,7 +547,7 @@ fn get_auth_token() -> String {
     match web_sys::window() {
         Some(window) => match window.local_storage() {
             Ok(Some(storage)) => match storage.get_item("auth_token") {
-                Ok(token) => token.unwrap_or_default(),
+                Ok(token) => token.unwrap_or_default().trim().to_string(),
                 _ => String::new(),
             },
             _ => String::new(),
@@ -1260,7 +1258,6 @@ fn BusinessApplication() -> Html {
         cloud_provider_config_id: None,
         zone_name: None,
         platform_name: None,
-        provider_vendor: None,
         county_city: None,
         vdc_name: None,
         customer_name: String::new(),
@@ -1348,7 +1345,7 @@ fn BusinessApplication() -> Html {
             let token = token.clone();
 
             spawn_local(async move {
-                if let Ok(resp) = Request::get(&format!("{}cloud-services/zone/{}", api_url(""), zone_id))
+                if let Ok(resp) = Request::get(&format!("{}cloud-services/provider/{}", api_url(""), zone_id))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -1454,7 +1451,6 @@ fn BusinessApplication() -> Html {
                         cloud_provider_config_id: data.cloud_provider_config_id,
                         zone_name: data.zone_name.clone(),
                         platform_name: data.platform_name.clone(),
-                        provider_vendor: data.provider_vendor.clone(),
                         county_city: data.county_city.clone(),
                         vdc_name: data.vdc_name.clone(),
                         customer_name: Some(data.customer_name.clone()),
@@ -1579,7 +1575,6 @@ fn BusinessApplication() -> Html {
                 cloud_provider_config_id: resource.cloud_provider_config_id,
                 zone_name: resource.zone_name.clone(),
                 platform_name: resource.platform_name.clone(),
-                provider_vendor: resource.provider_vendor.clone(),
                 county_city: resource.county_city.clone(),
                 vdc_name: resource.vdc_name.clone(),
                 customer_name: resource.customer_name.clone(),
@@ -1656,7 +1651,6 @@ fn BusinessApplication() -> Html {
                 cloud_provider_config_id: None,
                 zone_name: None,
                 platform_name: None,
-                provider_vendor: None,
                 county_city: None,
                 vdc_name: None,
                 customer_name: String::new(),
@@ -1723,7 +1717,6 @@ fn BusinessApplication() -> Html {
                 "bastion_admin_account" => data.bastion_admin_account = if value.is_empty() { None } else { Some(value) },
                 "bastion_initial_password" => data.bastion_initial_password = if value.is_empty() { None } else { Some(value) },
                 "remarks" => data.remarks = if value.is_empty() { None } else { Some(value) },
-                "provider_vendor" => data.provider_vendor = if value.is_empty() { None } else { Some(value) },
                 _ => {}
             }
 
@@ -1815,7 +1808,7 @@ fn BusinessApplication() -> Html {
                             let form_data = form_data.clone();
                             Callback::from(move |_| {
                                 show_form.set(true);
-                                // 打开新表单时重置云区和云平台选择
+                                // 打开新表单时重置云区和云服务选择
                                 selected_zone_id.set(None);
                                 selected_platform_id.set(None);
 
@@ -1961,30 +1954,6 @@ fn BusinessApplication() -> Html {
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="column is-6">
-                                        <label class="label">{ lang.t("resource_id") }</label>
-                                        <input
-                                            type="text"
-                                            class="input"
-                                            readonly=true
-                                            placeholder="待分配（由运维/编排自动填写）"
-                                            value={(*form_data).resource_id.clone()}
-                                            style="background-color: #f5f5f5; cursor: not-allowed;"
-                                        />
-                                        <p class="help">{"此字段由运维人员或自动化编排分配"}</p>
-                                    </div>
-                                    <div class="column is-6">
-                                        <label class="label">{ lang.t("instance_id") }</label>
-                                        <input
-                                            type="text"
- class="input"
-                                            readonly=true
-                                            placeholder="待分配（由运维/编排自动填写）"
-                                            value={(*form_data).instance_id.clone()}
-                                            style="background-color: #f5f5f5; cursor: not-allowed;"
-                                        />
-                                        <p class="help">{"此字段由运维人员或自动化编排分配"}</p>
-                                    </div>
 
                                     // Cloud Zone Selection - 资源类型选择
                                     <div class="column is-6">
@@ -2006,7 +1975,7 @@ fn BusinessApplication() -> Html {
                                                         if value == "physical" {
                                                             data.cloud_provider_config_id = None;
                                                             data.cloud_category = "物理机".to_string();
-                                                            // 切换到物理机时，清除云区和云平台选择
+                                                            // 切换到物理机时，清除云区和云服务选择
                                                             selected_zone_id.set(None);
                                                             selected_platform_id.set(None);
                                                         } else {
@@ -2026,9 +1995,9 @@ fn BusinessApplication() -> Html {
                                         </p>
                                     </div>
 
-                                    // 地区选择 - 云资源和物理机都需要选择
+                                    // 运营商/厂家选择 - 云资源和物理机都需要选择
                                     <div class="column is-6">
-                                        <label class="label">{ "地区" }</label>
+                                        <label class="label">{ "所属运营商/厂家" }</label>
                                         <div class="select is-fullwidth">
                                             <select
                                                 onchange={
@@ -2042,13 +2011,13 @@ fn BusinessApplication() -> Html {
                                                         let zone_id: i32 = select.value().parse().unwrap_or(0);
                                                         if zone_id > 0 {
                                                             selected_zone_id.set(Some(zone_id));
-                                                            // 重置云平台选择
+                                                            // 重置云服务选择
                                                             selected_platform_id.set(None);
                                                             // 清除 cloud_provider_config_id
                                                             let mut data = (*form_data).clone();
                                                             data.cloud_provider_config_id = None;
                                                             form_data.set(data);
-                                                            // 获取该云区的云平台列表
+                                                            // 获取该云区的云服务列表
                                                             fetch_cloud_platforms.emit(zone_id);
                                                         } else {
                                                             selected_zone_id.set(None);
@@ -2061,7 +2030,7 @@ fn BusinessApplication() -> Html {
                                                     })
                                                 }
                                             >
-                                                <option value="" selected={(*selected_zone_id).is_none()}>{ "选择云区..." }</option>
+                                                <option value="" selected={(*selected_zone_id).is_none()}>{ "选择运营商/厂家..." }</option>
                                                 { for (*cloud_zones).iter().map(|zone| {
                                                     let zone_id_value = zone.id.unwrap_or(0);
                                                     let selected = (*selected_zone_id).map(|z| z == zone_id_value).unwrap_or(false);
@@ -2074,14 +2043,14 @@ fn BusinessApplication() -> Html {
                                             </select>
                                         </div>
                                         <p class="help">
-                                            { if (*form_data).resource_type == "physical" { "选择物理机所在地域" } else { "选择系统定义的云区" } }
+                                            { if (*form_data).resource_type == "physical" { "选择物理机所在运营商/厂家" } else { "选择系统定义的运营商/厂家" } }
                                         </p>
                                     </div>
 
-                                    // 云平台选择 - 选择云区后显示（云资源和物理机都需要）
+                                    // 云服务选择 - 选择云区后显示（云资源和物理机都需要）
                                     if (*selected_zone_id).is_some() {
                                         <div class="column is-6">
-                                            <label class="label">{ "云平台" }</label>
+                                            <label class="label">{ "云服务" }</label>
                                             <div class="select is-fullwidth">
                                                 <select
                                                     onchange={
@@ -2096,7 +2065,7 @@ fn BusinessApplication() -> Html {
                                                             let platform_id: i32 = select.value().parse().unwrap_or(0);
                                                             if platform_id > 0 {
                                                                 selected_platform_id.set(Some(platform_id));
-                                                                // 根据云区和云平台找到对应的云厂商配置ID
+                                                                // 根据云区和云服务找到对应的云厂商配置ID
                                                                 if let Some(zone_id) = *selected_zone_id {
                                                                     let matching_config = (*active_configs).iter()
                                                                         .find(|c| c.zone_id == Some(zone_id) && c.platform_id == Some(platform_id));
@@ -2109,7 +2078,7 @@ fn BusinessApplication() -> Html {
                                                                         data.cloud_category = format!("{:?}", config.provider);
                                                                         data.cloud_region = config.region_name.clone();
                                                                     }
-                                                                    // 获取云区和云平台名称
+                                                                    // 获取云区和云服务名称
                                                                     let zone_name = (*cloud_zones).iter()
                                                                         .find(|z| z.id == Some(zone_id))
                                                                         .map(|z| z.zone_name.clone());
@@ -2132,7 +2101,7 @@ fn BusinessApplication() -> Html {
                                                         })
                                                     }
                                                 >
-                                                    <option value="" selected={(*selected_platform_id).is_none()}>{ "选择云平台..." }</option>
+                                                    <option value="" selected={(*selected_platform_id).is_none()}>{ "选择云服务..." }</option>
                                                     { for (*cloud_platforms).iter().map(|platform| {
                                                         let platform_id_value = platform.id.unwrap_or(0);
                                                         let selected = (*selected_platform_id).map(|p| p == platform_id_value).unwrap_or(false);
@@ -2145,38 +2114,19 @@ fn BusinessApplication() -> Html {
                                                 </select>
                                             </div>
                                             <p class="help">
-                                                { if (*form_data).resource_type == "physical" { "选择物理机所在机房/环境" } else { "选择系统定义的云平台" } }
+                                                { if (*form_data).resource_type == "physical" { "选择物理机所在机房/环境" } else { "选择系统定义的云服务" } }
                                             </p>
                                         </div>
                                     } else {
                                         <div class="column is-6">
-                                            <label class="label">{ "云平台" }</label>
+                                            <label class="label">{ "云服务" }</label>
                                             <div class="select is-fullwidth">
                                                 <select disabled={true}>
-                                                    <option>{ "请先选择云区" }</option>
+                                                    <option>{ "请先选择运营商/厂家" }</option>
                                                 </select>
                                             </div>
                                         </div>
                                     }
-
-                                    // 运营商/厂家 - 文本输入字段
-                                    <div class="column is-6">
-                                        <label class="label">{ "运营商/厂家" }</label>
-                                        <input
-                                            type="text"
-                                            class="input"
-                                            value={(*form_data).provider_vendor.clone().unwrap_or_default()}
-                                            placeholder="如：阿里云、腾讯云、华为云、戴尔、惠普等"
-                                            onchange={
-                                                let on_input_change = on_input_change.clone();
-                                                Callback::from(move |e: Event| {
-                                                    let input: HtmlInputElement = e.target_unchecked_into();
-                                                    on_input_change.emit(("provider_vendor".to_string(), input.value()));
-                                                })
-                                            }
-                                        />
-                                        <p class="help">{ "填写云服务运营商或设备厂家名称" }</p>
-                                    </div>
 
                                     // 云平台（技术底座）选择 - 只有选择云资源且已选择运营商、云服务时才显示
                                     if (*form_data).resource_type == "cloud" && (*selected_platform_id).is_some() {
@@ -2545,14 +2495,13 @@ fn BusinessApplication() -> Html {
                                     <th>{ "资源类型" }</th>
                                     <th>{ lang.t("ecs_status") }</th>
                                     <th>{ "地区" }</th>
-                                    <th>{ "云平台" }</th>
-                                    <th>{ "运营商/厂家" }</th>
+                                    <th>{ "云服务" }</th>
                                     <th>{ lang.t("resource_id") }</th>
                                     <th>{ lang.t("cloud_region") }</th>
                                     <th>{ lang.t("cloud_category") }</th>
                                     <th>{ lang.t("customer_name") }</th>
                                     <th>{ lang.t("application_name") }</th>
-                                    <th>{ lang.t("instance_id") }</th>
+                                    <th>{ "业务资源ID" }</th>
                                     <th>{ lang.t("ecs_type") }</th>
                                     <th>{ lang.t("ecs_os") }</th>
                                     <th>{ lang.t("cpu_cores") }</th>
@@ -2583,13 +2532,12 @@ fn BusinessApplication() -> Html {
                                             </td>
                                             <td>{ resource_clone.zone_name.as_ref().unwrap_or(&String::new()) }</td>
                                             <td>{ resource_clone.platform_name.as_ref().unwrap_or(&String::new()) }</td>
-                                            <td>{ resource_clone.provider_vendor.as_ref().unwrap_or(&String::new()) }</td>
                                             <td><code>{ &resource_clone.resource_id }</code></td>
                                             <td>{ &resource_clone.cloud_region }</td>
                                             <td>{ &resource_clone.cloud_category }</td>
                                             <td>{ &resource_clone.customer_name }</td>
                                             <td>{ resource_clone.application_name.as_ref().unwrap_or(&String::new()) }</td>
-                                            <td><code>{ &resource_clone.instance_id }</code></td>
+                                            <td>{ resource_clone.id }</td>
                                             <td>{ &resource_clone.ecs_type }</td>
                                             <td>{ &resource_clone.ecs_os }</td>
                                             <td>{ resource_clone.cpu_cores }</td>
@@ -3114,7 +3062,7 @@ fn OperationsManagement() -> Html {
                                 <th>{"ID"}</th>
                                 <th>{"资源类型"}</th>
                                 <th>{"名称"}</th>
-                                <th>{"云平台"}</th>
+                                <th>{"云服务名称"}</th>
                                 <th>{"区域"}</th>
                                 <th>{"客户"}</th>
                                 <th>{"状态"}</th>
@@ -3138,7 +3086,7 @@ fn OperationsManagement() -> Html {
                                                 </span>
                                             </td>
                                             <td>{ &resource_clone.ecs_name }</td>
-                                            <td>{ &resource_clone.cloud_category }</td>
+                                            <td>{ &resource_clone.platform_name.clone().unwrap_or_else(|| "-".to_string()) }</td>
                                             <td>{ &resource_clone.cloud_region }</td>
                                             <td>{ &resource_clone.customer_name }</td>
                                             <td>
@@ -3207,7 +3155,7 @@ fn OperationsManagement() -> Html {
                                                 <tr><td><strong>{"ID"}</strong></td><td>{ resource.id.unwrap_or(0) }</td></tr>
                                                 <tr><td><strong>{"资源类型"}</strong></td><td>{ &resource.resource_type }</td></tr>
                                                 <tr><td><strong>{"ECS名称"}</strong></td><td>{ &resource.ecs_name }</td></tr>
-                                                <tr><td><strong>{"云平台"}</strong></td><td>{ &resource.cloud_category }</td></tr>
+                                                <tr><td><strong>{"云平台（技术底座）"}</strong></td><td>{ &resource.cloud_category }</td></tr>
                                                 <tr><td><strong>{"区域"}</strong></td><td>{ &resource.cloud_region }</td></tr>
                                                 <tr><td><strong>{"客户"}</strong></td><td>{ &resource.customer_name }</td></tr>
                                                 <tr><td><strong>{"应用"}</strong></td><td>{ resource.application_name.as_ref().map(|s| s.as_str()).unwrap_or("-") }</td></tr>
@@ -4193,12 +4141,11 @@ fn CloudServiceAssetManagement() -> Html {
                                 <th>{ "来源" }</th>
                                 <th>{ "类型" }</th>
                                 <th>{ "名称" }</th>
-                                <th>{ "实例ID" }</th>
+                                <th>{ "业务资源ID" }</th>
                                 <th>{ "地区" }</th>
                                 <th>{ "运营商/厂家" }</th>
                                 <th>{ "云服务" }</th>
                                 <th>{ "云平台（技术底座）" }</th>
-                                <th>{ "供应商" }</th>
                                 <th>{ "实例类型" }</th>
                                 <th>{ "CPU" }</th>
                                 <th>{ "内存GB" }</th>
@@ -4265,12 +4212,11 @@ fn CloudServiceAssetManagement() -> Html {
                                         <td><span class={classes!("tag", "is-light")}>{ source_type_label }</span></td>
                                         <td><span class={classes!("tag", asset_type_class)}>{ asset_type_label }</span></td>
                                         <td><strong>{ &asset.name }</strong></td>
-                                        <td><code>{ &asset.instance_id }</code></td>
+                                        <td>{ asset.business_resource_id.map(|id| id.to_string()).unwrap_or_else(|| "-".to_string()) }</td>
                                         <td>{ asset.region.as_ref().unwrap_or(&String::from("-")) }</td>
                                         <td>{ &asset.cloud_zone }</td>
                                         <td>{ asset.cloud_service.as_ref().unwrap_or(&String::from("-")) }</td>
                                         <td>{ &asset.cloud_platform }</td>
-                                        <td>{ asset.supplier_name.as_ref().unwrap_or(&String::from("-")) }</td>
                                         <td>{ &asset.instance_type }</td>
                                         <td>{ asset.cpu_cores }</td>
                                         <td>{ asset.memory_gb }</td>
@@ -5238,7 +5184,7 @@ fn UserManagement() -> Html {
                                         </label>
                                         // 子级权限
                                         <div style="margin-left: 1.5rem; border-left: 3px solid #3273dc; padding-left: 1rem; margin-top: 0.5rem;">
-                                            // 云厂商对接
+                                            // 云平台管理
                                             <label class="checkbox" style="display: block; margin: 0.5rem 0;">
                                                 <input
                                                     type="checkbox"
@@ -5247,9 +5193,9 @@ fn UserManagement() -> Html {
                                                     disabled={!perms.can_access_cloud}
                                                     style={if !perms.can_access_cloud { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
                                                 >
-                                                { " 查看云区对接" }
+                                                { " 查看云平台管理" }
                                             </label>
-                                            // 孙级权限 - 云区操作
+                                            // 孙级权限 - 云平台操作
                                             <div style="margin-left: 1.5rem; border-left: 2px solid #ddd; padding-left: 1rem; margin-top: 0.5rem;">
                                                 <label class="checkbox" style="display: block; margin: 0.4rem 0;">
                                                     <input
@@ -5259,7 +5205,7 @@ fn UserManagement() -> Html {
                                                         disabled={!perms.can_view_cloud_providers}
                                                         style={if !perms.can_view_cloud_providers { "opacity: 0.5; cursor: not-allowed;" } else { "" }}/
                                                     >
-                                                    { " 管理云区对接" }
+                                                    { " 管理云平台技术底座" }
                                                 </label>
                                             </div>
                                             // 云服务资产
@@ -5923,8 +5869,8 @@ fn AutomationOrchestration() -> Html {
     }
 }
 
-// ============== Cloud Provider Management Component ==============
-// 云厂商对接组件
+// ============== Cloud Platform Management Component ==============
+// 云平台（技术底座）管理组件
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CloudProviderConfigDisplay {
@@ -5955,8 +5901,8 @@ fn CloudProviderManagement() -> Html {
 
     // Form states
     let form_provider = use_state(|| CloudProvider::Aliyun);
-    let form_zone_id = use_state(|| None as Option<i32>);
-    let form_platform_id = use_state(|| None as Option<i32>);
+    let form_zone_id = use_state(|| 0);
+    let form_platform_id = use_state(|| 0);
     let form_account_name = use_state(|| String::new());
     let form_access_key_id = use_state(|| String::new());
     let form_access_key_secret = use_state(|| String::new());
@@ -6071,8 +6017,11 @@ fn CloudProviderManagement() -> Html {
             let cloud_platforms = cloud_platforms.clone();
             let token = token.clone();
 
+            // Clear platforms before fetching to avoid stale data
+            cloud_platforms.set(Vec::new());
+
             spawn_local(async move {
-                match Request::get(&format!("{}cloud-services/zone/{}", api_url(""), zone_id))
+                match Request::get(&format!("{}cloud-services/provider/{}", api_url(""), zone_id))
                     .header("Authorization", &token)
                     .send()
                     .await
@@ -6084,11 +6033,15 @@ fn CloudProviderManagement() -> Html {
                             }
                             Err(e) => {
                                 gloo_console::error!(format!("获取云平台列表失败: {}", e));
+                                // Clear platforms on error
+                                cloud_platforms.set(Vec::new());
                             }
                         }
                     }
                     _ => {
                         gloo_console::error!("获取云平台列表失败");
+                        // Clear platforms on error
+                        cloud_platforms.set(Vec::new());
                     }
                 }
             });
@@ -6171,7 +6124,16 @@ fn CloudProviderManagement() -> Html {
 
     let on_open_create_modal = Callback::from({
         let show_create_modal = show_create_modal.clone();
-        move |_| show_create_modal.set(true)
+        let cloud_platforms = cloud_platforms.clone();
+        let form_zone_id = form_zone_id.clone();
+        let form_platform_id = form_platform_id.clone();
+        move |_| {
+            // Clear platforms and reset form when opening modal
+            cloud_platforms.set(Vec::new());
+            form_zone_id.set(0);
+            form_platform_id.set(0);
+            show_create_modal.set(true);
+        }
     });
 
     let on_close_create_modal = {
@@ -6187,8 +6149,8 @@ fn CloudProviderManagement() -> Html {
         Callback::from(move |_: web_sys::MouseEvent| {
             show_create_modal.set(false);
             form_provider.set(CloudProvider::Aliyun);
-            form_zone_id.set(None);
-            form_platform_id.set(None);
+            form_zone_id.set(0);
+            form_platform_id.set(0);
             form_account_name.set(String::new());
             form_access_key_id.set(String::new());
             form_access_key_secret.set(String::new());
@@ -6229,8 +6191,8 @@ fn CloudProviderManagement() -> Html {
 
             spawn_local(async move {
                 let body = serde_json::json!({
-                    "zone_id": zone_id,
-                    "platform_id": platform_id,
+                    "zone_id": if zone_id > 0 { serde_json::Value::Number(serde_json::Number::from(zone_id)) } else { serde_json::Value::Null },
+                    "platform_id": if platform_id > 0 { serde_json::Value::Number(serde_json::Number::from(platform_id)) } else { serde_json::Value::Null },
                     "provider": provider,
                     "region_id": "",
                     "region_name": "",
@@ -6422,14 +6384,14 @@ fn CloudProviderManagement() -> Html {
             <div class="level mb-4">
                 <div class="level-left">
                     <div class="level-item">
-                        <h1 class="title is-4">{ "🌐 云厂商对接" }</h1>
+                        <h1 class="title is-4">{ "🌐 云平台（技术底座）管理" }</h1>
                     </div>
                 </div>
                 <div class="level-right">
                     <div class="level-item">
                         <button class="button is-primary" onclick={on_open_create_modal}>
                             <span class="icon"><i class="fas fa-plus"></i></span>
-                            <span>{ "添加云区配置" }</span>
+                            <span>{ "添加技术底座配置" }</span>
                         </button>
                     </div>
                 </div>
@@ -6508,9 +6470,9 @@ fn CloudProviderManagement() -> Html {
                 } else if filtered_configs.is_empty() {
                     html! {
                         <div class="box has-text-centered py-6">
-                            <p class="has-text-grey">{ "暂无云区对接配置" }</p>
+                            <p class="has-text-grey">{ "暂无技术底座配置" }</p>
                             <p class="has-text-grey is-size-7 mt-2">
-                                { "点击上方「添加云区配置」按钮添加新的云平台对接" }
+                                { "点击上方「添加技术底座配置」按钮添加新的云平台对接" }
                             </p>
                         </div>
                     }
@@ -6635,7 +6597,7 @@ fn CloudProviderManagement() -> Html {
                         <div class="modal-background" onclick={on_close_create_modal.clone()}></div>
                         <div class="modal-card">
                         <header class="modal-card-head">
-                            <p class="modal-card-title">{ "添加云区对接配置" }</p>
+                            <p class="modal-card-title">{ "添加技术底座对接配置" }</p>
                             <button class="delete" onclick={on_close_create_modal.clone()}></button>
                         </header>
                         <section class="modal-card-body">
@@ -6666,74 +6628,71 @@ fn CloudProviderManagement() -> Html {
                             </div>
 
                             <div class="field">
-                                <label class="label">{ "云区" }</label>
+                                <label class="label">{ "所属运营商/厂家" }</label>
                                 <div class="control">
                                     <div class="select is-fullwidth">
-                                        <select onchange={
-                                            let form_zone_id = form_zone_id.clone();
-                                            let fetch_cloud_platforms = fetch_cloud_platforms.clone();
-                                            let form_platform_id = form_platform_id.clone();
-                                            Callback::from(move |e: Event| {
-                                                let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
-                                                let zone_id: i32 = select.value().parse().unwrap_or(0);
-                                                if zone_id > 0 {
-                                                    form_zone_id.set(Some(zone_id));
+                                        <select
+                                            onchange={
+                                                let form_zone_id = form_zone_id.clone();
+                                                let fetch_cloud_platforms = fetch_cloud_platforms.clone();
+                                                let form_platform_id = form_platform_id.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                    let zone_id: i32 = select.value().parse().unwrap_or(0);
+                                                    form_zone_id.set(zone_id);
                                                     // Reset platform selection
-                                                    form_platform_id.set(None);
+                                                    form_platform_id.set(0);
                                                     // Fetch platforms for this zone
-                                                    fetch_cloud_platforms.emit(zone_id);
-                                                } else {
-                                                    form_zone_id.set(None);
-                                                    form_platform_id.set(None);
-                                                }
-                                            })
-                                        }>
-                                            <option value="">{ "请选择云区" }</option>
+                                                    if zone_id > 0 {
+                                                        fetch_cloud_platforms.emit(zone_id);
+                                                    }
+                                                })
+                                            }
+                                        >
+                                            <option value={0.to_string()} selected={*form_zone_id == 0}>{ "请选择运营商/厂家" }</option>
                                             { for (*cloud_zones).iter().map(|zone| {
-                                                let zone_id_value = zone.id.unwrap_or(0);
-                                                let selected = (*form_zone_id).map(|z| z == zone_id_value).unwrap_or(false);
-                                                html! {
-                                                    <option value={zone_id_value.to_string()}
-                                                        {selected}>
-                                                        { &zone.zone_name }
-                                                    </option>
+                                                if let Some(id) = zone.id {
+                                                    html! {
+                                                        <option value={id.to_string()} selected={*form_zone_id == id}>
+                                                            { &zone.zone_name }
+                                                        </option>
+                                                    }
+                                                } else {
+                                                    html! {}
                                                 }
                                             })}
                                         </select>
                                     </div>
                                     if *zones_loading {
-                                        <p class="help is-loading">{ "加载云区中..." }</p>
+                                        <p class="help is-loading">{ "加载运营商/厂家中..." }</p>
                                     }
                                 </div>
                             </div>
 
                             <div class="field">
-                                <label class="label">{ "云平台" }</label>
+                                <label class="label">{ "云服务" }</label>
                                 <div class="control">
                                     <div class="select is-fullwidth">
                                         <select
-                                            disabled={(*form_zone_id).is_none()}
+                                            disabled={(*form_zone_id) == 0}
                                             onchange={
                                                 let form_platform_id = form_platform_id.clone();
                                                 Callback::from(move |e: Event| {
                                                     let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
                                                     let platform_id: i32 = select.value().parse().unwrap_or(0);
-                                                    if platform_id > 0 {
-                                                        form_platform_id.set(Some(platform_id));
-                                                    } else {
-                                                        form_platform_id.set(None);
-                                                    }
+                                                    form_platform_id.set(platform_id);
                                                 })
                                             }>
-                                            <option value="">{ if (*form_zone_id).is_none() { "请先选择云区" } else { "请选择云平台" } }</option>
+                                            <option value={0.to_string()} selected={*form_platform_id == 0 || (*form_zone_id) == 0}>{ if (*form_zone_id) == 0 { "请先选择运营商/厂家" } else { "请选择云服务" } }</option>
                                             { for (*cloud_platforms).iter().map(|platform| {
-                                                let platform_id_value = platform.id.unwrap_or(0);
-                                                let selected = (*form_platform_id).map(|p| p == platform_id_value).unwrap_or(false);
-                                                html! {
-                                                    <option value={platform_id_value.to_string()}
-                                                        {selected}>
-                                                        { &platform.platform_name }
-                                                    </option>
+                                                if let Some(id) = platform.id {
+                                                    html! {
+                                                        <option value={id.to_string()} selected={*form_platform_id == id}>
+                                                            { &platform.platform_name }
+                                                        </option>
+                                                    }
+                                                } else {
+                                                    html! {}
                                                 }
                                             })}
                                         </select>
@@ -6762,7 +6721,7 @@ fn CloudProviderManagement() -> Html {
                                 <label class="label">{ "Access Key ID" }</label>
                                 <div class="control">
                                     <input type="text" class="input"
-                                        placeholder="云平台 Access Key ID"
+                                        placeholder="技术底座 Access Key ID"
                                         value={(*form_access_key_id).clone()}
                                         oninput={
                                             let form_access_key_id = form_access_key_id.clone();
@@ -6779,7 +6738,7 @@ fn CloudProviderManagement() -> Html {
                                 <label class="label">{ "Access Key Secret" }</label>
                                 <div class="control">
                                     <input type="password" class="input"
-                                        placeholder="云平台 Access Key Secret"
+                                        placeholder="技术底座 Access Key Secret"
                                         value={(*form_access_key_secret).clone()}
                                         oninput={
                                             let form_access_key_secret = form_access_key_secret.clone();
@@ -6895,7 +6854,7 @@ fn CloudZoneManagement() -> Html {
                     }
                     Ok(resp) => {
                         let status = resp.status();
-                        error_message.set(Some(format!("获取云区列表失败: HTTP {}", status)));
+                        error_message.set(Some(format!("获取运营商/厂家列表失败: HTTP {}", status)));
                     }
                     Err(e) => {
                         error_message.set(Some(format!("网络错误: {}", e)));
@@ -6977,7 +6936,7 @@ fn CloudZoneManagement() -> Html {
                     .await
                 {
                     Ok(resp) if resp.ok() => {
-                        success_message.set(Some(format!("云区「{}」创建成功", zone_name)));
+                        success_message.set(Some(format!("技术底座配置创建成功")));
                         fetch_zones.emit(());
                         show_create_modal.set(false);
                     }
@@ -7021,7 +6980,7 @@ fn CloudZoneManagement() -> Html {
                     .await
                 {
                     Ok(resp) if resp.ok() => {
-                        success_message.set(Some(format!("云区 {} 删除成功", id)));
+                        success_message.set(Some(format!("技术底座配置 {} 删除成功", id)));
                         fetch_zones.emit(());
                     }
                     Ok(resp) => {
@@ -7397,7 +7356,7 @@ fn CloudPlatformManagement() -> Html {
                     }
                     Ok(resp) => {
                         let status = resp.status();
-                        error_message.set(Some(format!("获取云区列表失败: HTTP {}", status)));
+                        error_message.set(Some(format!("获取运营商/厂家列表失败: HTTP {}", status)));
                     }
                     Err(e) => {
                         error_message.set(Some(format!("网络错误: {}", e)));
@@ -7729,7 +7688,7 @@ fn CloudPlatformManagement() -> Html {
                 <div class="level-left">
                     <button class="button is-primary" onclick={on_open_create_modal}>
                         <span class="icon"><span class="fas fa-plus"></span></span>
-                        <span>{ "新建云平台" }</span>
+                        <span>{ "新建云服务" }</span>
                     </button>
                 </div>
             </div>
@@ -7742,9 +7701,9 @@ fn CloudPlatformManagement() -> Html {
                         <thead>
                             <tr>
                                 <th>{ "ID" }</th>
-                                <th>{ "所属云区" }</th>
-                                <th>{ "云平台名称" }</th>
-                                <th>{ "云平台代码" }</th>
+                                <th>{ "所属运营商/厂家" }</th>
+                                <th>{ "云服务名称" }</th>
+                                <th>{ "云服务代码" }</th>
                                 <th>{ "描述" }</th>
                                 <th>{ "创建时间" }</th>
                                 <th>{ "操作" }</th>
@@ -7789,12 +7748,12 @@ fn CloudPlatformManagement() -> Html {
                     <div class="modal-background" onclick={on_close_create_modal.clone()}></div>
                     <div class="modal-card">
                         <header class="modal-card-head">
-                            <p class="modal-card-title">{ "新建云平台" }</p>
+                            <p class="modal-card-title">{ "新建云服务" }</p>
                             <button class="delete" onclick={on_close_create_modal.clone()}></button>
                         </header>
                         <section class="modal-card-body">
                             <div class="field">
-                                <label class="label">{ "所属云区" }</label>
+                                <label class="label">{ "所属运营商/厂家" }</label>
                                 <div class="control">
                                     <div class="select is-fullwidth">
                                         <select
@@ -7807,7 +7766,7 @@ fn CloudPlatformManagement() -> Html {
                                                 })
                                             }
                                         >
-                                            <option value="0">{ "请选择云区" }</option>
+                                            <option value="0">{ "请选择运营商/厂家" }</option>
                                             { for zone_options.iter().map(|(id, name)| {
                                                 html! {
                                                     <option value={id.to_string()}>{ name }</option>
@@ -7819,7 +7778,7 @@ fn CloudPlatformManagement() -> Html {
                             </div>
 
                             <div class="field">
-                                <label class="label">{ "云平台名称" }</label>
+                                <label class="label">{ "云服务名称" }</label>
                                 <div class="control">
                                     <input type="text" class="input"
                                         placeholder="例如：公众云、政务云"
@@ -7836,7 +7795,7 @@ fn CloudPlatformManagement() -> Html {
                             </div>
 
                             <div class="field">
-                                <label class="label">{ "云平台代码" }</label>
+                                <label class="label">{ "云服务代码" }</label>
                                 <div class="control">
                                     <input type="text" class="input"
                                         placeholder="例如：public、gov"
@@ -7883,12 +7842,12 @@ fn CloudPlatformManagement() -> Html {
                     <div class="modal-background" onclick={on_close_edit_modal.clone()}></div>
                     <div class="modal-card">
                         <header class="modal-card-head">
-                            <p class="modal-card-title">{ "编辑云平台" }</p>
+                            <p class="modal-card-title">{ "编辑云服务" }</p>
                             <button class="delete" onclick={on_close_edit_modal.clone()}></button>
                         </header>
                         <section class="modal-card-body">
                             <div class="field">
-                                <label class="label">{ "所属云区" }</label>
+                                <label class="label">{ "所属运营商/厂家" }</label>
                                 <div class="control">
                                     <div class="select is-fullwidth">
                                         <select
@@ -7901,7 +7860,7 @@ fn CloudPlatformManagement() -> Html {
                                                 })
                                             }
                                         >
-                                            <option value="0">{ "请选择云区" }</option>
+                                            <option value="0">{ "请选择运营商/厂家" }</option>
                                             { for zone_options.iter().map(|(id, name)| {
                                                 html! {
                                                     <option value={id.to_string()}>{ name }</option>
@@ -7913,7 +7872,7 @@ fn CloudPlatformManagement() -> Html {
                             </div>
 
                             <div class="field">
-                                <label class="label">{ "云平台名称" }</label>
+                                <label class="label">{ "云服务名称" }</label>
                                 <div class="control">
                                     <input type="text" class="input"
                                         value={(*form_platform_name).clone()}
@@ -7929,7 +7888,7 @@ fn CloudPlatformManagement() -> Html {
                             </div>
 
                             <div class="field">
-                                <label class="label">{ "云平台代码" }</label>
+                                <label class="label">{ "云服务代码" }</label>
                                 <div class="control">
                                     <input type="text" class="input"
                                         value={(*form_platform_code).clone()}

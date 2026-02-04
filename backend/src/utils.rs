@@ -9,7 +9,8 @@ use ipnetwork::IpNetwork;
 pub fn get_current_user(headers: &HeaderMap, users: &Arc<Mutex<Vec<User>>>) -> Option<User> {
     if let Some(auth_header) = headers.get("Authorization") {
         if let Ok(token) = auth_header.to_str() {
-            // Simple Mock: Token is just the username
+            // Simple Mock: Token is just the username (trimmed to handle whitespace)
+            let token = token.trim();
             let users_guard = users.lock().unwrap();
             return users_guard.iter().find(|u| u.username == token).cloned();
         }

@@ -84,7 +84,7 @@ pub async fn get_cloud_zone(
                     Json(zone).into_response()
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response()
+                    (StatusCode::NOT_FOUND, "Operator/Manufacturer not found".to_string()).into_response()
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud zone from database: {}", e);
@@ -158,13 +158,13 @@ pub async fn create_cloud_zone(
                     );
 
                     Json(json!({
-                        "message": "云区创建成功",
+                        "message": "运营商/厂家创建成功",
                         "data": zone
                     })).into_response()
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud zone: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create cloud zone".to_string()).into_response()
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create operator/manufacturer".to_string()).into_response()
                 }
             }
         }
@@ -211,7 +211,7 @@ pub async fn update_cloud_zone(
                     }
                 }
                 Ok(None) => {
-                    return (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response();
+                    return (StatusCode::NOT_FOUND, "Operator/Manufacturer not found".to_string()).into_response();
                 }
                 Err(e) => {
                     eprintln!("Error checking zone existence: {}", e);
@@ -249,18 +249,18 @@ pub async fn update_cloud_zone(
                                     .unwrap_or_else(|_| Utc::now()),
                             };
                             Json(json!({
-                                "message": "云区更新成功",
+                                "message": "运营商/厂家更新成功",
                                 "data": zone
                             })).into_response()
                         }
                         _ => {
-                            Json(json!({ "message": "云区更新成功" })).into_response()
+                            Json(json!({ "message": "运营商/厂家更新成功" })).into_response()
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Error updating cloud zone: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update cloud zone".to_string()).into_response()
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update operator/manufacturer".to_string()).into_response()
                 }
             }
         }
@@ -303,16 +303,16 @@ pub async fn delete_cloud_zone(
                                 &format!("Deleted cloud zone: {}", id),
                             );
 
-                            Json(json!({ "message": "云区删除成功" })).into_response()
+                            Json(json!({ "message": "运营商/厂家删除成功" })).into_response()
                         }
                         Err(e) => {
                             eprintln!("Error deleting cloud zone: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete cloud zone".to_string()).into_response()
+                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete operator/manufacturer".to_string()).into_response()
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud zone not found".to_string()).into_response()
+                    (StatusCode::NOT_FOUND, "Operator/Manufacturer not found".to_string()).into_response()
                 }
                 Err(e) => {
                     eprintln!("Error checking zone existence: {}", e);

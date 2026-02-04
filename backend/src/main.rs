@@ -262,8 +262,8 @@ async fn main() {
             Ok(platforms) => platforms.into_iter().map(|db| shared::CloudPlatform {
                 id: Some(db.id),
                 zone_id: db.zone_id,
-                platform_name: db.platform_name.clone(),
-                platform_code: db.platform_code.clone(),
+                platform_name: db.service_name.clone(),
+                platform_code: db.service_code.clone(),
                 description: db.description.clone(),
                 created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                     .map(|dt| dt.with_timezone(&Utc))

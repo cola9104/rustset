@@ -8,8 +8,7 @@ use axum::{
 };
 
 use crate::state::AppState;
-use crate::database::get_business_resources;
-use crate::handlers::cloud_providers::PROVIDER_CONFIGS;
+use crate::database::{get_business_resources, get_all_cloud_provider_configs};
 use shared::{CloudServiceAsset, CloudServiceAssetQuery, CloudServiceAssetStats};
 
 /// Get all cloud service assets (unified view of physical and virtual machines)
@@ -27,7 +26,37 @@ pub async fn get_cloud_service_assets(
     };
 
     // Load cloud provider configs for provider name lookup
-    let provider_configs = PROVIDER_CONFIGS.lock().unwrap().clone();
+    let provider_configs = if let Some(db_conn) = crate::database::get_db() {
+        match get_all_cloud_provider_configs(&db_conn).await {
+            Ok(configs) => {
+                // Convert to shared::CloudProviderConfig
+                configs.into_iter().filter_map(|db| {
+                    let provider = serde_json::from_str(&db.provider).ok()?;
+                    Some(shared::CloudProviderConfig {
+                        id: Some(db.id),
+                        zone_id: Some(db.zone_id),
+                        platform_id: Some(db.platform_id),
+                        provider,
+                        region_id: db.region_id,
+                        region_name: db.region_name,
+                        available_zones: vec![],
+                        account_name: db.account_name,
+                        access_key_id: db.access_key_id,
+                        access_key_secret: db.access_key_secret,
+                        status: shared::CloudProviderConfigStatus::Inactive,
+                        remarks: db.remarks,
+                        last_test_time: None,
+                        last_test_result: db.last_test_result,
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                    })
+                }).collect::<Vec<_>>()
+            }
+            Err(_) => vec![],
+        }
+    } else {
+        vec![]
+    };
 
     let mut assets: Vec<CloudServiceAsset> = business_resources.into_iter().map(|br| {
         CloudServiceAsset {
@@ -44,7 +73,6 @@ pub async fn get_cloud_service_assets(
             cloud_zone: br.zone_name.clone().unwrap_or_else(|| "-".to_string()),
             cloud_service: br.platform_name.clone(),
             cloud_platform: br.cloud_category,
-            supplier_name: br.provider_vendor.clone(),
 
             // 实例配置
             instance_type: br.ecs_type,
@@ -165,7 +193,37 @@ pub async fn get_cloud_service_stats(
     };
 
     // Load cloud provider configs for provider name lookup
-    let provider_configs = PROVIDER_CONFIGS.lock().unwrap().clone();
+    let provider_configs = if let Some(db_conn) = crate::database::get_db() {
+        match get_all_cloud_provider_configs(&db_conn).await {
+            Ok(configs) => {
+                // Convert to shared::CloudProviderConfig
+                configs.into_iter().filter_map(|db| {
+                    let provider = serde_json::from_str(&db.provider).ok()?;
+                    Some(shared::CloudProviderConfig {
+                        id: Some(db.id),
+                        zone_id: Some(db.zone_id),
+                        platform_id: Some(db.platform_id),
+                        provider,
+                        region_id: db.region_id,
+                        region_name: db.region_name,
+                        available_zones: vec![],
+                        account_name: db.account_name,
+                        access_key_id: db.access_key_id,
+                        access_key_secret: db.access_key_secret,
+                        status: shared::CloudProviderConfigStatus::Inactive,
+                        remarks: db.remarks,
+                        last_test_time: None,
+                        last_test_result: db.last_test_result,
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                    })
+                }).collect::<Vec<_>>()
+            }
+            Err(_) => vec![],
+        }
+    } else {
+        vec![]
+    };
 
     let total = business_resources.len() as u32;
     let running = business_resources.iter().filter(|r| r.ecs_status == "运行中").count() as u32;

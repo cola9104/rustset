@@ -4,10 +4,10 @@
 
 use sea_orm::{Database as SeaDatabase, DatabaseConnection, DbErr, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, Statement, QuerySelect, QueryOrder, ColumnTrait};
 use crate::entities::{
-    cloud_zone, cloud_platform, cloud_provider_config, business_resource,
+    cloud_zone, cloud_service, cloud_provider_config, business_resource,
     physical_machine, cloud_virtual_machine,
     user, audit_log, asset, task, risk, network_zone, custom_role, advanced_scan_task, quick_scan_result,
-    CloudZone, CloudPlatform, CloudProviderConfig, BusinessResource,
+    CloudZone, CloudService, CloudProviderConfig, BusinessResource,
     PhysicalMachine, CloudVirtualMachine,
     User, AuditLog, Asset, Task, Risk, NetworkZone, CustomRole, AdvancedScanTask, QuickScanResult,
 };
@@ -556,7 +556,7 @@ pub async fn insert_cloud_zone(
         id: NotSet,
         zone_name: Set(zone_name.to_string()),
         zone_code: Set(zone_code.to_string()),
-        description: Set(description.map(|s| s.to_string())),
+        description: Set(Some(description.map(|s| s.to_string()).unwrap_or_default())),
         created_at: Set(created_at.to_string()),
     };
     let result = db_zone.insert(conn).await?;
@@ -615,15 +615,15 @@ pub async fn insert_cloud_platform(
     description: Option<&str>,
     created_at: &str,
 ) -> Result<i32, DbErr> {
-    let db_platform = cloud_platform::ActiveModel {
+    let db_service = cloud_service::ActiveModel {
         id: NotSet,
         zone_id: Set(zone_id),
-        platform_name: Set(platform_name.to_string()),
-        platform_code: Set(platform_code.to_string()),
-        description: Set(description.map(|s| s.to_string())),
+        service_name: Set(platform_name.to_string()),
+        service_code: Set(platform_code.to_string()),
+        description: Set(Some(description.map(|s| s.to_string()).unwrap_or_default())),
         created_at: Set(created_at.to_string()),
     };
-    let result = db_platform.insert(conn).await?;
+    let result = db_service.insert(conn).await?;
     Ok(result.id)
 }
 
@@ -635,48 +635,48 @@ pub async fn update_cloud_platform_by_id(
     platform_code: Option<&str>,
     description: Option<&str>,
 ) -> Result<(), DbErr> {
-    let mut db_platform = cloud_platform::ActiveModel {
+    let mut db_service = cloud_service::ActiveModel {
         id: Set(id),
         ..Default::default()
     };
 
     if let Some(zid) = zone_id {
-        db_platform.zone_id = Set(zid);
+        db_service.zone_id = Set(zid);
     }
     if let Some(name) = platform_name {
-        db_platform.platform_name = Set(name.to_string());
+        db_service.service_name = Set(name.to_string());
     }
     if let Some(code) = platform_code {
-        db_platform.platform_code = Set(code.to_string());
+        db_service.service_code = Set(code.to_string());
     }
     if let Some(desc) = description {
-        db_platform.description = Set(Some(desc.to_string()));
+        db_service.description = Set(Some(desc.to_string()));
     }
 
-    CloudPlatform::update(db_platform).exec(conn).await?;
+    CloudService::update(db_service).exec(conn).await?;
     Ok(())
 }
 
 pub async fn delete_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
-    let platform = CloudPlatform::find_by_id(id).one(conn).await?;
-    if let Some(platform) = platform {
-        platform.delete(conn).await?;
+    let service = CloudService::find_by_id(id).one(conn).await?;
+    if let Some(service) = service {
+        service.delete(conn).await?;
     }
     Ok(())
 }
 
-pub async fn get_all_cloud_platforms(conn: &DatabaseConnection) -> Result<Vec<cloud_platform::Model>, DbErr> {
-    CloudPlatform::find().order_by_asc(cloud_platform::Column::Id).all(conn).await
+pub async fn get_all_cloud_platforms(conn: &DatabaseConnection) -> Result<Vec<cloud_service::Model>, DbErr> {
+    CloudService::find().order_by_asc(cloud_service::Column::Id).all(conn).await
 }
 
-pub async fn get_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_platform::Model>, DbErr> {
-    CloudPlatform::find_by_id(id).one(conn).await
+pub async fn get_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_service::Model>, DbErr> {
+    CloudService::find_by_id(id).one(conn).await
 }
 
-pub async fn get_platforms_by_zone_id(conn: &DatabaseConnection, zone_id: i32) -> Result<Vec<cloud_platform::Model>, DbErr> {
-    CloudPlatform::find()
-        .filter(cloud_platform::Column::ZoneId.eq(zone_id))
-        .order_by_asc(cloud_platform::Column::Id)
+pub async fn get_platforms_by_zone_id(conn: &DatabaseConnection, zone_id: i32) -> Result<Vec<cloud_service::Model>, DbErr> {
+    CloudService::find()
+        .filter(cloud_service::Column::ZoneId.eq(zone_id))
+        .order_by_asc(cloud_service::Column::Id)
         .all(conn)
         .await
 }
@@ -792,7 +792,6 @@ pub async fn insert_business_resource(
         cloud_provider_config_id: Set(req.cloud_provider_config_id),
         zone_name: Set(req.zone_name.clone()),
         platform_name: Set(req.platform_name.clone()),
-        provider_vendor: Set(req.provider_vendor.clone()),
         county_city: Set(req.county_city.clone()),
         vdc_name: Set(req.vdc_name.clone()),
         customer_name: Set(req.customer_name.clone()),
@@ -871,7 +870,6 @@ pub async fn update_business_resource_by_id(
     if let Some(v) = req.cloud_provider_config_id { db_resource.cloud_provider_config_id = Set(Some(v)); }
     if let Some(v) = &req.zone_name { db_resource.zone_name = Set(Some(v.clone())); }
     if let Some(v) = &req.platform_name { db_resource.platform_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.provider_vendor { db_resource.provider_vendor = Set(Some(v.clone())); }
     if let Some(v) = &req.county_city { db_resource.county_city = Set(Some(v.clone())); }
     if let Some(v) = &req.vdc_name { db_resource.vdc_name = Set(Some(v.clone())); }
     if let Some(v) = &req.customer_name { db_resource.customer_name = Set(v.clone()); }

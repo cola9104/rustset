@@ -215,7 +215,6 @@ pub struct BusinessResource {
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
     pub zone_name: Option<String>,       // 地区名称 (如 华北区、华南区、华东区)
     pub platform_name: Option<String>,   // 云平台名称 (如 公众云、政务云、内外核心云)
-    pub provider_vendor: Option<String>, // 运营商/厂家 (如: 阿里云、腾讯云、华为云、AWS、戴尔、惠普等)
     pub county_city: Option<String>,     // 县市区
     pub vdc_name: Option<String>,        // VDC名称
 
@@ -277,7 +276,6 @@ pub struct CreateBusinessResourceRequest {
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
     pub zone_name: Option<String>,       // 地区名称
     pub platform_name: Option<String>,   // 云平台名称
-    pub provider_vendor: Option<String>, // 运营商/厂家
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: String,
@@ -320,7 +318,6 @@ pub struct UpdateBusinessResourceRequest {
     pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
     pub zone_name: Option<String>,       // 地区名称
     pub platform_name: Option<String>,   // 云平台名称
-    pub provider_vendor: Option<String>, // 运营商/厂家
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: Option<String>,
@@ -362,7 +359,6 @@ impl Default for UpdateBusinessResourceRequest {
             cloud_provider_config_id: None,
             zone_name: None,
             platform_name: None,
-            provider_vendor: None,
             county_city: None,
             vdc_name: None,
             customer_name: None,
@@ -1326,7 +1322,6 @@ pub struct CloudServiceAsset {
     pub cloud_platform: String,           // 云平台 (阿里云/腾讯云/华为云/AWS)
     pub cloud_zone: String,               // 运营商/厂家 (云服务商或设备厂家)
     pub cloud_service: Option<String>,    // 云服务 (对外服务/内部核心服务等)
-    pub supplier_name: Option<String>,    // 供应商名称 (云厂商/设备厂家)
 
     // 实例配置
     pub instance_type: String,           // 实例类型 (如 ecs.g6.large) 或 物理机型号

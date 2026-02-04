@@ -37,7 +37,20 @@ impl DatabaseConfig {
 
         let connection_string = match db_type.as_str() {
             "sqlite" => {
-                let db_path = env::var("DB_PATH").unwrap_or_else(|_| "data.db".to_string());
+                // Try to find the database file in several possible locations
+                let db_path = env::var("DB_PATH").unwrap_or_else(|_| {
+                    // Check multiple possible paths for the database
+                    let paths = vec![
+                        "../data/rustset.db",
+                        "../../data/rustset.db",
+                        "data/rustset.db",
+                        "/home/cola/tools/rustset/data/rustset.db",
+                    ];
+                    paths.into_iter()
+                        .find(|p| std::path::Path::new(p).exists())
+                        .unwrap_or("../data/rustset.db")
+                        .to_string()
+                });
                 format!("sqlite://{}", db_path)
             }
             "postgres" | "postgresql" => {
@@ -85,9 +98,22 @@ impl DatabaseConfig {
 
     /// 创建默认配置 (SQLite)
     pub fn default_sqlite() -> Self {
+        // Try to find the database file in several possible locations
+        let db_path = {
+            let paths = vec![
+                "../data/rustset.db",
+                "../../data/rustset.db",
+                "data/rustset.db",
+                "/home/cola/tools/rustset/data/rustset.db",
+            ];
+            paths.into_iter()
+                .find(|p| std::path::Path::new(p).exists())
+                .unwrap_or("data/rustset.db")
+                .to_string()
+        };
         DatabaseConfig {
             db_type: "sqlite".to_string(),
-            connection_string: "sqlite://data.db".to_string(),
+            connection_string: format!("sqlite://{}", db_path),
         }
     }
 }

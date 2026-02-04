@@ -39,8 +39,8 @@ pub async fn get_cloud_platforms(
                     let platforms: Vec<CloudPlatform> = db_platforms.into_iter().map(|db| CloudPlatform {
                         id: Some(db.id),
                         zone_id: db.zone_id,
-                        platform_name: db.platform_name.clone(),
-                        platform_code: db.platform_code.clone(),
+                        platform_name: db.service_name.clone(),
+                        platform_code: db.service_code.clone(),
                         description: db.description.clone(),
                         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -78,8 +78,8 @@ pub async fn get_cloud_platform(
                     let platform = CloudPlatform {
                         id: Some(db.id),
                         zone_id: db.zone_id,
-                        platform_name: db.platform_name.clone(),
-                        platform_code: db.platform_code.clone(),
+                        platform_name: db.service_name.clone(),
+                        platform_code: db.service_code.clone(),
                         description: db.description.clone(),
                         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -88,7 +88,7 @@ pub async fn get_cloud_platform(
                     Json(platform).into_response()
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud platform not found".to_string()).into_response()
+                    (StatusCode::NOT_FOUND, "Cloud service not found".to_string()).into_response()
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud platform from database: {}", e);
@@ -120,8 +120,8 @@ pub async fn get_platforms_by_zone(
                     let platforms: Vec<CloudPlatform> = db_platforms.into_iter().map(|db| CloudPlatform {
                         id: Some(db.id),
                         zone_id: db.zone_id,
-                        platform_name: db.platform_name.clone(),
-                        platform_code: db.platform_code.clone(),
+                        platform_name: db.service_name.clone(),
+                        platform_code: db.service_code.clone(),
                         description: db.description.clone(),
                         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -164,7 +164,7 @@ pub async fn create_cloud_platform(
             match db_get_all_cloud_zones(&conn).await {
                 Ok(zones) => {
                     if !zones.iter().any(|z| z.id == req.zone_id) {
-                        return (StatusCode::BAD_REQUEST, "Zone not found".to_string()).into_response();
+                        return (StatusCode::BAD_REQUEST, "Operator/Manufacturer not found".to_string()).into_response();
                     }
                 }
                 Err(e) => {
@@ -176,8 +176,8 @@ pub async fn create_cloud_platform(
             // 检查同一zone下platform_code是否重复
             match db_get_all_cloud_platforms(&conn).await {
                 Ok(existing_platforms) => {
-                    if existing_platforms.iter().any(|p| p.zone_id == req.zone_id && p.platform_code == req.platform_code) {
-                        return (StatusCode::BAD_REQUEST, "Platform code already exists in this zone".to_string()).into_response();
+                    if existing_platforms.iter().any(|p| p.zone_id == req.zone_id && p.service_code == req.platform_code) {
+                        return (StatusCode::BAD_REQUEST, "Cloud service code already exists in this operator/manufacturer".to_string()).into_response();
                     }
                 }
                 Err(e) => {
@@ -216,13 +216,13 @@ pub async fn create_cloud_platform(
                     );
 
                     Json(json!({
-                        "message": "云平台创建成功",
+                        "message": "云服务创建成功",
                         "data": platform
                     })).into_response()
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud platform: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create cloud platform".to_string()).into_response()
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create cloud service".to_string()).into_response()
                 }
             }
         }
@@ -255,7 +255,7 @@ pub async fn update_cloud_platform(
             let existing_platform = match db_get_cloud_platform_by_id(&conn, id).await {
                 Ok(Some(p)) => p,
                 Ok(None) => {
-                    return (StatusCode::NOT_FOUND, "Cloud platform not found".to_string()).into_response();
+                    return (StatusCode::NOT_FOUND, "Cloud service not found".to_string()).into_response();
                 }
                 Err(e) => {
                     eprintln!("Error checking platform existence: {}", e);
@@ -269,7 +269,7 @@ pub async fn update_cloud_platform(
                 match db_get_all_cloud_zones(&conn).await {
                     Ok(zones) => {
                         if !zones.iter().any(|z| z.id == target_zone_id) {
-                            return (StatusCode::BAD_REQUEST, "Zone not found".to_string()).into_response();
+                            return (StatusCode::BAD_REQUEST, "Operator/Manufacturer not found".to_string()).into_response();
                         }
                     }
                     Err(e) => {
@@ -282,8 +282,8 @@ pub async fn update_cloud_platform(
             if let Some(ref code) = req.platform_code {
                 match db_get_all_cloud_platforms(&conn).await {
                     Ok(existing_platforms) => {
-                        if existing_platforms.iter().any(|p| p.id != id && p.zone_id == zone_id_to_check && p.platform_code == *code) {
-                            return (StatusCode::BAD_REQUEST, "Platform code already exists in this zone".to_string()).into_response();
+                        if existing_platforms.iter().any(|p| p.id != id && p.zone_id == zone_id_to_check && p.service_code == *code) {
+                            return (StatusCode::BAD_REQUEST, "Cloud service code already exists in this operator/manufacturer".to_string()).into_response();
                         }
                     }
                     Err(e) => {
@@ -316,26 +316,26 @@ pub async fn update_cloud_platform(
                             let platform = CloudPlatform {
                                 id: Some(db.id),
                                 zone_id: db.zone_id,
-                                platform_name: db.platform_name.clone(),
-                                platform_code: db.platform_code.clone(),
+                                platform_name: db.service_name.clone(),
+                                platform_code: db.service_code.clone(),
                                 description: db.description.clone(),
                                 created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                                     .map(|dt| dt.with_timezone(&chrono::Utc))
                                     .unwrap_or_else(|_| Utc::now()),
                             };
                             Json(json!({
-                                "message": "云平台更新成功",
+                                "message": "云服务更新成功",
                                 "data": platform
                             })).into_response()
                         }
                         _ => {
-                            Json(json!({ "message": "云平台更新成功" })).into_response()
+                            Json(json!({ "message": "云服务更新成功" })).into_response()
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Error updating cloud platform: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update cloud platform".to_string()).into_response()
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update cloud service".to_string()).into_response()
                 }
             }
         }
@@ -378,16 +378,16 @@ pub async fn delete_cloud_platform(
                                 &format!("Deleted cloud platform: {}", id),
                             );
 
-                            Json(json!({ "message": "云平台删除成功" })).into_response()
+                            Json(json!({ "message": "云服务删除成功" })).into_response()
                         }
                         Err(e) => {
                             eprintln!("Error deleting cloud platform: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete cloud platform".to_string()).into_response()
+                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete cloud service".to_string()).into_response()
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud platform not found".to_string()).into_response()
+                    (StatusCode::NOT_FOUND, "Cloud service not found".to_string()).into_response()
                 }
                 Err(e) => {
                     eprintln!("Error checking platform existence: {}", e);

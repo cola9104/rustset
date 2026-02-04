@@ -4,42 +4,162 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde_json::json;
-use std::sync::Mutex;
 
 use crate::state::AppState;
 use shared::{
     CloudProviderConfig, CloudProviderConfigStatus,
     CreateCloudProviderConfigRequest, UpdateCloudProviderConfigRequest,
 };
-use crate::database::{insert_provider_config, update_provider_config, delete_provider_config};
+use crate::database::{
+    insert_provider_config, update_provider_config, delete_provider_config,
+    get_all_cloud_provider_configs, get_cloud_provider_config_by_id, get_active_cloud_provider_configs as get_active_provider_configs_db,
+};
 
-// 云厂商配置存储 (内存)
-pub static PROVIDER_CONFIGS: Mutex<Vec<CloudProviderConfig>> = Mutex::new(Vec::new());
-
-/// 获取云厂商配置列表
+/// 获取云平台（技术底座）配置列表
 pub async fn get_cloud_provider_configs(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
-    let configs = PROVIDER_CONFIGS.lock().unwrap().clone();
-    Json(configs).into_response()
+    let db_conn = match crate::database::get_db() {
+        Some(conn) => conn,
+        None => return Json(Vec::<CloudProviderConfig>::new()).into_response(),
+    };
+
+    match get_all_cloud_provider_configs(&db_conn).await {
+        Ok(db_configs) => {
+            let configs: Vec<CloudProviderConfig> = db_configs.into_iter().filter_map(|db| {
+                // Parse provider from JSON string
+                let provider = serde_json::from_str(&db.provider).ok()?;
+                // Parse available_zones from region (stored as comma-separated if exists)
+                let available_zones = if !db.region_id.is_empty() {
+                    db.region_id.split(',').map(|s| s.to_string()).collect()
+                } else {
+                    Vec::new()
+                };
+                // Parse status
+                let status = match db.status.as_str() {
+                    "active" => CloudProviderConfigStatus::Active,
+                    "inactive" => CloudProviderConfigStatus::Inactive,
+                    "testing" => CloudProviderConfigStatus::Testing,
+                    "error" => CloudProviderConfigStatus::Error,
+                    _ => CloudProviderConfigStatus::Inactive,
+                };
+                // Parse timestamps
+                let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(|_| chrono::Utc::now());
+                let last_test_time = db.last_test_time.and_then(|t| {
+                    chrono::DateTime::parse_from_rfc3339(&t)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .ok()
+                });
+
+                Some(CloudProviderConfig {
+                    id: Some(db.id),
+                    zone_id: Some(db.zone_id),
+                    platform_id: Some(db.platform_id),
+                    provider,
+                    region_id: db.region_id,
+                    region_name: db.region_name,
+                    available_zones,
+                    account_name: db.account_name,
+                    access_key_id: db.access_key_id,
+                    access_key_secret: db.access_key_secret,
+                    status,
+                    remarks: db.remarks,
+                    last_test_time,
+                    last_test_result: db.last_test_result,
+                    created_at,
+                    updated_at: db.updated_at.and_then(|t| {
+                        chrono::DateTime::parse_from_rfc3339(&t)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .ok()
+                    }),
+                })
+            }).collect();
+            Json(configs).into_response()
+        }
+        Err(e) => {
+            eprintln!("Error loading cloud provider configs from database: {}", e);
+            Json(Vec::<CloudProviderConfig>::new()).into_response()
+        }
+    }
 }
 
-/// 获取单个云厂商配置
+/// 获取单个云平台（技术底座）配置
 pub async fn get_cloud_provider_config(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
     let _ = &state; // Mark as intentionally unused
-    let configs = PROVIDER_CONFIGS.lock().unwrap();
-    if let Some(config) = configs.iter().find(|c| c.id == Some(id)) {
-        Json(config.clone()).into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
+    let db_conn = match crate::database::get_db() {
+        Some(conn) => conn,
+        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    match get_cloud_provider_config_by_id(&db_conn, id).await {
+        Ok(Some(db)) => {
+            // Parse provider from JSON string
+            let provider = match serde_json::from_str(&db.provider) {
+                Ok(p) => p,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            };
+            // Parse available_zones from region (stored as comma-separated if exists)
+            let available_zones = if !db.region_id.is_empty() {
+                db.region_id.split(',').map(|s| s.to_string()).collect()
+            } else {
+                Vec::new()
+            };
+            // Parse status
+            let status = match db.status.as_str() {
+                "active" => CloudProviderConfigStatus::Active,
+                "inactive" => CloudProviderConfigStatus::Inactive,
+                "testing" => CloudProviderConfigStatus::Testing,
+                "error" => CloudProviderConfigStatus::Error,
+                _ => CloudProviderConfigStatus::Inactive,
+            };
+            // Parse timestamps
+            let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now());
+            let last_test_time = db.last_test_time.and_then(|t| {
+                chrono::DateTime::parse_from_rfc3339(&t)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .ok()
+            });
+
+            let config = CloudProviderConfig {
+                id: Some(db.id),
+                zone_id: Some(db.zone_id),
+                platform_id: Some(db.platform_id),
+                provider,
+                region_id: db.region_id,
+                region_name: db.region_name,
+                available_zones,
+                account_name: db.account_name,
+                access_key_id: db.access_key_id,
+                access_key_secret: db.access_key_secret,
+                status,
+                remarks: db.remarks,
+                last_test_time,
+                last_test_result: db.last_test_result,
+                created_at,
+                updated_at: db.updated_at.and_then(|t| {
+                    chrono::DateTime::parse_from_rfc3339(&t)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .ok()
+                }),
+            };
+            Json(config).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            eprintln!("Error loading cloud provider config from database: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
-/// 创建云厂商配置
+/// 创建云平台（技术底座）配置
 #[axum::debug_handler]
 pub async fn create_cloud_provider_config(
     State(state): State<AppState>,
@@ -47,41 +167,11 @@ pub async fn create_cloud_provider_config(
 ) -> impl IntoResponse {
     let _ = &state; // Mark as intentionally unused
 
-    // 生成新ID
-    let new_id = {
-        let configs = PROVIDER_CONFIGS.lock().unwrap();
-        configs.iter().filter_map(|c| c.id).max().map_or(1, |m| m + 1)
-    };
-
     let now = chrono::Utc::now();
-    let config = CloudProviderConfig {
-        id: Some(new_id),
-        zone_id: req.zone_id,
-        platform_id: req.platform_id,
-        provider: req.provider.clone(),
-        region_id: req.region_id.clone(),
-        region_name: req.region_name.clone(),
-        available_zones: req.available_zones.clone(),
-        account_name: req.account_name.clone(),
-        access_key_id: req.access_key_id.clone(),
-        access_key_secret: req.access_key_secret.clone(),
-        status: CloudProviderConfigStatus::Inactive, // 新建默认为停用
-        remarks: req.remarks.clone(),
-        last_test_time: None,
-        last_test_result: None,
-        created_at: now,
-        updated_at: Some(now),
-    };
-
-    {
-        let mut configs = PROVIDER_CONFIGS.lock().unwrap();
-        configs.push(config.clone());
-    }
+    let provider_str = serde_json::to_string(&req.provider).unwrap_or_default();
 
     // 持久化到数据库
-    let created_at_str = now.to_rfc3339();
-    let provider_str = serde_json::to_string(&config.provider).unwrap_or_default();
-    let _ = crate::database::insert_provider_config(
+    match insert_provider_config(
         req.zone_id.unwrap_or(0),
         req.platform_id.unwrap_or(0),
         &provider_str,
@@ -91,16 +181,44 @@ pub async fn create_cloud_provider_config(
         &req.access_key_id,
         &req.access_key_secret,
         req.remarks.as_deref(),
-        &created_at_str,
-    ).await;
+        &now.to_rfc3339(),
+    ).await {
+        Ok(id) => {
+            let config = CloudProviderConfig {
+                id: Some(id),
+                zone_id: req.zone_id,
+                platform_id: req.platform_id,
+                provider: req.provider.clone(),
+                region_id: req.region_id.clone(),
+                region_name: req.region_name.clone(),
+                available_zones: req.available_zones.clone(),
+                account_name: req.account_name.clone(),
+                access_key_id: req.access_key_id.clone(),
+                access_key_secret: req.access_key_secret.clone(),
+                status: CloudProviderConfigStatus::Inactive,
+                remarks: req.remarks.clone(),
+                last_test_time: None,
+                last_test_result: None,
+                created_at: now,
+                updated_at: Some(now),
+            };
 
-    Json(json!({
-        "message": "配置创建成功",
-        "data": config
-    })).into_response()
+            Json(json!({
+                "message": "配置创建成功",
+                "data": config
+            })).into_response()
+        }
+        Err(e) => {
+            eprintln!("Error creating cloud provider config: {}", e);
+            Json(json!({
+                "error": "Failed to create cloud provider config",
+                "details": e.to_string()
+            })).into_response()
+        }
+    }
 }
 
-/// 更新云厂商配置
+/// 更新云平台（技术底座）配置
 #[axum::debug_handler]
 pub async fn update_cloud_provider_config(
     State(state): State<AppState>,
@@ -109,113 +227,102 @@ pub async fn update_cloud_provider_config(
 ) -> impl IntoResponse {
     let _ = &state; // Mark as intentionally unused
 
-    // First, check if the config exists and clone its data
-    let (found, db_values) = {
-        let configs = PROVIDER_CONFIGS.lock().unwrap();
-        if let Some(config) = configs.iter().find(|c| c.id == Some(id)) {
-            (
-                true,
-                (
-                    config.zone_id,
-                    config.platform_id,
-                    config.region_id.clone(),
-                    config.region_name.clone(),
-                    config.account_name.clone(),
-                    config.access_key_id.clone(),
-                    config.access_key_secret.clone(),
-                    config.remarks.clone(),
-                ),
-            )
-        } else {
-            (false, (None, None, String::new(), String::new(), String::new(), String::new(), String::new(), None))
-        }
+    // Check if the config exists in database
+    let db_conn = match crate::database::get_db() {
+        Some(conn) => conn,
+        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    if !found {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-
-    // Now do the update
-    let (updated_config, db_zone_id, db_platform_id, db_region_id, db_region_name,
-         db_account_name, db_access_key_id, db_access_key_secret, db_remarks, db_status, updated_at_str) = {
-        let mut configs = PROVIDER_CONFIGS.lock().unwrap();
-        let config = configs.iter_mut().find(|c| c.id == Some(id)).unwrap();
-
-        if let Some(region_name) = req.region_name.clone() {
-            config.region_name = region_name;
-        }
-        if let Some(available_zones) = req.available_zones.clone() {
-            config.available_zones = available_zones;
-        }
-        if let Some(account_name) = req.account_name.clone() {
-            config.account_name = account_name;
-        }
-        if let Some(access_key_id) = req.access_key_id.clone() {
-            config.access_key_id = access_key_id;
-        }
-        if let Some(access_key_secret) = req.access_key_secret.clone() {
-            config.access_key_secret = access_key_secret;
-        }
-        if let Some(status) = req.status.clone() {
-            config.status = status;
-        }
-        if let Some(remarks) = req.remarks.clone() {
-            config.remarks = Some(remarks);
-        }
-        if let Some(zone_id) = req.zone_id {
-            config.zone_id = Some(zone_id);
-        }
-        if let Some(platform_id) = req.platform_id {
-            config.platform_id = Some(platform_id);
-        }
-        config.updated_at = Some(chrono::Utc::now());
-
-        let updated_at_str = config.updated_at.map(|dt| dt.to_rfc3339());
-        let db_status = config.status.clone();
-
-        (
-            config.clone(),
-            config.zone_id,
-            config.platform_id,
-            config.region_id.clone(),
-            config.region_name.clone(),
-            config.account_name.clone(),
-            config.access_key_id.clone(),
-            config.access_key_secret.clone(),
-            config.remarks.clone(),
-            db_status,
-            updated_at_str,
-        )
+    let existing = match get_cloud_provider_config_by_id(&db_conn, id).await {
+        Ok(Some(config)) => config,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
+
+    // Build the update parameters from request or existing values
+    let zone_id = req.zone_id.unwrap_or(existing.zone_id);
+    let platform_id = req.platform_id.unwrap_or(existing.platform_id);
+    let region_id = existing.region_id.clone();
+    let region_name = req.region_name.unwrap_or_else(|| existing.region_name.clone());
+    let account_name = req.account_name.unwrap_or_else(|| existing.account_name.clone());
+    let access_key_id = req.access_key_id.unwrap_or_else(|| existing.access_key_id.clone());
+    let access_key_secret = req.access_key_secret.unwrap_or_else(|| existing.access_key_secret.clone());
+    let remarks = req.remarks;
+    let status_str = if let Some(status) = req.status {
+        match status {
+            shared::CloudProviderConfigStatus::Active => "active",
+            shared::CloudProviderConfigStatus::Inactive => "inactive",
+            shared::CloudProviderConfigStatus::Testing => "testing",
+            shared::CloudProviderConfigStatus::Error => "error",
+        }
+    } else {
+        existing.status.as_str()
+    };
+    let updated_at = Some(chrono::Utc::now().to_rfc3339());
 
     // 持久化到数据库
-    let status_str = match db_status {
-        shared::CloudProviderConfigStatus::Active => "active",
-        shared::CloudProviderConfigStatus::Inactive => "inactive",
-        shared::CloudProviderConfigStatus::Testing => "testing",
-        shared::CloudProviderConfigStatus::Error => "error",
-    };
-    let _ = update_provider_config(
+    match update_provider_config(
         id,
-        db_zone_id.unwrap_or(0),
-        db_platform_id.unwrap_or(0),
-        &db_region_id,
-        &db_region_name,
-        &db_account_name,
-        &db_access_key_id,
-        &db_access_key_secret,
-        db_remarks.as_deref(),
+        zone_id,
+        platform_id,
+        &region_id,
+        &region_name,
+        &account_name,
+        &access_key_id,
+        &access_key_secret,
+        remarks.as_deref(),
         status_str,
-        updated_at_str.as_deref(),
-    ).await;
+        updated_at.as_deref(),
+    ).await {
+        Ok(_) => {
+            // Fetch the updated config
+            match get_cloud_provider_config_by_id(&db_conn, id).await {
+                Ok(Some(db)) => {
+                    let provider = serde_json::from_str(&db.provider).unwrap_or(shared::CloudProvider::Aliyun);
+                    let config = CloudProviderConfig {
+                        id: Some(db.id),
+                        zone_id: Some(db.zone_id),
+                        platform_id: Some(db.platform_id),
+                        provider,
+                        region_id: db.region_id,
+                        region_name: db.region_name,
+                        available_zones: Vec::new(),
+                        account_name: db.account_name,
+                        access_key_id: db.access_key_id,
+                        access_key_secret: db.access_key_secret,
+                        status: match db.status.as_str() {
+                            "active" => CloudProviderConfigStatus::Active,
+                            "inactive" => CloudProviderConfigStatus::Inactive,
+                            "testing" => CloudProviderConfigStatus::Testing,
+                            _ => CloudProviderConfigStatus::Error,
+                        },
+                        remarks: db.remarks,
+                        last_test_time: None,
+                        last_test_result: db.last_test_result,
+                        created_at: chrono::Utc::now(),
+                        updated_at: db.updated_at.and_then(|t| {
+                            chrono::DateTime::parse_from_rfc3339(&t)
+                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                                .ok()
+                        }),
+                    };
 
-    Json(json!({
-        "message": "配置更新成功",
-        "data": updated_config
-    })).into_response()
+                    Json(json!({
+                        "message": "配置更新成功",
+                        "data": config
+                    })).into_response()
+                }
+                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            }
+        }
+        Err(e) => {
+            eprintln!("Error updating cloud provider config: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
-/// 删除云厂商配置
+/// 删除云平台（技术底座）配置
 #[axum::debug_handler]
 pub async fn delete_cloud_provider_config(
     State(state): State<AppState>,
@@ -223,61 +330,66 @@ pub async fn delete_cloud_provider_config(
 ) -> impl IntoResponse {
     let _ = &state; // Mark as intentionally unused
 
-    // Check if exists and remove
-    let found = {
-        let mut configs = PROVIDER_CONFIGS.lock().unwrap();
-        configs.iter().position(|c| c.id == Some(id))
+    // Check if exists in database
+    let db_conn = match crate::database::get_db() {
+        Some(conn) => conn,
+        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    if let Some(pos) = found {
-        // Remove outside of the lock scope
-        {
-            let mut configs = PROVIDER_CONFIGS.lock().unwrap();
-            configs.remove(pos);
+    match get_cloud_provider_config_by_id(&db_conn, id).await {
+        Ok(Some(_)) => {
+            // Delete from database
+            match delete_provider_config(id).await {
+                Ok(_) => {
+                    Json(json!({ "message": "配置删除成功" })).into_response()
+                }
+                Err(e) => {
+                    eprintln!("Error deleting cloud provider config: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
         }
-
-        // 持久化到数据库
-        let _ = delete_provider_config(id).await;
-
-        Json(json!({ "message": "配置删除成功" })).into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
-/// 测试云厂商连接
+/// 测试云平台（技术底座）连接
 #[axum::debug_handler]
 pub async fn test_cloud_provider_connection(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> impl IntoResponse {
     let _ = &state; // Mark as intentionally unused
-    let exists = {
-        let configs = PROVIDER_CONFIGS.lock().unwrap();
-        configs.iter().any(|c| c.id == Some(id))
+
+    let db_conn = match crate::database::get_db() {
+        Some(conn) => conn,
+        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    if exists {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
+    match get_cloud_provider_config_by_id(&db_conn, id).await {
+        Ok(Some(_)) => {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
 
-        let test_result = json!({
-            "success": true,
-            "message": "连接测试成功",
-            "response_time_ms": 150u32,
-            "tested_at": now
-        });
+            let test_result = json!({
+                "success": true,
+                "message": "连接测试成功",
+                "response_time_ms": 150u32,
+                "tested_at": now
+            });
 
-        Json(test_result).into_response()
-    } else {
-        StatusCode::NOT_FOUND.into_response()
+            Json(test_result).into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
-/// 获取云厂商选项列表
+/// 获取云平台（技术底座）厂商选项列表
 pub async fn get_cloud_provider_options(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -303,19 +415,68 @@ pub async fn get_cloud_provider_options(
     Json(options).into_response()
 }
 
-/// 获取已启用的云厂商配置（用于业务申请选择）
+/// 获取已启用的云平台（技术底座）配置（用于业务申请选择）
 ///
 /// 返回完整的 CloudProviderConfig 对象，包括 zone_id 和 platform_id，
 /// 以便前端可以根据选中的云区和云平台进行过滤。
 pub async fn get_active_cloud_provider_configs(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused;
-    let configs = PROVIDER_CONFIGS.lock().unwrap();
-    let active: Vec<_> = configs.iter()
-        .filter(|c| c.status == CloudProviderConfigStatus::Active)
-        .cloned()
-        .collect();
+    let _ = &state; // Mark as intentionally unused
+    let db_conn = match crate::database::get_db() {
+        Some(conn) => conn,
+        None => return Json(Vec::<CloudProviderConfig>::new()).into_response(),
+    };
 
-    Json(active).into_response()
+    match get_active_provider_configs_db(&db_conn).await {
+        Ok(db_configs) => {
+            let configs: Vec<CloudProviderConfig> = db_configs.into_iter().filter_map(|db| {
+                // Parse provider from JSON string
+                let provider = serde_json::from_str(&db.provider).ok()?;
+                // Parse available_zones from region (stored as comma-separated if exists)
+                let available_zones = if !db.region_id.is_empty() {
+                    db.region_id.split(',').map(|s| s.to_string()).collect()
+                } else {
+                    Vec::new()
+                };
+                // Parse timestamps
+                let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(|_| chrono::Utc::now());
+                let last_test_time = db.last_test_time.and_then(|t| {
+                    chrono::DateTime::parse_from_rfc3339(&t)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .ok()
+                });
+
+                Some(CloudProviderConfig {
+                    id: Some(db.id),
+                    zone_id: Some(db.zone_id),
+                    platform_id: Some(db.platform_id),
+                    provider,
+                    region_id: db.region_id,
+                    region_name: db.region_name,
+                    available_zones,
+                    account_name: db.account_name,
+                    access_key_id: db.access_key_id,
+                    access_key_secret: db.access_key_secret,
+                    status: CloudProviderConfigStatus::Active,
+                    remarks: db.remarks,
+                    last_test_time,
+                    last_test_result: db.last_test_result,
+                    created_at,
+                    updated_at: db.updated_at.and_then(|t| {
+                        chrono::DateTime::parse_from_rfc3339(&t)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .ok()
+                    }),
+                })
+            }).collect();
+            Json(configs).into_response()
+        }
+        Err(e) => {
+            eprintln!("Error loading active cloud provider configs from database: {}", e);
+            Json(Vec::<CloudProviderConfig>::new()).into_response()
+        }
+    }
 }
