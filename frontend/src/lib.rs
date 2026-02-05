@@ -2198,22 +2198,6 @@ fn BusinessApplication() -> Html {
                                             }
                                         />
                                     </div>
-                                    <div class="column is-6">
-                                        <label class="label">{ lang.t("vdc_name") }</label>
-                                        <input
-                                            type="text"
-                                            class="input"
-                                            value={(*form_data).vdc_name.clone().unwrap_or_default()}
-                                            placeholder="VDC-01"
-                                            onchange={
-                                                let on_input_change = on_input_change.clone();
-                                                Callback::from(move |e: Event| {
-                                                    let input: HtmlInputElement = e.target_unchecked_into();
-                                                    on_input_change.emit(("vdc_name".to_string(), input.value()));
-                                                })
-                                            }
-                                        />
-                                    </div>
 
                                     // Customer Info
                                     <div class="column is-6">
