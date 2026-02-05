@@ -31,11 +31,11 @@ pub enum Relation {
     )]
     CloudZone,
     #[sea_orm(
-        belongs_to = "super::cloud_platform::Entity",
+        belongs_to = "super::cloud_service::Entity",
         from = "Column::PlatformId",
-        to = "super::cloud_platform::Column::Id"
+        to = "super::cloud_service::Column::Id"
     )]
-    CloudPlatform,
+    CloudService,
     #[sea_orm(has_many = "super::business_resource::Entity")]
     BusinessResource,
 }
@@ -46,9 +46,9 @@ impl Related<super::cloud_zone::Entity> for Entity {
     }
 }
 
-impl Related<super::cloud_platform::Entity> for Entity {
+impl Related<super::cloud_service::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::CloudPlatform.def()
+        Relation::CloudService.def()
     }
 }
 

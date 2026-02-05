@@ -21,19 +21,11 @@ pub enum Relation {
         to = "super::cloud_zone::Column::Id"
     )]
     CloudZone,
-    #[sea_orm(has_many = "super::cloud_provider_config::Entity")]
-    CloudProviderConfig,
 }
 
 impl Related<super::cloud_zone::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::CloudZone.def()
-    }
-}
-
-impl Related<super::cloud_provider_config::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::CloudProviderConfig.def()
     }
 }
 
