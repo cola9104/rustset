@@ -3,7 +3,7 @@
 use crate::{api_url, Language, get_auth_token};
 use shared::{CloudPlatform, CloudZone, CreateCloudPlatformRequest, UpdateCloudPlatformRequest};
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{Event, HtmlInputElement, HtmlTextAreaElement};
+use web_sys::{Event, HtmlInputElement};
 use yew::prelude::*;
 use gloo_net::http::Request;
 use serde_json;
@@ -513,3 +513,127 @@ pub fn CloudPlatformManagement() -> Html {
                             <div class="field">
                                 <label class="label">{ "描述" }</label>
                                 <div class="control">
+                                    <input type="text" class="input"
+                                        placeholder="选填"
+                                        value={(*form_description).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_description = form_description.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_description.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_create_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_create_platform}>{ "创建" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            // Edit Modal
+            if *show_edit_modal {
+                <div class="modal is-active">
+                    <div class="modal-background" onclick={on_close_edit_modal.clone()}></div>
+                    <div class="modal-card">
+                        <header class="modal-card-head">
+                            <p class="modal-card-title">{ "编辑云服务" }</p>
+                            <button class="delete" onclick={on_close_edit_modal.clone()}></button>
+                        </header>
+                        <section class="modal-card-body">
+                            <div class="field">
+                                <label class="label">{ "所属运营商/厂家" }</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select
+                                            value={(*form_zone_id).to_string()}
+                                            onchange={
+                                                let form_zone_id = form_zone_id.clone();
+                                                Callback::from(move |e: Event| {
+                                                    let select: web_sys::HtmlSelectElement = e.target_unchecked_into();
+                                                    form_zone_id.set(select.value().parse().unwrap_or(0));
+                                                })
+                                            }
+                                        >
+                                            <option value="0">{ "请选择运营商/厂家" }</option>
+                                            { for zone_options.iter().map(|(id, name)| {
+                                                html! {
+                                                    <option value={id.to_string()}>{ name }</option>
+                                                }
+                                            }) }
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云服务名称" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_platform_name).clone()}
+                                        oninput={
+                                            let form_platform_name = form_platform_name.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_platform_name.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "云服务代码" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_platform_code).clone()}
+                                        oninput={
+                                            let form_platform_code = form_platform_code.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_platform_code.set(input.value());
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="field">
+                                <label class="label">{ "描述" }</label>
+                                <div class="control">
+                                    <input type="text" class="input"
+                                        value={(*form_description).clone().unwrap_or_default()}
+                                        oninput={
+                                            let form_description = form_description.clone();
+                                            Callback::from(move |e: InputEvent| {
+                                                let input: web_sys::HtmlInputElement = e.target_unchecked_into();
+                                                form_description.set(Some(input.value()));
+                                            })
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                        <footer class="modal-card-foot" style="justify-content: flex-end;">
+                            <button class="button" onclick={on_close_edit_modal.clone()}>{ "取消" }</button>
+                            <button class="button is-primary" onclick={on_update_platform}>{ "更新" }</button>
+                        </footer>
+                    </div>
+                </div>
+            }
+
+            <div class="box mt-5">
+                <p class="heading">{ "☁️ 云服务管理说明" }</p>
+                <ul>
+                    <li>{ "云服务属于某个云区，如「华北区」下的「对外服务」「内部核心服务」" }</li>
+                    <li>{ "每个云服务可以对接多个云厂商配置" }</li>
+                    <li>{ "云服务代码用于系统内部标识，建议使用英文简写" }</li>
+                </ul>
+            </div>
+        </div>
+    }
+}

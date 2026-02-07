@@ -1,12 +1,31 @@
 // ============== Cloud Provider Management Component (云平台/技术底座管理) ==============
 
 use crate::{api_url, Language, get_auth_token};
-use shared::{CloudProviderConfig, CloudProvider, BillingMode, CloudProviderConfigStatus};
+use shared::{CloudProviderConfig, CloudProvider, BillingMode, CloudProviderConfigStatus, CloudZone, CloudPlatform};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{Event, HtmlInputElement, HtmlTextAreaElement, KeyboardEvent};
 use yew::prelude::*;
 use gloo_net::http::Request;
+use gloo_timers::callback::Timeout;
 use serde_json;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CloudProviderConfigDisplay {
+    pub id: Option<i32>,
+    pub provider: CloudProvider,
+    pub region_id: String,
+    pub region_name: String,
+    pub available_zones: Vec<String>,
+    pub account_name: String,
+    pub access_key_id: String,
+    pub status: CloudProviderConfigStatus,
+    pub remarks: Option<String>,
+    pub last_test_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_test_result: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 #[function_component]
 pub fn CloudProviderManagement() -> Html {
