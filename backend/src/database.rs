@@ -831,6 +831,34 @@ pub async fn insert_business_resource(
         delivery_status: Set(req.delivery_status.clone()),
         delivery_confirmed_at: Set(req.delivery_confirmed_at.map(|d| d.to_rfc3339())),
         delivery_confirmed_by: Set(req.delivery_confirmed_by.clone()),
+        // 申请流程相关
+        applicant: Set(req.applicant.clone()),
+        department: Set(req.department.clone()),
+        approver: Set(req.approver.clone()),
+        approval_time: Set(req.approval_time.map(|d| d.to_rfc3339())),
+        approval_remarks: Set(req.approval_remarks.clone()),
+        rejection_reason: Set(req.rejection_reason.clone()),
+        // 资源配置相关
+        bandwidth_mbps: Set(req.bandwidth_mbps.map(|v| v as i32)),
+        bandwidth_type: Set(req.bandwidth_type.clone()),
+        public_ip_count: Set(req.public_ip_count.map(|v| v as i32)),
+        network_type: Set(req.network_type.clone()),
+        // 业务关联相关
+        project_name: Set(req.project_name.clone()),
+        project_code: Set(req.project_code.clone()),
+        business_owner: Set(req.business_owner.clone()),
+        tech_owner: Set(req.tech_owner.clone()),
+        contact_phone: Set(req.contact_phone.clone()),
+        // 费用相关
+        billing_method: Set(req.billing_method.clone()),
+        purchase_duration: Set(req.purchase_duration.map(|v| v as i32)),
+        cost_center: Set(req.cost_center.clone()),
+        // 合规相关
+        security_level: Set(req.security_level.clone()),
+        data_sensitivity: Set(req.data_sensitivity.clone()),
+        // 其他
+        purpose: Set(req.purpose.clone()),
+        expected_delivery_time: Set(req.expected_delivery_time.map(|d| d.to_rfc3339())),
     };
     let result = db_resource.insert(conn).await?;
     let business_resource_id = result.id;
@@ -907,6 +935,39 @@ pub async fn update_business_resource_by_id(
         if let Some(v) = &pm_info.ipmi_address { db_resource.ipmi_address = Set(Some(v.clone())); }
     }
     if let Some(v) = &req.remarks { db_resource.remarks = Set(Some(v.clone())); }
+    // 申请流程相关
+    if let Some(v) = &req.applicant { db_resource.applicant = Set(Some(v.clone())); }
+    if let Some(v) = &req.department { db_resource.department = Set(Some(v.clone())); }
+    if let Some(v) = &req.approver { db_resource.approver = Set(Some(v.clone())); }
+    if let Some(v) = &req.approval_time { db_resource.approval_time = Set(Some(v.to_rfc3339())); }
+    if let Some(v) = &req.approval_remarks { db_resource.approval_remarks = Set(Some(v.clone())); }
+    if let Some(v) = &req.rejection_reason { db_resource.rejection_reason = Set(Some(v.clone())); }
+    // 资源配置相关
+    if let Some(v) = req.bandwidth_mbps { db_resource.bandwidth_mbps = Set(Some(v as i32)); }
+    if let Some(v) = &req.bandwidth_type { db_resource.bandwidth_type = Set(Some(v.clone())); }
+    if let Some(v) = req.public_ip_count { db_resource.public_ip_count = Set(Some(v as i32)); }
+    if let Some(v) = &req.network_type { db_resource.network_type = Set(Some(v.clone())); }
+    // 业务关联相关
+    if let Some(v) = &req.project_name { db_resource.project_name = Set(Some(v.clone())); }
+    if let Some(v) = &req.project_code { db_resource.project_code = Set(Some(v.clone())); }
+    if let Some(v) = &req.business_owner { db_resource.business_owner = Set(Some(v.clone())); }
+    if let Some(v) = &req.tech_owner { db_resource.tech_owner = Set(Some(v.clone())); }
+    if let Some(v) = &req.contact_phone { db_resource.contact_phone = Set(Some(v.clone())); }
+    // 费用相关
+    if let Some(v) = &req.billing_method { db_resource.billing_method = Set(Some(v.clone())); }
+    if let Some(v) = req.purchase_duration { db_resource.purchase_duration = Set(Some(v as i32)); }
+    if let Some(v) = &req.cost_center { db_resource.cost_center = Set(Some(v.clone())); }
+    // 合规相关
+    if let Some(v) = &req.security_level { db_resource.security_level = Set(Some(v.clone())); }
+    if let Some(v) = &req.data_sensitivity { db_resource.data_sensitivity = Set(Some(v.clone())); }
+    // 其他
+    if let Some(v) = &req.purpose { db_resource.purpose = Set(Some(v.clone())); }
+    if let Some(v) = &req.expected_delivery_time { db_resource.expected_delivery_time = Set(Some(v.to_rfc3339())); }
+    // 状态管理
+    if let Some(v) = &req.application_status { db_resource.application_status = Set(Some(v.clone())); }
+    if let Some(v) = &req.delivery_status { db_resource.delivery_status = Set(Some(v.clone())); }
+    if let Some(v) = &req.delivery_confirmed_at { db_resource.delivery_confirmed_at = Set(Some(v.to_rfc3339())); }
+    if let Some(v) = &req.delivery_confirmed_by { db_resource.delivery_confirmed_by = Set(Some(v.clone())); }
 
     BusinessResource::update(db_resource).exec(conn).await?;
     Ok(())

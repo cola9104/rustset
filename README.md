@@ -1,7 +1,7 @@
 # RustSet - 网络安全资产管理平台
 
 RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫描、监控安全合规，以及混合云多云资产管理。
-Dioxus（前端 / 桌面） + Axum（后端 API） + SeaORM（数据库） + Tokio（异步运行时）+ Tonic（gRPC） + Tower（中间件）
+**技术栈**: Dioxus（前端/WASM） + Axum（后端 API） + SeaORM（数据库） + Tokio（异步运行时） + Tonic（gRPC） + Tower（中间件）
 ## 🚀 快速启动
 
 ### 使用启动脚本（推荐）
@@ -23,16 +23,16 @@ Dioxus（前端 / 桌面） + Axum（后端 API） + SeaORM（数据库） + Tok
 
 ```bash
 # 后端
-cargo run --bin backend
+cargo run -p backend
 
 # 前端（需要单独终端窗口）
 cd frontend
-trunk serve
+dx serve
 ```
 
 ## 系统架构
 
-- **frontend**: Yew (Rust + WASM) 前端应用
+- **frontend**: Dioxus (Rust + WASM) 前端应用
 - **backend**: Axum (Rust) REST API 服务器
 - **shared**: 前后端共享的 Rust 类型定义
 
@@ -78,7 +78,7 @@ trunk serve
 ## 环境要求
 
 - Rust (cargo)
-- `trunk` (前端构建工具): `cargo install trunk`
+- `dioxus-cli` (前端构建工具): `cargo install dioxus-cli`
 
 ## 快速启动
 
@@ -95,7 +95,7 @@ cargo run -p backend
 ### 2. 启动前端服务
 ```bash
 cd frontend
-trunk serve --open
+dx serve
 ```
 应用将在浏览器中自动打开 `http://127.0.0.1:8080`
 
@@ -103,7 +103,7 @@ trunk serve --open
 ```bash
 # 前端构建
 cd frontend
-trunk build --release
+dx build --release
 
 # 后端构建
 cargo build --release -p backend
@@ -111,8 +111,8 @@ cargo build --release -p backend
 
 ## 技术架构
 
-- **前端**: Yew 通过 `gloo-net` 调用后端 API，使用 `use_state` 管理状态
-- **后端**: Axum 处理 HTTP 请求，使用 `Arc<Mutex<>>` 进行内存状态管理
+- **前端**: Dioxus 通过 `gloo-net` 调用后端 API，使用 `use_signal` 管理状态
+- **后端**: Axum 处理 HTTP 请求，使用 SeaORM 进行数据库操作
 - **扫描器**: Tokio 后台任务定期运行，模拟网络扫描
 
 ## 更新到 Gitee
@@ -171,7 +171,7 @@ rustset/
 │       └── main.rs   # 入口文件
 ├── frontend/         # 前端应用
 │   ├── src/
-│   │   └── lib.rs    # Yew 组件
+│   │   └── lib.rs    # Dioxus 组件
 │   ├── index.html    # HTML 入口
 │   └── Cargo.toml    # 前端依赖
 ├── shared/           # 共享类型

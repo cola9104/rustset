@@ -128,6 +128,35 @@ async fn db_to_business_resource_with_details(
         updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
         created_by: db.created_by,
         updated_by: db.updated_by,
+        // 申请流程相关
+        applicant: db.applicant,
+        department: db.department,
+        approver: db.approver,
+        approval_time: db.approval_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        approval_remarks: db.approval_remarks,
+        rejection_reason: db.rejection_reason,
+        // 资源配置相关
+        bandwidth_mbps: db.bandwidth_mbps.map(|v| v as u32),
+        bandwidth_type: db.bandwidth_type,
+        public_ip_count: db.public_ip_count.map(|v| v as u32),
+        network_type: db.network_type,
+        // 业务关联相关
+        project_name: db.project_name,
+        project_code: db.project_code,
+        business_owner: db.business_owner,
+        tech_owner: db.tech_owner,
+        contact_phone: db.contact_phone,
+        // 费用相关
+        billing_method: db.billing_method,
+        purchase_duration: db.purchase_duration.map(|v| v as u32),
+        cost_center: db.cost_center,
+        // 合规相关
+        security_level: db.security_level,
+        data_sensitivity: db.data_sensitivity,
+        // 其他
+        purpose: db.purpose,
+        expected_delivery_time: db.expected_delivery_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        // 状态管理
         application_status: db.application_status,
         delivery_status: db.delivery_status,
         delivery_confirmed_at: db.delivery_confirmed_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
@@ -179,6 +208,35 @@ fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessR
         updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
         created_by: db.created_by,
         updated_by: db.updated_by,
+        // 申请流程相关
+        applicant: db.applicant,
+        department: db.department,
+        approver: db.approver,
+        approval_time: db.approval_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        approval_remarks: db.approval_remarks,
+        rejection_reason: db.rejection_reason,
+        // 资源配置相关
+        bandwidth_mbps: db.bandwidth_mbps.map(|v| v as u32),
+        bandwidth_type: db.bandwidth_type,
+        public_ip_count: db.public_ip_count.map(|v| v as u32),
+        network_type: db.network_type,
+        // 业务关联相关
+        project_name: db.project_name,
+        project_code: db.project_code,
+        business_owner: db.business_owner,
+        tech_owner: db.tech_owner,
+        contact_phone: db.contact_phone,
+        // 费用相关
+        billing_method: db.billing_method,
+        purchase_duration: db.purchase_duration.map(|v| v as u32),
+        cost_center: db.cost_center,
+        // 合规相关
+        security_level: db.security_level,
+        data_sensitivity: db.data_sensitivity,
+        // 其他
+        purpose: db.purpose,
+        expected_delivery_time: db.expected_delivery_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        // 状态管理
         application_status: db.application_status,
         delivery_status: db.delivery_status,
         delivery_confirmed_at: db.delivery_confirmed_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
@@ -339,6 +397,35 @@ pub async fn create_business_resource(
         updated_at: Some(now),
         created_by: Some(user.username.clone()),
         updated_by: Some(user.username.clone()),
+        // 申请流程相关
+        applicant: req.applicant.clone(),
+        department: req.department.clone(),
+        approver: req.approver.clone(),
+        approval_time: req.approval_time,
+        approval_remarks: req.approval_remarks.clone(),
+        rejection_reason: req.rejection_reason.clone(),
+        // 资源配置相关
+        bandwidth_mbps: req.bandwidth_mbps,
+        bandwidth_type: req.bandwidth_type.clone(),
+        public_ip_count: req.public_ip_count,
+        network_type: req.network_type.clone(),
+        // 业务关联相关
+        project_name: req.project_name.clone(),
+        project_code: req.project_code.clone(),
+        business_owner: req.business_owner.clone(),
+        tech_owner: req.tech_owner.clone(),
+        contact_phone: req.contact_phone.clone(),
+        // 费用相关
+        billing_method: req.billing_method.clone(),
+        purchase_duration: req.purchase_duration,
+        cost_center: req.cost_center.clone(),
+        // 合规相关
+        security_level: req.security_level.clone(),
+        data_sensitivity: req.data_sensitivity.clone(),
+        // 其他
+        purpose: req.purpose.clone(),
+        expected_delivery_time: req.expected_delivery_time,
+        // 状态管理
         application_status: req.application_status.clone(),
         delivery_status: req.delivery_status.clone(),
         delivery_confirmed_at: req.delivery_confirmed_at,

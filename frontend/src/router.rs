@@ -8,6 +8,7 @@ use crate::components::asset::AssetManagement;
 use crate::components::task::TaskCenter;
 use crate::components::risk::RiskCenter;
 use crate::components::audit::AuditLogs;
+use crate::components::business::BusinessApplication;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -120,16 +121,7 @@ fn OperationsManagement() -> Element {
     }
 }
 
-/// 业务申请
-#[component]
-fn BusinessApplication() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "业务申请" }
-            p { class: "text-gray-600 mt-2", "管理业务资源申请" }
-        }
-    }
-}
+/// 业务申请 (使用 components/business 模块中的组件)
 
 /// 用户管理
 #[component]

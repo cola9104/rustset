@@ -117,7 +117,7 @@ impl ResourceType {
 }
 
 /// 物理机特有信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PhysicalMachineInfo {
     pub id: Option<i32>,
     pub business_resource_id: Option<i32>,
@@ -130,7 +130,7 @@ pub struct PhysicalMachineInfo {
 }
 
 /// 云虚拟机特有信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CloudVirtualMachineInfo {
     pub id: Option<i32>,
     pub business_resource_id: Option<i32>,
@@ -199,7 +199,7 @@ pub struct UpdateCloudVirtualMachineInfo {
 }
 
 /// 业务受理单 - 云资源管理 & 物理机管理
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BusinessResource {
     pub id: Option<i32>,
 
@@ -262,6 +262,40 @@ pub struct BusinessResource {
     pub created_by: Option<String>,
     pub updated_by: Option<String>,
 
+    // 申请流程相关
+    pub applicant: Option<String>,              // 申请人
+    pub department: Option<String>,             // 申请部门
+    pub approver: Option<String>,               // 审批人
+    pub approval_time: Option<DateTime<Utc>>,   // 审批时间
+    pub approval_remarks: Option<String>,       // 审批备注
+    pub rejection_reason: Option<String>,       // 拒绝原因
+
+    // 资源配置相关
+    pub bandwidth_mbps: Option<u32>,            // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
+    pub public_ip_count: Option<u32>,           // 公网IP数量
+    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+
+    // 业务关联相关
+    pub project_name: Option<String>,           // 项目名称
+    pub project_code: Option<String>,           // 项目编号
+    pub business_owner: Option<String>,         // 业务负责人
+    pub tech_owner: Option<String>,             // 技术负责人
+    pub contact_phone: Option<String>,          // 联系电话
+
+    // 费用相关
+    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<u32>,         // 购买时长(月)
+    pub cost_center: Option<String>,            // 成本中心
+
+    // 合规相关
+    pub security_level: Option<String>,         // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+
+    // 其他
+    pub purpose: Option<String>,                // 用途说明
+    pub expected_delivery_time: Option<DateTime<Utc>>, // 期望交付时间
+
     // 申请与交付状态管理
     pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
     pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
@@ -320,6 +354,40 @@ pub struct CreateBusinessResourceRequest {
     pub cloud_vm_info: Option<CreateCloudVirtualMachineInfo>,        // 云虚拟机特有信息
     pub remarks: Option<String>,
 
+    // 申请流程相关
+    pub applicant: Option<String>,              // 申请人
+    pub department: Option<String>,             // 申请部门
+    pub approver: Option<String>,               // 审批人
+    pub approval_time: Option<DateTime<Utc>>,   // 审批时间
+    pub approval_remarks: Option<String>,       // 审批备注
+    pub rejection_reason: Option<String>,       // 拒绝原因
+
+    // 资源配置相关
+    pub bandwidth_mbps: Option<u32>,            // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
+    pub public_ip_count: Option<u32>,           // 公网IP数量
+    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+
+    // 业务关联相关
+    pub project_name: Option<String>,           // 项目名称
+    pub project_code: Option<String>,           // 项目编号
+    pub business_owner: Option<String>,         // 业务负责人
+    pub tech_owner: Option<String>,             // 技术负责人
+    pub contact_phone: Option<String>,          // 联系电话
+
+    // 费用相关
+    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<u32>,         // 购买时长(月)
+    pub cost_center: Option<String>,            // 成本中心
+
+    // 合规相关
+    pub security_level: Option<String>,         // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+
+    // 其他
+    pub purpose: Option<String>,                // 用途说明
+    pub expected_delivery_time: Option<DateTime<Utc>>, // 期望交付时间,
+
     // 申请与交付状态管理
     #[serde(default = "default_application_status")]
     pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
@@ -369,6 +437,40 @@ pub struct UpdateBusinessResourceRequest {
     pub cloud_vm_info: Option<UpdateCloudVirtualMachineInfo>,        // 云虚拟机特有信息更新
     pub remarks: Option<String>,
 
+    // 申请流程相关
+    pub applicant: Option<String>,              // 申请人
+    pub department: Option<String>,             // 申请部门
+    pub approver: Option<String>,               // 审批人
+    pub approval_time: Option<DateTime<Utc>>,   // 审批时间
+    pub approval_remarks: Option<String>,       // 审批备注
+    pub rejection_reason: Option<String>,       // 拒绝原因
+
+    // 资源配置相关
+    pub bandwidth_mbps: Option<u32>,            // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
+    pub public_ip_count: Option<u32>,           // 公网IP数量
+    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+
+    // 业务关联相关
+    pub project_name: Option<String>,           // 项目名称
+    pub project_code: Option<String>,           // 项目编号
+    pub business_owner: Option<String>,         // 业务负责人
+    pub tech_owner: Option<String>,             // 技术负责人
+    pub contact_phone: Option<String>,          // 联系电话
+
+    // 费用相关
+    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<u32>,         // 购买时长(月)
+    pub cost_center: Option<String>,            // 成本中心
+
+    // 合规相关
+    pub security_level: Option<String>,         // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+
+    // 其他
+    pub purpose: Option<String>,                // 用途说明
+    pub expected_delivery_time: Option<DateTime<Utc>>, // 期望交付时间,
+
     // 申请与交付状态管理
     pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
     pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
@@ -414,6 +516,35 @@ impl Default for UpdateBusinessResourceRequest {
             physical_machine_info: None,
             cloud_vm_info: None,
             remarks: None,
+            // 申请流程相关
+            applicant: None,
+            department: None,
+            approver: None,
+            approval_time: None,
+            approval_remarks: None,
+            rejection_reason: None,
+            // 资源配置相关
+            bandwidth_mbps: None,
+            bandwidth_type: None,
+            public_ip_count: None,
+            network_type: None,
+            // 业务关联相关
+            project_name: None,
+            project_code: None,
+            business_owner: None,
+            tech_owner: None,
+            contact_phone: None,
+            // 费用相关
+            billing_method: None,
+            purchase_duration: None,
+            cost_center: None,
+            // 合规相关
+            security_level: None,
+            data_sensitivity: None,
+            // 其他
+            purpose: None,
+            expected_delivery_time: None,
+            // 状态管理
             application_status: None,
             delivery_status: None,
             delivery_confirmed_at: None,

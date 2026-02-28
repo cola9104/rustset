@@ -57,6 +57,40 @@ pub struct Model {
     pub delivery_confirmed_at: Option<String>,
     // 交付确认人
     pub delivery_confirmed_by: Option<String>,
+
+    // 申请流程相关
+    pub applicant: Option<String>,              // 申请人
+    pub department: Option<String>,             // 申请部门
+    pub approver: Option<String>,               // 审批人
+    pub approval_time: Option<String>,          // 审批时间
+    pub approval_remarks: Option<String>,       // 审批备注
+    pub rejection_reason: Option<String>,       // 拒绝原因
+
+    // 资源配置相关
+    pub bandwidth_mbps: Option<i32>,            // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
+    pub public_ip_count: Option<i32>,           // 公网IP数量
+    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+
+    // 业务关联相关
+    pub project_name: Option<String>,           // 项目名称
+    pub project_code: Option<String>,           // 项目编号
+    pub business_owner: Option<String>,         // 业务负责人
+    pub tech_owner: Option<String>,             // 技术负责人
+    pub contact_phone: Option<String>,          // 联系电话
+
+    // 费用相关
+    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<i32>,         // 购买时长(月)
+    pub cost_center: Option<String>,            // 成本中心
+
+    // 合规相关
+    pub security_level: Option<String>,         // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+
+    // 其他
+    pub purpose: Option<String>,                // 用途说明
+    pub expected_delivery_time: Option<String>, // 期望交付时间
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
