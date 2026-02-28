@@ -128,6 +128,10 @@ async fn db_to_business_resource_with_details(
         updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
         created_by: db.created_by,
         updated_by: db.updated_by,
+        application_status: db.application_status,
+        delivery_status: db.delivery_status,
+        delivery_confirmed_at: db.delivery_confirmed_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        delivery_confirmed_by: db.delivery_confirmed_by,
     }
 }
 
@@ -175,10 +179,16 @@ fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessR
         updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
         created_by: db.created_by,
         updated_by: db.updated_by,
+        application_status: db.application_status,
+        delivery_status: db.delivery_status,
+        delivery_confirmed_at: db.delivery_confirmed_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        delivery_confirmed_by: db.delivery_confirmed_by,
     }
 }
 
 /// 获取业务资源列表
+/// 注意：只返回未完成交付的资源（delivery_status != "已交付"）
+/// 已交付的资源将在云服务资产中显示
 pub async fn get_business_resources(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -192,9 +202,13 @@ pub async fn get_business_resources(
     if let Some(conn) = crate::database::get_db() {
         match db_get_business_resources().await {
             Ok(db_resources) => {
-                // Load with details
+                // Load with details，过滤掉已交付的资源
                 let mut resources = Vec::new();
                 for db_res in db_resources {
+                    // 跳过已交付的资源，它们应该在云服务资产中显示
+                    if db_res.delivery_status.as_ref().map(|s| s == "已交付").unwrap_or(false) {
+                        continue;
+                    }
                     let res = db_to_business_resource_with_details(db_res, &conn).await;
                     resources.push(res);
                 }
@@ -210,9 +224,13 @@ pub async fn get_business_resources(
         }
     }
 
-    // 回退到内存缓存
+    // 回退到内存缓存，也过滤已交付的资源
     let resources = BUSINESS_RESOURCES.lock().unwrap();
-    Json(resources.clone()).into_response()
+    let filtered: Vec<_> = resources.iter()
+        .filter(|r| r.delivery_status.as_ref().map(|s| s != "已交付").unwrap_or(true))
+        .cloned()
+        .collect();
+    Json(filtered).into_response()
 }
 
 /// 创建业务资源申请
@@ -321,6 +339,10 @@ pub async fn create_business_resource(
         updated_at: Some(now),
         created_by: Some(user.username.clone()),
         updated_by: Some(user.username.clone()),
+        application_status: req.application_status.clone(),
+        delivery_status: req.delivery_status.clone(),
+        delivery_confirmed_at: req.delivery_confirmed_at,
+        delivery_confirmed_by: req.delivery_confirmed_by.clone(),
     };
 
     // 添加到内存缓存

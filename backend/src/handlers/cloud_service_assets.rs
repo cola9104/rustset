@@ -58,7 +58,13 @@ pub async fn get_cloud_service_assets(
         vec![]
     };
 
-    let mut assets: Vec<CloudServiceAsset> = business_resources.into_iter().map(|br| {
+    let mut assets: Vec<CloudServiceAsset> = business_resources.into_iter()
+        .filter(|br| {
+            // 只显示已交付的资源（包括物理机和云资源）
+            // 这些资源是从云资源申请流转过来的
+            br.delivery_status.as_ref().map(|s| s == "已交付").unwrap_or(false)
+        })
+        .map(|br| {
         CloudServiceAsset {
             // 基础标识
             id: format!("{}-{}", br.resource_type, br.id),
@@ -225,11 +231,16 @@ pub async fn get_cloud_service_stats(
         vec![]
     };
 
-    let total = business_resources.len() as u32;
-    let running = business_resources.iter().filter(|r| r.ecs_status == "运行中").count() as u32;
-    let stopped = business_resources.iter().filter(|r| r.ecs_status == "已释放").count() as u32;
-    let total_cpu: u32 = business_resources.iter().map(|r| r.cpu_cores as u32).sum();
-    let total_memory: u32 = business_resources.iter().map(|r| r.memory_gb as u32).sum();
+    // 只统计已交付的资源
+    let delivered_resources: Vec<_> = business_resources.iter()
+        .filter(|r| r.delivery_status.as_ref().map(|s| s == "已交付").unwrap_or(false))
+        .collect();
+
+    let total = delivered_resources.len() as u32;
+    let running = delivered_resources.iter().filter(|r| r.ecs_status == "运行中").count() as u32;
+    let stopped = delivered_resources.iter().filter(|r| r.ecs_status == "已释放").count() as u32;
+    let total_cpu: u32 = delivered_resources.iter().map(|r| r.cpu_cores as u32).sum();
+    let total_memory: u32 = delivered_resources.iter().map(|r| r.memory_gb as u32).sum();
 
     // Group by provider
     let mut by_provider = std::collections::HashMap::new();
@@ -252,9 +263,9 @@ pub async fn get_cloud_service_stats(
         *by_customer.entry(customer).or_insert(0) += 1;
     }
 
-    // Group by status
+    // Group by status（只统计已交付的资源）
     let mut by_status = std::collections::HashMap::new();
-    for r in &business_resources {
+    for r in delivered_resources.iter() {
         let status = r.ecs_status.clone();
         *by_status.entry(status).or_insert(0) += 1;
     }

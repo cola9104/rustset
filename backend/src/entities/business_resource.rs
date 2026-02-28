@@ -49,6 +49,14 @@ pub struct Model {
     pub updated_at: Option<String>,
     pub created_by: Option<String>,
     pub updated_by: Option<String>,
+    // 申请状态: 待审核、已批准、已拒绝
+    pub application_status: Option<String>,
+    // 交付状态: 待交付、交付中、已交付
+    pub delivery_status: Option<String>,
+    // 交付确认时间
+    pub delivery_confirmed_at: Option<String>,
+    // 交付确认人
+    pub delivery_confirmed_by: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -88,6 +88,10 @@ pub fn BusinessApplication() -> Html {
         physical_machine_info: None,
         cloud_vm_info: None,
         remarks: None,
+        application_status: Some("待审核".to_string()),
+        delivery_status: Some("待交付".to_string()),
+        delivery_confirmed_at: None,
+        delivery_confirmed_by: None,
     });
 
     // Get token from localStorage
@@ -305,6 +309,10 @@ pub fn BusinessApplication() -> Html {
                             }
                         }),
                         remarks: data.remarks.clone(),
+                        application_status: data.application_status.clone(),
+                        delivery_status: data.delivery_status.clone(),
+                        delivery_confirmed_at: data.delivery_confirmed_at,
+                        delivery_confirmed_by: data.delivery_confirmed_by.clone(),
                     };
                     let url = format!("{}/{}", api_url("business-resources"), id);
                     let json_body = serde_json::to_string(&update_req).unwrap_or_default();
@@ -405,6 +413,10 @@ pub fn BusinessApplication() -> Html {
                 physical_machine_info,
                 cloud_vm_info,
                 remarks: resource.remarks.clone(),
+                application_status: resource.application_status.clone(),
+                delivery_status: resource.delivery_status.clone(),
+                delivery_confirmed_at: resource.delivery_confirmed_at,
+                delivery_confirmed_by: resource.delivery_confirmed_by.clone(),
             };
 
             form_data.set(edit_data);
@@ -481,6 +493,10 @@ pub fn BusinessApplication() -> Html {
                 physical_machine_info: None,
                 cloud_vm_info: None,
                 remarks: None,
+                application_status: Some("待审核".to_string()),
+                delivery_status: Some("待交付".to_string()),
+                delivery_confirmed_at: None,
+                delivery_confirmed_by: None,
             });
             editing_id.set(None);
             selected_zone_id.set(None);

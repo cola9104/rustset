@@ -261,6 +261,21 @@ pub struct BusinessResource {
     pub updated_at: Option<DateTime<Utc>>,
     pub created_by: Option<String>,
     pub updated_by: Option<String>,
+
+    // 申请与交付状态管理
+    pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
+    pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
+    pub delivery_confirmed_at: Option<DateTime<Utc>>, // 交付确认时间
+    pub delivery_confirmed_by: Option<String>,     // 交付确认人
+}
+
+// 默认值函数
+fn default_application_status() -> Option<String> {
+    Some("待审核".to_string())
+}
+
+fn default_delivery_status() -> Option<String> {
+    Some("待交付".to_string())
 }
 
 /// 创建业务资源请求
@@ -304,6 +319,14 @@ pub struct CreateBusinessResourceRequest {
     pub physical_machine_info: Option<CreatePhysicalMachineInfo>,    // 物理机特有信息
     pub cloud_vm_info: Option<CreateCloudVirtualMachineInfo>,        // 云虚拟机特有信息
     pub remarks: Option<String>,
+
+    // 申请与交付状态管理
+    #[serde(default = "default_application_status")]
+    pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
+    #[serde(default = "default_delivery_status")]
+    pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
+    pub delivery_confirmed_at: Option<DateTime<Utc>>, // 交付确认时间
+    pub delivery_confirmed_by: Option<String>,     // 交付确认人
 }
 
 /// 更新业务资源请求
@@ -345,6 +368,12 @@ pub struct UpdateBusinessResourceRequest {
     pub physical_machine_info: Option<UpdatePhysicalMachineInfo>,    // 物理机特有信息更新
     pub cloud_vm_info: Option<UpdateCloudVirtualMachineInfo>,        // 云虚拟机特有信息更新
     pub remarks: Option<String>,
+
+    // 申请与交付状态管理
+    pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
+    pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
+    pub delivery_confirmed_at: Option<DateTime<Utc>>, // 交付确认时间
+    pub delivery_confirmed_by: Option<String>,     // 交付确认人
 }
 
 impl Default for UpdateBusinessResourceRequest {
@@ -385,6 +414,10 @@ impl Default for UpdateBusinessResourceRequest {
             physical_machine_info: None,
             cloud_vm_info: None,
             remarks: None,
+            application_status: None,
+            delivery_status: None,
+            delivery_confirmed_at: None,
+            delivery_confirmed_by: None,
         }
     }
 }
@@ -1409,4 +1442,22 @@ pub struct CloudServiceAssetStats {
     pub by_provider: Vec<(String, u32)>, // 按厂商统计
     pub by_customer: Vec<(String, u32)>, // 按客户统计
     pub by_status: Vec<(String, u32)>,   // 按状态统计
+}
+
+/// 创建云服务资产请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateCloudServiceAssetRequest {
+    pub business_resource_id: i32,     // 关联的业务资源ID（用于验证交付状态）
+    pub instance_id: String,             // 实例ID（云厂商返回）
+    pub public_ip: Option<String>,         // 公网IP
+    pub ipv6_address: Option<String>,      // IPv6地址
+    pub instance_type: String,            // 实例类型（ecs、gpu等）
+    pub cpu_cores: u32,                 // CPU核数
+    pub memory_gb: u32,                 // 内存（GB）
+    pub system_disk_gb: u32,            // 系统盘（GB）
+    pub data_disk_gb: u32,              // 数据盘（GB）
+    pub os_type: String,                 // 操作系统类型
+    pub status: String,                   // 初始状态：默认为"运行中"
+    pub tags: Option<String>,             // 标签（JSON字符串）
+    pub remarks: Option<String>,           // 备注
 }

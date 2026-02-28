@@ -826,6 +826,11 @@ pub async fn insert_business_resource(
         updated_at: Set(None),
         created_by: Set(Some(created_by.to_string())),
         updated_by: Set(None),
+        // 申请与交付状态管理
+        application_status: Set(req.application_status.clone()),
+        delivery_status: Set(req.delivery_status.clone()),
+        delivery_confirmed_at: Set(req.delivery_confirmed_at.map(|d| d.to_rfc3339())),
+        delivery_confirmed_by: Set(req.delivery_confirmed_by.clone()),
     };
     let result = db_resource.insert(conn).await?;
     let business_resource_id = result.id;

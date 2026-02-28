@@ -419,7 +419,7 @@ enum CloudProviderConfigs {
 }
 
 #[derive(DeriveIden)]
-enum BusinessResources {
+pub enum BusinessResources {
     Table,
     Id,
     ResourceType,
@@ -465,6 +465,11 @@ enum BusinessResources {
     UpdatedAt,
     CreatedBy,
     UpdatedBy,
+    // 申请与交付状态管理
+    ApplicationStatus,
+    DeliveryStatus,
+    DeliveryConfirmedAt,
+    DeliveryConfirmedBy,
 }
 
 #[derive(DeriveIden)]

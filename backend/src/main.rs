@@ -164,6 +164,30 @@ async fn main() {
     // 获取数据库连接
     let db_conn = database::get_db().expect("Database not initialized");
 
+    // 添加新的申请与交付状态字段（如果不存在）
+    // 注意：这些 SQL 语句会在表已存在时执行，用于升级现有数据库
+    use sea_orm::{ConnectionTrait, Statement, DatabaseBackend, ExecResult};
+    let alter_sqls = vec![
+        "ALTER TABLE business_resources ADD COLUMN application_status TEXT DEFAULT '待审核'",
+        "ALTER TABLE business_resources ADD COLUMN delivery_status TEXT DEFAULT '待交付'",
+        "ALTER TABLE business_resources ADD COLUMN delivery_confirmed_at TEXT",
+        "ALTER TABLE business_resources ADD COLUMN delivery_confirmed_by TEXT",
+    ];
+    // 尝试执行 ALTER TABLE，如果字段已存在会忽略错误
+    for sql in alter_sqls {
+        // SQLite 需要明确指定后端
+        let stmt = Statement::from_string(DatabaseBackend::Sqlite, sql.to_string());
+        match db_conn.execute(stmt).await {
+            Ok(result) => {
+                println!("Added new column(s), result: {:?}", result);
+            },
+            Err(e) => {
+                // 字段可能已存在，忽略错误
+                println!("Note: Column might already exist: {}", e);
+            }
+        }
+    }
+
     // 从数据库加载数据 (使用 SeaORM)
     let loaded_users = load_users_from_db(&db_conn).await;
     println!("Loaded {} users from database", loaded_users.len());

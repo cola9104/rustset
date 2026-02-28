@@ -10,6 +10,10 @@ pub fn api_base_url() -> String {
                 if host.contains(":8080") {
                     return host.replace(":8080", ":3003");
                 }
+                // 将 3004 替换为 3003
+                if host.contains(":3004") {
+                    return host.replace(":3004", ":3003");
+                }
                 // 如果没有端口，添加 3003
                 if !host.contains(':') {
                     return format!("{}:3003", host);
