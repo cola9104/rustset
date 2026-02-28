@@ -1,7 +1,7 @@
 # RustSet - 网络安全资产管理平台
 
 RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫描、监控安全合规，以及混合云多云资产管理。
-
+Dioxus（前端 / 桌面） + Axum（后端 API） + SeaORM（数据库） + Tokio（异步运行时）+ Tonic（gRPC） + Tower（中间件）
 ## 🚀 快速启动
 
 ### 使用启动脚本（推荐）

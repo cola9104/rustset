@@ -1,0 +1,14 @@
+[application]
+name = "rustset"
+default_platform = "web"
+out_dir = "dist"
+asset_dir = "assets"
+
+[application.dev]
+watch_path = ["src", "assets"]
+
+[web.app]
+title = "RustSet - 安全资产管理平台"
+
+[web.resource.dev]
+style = ["assets/tailwind.css"]

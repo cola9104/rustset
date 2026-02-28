@@ -1,61 +1,60 @@
-//! localStorage operations for authentication
+use web_sys::window;
+use crate::app::AuthUser;
 
-use shared::{User, LoginResponse};
+const TOKEN_KEY: &str = "auth_token";
+const USER_KEY: &str = "auth_user";
 
-/// Get auth token from localStorage
-pub fn get_auth_token() -> String {
-    match web_sys::window() {
-        Some(window) => match window.local_storage() {
-            Ok(Some(storage)) => match storage.get_item("auth_token") {
-                Ok(token) => token.unwrap_or_default().trim().to_string(),
-                _ => String::new(),
-            },
-            _ => String::new(),
-        },
-        _ => String::new(),
+/// 获取 localStorage
+fn local_storage() -> Option<web_sys::Storage> {
+    window()?.local_storage().ok()?
+}
+
+/// 保存认证 token
+pub fn save_token(token: &str) {
+    if let Some(storage) = local_storage() {
+        let _ = storage.set_item(TOKEN_KEY, token);
     }
 }
 
-/// Get authenticated user from localStorage
-pub fn get_auth_user() -> Option<User> {
-    match web_sys::window() {
-        Some(window) => match window.local_storage() {
-            Ok(Some(storage)) => match storage.get_item("auth_user") {
-                Ok(Some(user_str)) => serde_json::from_str::<LoginResponse>(&user_str).ok().map(|r| r.user),
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
+/// 获取认证 token
+pub fn get_token() -> Option<String> {
+    local_storage().and_then(|s| s.get_item(TOKEN_KEY).ok().flatten())
+}
+
+/// 清除认证 token
+pub fn clear_token() {
+    if let Some(storage) = local_storage() {
+        let _ = storage.remove_item(TOKEN_KEY);
     }
 }
 
-/// Get user role from localStorage
-pub fn get_user_role() -> Option<shared::Role> {
-    get_auth_user().map(|user| user.role)
-}
-
-/// Get user permissions from localStorage
-pub fn get_user_permissions() -> Option<shared::Permissions> {
-    get_auth_user().and_then(|user| user.permissions)
-}
-
-/// Set auth data in localStorage
-pub fn set_auth(token: &str, user_str: &str) {
-    if let Some(window) = web_sys::window() {
-        if let Ok(Some(storage)) = window.local_storage() {
-            let _ = storage.set_item("auth_token", token);
-            let _ = storage.set_item("auth_user", user_str);
+/// 保存当前用户信息
+pub fn save_current_user(user: &AuthUser) {
+    if let Some(storage) = local_storage() {
+        if let Ok(json) = serde_json::to_string(user) {
+            let _ = storage.set_item(USER_KEY, &json);
         }
     }
 }
 
-/// Clear auth data from localStorage
+/// 获取当前用户信息
+pub fn get_current_user() -> Option<AuthUser> {
+    local_storage().and_then(|s| {
+        s.get_item(USER_KEY).ok().flatten().and_then(|json| {
+            serde_json::from_str(&json).ok()
+        })
+    })
+}
+
+/// 清除当前用户信息
+pub fn clear_current_user() {
+    if let Some(storage) = local_storage() {
+        let _ = storage.remove_item(USER_KEY);
+    }
+}
+
+/// 清除所有认证信息
 pub fn clear_auth() {
-    if let Some(window) = web_sys::window() {
-        if let Ok(Some(storage)) = window.local_storage() {
-            let _ = storage.remove_item("auth_token");
-            let _ = storage.remove_item("auth_user");
-        }
-    }
+    clear_token();
+    clear_current_user();
 }

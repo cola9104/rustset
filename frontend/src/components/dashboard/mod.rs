@@ -1,5 +1,3 @@
-//! Dashboard components
-
-mod dashboard;
+pub mod dashboard;
 
 pub use dashboard::Dashboard;

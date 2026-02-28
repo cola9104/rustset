@@ -1,5 +1,3 @@
-//! Authentication components
-
-mod login;
+pub mod login;
 
 pub use login::Login;

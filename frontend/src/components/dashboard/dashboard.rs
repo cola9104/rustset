@@ -1,98 +1,87 @@
-//! Dashboard page component
+use dioxus::prelude::*;
+use dioxus_free_icons::Icon;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaServer, FaCircleCheck, FaList, FaTriangleExclamation
+};
 
-use yew::prelude::*;
-use gloo_net::http::Request;
-use wasm_bindgen_futures::spawn_local;
-use shared::Asset;
-use crate::{api_url, Language, get_auth_token};
+/// 仪表板页面
+#[allow(non_snake_case)]
+pub fn Dashboard() -> Element {
+    rsx! {
+        div { class: "space-y-6",
+            // 页面标题
+            h1 { class: "text-2xl font-bold text-gray-800", "仪表板" }
 
-#[function_component]
-pub fn Dashboard() -> Html {
-    let lang = use_state(|| Language::Zh);
-    let stats = use_state(|| (0, 0, 0, 0));
-    let loading = use_state(|| true);
-
-    let token = get_auth_token();
-
-    use_effect_with((), {
-        let stats = stats.clone();
-        let loading = loading.clone();
-        let token = token.clone();
-
-        move |_| {
-            spawn_local(async move {
-                loading.set(true);
-
-                let assets_req = Request::get(&api_url("assets"))
-                    .header("Authorization", &token)
-                    .send()
-                    .await;
-                let tasks_req = Request::get(&api_url("tasks"))
-                    .header("Authorization", &token)
-                    .send()
-                    .await;
-
-                let mut asset_count = 0;
-                let mut port_count = 0;
-                let mut unbound_count = 0;
-                let mut task_count = 0;
-
-                if let Ok(resp) = assets_req {
-                    if let Ok(assets) = resp.json::<Vec<Asset>>().await {
-                        asset_count = assets.len();
-                        port_count = assets.iter().map(|a| a.ports.len()).sum();
-                        unbound_count = assets.iter().map(|a| a.ports.iter().filter(|p| !p.is_bound).count()).sum();
+            // 统计卡片
+            div { class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+                // 资产总数
+                div { class: "bg-white rounded-lg shadow p-6",
+                    div { class: "flex items-center",
+                        div { class: "p-3 rounded-full bg-blue-500",
+                            Icon { icon: FaServer, width: 24, height: 24 }
+                        }
+                        div { class: "ml-4",
+                            p { class: "text-sm text-gray-500", "资产总数" }
+                            p { class: "text-2xl font-bold text-gray-800", "0" }
+                        }
                     }
                 }
-
-                if let Ok(resp) = tasks_req {
-                    if let Ok(tasks) = resp.json::<Vec<shared::Task>>().await {
-                        task_count = tasks.len();
+                // 在线资产
+                div { class: "bg-white rounded-lg shadow p-6",
+                    div { class: "flex items-center",
+                        div { class: "p-3 rounded-full bg-green-500",
+                            Icon { icon: FaCircleCheck, width: 24, height: 24 }
+                        }
+                        div { class: "ml-4",
+                            p { class: "text-sm text-gray-500", "在线资产" }
+                            p { class: "text-2xl font-bold text-gray-800", "0" }
+                        }
                     }
                 }
+                // 任务数量
+                div { class: "bg-white rounded-lg shadow p-6",
+                    div { class: "flex items-center",
+                        div { class: "p-3 rounded-full bg-yellow-500",
+                            Icon { icon: FaList, width: 24, height: 24 }
+                        }
+                        div { class: "ml-4",
+                            p { class: "text-sm text-gray-500", "任务数量" }
+                            p { class: "text-2xl font-bold text-gray-800", "0" }
+                        }
+                    }
+                }
+                // 风险数量
+                div { class: "bg-white rounded-lg shadow p-6",
+                    div { class: "flex items-center",
+                        div { class: "p-3 rounded-full bg-red-500",
+                            Icon { icon: FaTriangleExclamation, width: 24, height: 24 }
+                        }
+                        div { class: "ml-4",
+                            p { class: "text-sm text-gray-500", "风险数量" }
+                            p { class: "text-2xl font-bold text-gray-800", "0" }
+                        }
+                    }
+                }
+            }
 
-                stats.set((asset_count, port_count, unbound_count, task_count));
-                loading.set(false);
-            });
-            || ()
+            // 系统信息
+            div { class: "bg-white rounded-lg shadow p-6",
+                h2 { class: "text-lg font-semibold text-gray-800 mb-4", "系统信息" }
+                div { class: "space-y-3",
+                    div { class: "flex justify-between",
+                        span { class: "text-gray-600", "版本" }
+                        span { class: "text-gray-800", "v1.0.0" }
+                    }
+                    div { class: "flex justify-between",
+                        span { class: "text-gray-600", "运行状态" }
+                        span { class: "text-gray-800", "正常" }
+                    }
+                    div { class: "flex justify-between",
+                        span { class: "text-gray-600", "数据库" }
+                        span { class: "text-gray-800", "已连接" }
+                    }
+                }
+            }
         }
-    });
-
-    let (total_assets, total_ports, unbound_ports, total_tasks) = *stats;
-
-    html! {
-        <div class="container p-4">
-            <h1 class="title">{ lang.t("dashboard") }</h1>
-            <div class="columns is-multiline">
-                <div class="column is-3">
-                    <div class="box has-background-info-light">
-                        <div class="heading">{ lang.t("total_assets") }</div>
-                        <div class="title">{ total_assets }</div>
-                    </div>
-                </div>
-                <div class="column is-3">
-                    <div class="box has-background-primary-light">
-                        <div class="heading">{ lang.t("total_ports") }</div>
-                        <div class="title">{ total_ports }</div>
-                    </div>
-                </div>
-                <div class="column is-3">
-                    <div class="box has-background-danger-light">
-                        <div class="heading">{ lang.t("unbound_ports") }</div>
-                        <div class="title has-text-danger">{ unbound_ports }</div>
-                    </div>
-                </div>
-                <div class="column is-3">
-                    <div class="box has-background-warning-light">
-                        <div class="heading">{ lang.t("active_tasks") }</div>
-                        <div class="title">{ total_tasks }</div>
-                    </div>
-                </div>
-            </div>
-            <div class="box">
-                <h2 class="subtitle">{ lang.t("system_status") }</h2>
-                <p>{ lang.t("system_running_msg") }</p>
-            </div>
-        </div>
     }
 }

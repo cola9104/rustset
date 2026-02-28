@@ -1,16 +1,13 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RustSet</title>
-    <link data-trunk rel="rust" href="Cargo.toml" />
-    <!-- Use local Bulma CSS for better performance and reliability -->
-    <link data-trunk rel="css" href="bulma.min.css" />
-    <!-- Use CDNJS for FontAwesome (jsdelivr was unstable) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RustSet - 安全资产管理平台</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Basic loading spinner */
+        /* 加载动画 */
         #loading {
             position: fixed;
             top: 50%;
@@ -22,7 +19,7 @@
             flex-direction: column;
             align-items: center;
         }
-        
+
         #loading::after {
             content: "";
             display: block;
@@ -31,103 +28,18 @@
             margin-top: 10px;
             border-radius: 50%;
             border: 3px solid #ccc;
-            border-top-color: #333;
+            border-top-color: #3b82f6;
             animation: spin 1s linear infinite;
         }
-        
+
         @keyframes spin {
             to { transform: rotate(360deg); }
-        }
-
-        /* Sidebar menu hover styles */
-        .menu-list a:hover {
-            background-color: #e8e8e8 !important;
-            color: #3273dc !important;
-        }
-
-        .menu-list a.is-active {
-            background-color: #3273dc !important;
-            color: #ffffff !important;
-        }
-
-        /* Excel-like table styles */
-        .excel-table-wrapper {
-            overflow-x: auto;
-            position: relative;
-            border: 1px solid #ddd;
-        }
-
-        .excel-table {
-            border-collapse: collapse;
-            width: 100%;
-            min-width: 3200px;
-        }
-
-        .excel-table td,
-        .excel-table th {
-            min-height: 48px;
-        }
-
-        .excel-table thead tr {
-            background: #f5f5f5;
-        }
-
-        .excel-table th {
-            border: 1px solid #ddd;
-            padding: 16px 10px;
-            font-weight: bold;
-            text-align: left;
-            position: relative;
-            user-select: none;
-            font-size: 14px;
-        }
-
-        .excel-table td {
-            border: 1px solid #ddd;
-            padding: 16px 10px;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
-        .excel-table tbody tr.excel-row:hover {
-            background-color: #e8f4fd !important;
-        }
-
-        .resizer {
-            position: absolute;
-            right: 0;
-            top: 0;
-            height: 100%;
-            width: 5px;
-            cursor: col-resize;
-            user-select: none;
-        }
-
-        .resizer:hover,
-        .resizer.resizing {
-            background: #3273dc;
-        }
-
-        /* Action select styling */
-        .action-select {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 12px;
-            cursor: pointer;
-            width: 100%;
-        }
-
-        .action-select:focus {
-            outline: none;
-            border-color: #3273dc;
-            box-shadow: 0 0 0 2px rgba(50, 115, 220, 0.2);
         }
     </style>
 </head>
 <body>
     <div id="main">
-        <div id="loading">Loading RustSet...</div>
+        <div id="loading">正在加载 RustSet...</div>
     </div>
 </body>
 </html>

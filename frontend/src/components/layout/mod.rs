@@ -1,5 +1,5 @@
-//! Layout components
+pub mod layout;
+pub mod sidebar;
 
-mod sidebar;
-
+pub use layout::Layout;
 pub use sidebar::Sidebar;

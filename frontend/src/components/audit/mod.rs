@@ -1,5 +1,3 @@
-//! Audit log components
-
-mod audit_logs;
+pub mod audit_logs;
 
 pub use audit_logs::AuditLogs;
