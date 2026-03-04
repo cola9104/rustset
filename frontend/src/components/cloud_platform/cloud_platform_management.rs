@@ -10,6 +10,7 @@ use crate::state::machine_room::MachineRoomConfig;
 use crate::app::CLOUD_PLATFORMS_STATE;
 use crate::app::PROVIDERS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
+use super::platform_form::{PlatformForm, FormMode};
 
 /// 测试连接结果
 #[derive(Clone, Debug, PartialEq)]
@@ -358,27 +359,30 @@ pub fn CloudPlatformManagement() -> Element {
 
         // 添加平台模态框
         if *show_add_modal.read() {
-            AddPlatformModal {
-                on_close: move |_| show_add_modal.set(false),
-                on_save: move |config| {
+            PlatformForm {
+                mode: FormMode::New,
+                config: None,
+                on_save: move |config: CloudPlatformConfig| {
                     CLOUD_PLATFORMS_STATE.write().push(config);
                     show_add_modal.set(false);
-                }
+                },
+                on_close: move |_| show_add_modal.set(false)
             }
         }
 
         // 编辑平台模态框
-        if let Some(config) = &*editing_config.read() {
-            EditPlatformModal {
-                config: config.clone(),
-                on_close: move |_| editing_config.set(None),
-                on_save: move |config: CloudPlatformConfig| {
-                    let idx = CLOUD_PLATFORMS_STATE.read().iter().position(|c| c.id == config.id);
+        if let Some(config) = editing_config.read().as_ref() {
+            PlatformForm {
+                mode: FormMode::Edit,
+                config: Some(config.clone()),
+                on_save: move |updated: CloudPlatformConfig| {
+                    let idx = CLOUD_PLATFORMS_STATE.read().iter().position(|c| c.id == updated.id);
                     if let Some(idx) = idx {
-                        CLOUD_PLATFORMS_STATE.write()[idx] = config;
+                        CLOUD_PLATFORMS_STATE.write()[idx] = updated;
                     }
                     editing_config.set(None);
-                }
+                },
+                on_close: move |_| editing_config.set(None)
             }
         }
 

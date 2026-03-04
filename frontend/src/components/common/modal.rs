@@ -4,7 +4,7 @@ use dioxus_free_icons::icons::fa_solid_icons::FaXmark;
 
 /// 通用模态框组件属性
 #[derive(Props, Clone, PartialEq)]
-struct ModalProps {
+pub struct ModalProps {
     /// 是否显示
     show: bool,
     /// 标题
