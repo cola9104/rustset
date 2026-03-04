@@ -18,8 +18,12 @@ pub struct HardwareAsset {
     pub name: String,
     pub asset_type: String,
     pub ip_address: String,
+    pub ports: String,  // 开放端口，如 "22, 80, 443, 3306"
     pub status: String,
-    pub location: String,
+    pub datacenter: String,   // 机房，如 "机房A"
+    pub cabinet: String,      // 机柜，如 "机柜2"
+    pub u_position: String,   // U位，如 "1U-4U"
+    pub u_total: String,      // 总U数，如 "4U"
     pub created_at: String,
 }
 
@@ -27,12 +31,16 @@ pub struct HardwareAsset {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CloudAsset {
     pub id: i32,
-    pub name: String,
-    pub provider: String,
-    pub instance_type: String,
+    pub name: String,                    // 实例名称
+    pub provider: String,                // 云厂商
+    pub cloud_type: String,              // 云类型（公有云、政务云）
+    pub foundation: String,              // 底座（阿里云、华为云等）
+    pub instance_type: String,           // 实例类型
     pub ip_address: String,
+    pub ports: String,                   // 开放端口，如 "22, 80, 443"
     pub status: String,
-    pub region: String,
+    pub region: String,                  // 区域
+    pub machine_room: String,            // 机房
     pub created_at: String,
 }
 
@@ -48,8 +56,12 @@ pub fn AssetManagement() -> Element {
             name: "服务器-01".to_string(),
             asset_type: "服务器".to_string(),
             ip_address: "192.168.1.10".to_string(),
+            ports: "22, 80, 443, 3306, 8080".to_string(),
             status: "在线".to_string(),
-            location: "机房A-机柜1".to_string(),
+            datacenter: "机房A".to_string(),
+            cabinet: "机柜1".to_string(),
+            u_position: "1U-4U".to_string(),
+            u_total: "4U".to_string(),
             created_at: "2024-01-15".to_string(),
         },
         HardwareAsset {
@@ -57,8 +69,12 @@ pub fn AssetManagement() -> Element {
             name: "服务器-02".to_string(),
             asset_type: "服务器".to_string(),
             ip_address: "192.168.1.11".to_string(),
+            ports: "22, 80, 443".to_string(),
             status: "在线".to_string(),
-            location: "机房A-机柜2".to_string(),
+            datacenter: "机房A".to_string(),
+            cabinet: "机柜2".to_string(),
+            u_position: "5U-8U".to_string(),
+            u_total: "4U".to_string(),
             created_at: "2024-01-16".to_string(),
         },
         HardwareAsset {
@@ -66,8 +82,12 @@ pub fn AssetManagement() -> Element {
             name: "工作站-01".to_string(),
             asset_type: "工作站".to_string(),
             ip_address: "192.168.2.100".to_string(),
+            ports: "22, 3389".to_string(),
             status: "离线".to_string(),
-            location: "办公区".to_string(),
+            datacenter: "".to_string(),
+            cabinet: "".to_string(),
+            u_position: "".to_string(),
+            u_total: "".to_string(),
             created_at: "2024-01-20".to_string(),
         },
     ]);
@@ -78,31 +98,85 @@ pub fn AssetManagement() -> Element {
             id: 1,
             name: "web-server-01".to_string(),
             provider: "阿里云".to_string(),
+            cloud_type: "公有云".to_string(),
+            foundation: "阿里云".to_string(),
             instance_type: "ecs.g6.large".to_string(),
             ip_address: "47.96.123.45".to_string(),
+            ports: "22, 80, 443".to_string(),
             status: "运行中".to_string(),
             region: "华东1-杭州".to_string(),
+            machine_room: "市政务云机房A".to_string(),
             created_at: "2024-01-10".to_string(),
         },
         CloudAsset {
             id: 2,
             name: "api-server-01".to_string(),
             provider: "腾讯云".to_string(),
+            cloud_type: "公有云".to_string(),
+            foundation: "腾讯云".to_string(),
             instance_type: "S5.MEDIUM4".to_string(),
             ip_address: "119.29.67.89".to_string(),
+            ports: "22, 8080".to_string(),
             status: "运行中".to_string(),
             region: "广州".to_string(),
+            machine_room: "联通核心机房".to_string(),
             created_at: "2024-01-12".to_string(),
         },
         CloudAsset {
             id: 3,
             name: "db-server-01".to_string(),
             provider: "华为云".to_string(),
+            cloud_type: "政务云".to_string(),
+            foundation: "华为云".to_string(),
             instance_type: "s6.xlarge.4".to_string(),
             ip_address: "119.8.123.234".to_string(),
+            ports: "22, 3306".to_string(),
             status: "已停止".to_string(),
             region: "华北区-北京4".to_string(),
+            machine_room: "核心机房(电信)".to_string(),
             created_at: "2024-01-18".to_string(),
+        },
+        CloudAsset {
+            id: 4,
+            name: "app-server-02".to_string(),
+            provider: "阿里云".to_string(),
+            cloud_type: "政务云".to_string(),
+            foundation: "阿里云".to_string(),
+            instance_type: "ecs.g7.xlarge".to_string(),
+            ip_address: "47.97.234.56".to_string(),
+            ports: "22, 80, 443, 8080".to_string(),
+            status: "运行中".to_string(),
+            region: "华东1-杭州".to_string(),
+            machine_room: "市政务云机房B".to_string(),
+            created_at: "2024-01-20".to_string(),
+        },
+        CloudAsset {
+            id: 5,
+            name: "cache-server-01".to_string(),
+            provider: "华为云".to_string(),
+            cloud_type: "公有云".to_string(),
+            foundation: "华为云".to_string(),
+            instance_type: "s6.large.2".to_string(),
+            ip_address: "119.9.45.123".to_string(),
+            ports: "22, 6379".to_string(),
+            status: "运行中".to_string(),
+            region: "西南区-成都1".to_string(),
+            machine_room: "市政务云机房C".to_string(),
+            created_at: "2024-01-22".to_string(),
+        },
+        CloudAsset {
+            id: 6,
+            name: "file-server-01".to_string(),
+            provider: "阿里云".to_string(),
+            cloud_type: "公有云".to_string(),
+            foundation: "阿里云".to_string(),
+            instance_type: "ecs.g6.2xlarge".to_string(),
+            ip_address: "47.98.156.78".to_string(),
+            ports: "22, 80, 443, 2049".to_string(),
+            status: "运行中".to_string(),
+            region: "华北2-北京".to_string(),
+            machine_room: "移动核心机房".to_string(),
+            created_at: "2024-01-25".to_string(),
         },
     ]);
 
@@ -274,8 +348,10 @@ fn HardwareAssetsTab(
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "名称" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "类型" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "IP地址" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "开放端口" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
-                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "位置" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房/机柜" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "U位" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
                     }
                 }
@@ -300,6 +376,9 @@ fn HardwareAssetsTab(
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
                                 {asset.ip_address.clone()}
                             }
+                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                span { class: "text-xs font-mono bg-gray-100 px-2 py-1 rounded", {asset.ports.clone()} }
+                            }
                             td { class: "px-6 py-4 whitespace-nowrap",
                                 span {
                                     class: if asset.status == "在线" {
@@ -311,7 +390,32 @@ fn HardwareAssetsTab(
                                 }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                {asset.location.clone()}
+                                if asset.datacenter.is_empty() && asset.cabinet.is_empty() {
+                                    "-"
+                                } else {
+                                    div {
+                                        if !asset.datacenter.is_empty() {
+                                            div { {asset.datacenter.clone()} }
+                                        }
+                                        if !asset.cabinet.is_empty() {
+                                            div { class: "text-xs text-gray-400", {asset.cabinet.clone()} }
+                                        }
+                                    }
+                                }
+                            }
+                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                if asset.u_position.is_empty() && asset.u_total.is_empty() {
+                                    "-"
+                                } else {
+                                    div { class: "flex items-center space-x-2",
+                                        if !asset.u_position.is_empty() {
+                                            span { class: "font-mono text-xs bg-gray-100 px-2 py-1 rounded", {asset.u_position.clone()} }
+                                        }
+                                        if !asset.u_total.is_empty() {
+                                            span { class: "text-xs text-gray-400", {asset.u_total.clone()} }
+                                        }
+                                    }
+                                }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
                                 button {
@@ -465,10 +569,13 @@ fn CloudAssetsTab(
                     tr {
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "实例名称" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "云厂商" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "云类型" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "底座" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "实例类型" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "IP地址" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "开放端口" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
-                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "区域" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "区域/机房" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
                     }
                 }
@@ -488,11 +595,22 @@ fn CloudAssetsTab(
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
                                 {asset.provider.clone()}
                             }
+                            td { class: "px-6 py-4 whitespace-nowrap",
+                                span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800",
+                                    {asset.cloud_type.clone()}
+                                }
+                            }
+                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                {asset.foundation.clone()}
+                            }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
                                 {asset.instance_type.clone()}
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
                                 {asset.ip_address.clone()}
+                            }
+                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                span { class: "text-xs font-mono bg-gray-100 px-2 py-1 rounded", {asset.ports.clone()} }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap",
                                 span {
@@ -505,7 +623,10 @@ fn CloudAssetsTab(
                                 }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                {asset.region.clone()}
+                                div {
+                                    div { {asset.region.clone()} }
+                                    div { class: "text-xs text-gray-400", {asset.machine_room.clone()} }
+                                }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
                                 button {
@@ -566,8 +687,12 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
     let mut name = use_signal(|| asset.name.clone());
     let mut asset_type = use_signal(|| asset.asset_type.clone());
     let mut ip_address = use_signal(|| asset.ip_address.clone());
+    let mut ports = use_signal(|| asset.ports.clone());
     let mut status = use_signal(|| asset.status.clone());
-    let mut location = use_signal(|| asset.location.clone());
+    let mut datacenter = use_signal(|| asset.datacenter.clone());
+    let mut cabinet = use_signal(|| asset.cabinet.clone());
+    let mut u_position = use_signal(|| asset.u_position.clone());
+    let mut u_total = use_signal(|| asset.u_total.clone());
 
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -616,6 +741,18 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                     }
 
                     div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "开放端口" }
+                        input {
+                            r#type: "text",
+                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                            placeholder: "例如: 22, 80, 443",
+                            value: ports,
+                            oninput: move |e| ports.set(e.value()),
+                        }
+                        p { class: "text-xs text-gray-500 mt-1", "多个端口用逗号分隔" }
+                    }
+
+                    div {
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
                         select {
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -626,13 +763,49 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                         }
                     }
 
-                    div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "位置" }
-                        input {
-                            r#type: "text",
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            value: location,
-                            oninput: move |e| location.set(e.value()),
+                    div { class: "border-t pt-4 mt-4",
+                        h4 { class: "text-sm font-medium text-gray-700 mb-3", "位置信息" }
+                        div { class: "grid grid-cols-2 gap-3",
+                            div {
+                                label { class: "block text-sm font-medium text-gray-700 mb-1", "机房" }
+                                input {
+                                    r#type: "text",
+                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    placeholder: "如：机房A",
+                                    value: datacenter,
+                                    oninput: move |e| datacenter.set(e.value()),
+                                }
+                            }
+                            div {
+                                label { class: "block text-sm font-medium text-gray-700 mb-1", "机柜" }
+                                input {
+                                    r#type: "text",
+                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    placeholder: "如：机柜2",
+                                    value: cabinet,
+                                    oninput: move |e| cabinet.set(e.value()),
+                                }
+                            }
+                            div {
+                                label { class: "block text-sm font-medium text-gray-700 mb-1", "U位" }
+                                input {
+                                    r#type: "text",
+                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    placeholder: "如：1U-4U",
+                                    value: u_position,
+                                    oninput: move |e| u_position.set(e.value()),
+                                }
+                            }
+                            div {
+                                label { class: "block text-sm font-medium text-gray-700 mb-1", "总U数" }
+                                input {
+                                    r#type: "text",
+                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    placeholder: "如：4U",
+                                    value: u_total,
+                                    oninput: move |e| u_total.set(e.value()),
+                                }
+                            }
                         }
                     }
                 }
@@ -654,8 +827,12 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                                     name: name.read().clone(),
                                     asset_type: asset_type.read().clone(),
                                     ip_address: ip_address.read().clone(),
+                                    ports: ports.read().clone(),
                                     status: status.read().clone(),
-                                    location: location.read().clone(),
+                                    datacenter: datacenter.read().clone(),
+                                    cabinet: cabinet.read().clone(),
+                                    u_position: u_position.read().clone(),
+                                    u_total: u_total.read().clone(),
                                     created_at: created_at.clone(),
                                 };
                                 on_save.call(updated);
@@ -674,10 +851,14 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
 fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: EventHandler<CloudAsset>) -> Element {
     let mut name = use_signal(|| asset.name.clone());
     let mut provider = use_signal(|| asset.provider.clone());
+    let mut cloud_type = use_signal(|| asset.cloud_type.clone());
+    let mut foundation = use_signal(|| asset.foundation.clone());
     let mut instance_type = use_signal(|| asset.instance_type.clone());
     let mut ip_address = use_signal(|| asset.ip_address.clone());
+    let mut ports = use_signal(|| asset.ports.clone());
     let mut status = use_signal(|| asset.status.clone());
     let mut region = use_signal(|| asset.region.clone());
+    let mut machine_room = use_signal(|| asset.machine_room.clone());
 
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -702,15 +883,42 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                         }
                     }
 
+                    div { class: "grid grid-cols-2 gap-3",
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "云厂商" }
+                            select {
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                value: provider,
+                                onchange: move |e| provider.set(e.value()),
+                                option { value: "阿里云", "阿里云" }
+                                option { value: "腾讯云", "腾讯云" }
+                                option { value: "华为云", "华为云" }
+                                option { value: "AWS", "AWS" }
+                                option { value: "Azure", "Azure" }
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "云类型" }
+                            select {
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                value: cloud_type,
+                                onchange: move |e| cloud_type.set(e.value()),
+                                option { value: "公有云", "公有云" }
+                                option { value: "政务云", "政务云" }
+                                option { value: "私有云", "私有云" }
+                            }
+                        }
+                    }
+
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "云厂商" }
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "底座" }
                         select {
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            value: provider,
-                            onchange: move |e| provider.set(e.value()),
+                            value: foundation,
+                            onchange: move |e| foundation.set(e.value()),
                             option { value: "阿里云", "阿里云" }
-                            option { value: "腾讯云", "腾讯云" }
                             option { value: "华为云", "华为云" }
+                            option { value: "腾讯云", "腾讯云" }
                             option { value: "AWS", "AWS" }
                             option { value: "Azure", "Azure" }
                         }
@@ -738,6 +946,18 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                     }
 
                     div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "开放端口" }
+                        input {
+                            r#type: "text",
+                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                            placeholder: "例如: 22, 80, 443",
+                            value: ports,
+                            oninput: move |e| ports.set(e.value()),
+                        }
+                        p { class: "text-xs text-gray-500 mt-1", "多个端口用逗号分隔" }
+                    }
+
+                    div {
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
                         select {
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
@@ -749,14 +969,26 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                         }
                     }
 
-                    div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "区域" }
-                        input {
-                            r#type: "text",
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            placeholder: "例如: 华东1-杭州",
-                            value: region,
-                            oninput: move |e| region.set(e.value()),
+                    div { class: "grid grid-cols-2 gap-3",
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "区域" }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                placeholder: "例如: 华东1-杭州",
+                                value: region,
+                                oninput: move |e| region.set(e.value()),
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房" }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                placeholder: "例如: 市政务云机房A",
+                                value: machine_room,
+                                oninput: move |e| machine_room.set(e.value()),
+                            }
                         }
                     }
                 }
@@ -777,10 +1009,14 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                                     id: asset_id,
                                     name: name.read().clone(),
                                     provider: provider.read().clone(),
+                                    cloud_type: cloud_type.read().clone(),
+                                    foundation: foundation.read().clone(),
                                     instance_type: instance_type.read().clone(),
                                     ip_address: ip_address.read().clone(),
+                                    ports: ports.read().clone(),
                                     status: status.read().clone(),
                                     region: region.read().clone(),
+                                    machine_room: machine_room.read().clone(),
                                     created_at: created_at.clone(),
                                 };
                                 on_save.call(updated);

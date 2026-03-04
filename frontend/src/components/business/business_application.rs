@@ -512,8 +512,8 @@ fn AddAppModal(on_close: EventHandler<()>, on_save: EventHandler<BusinessApplica
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
                         select {
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            value: if status.read() == &AppState::Online { "在线" }
-                                  else if status.read() == &AppState::Offline { "离线" }
+                            value: if matches!(&*status.read(), AppState::Online) { "在线" }
+                                  else if matches!(&*status.read(), AppState::Offline) { "离线" }
                                   else { "维护中" },
                             onchange: move |e| {
                                 status.set(match e.value().as_str() {
@@ -680,8 +680,8 @@ fn EditAppModal(app: BusinessApplication, on_close: EventHandler<()>, on_save: E
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
                         select {
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            value: if status.read() == &AppState::Online { "在线" }
-                                  else if status.read() == &AppState::Offline { "离线" }
+                            value: if matches!(&*status.read(), AppState::Online) { "在线" }
+                                  else if matches!(&*status.read(), AppState::Offline) { "离线" }
                                   else { "维护中" },
                             onchange: move |e| {
                                 status.set(match e.value().as_str() {

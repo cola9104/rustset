@@ -15,6 +15,7 @@ use crate::components::resource_ticket::ResourceTicket;
 use crate::components::cloud_platform::CloudPlatformManagement;
 use crate::components::machine_room::MachineRoomManagement;
 use crate::components::service_provider::ServiceProviderManagement;
+use crate::components::business::BusinessApplication;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -45,6 +46,10 @@ pub enum Route {
     // 审计日志
     #[route("/audit")]
     AuditLogs {},
+
+    // 业务应用管理
+    #[route("/business-apps")]
+    BusinessApplication {},
 
     // 资源工单
     #[route("/tickets")]

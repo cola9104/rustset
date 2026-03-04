@@ -4,6 +4,7 @@ use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaHouse, FaServer, FaList, FaTriangleExclamation, FaFileLines,
     FaBriefcase, FaUsers, FaKey, FaLock, FaCloud, FaBuilding, FaNetworkWired,
+    FaEarthAmericas,
 };
 use crate::router::Route;
 
@@ -40,15 +41,6 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         span { class: "ml-3", "仪表板" }
                     }
                 }
-                // 资产管理
-                Link {
-                    to: Route::AssetManagement {},
-                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaServer, width: 20, height: 20 }
-                    if !is_collapsed {
-                        span { class: "ml-3", "资产管理" }
-                    }
-                }
                 // 任务中心
                 Link {
                     to: Route::TaskCenter {},
@@ -67,13 +59,22 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         span { class: "ml-3", "风险中心" }
                     }
                 }
-                // 审计日志
+                // 资产管理
                 Link {
-                    to: Route::AuditLogs {},
+                    to: Route::AssetManagement {},
                     class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaFileLines, width: 20, height: 20 }
+                    Icon { icon: FaServer, width: 20, height: 20 }
                     if !is_collapsed {
-                        span { class: "ml-3", "审计日志" }
+                        span { class: "ml-3", "资产管理" }
+                    }
+                }
+                // 业务应用管理
+                Link {
+                    to: Route::BusinessApplication {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaEarthAmericas, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "业务应用" }
                     }
                 }
                 // 资源工单
@@ -137,6 +138,15 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     Icon { icon: FaLock, width: 20, height: 20 }
                     if !is_collapsed {
                         span { class: "ml-3", "密码策略" }
+                    }
+                }
+                // 审计日志
+                Link {
+                    to: Route::AuditLogs {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaFileLines, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "审计日志" }
                     }
                 }
             }

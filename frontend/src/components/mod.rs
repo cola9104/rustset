@@ -5,6 +5,7 @@ pub mod asset;
 pub mod task;
 pub mod risk;
 pub mod audit;
+pub mod business;
 pub mod user;
 pub mod permission;
 pub mod password;
