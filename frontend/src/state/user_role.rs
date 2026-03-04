@@ -52,7 +52,6 @@ impl UserRole {
         match self {
             UserRole::Applicant => vec![
                 ApplicationTab::MyApplications,
-                ApplicationTab::NewApplication,
             ],
             UserRole::Approver => vec![
                 ApplicationTab::PendingApproval,
@@ -66,7 +65,6 @@ impl UserRole {
             ],
             UserRole::Admin => vec![
                 ApplicationTab::MyApplications,
-                ApplicationTab::NewApplication,
                 ApplicationTab::PendingApproval,
                 ApplicationTab::PendingProvision,
                 ApplicationTab::PendingDelivery,
@@ -82,8 +80,6 @@ impl UserRole {
 pub enum ApplicationTab {
     /// 我的申请
     MyApplications,
-    /// 新建申请
-    NewApplication,
     /// 待审批
     PendingApproval,
     /// 待配置
@@ -100,7 +96,6 @@ impl ApplicationTab {
     pub fn display_name(&self) -> &'static str {
         match self {
             ApplicationTab::MyApplications => "我的申请",
-            ApplicationTab::NewApplication => "新建申请",
             ApplicationTab::PendingApproval => "待审批",
             ApplicationTab::PendingProvision => "待配置",
             ApplicationTab::PendingDelivery => "待交付",
@@ -112,7 +107,6 @@ impl ApplicationTab {
     pub fn icon_name(&self) -> &'static str {
         match self {
             ApplicationTab::MyApplications => "fa-list",
-            ApplicationTab::NewApplication => "fa-plus",
             ApplicationTab::PendingApproval => "fa-clock",
             ApplicationTab::PendingProvision => "fa-cog",
             ApplicationTab::PendingDelivery => "fa-truck",

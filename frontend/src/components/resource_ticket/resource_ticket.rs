@@ -15,6 +15,7 @@ use crate::state::cloud_platform::{CloudPlatformConfig, init_cloud_platforms};
 use crate::state::machine_room::{MachineRoomConfig, init_machine_rooms};
 use crate::state::service_provider::{ServiceProviderConfig, init_service_providers};
 use crate::app::PROVIDERS_STATE;
+use crate::components::security_product::security_product_selector::{SecurityProductSelector, SelectedSecurityProducts};
 
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
 #[allow(non_snake_case)]
@@ -92,71 +93,83 @@ pub fn ResourceTicket() -> Element {
 
             // 资源类型标签页导航（外层）
             div { class: "bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 px-6 py-2 shadow-sm overflow-visible",
-                div { class: "flex gap-2 overflow-x-auto overflow-y-visible",
-                    button {
-                        class: format!(
-                            "px-5 py-3 text-sm font-semibold rounded-t-lg whitespace-nowrap transition-all duration-200 flex items-center gap-2.5 relative {}",
-                            if *resource_type_tab.read() == ResourceType::Cloud {
-                                "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
-                            } else {
-                                "text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-md"
+                div { class: "flex items-center justify-between overflow-x-auto overflow-y-visible",
+                    div { class: "flex gap-2",
+                        button {
+                            class: format!(
+                                "px-5 py-3 text-sm font-semibold rounded-t-lg whitespace-nowrap transition-all duration-200 flex items-center gap-2.5 relative {}",
+                                if *resource_type_tab.read() == ResourceType::Cloud {
+                                    "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
+                                } else {
+                                    "text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-md"
+                                }
+                            ),
+                            onclick: move |_| {
+                                resource_type_tab.set(ResourceType::Cloud);
+                                selected_ticket.set(None);
+                                show_new_form.set(false);
+                            },
+                            Icon { icon: FaCloud, width: 16, height: 16, class: if *resource_type_tab.read() == ResourceType::Cloud { "text-white" } else { "text-gray-400" } }
+                            "云资源"
+                            if cloud_pending_count > 0 {
+                                span { class: "absolute top-0 -right-3 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow-md z-50 border-2 border-white",
+                                    {cloud_pending_count.to_string()}
+                                }
                             }
-                        ),
-                        onclick: move |_| {
-                            resource_type_tab.set(ResourceType::Cloud);
-                            selected_ticket.set(None);
-                            show_new_form.set(false);
-                        },
-                        Icon { icon: FaCloud, width: 16, height: 16, class: if *resource_type_tab.read() == ResourceType::Cloud { "text-white" } else { "text-gray-400" } }
-                        "云资源"
-                        if cloud_pending_count > 0 {
-                            span { class: "absolute top-0 -right-3 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow-md z-50 border-2 border-white",
-                                {cloud_pending_count.to_string()}
+                        }
+                        button {
+                            class: format!(
+                                "px-5 py-3 text-sm font-semibold rounded-t-lg whitespace-nowrap transition-all duration-200 flex items-center gap-2.5 relative {}",
+                                if *resource_type_tab.read() == ResourceType::Physical {
+                                    "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
+                                } else {
+                                    "text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-md"
+                                }
+                            ),
+                            onclick: move |_| {
+                                resource_type_tab.set(ResourceType::Physical);
+                                selected_ticket.set(None);
+                                show_new_form.set(false);
+                            },
+                            Icon { icon: FaServer, width: 16, height: 16, class: if *resource_type_tab.read() == ResourceType::Physical { "text-white" } else { "text-gray-400" } }
+                            "物理资源"
+                            if physical_pending_count > 0 {
+                                span { class: "absolute top-0 -right-3 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow-md z-50 border-2 border-white",
+                                    {physical_pending_count.to_string()}
+                                }
+                            }
+                        }
+                        button {
+                            class: format!(
+                                "px-5 py-3 text-sm font-semibold rounded-t-lg whitespace-nowrap transition-all duration-200 flex items-center gap-2.5 relative {}",
+                                if *resource_type_tab.read() == ResourceType::Network {
+                                    "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
+                                } else {
+                                    "text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-md"
+                                }
+                            ),
+                            onclick: move |_| {
+                                resource_type_tab.set(ResourceType::Network);
+                                selected_ticket.set(None);
+                                show_new_form.set(false);
+                            },
+                            Icon { icon: FaShieldHalved, width: 16, height: 16, class: if *resource_type_tab.read() == ResourceType::Network { "text-white" } else { "text-gray-400" } }
+                            "网络策略"
+                            if network_pending_count > 0 {
+                                span { class: "absolute top-0 -right-3 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow-md z-50 border-2 border-white",
+                                    {network_pending_count.to_string()}
+                                }
                             }
                         }
                     }
-                    button {
-                        class: format!(
-                            "px-5 py-3 text-sm font-semibold rounded-t-lg whitespace-nowrap transition-all duration-200 flex items-center gap-2.5 relative {}",
-                            if *resource_type_tab.read() == ResourceType::Physical {
-                                "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
-                            } else {
-                                "text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-md"
-                            }
-                        ),
-                        onclick: move |_| {
-                            resource_type_tab.set(ResourceType::Physical);
-                            selected_ticket.set(None);
-                            show_new_form.set(false);
-                        },
-                        Icon { icon: FaServer, width: 16, height: 16, class: if *resource_type_tab.read() == ResourceType::Physical { "text-white" } else { "text-gray-400" } }
-                        "物理资源"
-                        if physical_pending_count > 0 {
-                            span { class: "absolute top-0 -right-3 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow-md z-50 border-2 border-white",
-                                {physical_pending_count.to_string()}
-                            }
-                        }
-                    }
-                    button {
-                        class: format!(
-                            "px-5 py-3 text-sm font-semibold rounded-t-lg whitespace-nowrap transition-all duration-200 flex items-center gap-2.5 relative {}",
-                            if *resource_type_tab.read() == ResourceType::Network {
-                                "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-200"
-                            } else {
-                                "text-gray-600 hover:bg-white hover:text-blue-600 hover:shadow-md"
-                            }
-                        ),
-                        onclick: move |_| {
-                            resource_type_tab.set(ResourceType::Network);
-                            selected_ticket.set(None);
-                            show_new_form.set(false);
-                        },
-                        Icon { icon: FaShieldHalved, width: 16, height: 16, class: if *resource_type_tab.read() == ResourceType::Network { "text-white" } else { "text-gray-400" } }
-                        "网络策略"
-                        if network_pending_count > 0 {
-                            span { class: "absolute top-0 -right-3 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white shadow-md z-50 border-2 border-white",
-                                {network_pending_count.to_string()}
-                            }
+
+                    // 新建工单按钮
+                    if current_role.can_submit() {
+                        button {
+                            class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm",
+                            onclick: move |_| show_new_form.set(true),
+                            Icon { icon: FaPlus, class: "text-sm" }
+                            "新建工单"
                         }
                     }
                 }
@@ -234,64 +247,47 @@ pub fn ResourceTicket() -> Element {
                 }
             }
 
-            // 工作流程标签页导航（内层）
+            // 工作流程标签页导航 + 搜索框
             div { class: "bg-white border-b border-gray-200 px-6",
-                div { class: "flex gap-1 overflow-x-auto",
-                    for tab in accessible_tabs {
-                        button {
-                            class: format!(
-                                "px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors {}",
-                                if *workflow_tab.read() == tab {
-                                    "border-blue-500 text-blue-600 bg-white"
-                                } else {
-                                    "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                                }
-                            ),
-                            onclick: move |_| {
-                                workflow_tab.set(tab);
-                                selected_ticket.set(None);
-                                show_new_form.set(false);
-                            },
-                            i { class: format!("fa {} mr-2", tab.icon_name()) }
-                            {tab.display_name()}
+                div { class: "flex items-center justify-between gap-4",
+                    // 工作流标签
+                    div { class: "flex gap-1 overflow-x-auto",
+                        for tab in accessible_tabs {
+                            button {
+                                class: format!(
+                                    "px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors {}",
+                                    if *workflow_tab.read() == tab {
+                                        "border-blue-500 text-blue-600 bg-white"
+                                    } else {
+                                        "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                                    }
+                                ),
+                                onclick: move |_| {
+                                    workflow_tab.set(tab);
+                                    selected_ticket.set(None);
+                                    show_new_form.set(false);
+                                },
+                                i { class: format!("fa {} mr-2", tab.icon_name()) }
+                                {tab.display_name()}
+                            }
                         }
                     }
-                }
-            }
 
-            // 工具栏
-            div { class: "bg-white border-b border-gray-200 px-6 py-3",
-                div { class: "flex items-center justify-between",
-                    div { class: "flex items-center gap-4 flex-1",
+                    // 搜索框和统计
+                    div { class: "flex items-center gap-3",
+                        // 统计信息
+                        span { class: "text-sm text-gray-500 whitespace-nowrap",
+                            {format!("共 {} 条", total_count)}
+                        }
                         // 搜索框
-                        div { class: "relative flex-1 max-w-md",
+                        div { class: "relative w-40",
                             input {
-                                class: "w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                                placeholder: "搜索工单名称、申请人、合同...",
+                                class: "w-full pl-7 pr-2 py-1 border border-gray-200 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 focus:bg-white",
+                                placeholder: "搜索...",
                                 value: "{search_query}",
                                 oninput: move |e| search_query.set(e.value())
                             }
-                            Icon { icon: FaMagnifyingGlass, class: "absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" }
-                        }
-
-                        // 统计信息
-                        div { class: "flex items-center gap-4 text-sm text-gray-600",
-                            span { class: "flex items-center gap-1",
-                                span { class: "font-semibold text-blue-600" },
-                                {format!("共 {} 条", total_count)}
-                            }
-                        }
-                    }
-
-                    // 操作按钮
-                    div { class: "flex items-center gap-2",
-                        if current_role.can_submit() && *workflow_tab.read() == ApplicationTab::MyApplications {
-                            button {
-                                class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors",
-                                onclick: move |_| show_new_form.set(true),
-                                Icon { icon: FaPlus, class: "text-sm" }
-                                "新建工单"
-                            }
+                            Icon { icon: FaMagnifyingGlass, class: "absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 w-3 h-3" }
                         }
                     }
                 }
@@ -299,17 +295,7 @@ pub fn ResourceTicket() -> Element {
 
             // 主内容区
             div { class: "flex-1 overflow-auto p-6",
-                // 新建工单表单
-                if *show_new_form.read() {
-                    NewTicketForm {
-                        tickets: tickets.clone(),
-                        default_resource_type: *resource_type_tab.read(),
-                        on_cancel: move |_| show_new_form.set(false),
-                        on_submit: move |_| {
-                            show_new_form.set(false);
-                        },
-                    }
-                } else if let Some(ticket_id) = *selected_ticket.read() {
+                if let Some(ticket_id) = *selected_ticket.read() {
                     // 详情视图
                     {
                         let all_tickets = tickets.read().clone();
@@ -336,6 +322,18 @@ pub fn ResourceTicket() -> Element {
                         current_role,
                         on_select: move |id| selected_ticket.set(Some(id)),
                     }
+                }
+            }
+
+            // 新建工单模态框（放在最外层）
+            if *show_new_form.read() {
+                NewTicketForm {
+                    tickets: tickets.clone(),
+                    default_resource_type: *resource_type_tab.read(),
+                    on_cancel: move |_| show_new_form.set(false),
+                    on_submit: move |_| {
+                        show_new_form.set(false);
+                    },
                 }
             }
         }
@@ -432,7 +430,6 @@ fn TicketListViewByTypeAndWorkflow(
                 ApplicationTab::PendingDelivery => ticket.ticket_status == TicketStatus::PendingDelivery,
                 ApplicationTab::Delivered => ticket.ticket_status == TicketStatus::Delivered,
                 ApplicationTab::Archived => ticket.ticket_status == TicketStatus::Archived,
-                ApplicationTab::NewApplication => false,
             }
         })
         .filter(|ticket| {
@@ -541,7 +538,6 @@ fn TicketListView(
         ApplicationTab::PendingDelivery => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::PendingDelivery).collect(),
         ApplicationTab::Delivered => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::Delivered).collect(),
         ApplicationTab::Archived => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::Archived).collect(),
-        ApplicationTab::NewApplication => vec![],
     };
 
     let filtered_tickets: Vec<_> = filtered_tickets
@@ -848,7 +844,7 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
         div { class: "space-y-4",
             p { class: "text-sm text-gray-500", "请审批此申请" }
             textarea {
-                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                 rows: 3,
                 placeholder: "审批意见（可选）",
                 value: "{comment}",
@@ -908,16 +904,16 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
         div { class: "space-y-4",
             p { class: "text-sm text-gray-500", "请配置云资源并填写配置信息" }
             div {
-                label { class: "block text-sm font-medium text-gray-700 mb-1", "IP地址" }
+                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "IP地址" }
                 input {
-                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                     placeholder: "192.168.1.100",
                     value: "{ip_address}",
                     oninput: move |e| ip_address.set(e.value())
                 }
             }
             textarea {
-                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                 rows: 4,
                 placeholder: "配置详情（如：实例已创建，安全组已配置等）",
                 value: "{details}",
@@ -966,7 +962,7 @@ fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                 }
             }
             textarea {
-                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                 rows: 3,
                 placeholder: "交付备注（可选）",
                 value: "{comment}",
@@ -1128,8 +1124,10 @@ fn NewTicketForm(
     // 选中的云平台和机房
     let mut selected_cloud_platform_id = use_signal(|| Option::<i32>::None);
     let mut selected_machine_room_id = use_signal(|| Option::<i32>::None);
-    let mut resource_type = use_signal(|| default_resource_type);
-    let mut zone_name = use_signal(|| String::new());
+    let resource_type = default_resource_type;  // 直接使用传入的类型，不可切换
+    let mut zone_name = use_signal(|| String::new());       // 区域
+    let mut zone_cabinet = use_signal(|| String::new());    // 机柜
+    let mut rack_units = use_signal(|| 0i32);               // 机位(U数)
     let mut ecs_type = use_signal(|| "ecs.g6.xlarge".to_string());
     let mut ecs_os = use_signal(|| "CentOS 7.9".to_string());
     let mut data_disk_type = use_signal(|| String::new());
@@ -1139,6 +1137,17 @@ fn NewTicketForm(
     let mut system_disk = use_signal(|| "SSD".to_string());
     let mut system_disk_size = use_signal(|| 100);
     let mut has_security = use_signal(|| true);
+    // 初始化安全产品选择，只为堡垒机、VPN、SIEM设置默认值（这些分类只有一个产品）
+    let mut selected_security_products = use_signal(|| {
+        let mut products = SelectedSecurityProducts::new();
+        use crate::state::security_product::SecurityProductCategory;
+        // 只预选指定的三个分类（堡垒机ID=8, VPN ID=7, SIEM ID=9）
+        products.set(SecurityProductCategory::Bastion, 8);  // 堡垒机
+        products.set(SecurityProductCategory::Vpn, 7);         // VPN网关
+        products.set(SecurityProductCategory::Siem, 9);        // SIEM
+        products
+    });
+    let mut show_security_selector = use_signal(|| false);
     let mut remarks = use_signal(|| String::new());
 
     // 网络策略专用字段
@@ -1153,69 +1162,39 @@ fn NewTicketForm(
     let mut fw_firewall_name = use_signal(|| String::new());
 
     rsx! {
-        div { class: "bg-white rounded-xl shadow-sm border border-gray-200 p-6",
-            div { class: "flex items-center justify-between mb-6",
-                h2 { class: "text-xl font-bold text-gray-800 flex items-center gap-2",
-                    Icon { icon: FaPlus, class: "text-blue-600" }
-                    "新建资源申请"
-                }
-                button {
-                    class: "text-gray-400 hover:text-gray-600",
-                    onclick: move |_| on_cancel.call(()),
-                    Icon { icon: FaXmark }
-                }
-            }
+        // 模态框背景层
+        div {
+            class: "fixed inset-0 z-50 flex items-center justify-center bg-black/40",
+            onclick: move |_| on_cancel.call(()),
 
-            // Tab 切换
-            div { class: "border-b border-gray-200 mb-6",
-                div { class: "flex gap-8",
-                    button {
-                        class: format!("pb-3 px-1 border-b-2 font-medium text-sm transition-colors {}",
-                            if *resource_type.read() == ResourceType::Cloud {
-                                "border-blue-500 text-blue-600"
-                            } else {
-                                "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                            }
-                        ),
-                        onclick: move |_| resource_type.set(ResourceType::Cloud),
-                        div { class: "flex items-center gap-2",
-                            Icon { icon: FaCloud, width: 16, height: 16 }
-                            span { "云资源" }
+            // 模态框内容
+            div {
+                class: "bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto m-4",
+                onclick: |e| e.stop_propagation(),
+
+                // 标题栏
+                div { class: "flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50",
+                    h2 { class: "text-base font-semibold text-gray-800 flex items-center gap-2",
+                        if resource_type == ResourceType::Cloud {
+                            Icon { icon: FaCloud, class: "text-blue-500 w-4 h-4" }
+                        } else if resource_type == ResourceType::Physical {
+                            Icon { icon: FaServer, class: "text-blue-500 w-4 h-4" }
+                        } else {
+                            Icon { icon: FaShieldHalved, class: "text-blue-500 w-4 h-4" }
                         }
+                        "新建{resource_type.display_name()}申请"
                     }
                     button {
-                        class: format!("pb-3 px-1 border-b-2 font-medium text-sm transition-colors {}",
-                            if *resource_type.read() == ResourceType::Physical {
-                            "border-blue-500 text-blue-600"
-                            } else {
-                                "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                            }
-                        ),
-                        onclick: move |_| resource_type.set(ResourceType::Physical),
-                        div { class: "flex items-center gap-2",
-                            Icon { icon: FaServer, width: 16, height: 16 }
-                            span { "物理资源" }
-                        }
-                    }
-                    button {
-                        class: format!("pb-3 px-1 border-b-2 font-medium text-sm transition-colors {}",
-                            if *resource_type.read() == ResourceType::Network {
-                            "border-blue-500 text-blue-600"
-                            } else {
-                                "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                            }
-                        ),
-                        onclick: move |_| resource_type.set(ResourceType::Network),
-                        div { class: "flex items-center gap-2",
-                            Icon { icon: FaShieldHalved, width: 16, height: 16 }
-                            span { "网络策略" }
-                        }
+                        class: "p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors",
+                        onclick: move |_| on_cancel.call(()),
+                        Icon { icon: FaXmark, width: 16, height: 16 }
                     }
                 }
-            }
 
-            form {
-                class: "space-y-6",
+                // 表单内容区域
+                div { class: "p-5",
+                    form {
+                        class: "space-y-4",
                 onsubmit: move |e: dioxus::prelude::Event<FormData>| {
                     e.prevent_default();
                     let id = (tickets.read().len() + 1) as i32;
@@ -1251,22 +1230,24 @@ fn NewTicketForm(
 
                     let new_app = ResourceTicket {
                         id,
-                        resource_type: *resource_type.read(),
+                        resource_type: resource_type,
                         ecs_name: ecs_name.read().clone(),
                         ticket_status: TicketStatus::PendingApproval,
                         provider_id,
                         provider_name,
                         cloud_platform_id,
                         cloud_platform_name,
-                        machine_room_id: if *resource_type.read() == ResourceType::Cloud { None } else { machine_room_id },
-                        machine_room_name: if *resource_type.read() == ResourceType::Cloud { String::new() } else { machine_room_name },
+                        machine_room_id: if resource_type == ResourceType::Cloud { None } else { machine_room_id },
+                        machine_room_name: if resource_type == ResourceType::Cloud { String::new() } else { machine_room_name },
                         cloud_region: String::new(),
-                        cloud_category: match *resource_type.read() {
+                        cloud_category: match resource_type {
                             ResourceType::Cloud => "云主机".to_string(),
                             ResourceType::Physical => "物理机".to_string(),
                             ResourceType::Network => "网络策略".to_string(),
                         },
-                        zone_name: if *resource_type.read() == ResourceType::Cloud { String::new() } else { zone_name.read().clone() },
+                        zone_name: if resource_type == ResourceType::Cloud { String::new() } else { zone_name.read().clone() },
+                        zone_cabinet: if resource_type == ResourceType::Physical { zone_cabinet.read().clone() } else { String::new() },
+                        rack_units: if resource_type == ResourceType::Physical { *rack_units.read() } else { 0 },
                         customer_name: customer_name.read().clone(),
                         application_name: application_name.read().clone(),
                         contract_name: contract_name.read().clone(),
@@ -1281,7 +1262,11 @@ fn NewTicketForm(
                         } else {
                             format!("{} {}GB", data_disk_type.read(), data_disk_size.read())
                         },
-                        has_security_product: *has_security.read(),
+                        has_security_product: if resource_type == ResourceType::Network {
+                            false
+                        } else {
+                            *has_security.read()
+                        },
                         ip_address: String::new(),
                         delivery_status: "未交付".to_string(),
                         remarks: remarks.read().clone(),
@@ -1299,47 +1284,47 @@ fn NewTicketForm(
                         deliver_comment: None,
 
                         // 网络策略字段（网络策略类型时使用）
-                        fw_source_zone: if *resource_type.read() == ResourceType::Network {
+                        fw_source_zone: if resource_type == ResourceType::Network {
                             Some(fw_source_zone.read().clone())
                         } else {
                             None
                         },
-                        fw_source_address: if *resource_type.read() == ResourceType::Network {
+                        fw_source_address: if resource_type == ResourceType::Network {
                             Some(fw_source_address.read().clone())
                         } else {
                             None
                         },
-                        fw_dest_zone: if *resource_type.read() == ResourceType::Network {
+                        fw_dest_zone: if resource_type == ResourceType::Network {
                             Some(fw_dest_zone.read().clone())
                         } else {
                             None
                         },
-                        fw_dest_address: if *resource_type.read() == ResourceType::Network {
+                        fw_dest_address: if resource_type == ResourceType::Network {
                             Some(fw_dest_address.read().clone())
                         } else {
                             None
                         },
-                        fw_protocol: if *resource_type.read() == ResourceType::Network {
+                        fw_protocol: if resource_type == ResourceType::Network {
                             Some(fw_protocol.read().clone())
                         } else {
                             None
                         },
-                        fw_port: if *resource_type.read() == ResourceType::Network {
+                        fw_port: if resource_type == ResourceType::Network {
                             Some(fw_port.read().clone())
                         } else {
                             None
                         },
-                        fw_direction: if *resource_type.read() == ResourceType::Network {
+                        fw_direction: if resource_type == ResourceType::Network {
                             Some(fw_direction.read().clone())
                         } else {
                             None
                         },
-                        fw_valid_until: if *resource_type.read() == ResourceType::Network {
+                        fw_valid_until: if resource_type == ResourceType::Network {
                             Some(fw_valid_until.read().clone())
                         } else {
                             None
                         },
-                        fw_firewall_name: if *resource_type.read() == ResourceType::Network {
+                        fw_firewall_name: if resource_type == ResourceType::Network {
                             Some(fw_firewall_name.read().clone())
                         } else {
                             None
@@ -1352,31 +1337,31 @@ fn NewTicketForm(
                 },
 
                 // 基本信息
-                div { class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+                div { class: "grid grid-cols-2 gap-3",
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "申请名称*" }
+                        label { class: "block text-xs font-medium text-gray-600 mb-0.5", "申请名称*" }
                         input {
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                            placeholder: "如：业务系统A-Web服务器",
+                            class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                            placeholder: "业务系统A-Web服务器",
                             value: "{application_name}",
                             required: true,
                             oninput: move |e| application_name.set(e.value())
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "实例名称*" }
+                        label { class: "block text-xs font-medium text-gray-600 mb-0.5", "实例名称*" }
                         input {
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                            placeholder: "如：Web服务器-01",
+                            class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                            placeholder: "Web服务器-01",
                             value: "{ecs_name}",
                             required: true,
                             oninput: move |e| ecs_name.set(e.value())
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "客户名称*" }
+                        label { class: "block text-xs font-medium text-gray-600 mb-0.5", "客户名称*" }
                         input {
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                            class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                             placeholder: "客户单位名称",
                             value: "{customer_name}",
                             required: true,
@@ -1384,10 +1369,10 @@ fn NewTicketForm(
                         }
                     }
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "合同名称*" }
+                        label { class: "block text-xs font-medium text-gray-600 mb-0.5", "合同名称*" }
                         input {
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                            placeholder: "如：合同-2024-001",
+                            class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                            placeholder: "合同-2024-001",
                             value: "{contract_name}",
                             required: true,
                             oninput: move |e| contract_name.set(e.value())
@@ -1396,21 +1381,21 @@ fn NewTicketForm(
                 }
 
                 // 资源配置
-                div { class: "border-t border-gray-200 pt-4",
-                    h3 { class: "text-md font-semibold text-gray-800 mb-4",
-                        if *resource_type.read() == ResourceType::Cloud {
+                div { class: "border-t border-gray-100 pt-3 mt-3",
+                    h3 { class: "text-sm font-medium text-gray-700 mb-3",
+                        if resource_type == ResourceType::Cloud {
                             "云资源配置"
-                        } else if *resource_type.read() == ResourceType::Physical {
+                        } else if resource_type == ResourceType::Physical {
                             "物理资源配置"
                         } else {
                             "网络策略配置"
                         }
                     }
-                    div { class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+                    div { class: "grid grid-cols-2 gap-3",
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商*" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "服务商*" }
                             select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 required: true,
                                 value: "{selected_provider_id}",
                                 onchange: move |e| {
@@ -1431,11 +1416,11 @@ fn NewTicketForm(
                             }
                         }
                         // 云资源专用字段
-                        if *resource_type.read() == ResourceType::Cloud {
+                        if resource_type == ResourceType::Cloud {
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "云平台*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "云平台*" }
                                 select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     required: true,
                                     oninput: move |e| {
                                         let platform_id: i32 = e.value().parse().unwrap_or(0);
@@ -1454,11 +1439,11 @@ fn NewTicketForm(
                             }
                         }
                         // 物理资源专用字段
-                        if *resource_type.read() == ResourceType::Physical {
+                        if resource_type == ResourceType::Physical {
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "服务器型号*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "服务器型号*" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     placeholder: "如：Dell R740",
                                     required: true,
                                     value: "{ecs_type}",
@@ -1466,9 +1451,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "机房*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "机房*" }
                                 select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     required: true,
                                     oninput: move |e| {
                                         let room_id: i32 = e.value().parse().unwrap_or(0);
@@ -1486,21 +1471,42 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "机柜位置" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "区域" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                                    placeholder: "如：A区-03柜",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                                    placeholder: "如：A区",
                                     value: "{zone_name}",
                                     oninput: move |e| zone_name.set(e.value())
                                 }
                             }
+                            div {
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "机柜" }
+                                input {
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                                    placeholder: "如：03柜",
+                                    value: "{zone_cabinet}",
+                                    oninput: move |e| zone_cabinet.set(e.value())
+                                }
+                            }
+                            div {
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "机位(U)" }
+                                input {
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                                    r#type: "number",
+                                    min: 1,
+                                    max: 42,
+                                    placeholder: "如：20",
+                                    value: "{rack_units}",
+                                    oninput: move |e| rack_units.set(e.value().parse().unwrap_or(0))
+                                }
+                            }
                         }
                         // 网络策略专用字段
-                        if *resource_type.read() == ResourceType::Network {
+                        if resource_type == ResourceType::Network {
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "源区域*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "源区域*" }
                                 select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     required: true,
                                     value: "{fw_source_zone}",
                                     oninput: move |e| fw_source_zone.set(e.value()),
@@ -1513,9 +1519,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "源地址/IP*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "源地址/IP*" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     placeholder: "如: 192.168.1.0/24",
                                     required: true,
                                     value: "{fw_source_address}",
@@ -1523,9 +1529,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "目标区域*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "目标区域*" }
                                 select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     required: true,
                                     value: "{fw_dest_zone}",
                                     oninput: move |e| fw_dest_zone.set(e.value()),
@@ -1538,9 +1544,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "目标地址/IP*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "目标地址/IP*" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     placeholder: "如: 10.1.1.100",
                                     required: true,
                                     value: "{fw_dest_address}",
@@ -1548,9 +1554,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "协议*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "协议*" }
                                 select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     required: true,
                                     value: "{fw_protocol}",
                                     oninput: move |e| fw_protocol.set(e.value()),
@@ -1561,9 +1567,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "端口*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "端口*" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     placeholder: "如: 443 或 8080-8090",
                                     required: true,
                                     value: "{fw_port}",
@@ -1571,9 +1577,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "访问方向*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "访问方向*" }
                                 select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     required: true,
                                     value: "{fw_direction}",
                                     oninput: move |e| fw_direction.set(e.value()),
@@ -1583,9 +1589,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "有效期至*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "有效期至*" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     r#type: "date",
                                     required: true,
                                     value: "{fw_valid_until}",
@@ -1593,9 +1599,9 @@ fn NewTicketForm(
                                 }
                             }
                             div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "防火墙设备*" }
+                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "防火墙设备*" }
                                 input {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                     placeholder: "如: 核心防火墙-01",
                                     required: true,
                                     value: "{fw_firewall_name}",
@@ -1604,21 +1610,9 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "实例类型" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "操作系统" }
                             select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                                value: "{ecs_type}",
-                                oninput: move |e| ecs_type.set(e.value()),
-                                option { value: "ecs.g6.large", "ecs.g6.large (2核8GB)" }
-                                option { value: "ecs.g6.xlarge", "ecs.g6.xlarge (4核16GB)" }
-                                option { value: "ecs.g6.2xlarge", "ecs.g6.2xlarge (8核32GB)" }
-                                option { value: "Dell R740", "Dell R740 (物理机)" }
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "操作系统" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 value: "{ecs_os}",
                                 oninput: move |e| ecs_os.set(e.value()),
                                 option { value: "CentOS 7.9", "CentOS 7.9" }
@@ -1628,9 +1622,9 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "CPU核数" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "CPU核数" }
                             input {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 r#type: "number",
                                 min: 1,
                                 max: 128,
@@ -1639,9 +1633,9 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "内存(GB)" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "内存(GB)" }
                             input {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 r#type: "number",
                                 min: 1,
                                 max: 1024,
@@ -1650,9 +1644,9 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "系统盘类型" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "系统盘类型" }
                             select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 value: "{system_disk}",
                                 oninput: move |e| system_disk.set(e.value()),
                                 option { value: "SSD", "SSD" }
@@ -1660,9 +1654,9 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "系统盘大小(GB)" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "系统盘大小(GB)" }
                             input {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 r#type: "number",
                                 min: 20,
                                 max: 5000,
@@ -1671,9 +1665,9 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "数据盘类型" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "数据盘类型" }
                             select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                                class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 value: "{data_disk_type}",
                                 oninput: move |e| {
                                     let new_value = e.value();
@@ -1692,7 +1686,7 @@ fn NewTicketForm(
                             }
                         }
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "数据盘大小(GB)" }
+                            label { class: "block text-xs font-medium text-gray-600 mb-0.5", "数据盘大小(GB)" }
                             input {
                                 class: format!("w-full px-3 py-2 border rounded-lg {} {}",
                                     if data_disk_type.read().is_empty() {
@@ -1712,47 +1706,94 @@ fn NewTicketForm(
                             }
                         }
                     }
-                    div { class: "mt-4",
-                        label { class: "flex items-center gap-2 cursor-pointer",
-                            input {
-                                r#type: "checkbox",
-                                class: "w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500",
-                                checked: *has_security.read(),
-                                oninput: move |e| has_security.set(e.checked())
+                    // 安全产品选择（仅云服务和物理机显示）
+                    if resource_type != ResourceType::Network {
+                        div { class: "border-t pt-3 mt-2",
+                            div { class: "flex items-center justify-between mb-2",
+                                h4 { class: "text-sm font-medium text-gray-700", "安全产品选择" }
+                                {
+                                    let is_expanded = *show_security_selector.read();
+                                    rsx! {
+                                        button {
+                                            class: "text-sm text-blue-600 hover:text-blue-800",
+                                            onclick: move |_| show_security_selector.set(!is_expanded),
+                                            if is_expanded {
+                                                "收起选择器"
+                                            } else {
+                                                "展开选择器"
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            span { class: "text-sm text-gray-700", "需要安全产品（防火墙、WAF等）" }
+                            p { class: "text-xs text-gray-500 mb-2", "选择需要绑定的安全产品，每个分类只能选择一个" }
+
+                            if *show_security_selector.read() {
+                                SecurityProductSelector {
+                                    selected: selected_security_products,
+                                    active_only: true,
+                                }
+                            } else {
+                                // 显示已选择的安全产品摘要
+                                div { class: "bg-gray-50 rounded-lg p-3",
+                                    if selected_security_products.read().is_empty() {
+                                        p { class: "text-sm text-gray-400", "尚未选择安全产品" }
+                                    } else {
+                                        div { class: "space-y-1",
+                                            for (category, product_id) in selected_security_products.read().products.iter() {
+                                                {
+                                                    let products = crate::app::SECURITY_PRODUCTS_STATE.read();
+                                                    let product_name = products.iter()
+                                                        .find(|p| p.id == *product_id)
+                                                        .map(|p| p.name.clone())
+                                                        .unwrap_or_else(|| format!("产品{}", product_id));
+                                                    rsx! {
+                                                        div { class: "flex items-center text-sm",
+                                                            dioxus_free_icons::Icon { icon: FaShieldHalved, width: 14, height: 14, class: "text-indigo-500 mr-2" }
+                                                            span { class: "text-gray-600", "{category.display_name()}: " }
+                                                            span { class: "font-medium text-gray-800", "{product_name}" }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
                 // 备注
-                div {
-                    label { class: "block text-sm font-medium text-gray-700 mb-1", "备注说明" }
+                div { class: "mt-3",
+                    label { class: "block text-xs font-medium text-gray-600 mb-0.5", "备注说明" }
                     textarea {
-                        class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                        rows: 3,
+                        class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
+                        rows: 2,
                         placeholder: "申请用途、特殊需求等",
                         value: "{remarks}",
                         oninput: move |e| remarks.set(e.value())
                     }
                 }
 
-                // 提交按钮
-                div { class: "flex gap-3 pt-4 border-t border-gray-200",
-                    button {
-                        class: "flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2 transition-colors",
-                        r#type: "submit",
-                        Icon { icon: FaPaperPlane, class: "text-sm" }
-                        "提交申请"
-                    }
-                    button {
-                        class: "px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium",
-                        r#type: "button",
-                        onclick: move |_| on_cancel.call(()),
-                        "取消"
+                    // 提交按钮
+                    div { class: "flex gap-2 pt-3 mt-3 border-t border-gray-100",
+                        button {
+                            class: "flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 font-medium flex items-center justify-center gap-1.5 transition-colors",
+                            r#type: "submit",
+                            Icon { icon: FaPaperPlane, class: "w-3.5 h-3.5" }
+                            "提交申请"
+                        }
+                        button {
+                            class: "px-4 py-2 text-sm border border-gray-200 text-gray-600 rounded hover:bg-gray-50 font-medium",
+                            r#type: "button",
+                            onclick: move |_| on_cancel.call(()),
+                            "取消"
+                        }
                     }
                 }
-            }
-        }
+                } // end p-5 wrapper
+            } // end modal content
+        } // end backdrop
     }
 }

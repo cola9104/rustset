@@ -1,11 +1,12 @@
 use dioxus::prelude::*;
-use dioxus_router::Outlet;
+use dioxus_router::{Outlet, navigator};
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{FaBars, FaRightFromBracket, FaUser};
 
 use super::Sidebar;
 use crate::router::Route;
 use crate::state::user_role::use_auth;
+use crate::app::logout;
 
 /// 主布局组件
 #[allow(non_snake_case)]
@@ -13,6 +14,7 @@ pub fn Layout() -> Element {
     let mut sidebar_collapsed = use_signal(|| false);
     let mut show_user_menu = use_signal(|| false);
     let auth_state = use_auth();
+    let nav = navigator();
 
     // 获取用户名的首字母作为头像
     let user_initial = auth_state.read().username.chars().next().unwrap_or('U');
@@ -60,8 +62,11 @@ pub fn Layout() -> Element {
                                 button {
                                     class: "w-full flex items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 transition-colors",
                                     onclick: move |_| {
-                                        // TODO: 实现退出登录逻辑
+                                        // 调用登出函数清除认证状态
+                                        logout();
                                         show_user_menu.set(false);
+                                        // 导航到登录页面
+                                        nav.push(Route::Login {});
                                     },
                                     Icon { icon: FaRightFromBracket, width: 16, height: 16, class: "text-gray-500" }
                                     "退出登录"

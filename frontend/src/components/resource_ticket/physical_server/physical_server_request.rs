@@ -2,10 +2,12 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaMagnifyingGlass, FaServer, FaCheck, FaClock, FaXmark,
-    FaCircleCheck, FaPen, FaEye
+    FaCircleCheck, FaPen, FaEye, FaShieldHalved
 };
 use crate::app::PROVIDERS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
+use crate::app::SECURITY_PRODUCTS_STATE;
+use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
 
 /// 物理机申请状态
 #[derive(Clone, Debug, PartialEq)]
@@ -57,6 +59,7 @@ pub struct PhysicalServerRequest {
     pub storage: String,
     pub server_count: i32,
     pub purpose: String,
+    pub security_products: SelectedSecurityProducts, // 选中的安全产品
     pub status: PhysicalServerStatus,
     pub created_at: String,
 }
@@ -117,6 +120,7 @@ pub fn init_physical_server_requests() -> Vec<PhysicalServerRequest> {
             storage: "2TB SSD".to_string(),
             server_count: 2,
             purpose: "部署核心数据库集群".to_string(),
+            security_products: SelectedSecurityProducts::new(),
             status: PhysicalServerStatus::Pending,
             created_at: "2024-03-01 10:30".to_string(),
         },
@@ -133,6 +137,7 @@ pub fn init_physical_server_requests() -> Vec<PhysicalServerRequest> {
             storage: "4TB HDD".to_string(),
             server_count: 1,
             purpose: "文件存储扩容".to_string(),
+            security_products: SelectedSecurityProducts::new(),
             status: PhysicalServerStatus::Approved,
             created_at: "2024-02-28 14:20".to_string(),
         },
@@ -149,6 +154,7 @@ pub fn init_physical_server_requests() -> Vec<PhysicalServerRequest> {
             storage: "8TB HDD".to_string(),
             server_count: 1,
             purpose: "数据备份服务器".to_string(),
+            security_products: SelectedSecurityProducts::new(),
             status: PhysicalServerStatus::Processing,
             created_at: "2024-03-02 09:15".to_string(),
         },
@@ -165,6 +171,7 @@ pub fn init_physical_server_requests() -> Vec<PhysicalServerRequest> {
             storage: "1TB SSD".to_string(),
             server_count: 4,
             purpose: "Web应用服务器集群".to_string(),
+            security_products: SelectedSecurityProducts::new(),
             status: PhysicalServerStatus::Deployed,
             created_at: "2024-02-25 16:45".to_string(),
         },

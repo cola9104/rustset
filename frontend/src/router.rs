@@ -20,6 +20,7 @@ use crate::components::machine_room::MachineRoomManagement;
 use crate::components::service_provider::ServiceProviderManagement;
 use crate::components::business::BusinessApplication;
 use crate::components::network_zone::NetworkZoneManagement;
+use crate::components::security_product::SecurityProductManagement;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -84,6 +85,10 @@ pub enum Route {
     // 网络区域管理
     #[route("/network-zones")]
     NetworkZoneManagement {},
+
+    // 安全产品管理
+    #[route("/security-products")]
+    SecurityProductManagement {},
 
     // 用户管理
     #[route("/users")]

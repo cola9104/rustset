@@ -4,6 +4,7 @@ pub mod service_provider;
 pub mod user_role;
 pub mod resource_ticket;
 pub mod network_zone;
+pub mod security_product;
 
 pub use cloud_platform::{
     CloudPlatformConfig, init_cloud_platforms,
@@ -22,5 +23,9 @@ pub use resource_ticket::{
 };
 pub use network_zone::{
     NetworkZone, init_network_zones,
+};
+pub use security_product::{
+    SecurityProduct, SecurityProductCategory, SecurityProductStatus,
+    init_security_products, get_products_by_category, get_active_products_by_category,
 };
 

@@ -431,6 +431,25 @@ fn NetworkZoneModal(
     let cloud_platforms = CLOUD_PLATFORMS_STATE.read().clone();
     let machine_rooms = MACHINE_ROOMS_STATE.read().clone();
 
+    // 使用 use_memo 响应式计算已被分配的ID（编辑时排除当前区域）
+    let assigned_cloud_ids = use_memo(move || {
+        let editing_id = editing_zone.read().as_ref().and_then(|z| z.cloud_platform_id);
+        NETWORK_ZONES_STATE.read()
+            .iter()
+            .filter_map(|z| z.cloud_platform_id)
+            .filter(|id| Some(*id) != editing_id)
+            .collect::<std::collections::HashSet<i32>>()
+    });
+
+    let assigned_room_ids = use_memo(move || {
+        let editing_id = editing_zone.read().as_ref().and_then(|z| z.machine_room_id);
+        NETWORK_ZONES_STATE.read()
+            .iter()
+            .filter_map(|z| z.machine_room_id)
+            .filter(|id| Some(*id) != editing_id)
+            .collect::<std::collections::HashSet<i32>>()
+    });
+
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
             div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto",
@@ -496,10 +515,13 @@ fn NetworkZoneModal(
                                     },
                                     option { value: "-1", "请选择云平台" }
                                     for platform in cloud_platforms.iter() {
-                                        option {
-                                            value: "{platform.id}",
-                                            selected: *selected_cloud_platform.read() == Some(platform.id),
-                                            "{platform.foundation} ({platform.platform_name})"
+                                        // 过滤已被分配的云平台
+                                        if !assigned_cloud_ids.contains(&platform.id) {
+                                            option {
+                                                value: "{platform.id}",
+                                                selected: *selected_cloud_platform.read() == Some(platform.id),
+                                                "{platform.foundation} ({platform.platform_name})"
+                                            }
                                         }
                                     }
                                 }
@@ -520,10 +542,13 @@ fn NetworkZoneModal(
                                     },
                                     option { value: "-1", "请选择机房" }
                                     for room in machine_rooms.iter() {
-                                        option {
-                                            value: "{room.id}",
-                                            selected: *selected_machine_room.read() == Some(room.id),
-                                            "{room.room_name} - {room.facility_type}"
+                                        // 过滤已被分配的机房
+                                        if !assigned_room_ids.contains(&room.id) {
+                                            option {
+                                                value: "{room.id}",
+                                                selected: *selected_machine_room.read() == Some(room.id),
+                                                "{room.room_name} - {room.facility_type}"
+                                            }
                                         }
                                     }
                                 }

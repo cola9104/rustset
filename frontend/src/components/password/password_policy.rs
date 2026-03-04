@@ -4,6 +4,9 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaShield, FaKey, FaClock, FaLock, FaUserShield, FaCheck
 };
 
+/// 全局安全策略状态
+pub static SECURITY_POLICY_STATE: GlobalSignal<SecurityPolicy> = Signal::global(SecurityPolicy::default);
+
 /// 安全策略配置（全局唯一）
 #[derive(Clone, Debug, PartialEq)]
 pub struct SecurityPolicy {
@@ -82,7 +85,8 @@ impl Default for SecurityPolicy {
 /// 安全策略页面
 #[allow(non_snake_case)]
 pub fn PasswordPolicy() -> Element {
-    let mut policy = use_signal(SecurityPolicy::default);
+    // 使用全局状态
+    let mut policy = use_signal(|| SECURITY_POLICY_STATE.read().clone());
     let mut show_success = use_signal(|| false);
     let mut active_section = use_signal(|| "password".to_string());
 
@@ -187,10 +191,20 @@ pub fn PasswordPolicy() -> Element {
                 button {
                     class: "flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors",
                     onclick: move |_| {
-                        // TODO: 保存到后端
+                        // 保存到全局状态
+                        *SECURITY_POLICY_STATE.write() = policy.read().clone();
                         show_success.set(true);
                     },
+                    Icon { icon: FaCheck, width: 16, height: 16, class: "mr-2" }
                     "保存配置"
+                }
+                // 添加关闭提示按钮
+                if *show_success.read() {
+                    button {
+                        class: "ml-4 flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors",
+                        onclick: move |_| show_success.set(false),
+                        "关闭提示"
+                    }
                 }
             }
         }

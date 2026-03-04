@@ -7,11 +7,16 @@ use crate::state::{
     machine_room::MachineRoomConfig,
     cloud_platform::CloudPlatformConfig,
     network_zone::NetworkZone,
+    security_product::SecurityProduct,
     init_service_providers,
     init_machine_rooms,
     init_cloud_platforms,
     init_network_zones,
+    init_security_products,
 };
+
+/// 全局安全产品数据状态
+pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> = Signal::global(init_security_products);
 
 /// 主应用组件
 #[allow(non_snake_case)]

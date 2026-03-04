@@ -181,7 +181,9 @@ pub struct ResourceTicket {
 
     pub cloud_region: String,
     pub cloud_category: String,
-    pub zone_name: String,
+    pub zone_name: String,          // 可用区（云资源）/ 区域（物理机）
+    pub zone_cabinet: String,       // 机柜（物理机）
+    pub rack_units: i32,            // 机位(U数)（物理机）
     pub customer_name: String,
     pub application_name: String,
     pub contract_name: String,
@@ -244,6 +246,8 @@ pub fn init_test_tickets() -> Vec<ResourceTicket> {
             cloud_region: "华东".to_string(),
             cloud_category: "云主机".to_string(),
             zone_name: "杭州可用区A".to_string(),
+            zone_cabinet: String::new(),
+            rack_units: 0,
             customer_name: "某某公司".to_string(),
             application_name: "业务系统A".to_string(),
             contract_name: "合同-2024-001".to_string(),
@@ -294,6 +298,8 @@ pub fn init_test_tickets() -> Vec<ResourceTicket> {
             cloud_region: "华东".to_string(),
             cloud_category: "网络策略".to_string(),
             zone_name: "".to_string(),
+            zone_cabinet: String::new(),
+            rack_units: 0,
             customer_name: "某某局".to_string(),
             application_name: "门户网站访问".to_string(),
             contract_name: "合同-2024-001".to_string(),
@@ -344,6 +350,8 @@ pub fn init_test_tickets() -> Vec<ResourceTicket> {
             cloud_region: "华东".to_string(),
             cloud_category: "网络策略".to_string(),
             zone_name: "".to_string(),
+            zone_cabinet: String::new(),
+            rack_units: 0,
             customer_name: "某某局".to_string(),
             application_name: "管理后台访问".to_string(),
             contract_name: "合同-2024-002".to_string(),

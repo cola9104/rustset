@@ -117,9 +117,18 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                 Link {
                     to: Route::NetworkZoneManagement {},
                     class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaShieldHalved, width: 20, height: 20 }
+                    Icon { icon: FaNetworkWired, width: 20, height: 20 }
                     if !is_collapsed {
                         span { class: "ml-3", "网络区域" }
+                    }
+                }
+                // 安全产品管理
+                Link {
+                    to: Route::SecurityProductManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaShieldHalved, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "安全产品" }
                     }
                 }
                 // 用户管理

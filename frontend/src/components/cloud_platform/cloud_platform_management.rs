@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaCloud,
-    FaCheck, FaKey, FaEye, FaVial, FaPowerOff, FaBuilding,
+    FaCheck, FaKey, FaEye, FaVial, FaPowerOff, FaBuilding, FaXmark,
 };
 use crate::state::cloud_platform::CloudPlatformConfig;
 use crate::state::service_provider::ServiceProviderConfig;
@@ -10,6 +10,15 @@ use crate::state::machine_room::MachineRoomConfig;
 use crate::app::CLOUD_PLATFORMS_STATE;
 use crate::app::PROVIDERS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
+
+/// 测试连接结果
+#[derive(Clone, Debug, PartialEq)]
+pub enum TestConnectionResult {
+    Idle,
+    Testing,
+    Success(String),
+    Failed(String),
+}
 
 /// 云平台管理页面
 #[allow(non_snake_case)]
@@ -21,6 +30,7 @@ pub fn CloudPlatformManagement() -> Element {
     let mut show_add_modal = use_signal(|| false);
     let mut editing_config = use_signal(|| None::<CloudPlatformConfig>);
     let mut viewing_config = use_signal(|| None::<CloudPlatformConfig>);
+    let mut test_result = use_signal(|| TestConnectionResult::Idle);
 
     // 获取服务商名称的辅助函数
     let get_provider_name = |provider_id: i32| -> String {
@@ -373,12 +383,28 @@ pub fn CloudPlatformManagement() -> Element {
         }
 
         // 查看详情模态框
-        if let Some(ref config) = viewing_config_clone {
+        if let Some(config) = viewing_config_clone.clone() {
             ConfigDetailModal {
-                config: (*config).clone(),
-                on_close: move |_| viewing_config.set(None),
+                config: config.clone(),
+                test_result: test_result,
+                on_close: move |_| {
+                    viewing_config.set(None);
+                    test_result.set(TestConnectionResult::Idle);
+                },
                 on_test: move |_| {
-                    // TODO: 实现测试连接逻辑
+                    // 模拟测试连接（简化版本，直接返回结果）
+                    let result = if config.access_key_id.is_empty() || config.access_key_secret.is_empty() {
+                        TestConnectionResult::Failed("AccessKey ID 或 Secret 为空".to_string())
+                    } else if config.status == "inactive" {
+                        TestConnectionResult::Failed("平台已停用，无法测试连接".to_string())
+                    } else {
+                        TestConnectionResult::Success(format!(
+                            "连接成功！平台: {}, 区域: {}",
+                            config.platform_name,
+                            config.region_id.clone()
+                        ))
+                    };
+                    test_result.set(result);
                 },
                 on_toggle_status: move |_| {
                     if let Some(id) = toggle_config_id {
@@ -814,6 +840,7 @@ fn EditPlatformModal(
 #[component]
 fn ConfigDetailModal(
     config: CloudPlatformConfig,
+    test_result: Signal<TestConnectionResult>,
     on_close: EventHandler<()>,
     on_test: EventHandler<()>,
     on_toggle_status: EventHandler<()>
@@ -956,6 +983,44 @@ fn ConfigDetailModal(
                     }
                 }
 
+                // 测试结果显示区域
+                {
+                    let result = test_result.read();
+                    match &*result {
+                        TestConnectionResult::Idle => rsx! {},
+                        TestConnectionResult::Testing => rsx! {
+                            div { class: "p-4 bg-blue-50 border-t border-blue-100",
+                                div { class: "flex items-center text-blue-600",
+                                    div { class: "animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent mr-2" }
+                                    "正在测试连接..."
+                                }
+                            }
+                        },
+                        TestConnectionResult::Success(msg) => rsx! {
+                            div { class: "p-4 bg-green-50 border-t border-green-100",
+                                div { class: "flex items-start",
+                                    Icon { icon: FaCheck, width: 16, height: 16, class: "text-green-600 mr-2 mt-0.5" }
+                                    div {
+                                        p { class: "text-green-800 font-medium", "连接成功" }
+                                        p { class: "text-green-600 text-sm mt-1", "{msg}" }
+                                    }
+                                }
+                            }
+                        },
+                        TestConnectionResult::Failed(msg) => rsx! {
+                            div { class: "p-4 bg-red-50 border-t border-red-100",
+                                div { class: "flex items-start",
+                                    Icon { icon: FaXmark, width: 16, height: 16, class: "text-red-600 mr-2 mt-0.5" }
+                                    div {
+                                        p { class: "text-red-800 font-medium", "连接失败" }
+                                        p { class: "text-red-600 text-sm mt-1", "{msg}" }
+                                    }
+                                }
+                            }
+                        },
+                    }
+                }
+
                 // 操作按钮
                 div { class: "flex justify-end space-x-3 p-4 border-t",
                     button {
@@ -964,10 +1029,17 @@ fn ConfigDetailModal(
                         "关闭"
                     }
                     button {
-                        class: "px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center",
+                        class: match &*test_result.read() {
+                            TestConnectionResult::Testing => "px-4 py-2 bg-gray-400 text-white rounded-md cursor-not-allowed flex items-center",
+                            _ => "px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center",
+                        },
+                        disabled: matches!(*test_result.read(), TestConnectionResult::Testing),
                         onclick: move |_| on_test.call(()),
                         Icon { icon: FaVial, width: 16, height: 16, class: "mr-2" }
-                        "测试连接"
+                        match &*test_result.read() {
+                            TestConnectionResult::Testing => "测试中...",
+                            _ => "测试连接",
+                        }
                     }
                     button {
                         class: "px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 flex items-center",

@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaServer, FaDesktop, FaLaptop, FaCloud
+    FaPenToSquare, FaTrash, FaMagnifyingGlass, FaServer, FaDesktop, FaLaptop, FaCloud
 };
 use crate::app::PROVIDERS_STATE;
 
@@ -246,7 +246,6 @@ pub fn AssetManagement() -> Element {
     ]);
 
     let search_query = use_signal(String::new);
-    let mut show_add_modal = use_signal(|| false);
 
     let is_hardware = *active_tab.read() == AssetTab::Hardware;
 
@@ -255,12 +254,6 @@ pub fn AssetManagement() -> Element {
             // 页面标题
             div { class: "flex justify-between items-center",
                 h1 { class: "text-2xl font-bold text-gray-800", "资产管理" }
-                button {
-                    class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
-                    onclick: move |_| show_add_modal.set(true),
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    span { class: "ml-2", "添加资产" }
-                }
             }
 
             // 标签页
@@ -299,14 +292,12 @@ pub fn AssetManagement() -> Element {
             if is_hardware {
                 HardwareAssetsTab {
                     assets: hardware_assets,
-                    search_query: search_query,
-                    show_add_modal: show_add_modal
+                    search_query: search_query
                 }
             } else {
                 CloudAssetsTab {
                     assets: cloud_assets,
-                    search_query: search_query,
-                    show_add_modal: show_add_modal
+                    search_query: search_query
                 }
             }
         }
@@ -317,8 +308,7 @@ pub fn AssetManagement() -> Element {
 #[component]
 fn HardwareAssetsTab(
     assets: Signal<Vec<HardwareAsset>>,
-    search_query: Signal<String>,
-    show_add_modal: Signal<bool>
+    search_query: Signal<String>
 ) -> Element {
     let mut editing_asset = use_signal(|| None::<HardwareAsset>);
 
@@ -546,8 +536,7 @@ fn HardwareAssetsTab(
 #[component]
 fn CloudAssetsTab(
     assets: Signal<Vec<CloudAsset>>,
-    search_query: Signal<String>,
-    show_add_modal: Signal<bool>
+    search_query: Signal<String>
 ) -> Element {
     let mut editing_asset = use_signal(|| None::<CloudAsset>);
 
