@@ -2,8 +2,9 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{FaPlus, FaPenToSquare, FaEye, FaTrash, FaMagnifyingGlass, FaBuilding};
 use crate::state::machine_room::MachineRoomConfig;
-use crate::app::MACHINE_ROOMS_STATE;
-use crate::app::PROVIDERS_STATE;
+ use crate::app::MACHINE_ROOMS_STATE;
+ use crate::app::PROVIDERS_STATE;
+ use super::room_form::{RoomForm, RoomFormData, FormMode};
 
 /// 机房管理页面
 #[component]
@@ -273,490 +274,42 @@ pub fn MachineRoomManagement() -> Element {
 
         // 添加机房模态框
         if *show_add_modal.read() {
-            AddRoomModal {
-                on_close: move |_| show_add_modal.set(false),
-                on_save: move |room| {
+            RoomForm {
+                mode: FormMode::New,
+                room: None,
+                on_save: move |room: MachineRoomConfig| {
                     MACHINE_ROOMS_STATE.write().push(room);
                     show_add_modal.set(false);
-                }
+                },
+                on_close: move |_| show_add_modal.set(false),
             }
         }
 
         // 编辑机房模态框
         if *show_edit_modal.read() {
-            if let Some(room) = &*selected_room.read() {
-                EditRoomModal {
-                    room: room.clone(),
-                    on_close: move |_| show_edit_modal.set(false),
-                    on_save: move |room: MachineRoomConfig| {
-                        let id = room.id;
+            if let Some(room) = selected_room.read().as_ref() {
+                RoomForm {
+                    mode: FormMode::Edit,
+                    room: Some(room.clone()),
+                    on_save: move |updated: MachineRoomConfig| {
+                        let id = updated.id;
                         let idx = MACHINE_ROOMS_STATE.read().iter().position(|r| r.id == id);
                         if let Some(idx) = idx {
-                            MACHINE_ROOMS_STATE.write()[idx] = room;
+                            MACHINE_ROOMS_STATE.write()[idx] = updated;
                         }
                         show_edit_modal.set(false);
-                    }
+                    },
+                    on_close: move |_| show_edit_modal.set(false),
                 }
             }
         }
 
         // 查看机房模态框
         if *show_view_modal.read() {
-            if let Some(room) = &*selected_room.read() {
+            if let Some(room) = selected_room.read().as_ref() {
                 ViewRoomModal {
                     room: room.clone(),
                     on_close: move |_| show_view_modal.set(false)
-                }
-            }
-        }
-    }
-}
-
-/// 添加机房模态框
-#[component]
-fn AddRoomModal(
-    on_close: EventHandler,
-    on_save: EventHandler<MachineRoomConfig>
-) -> Element {
-    let mut room_name = use_signal(|| String::new());
-    let mut room_code = use_signal(|| String::new());
-    let mut facility_type = use_signal(|| String::from("服务商机房"));
-    let mut address = use_signal(|| String::new());
-    let mut provider_id = use_signal(|| 1);
-    let mut room_type = use_signal(|| String::from("DMZ机房（政务云）"));
-    let mut contact_person = use_signal(|| String::new());
-    let mut contact_phone = use_signal(|| String::new());
-    let mut floor = use_signal(|| String::new());
-    let mut cabinet_count = use_signal(|| String::new());
-    let mut area_size = use_signal(|| String::new());
-    let mut remarks = use_signal(|| String::new());
-    let mut status = use_signal(|| String::from("active"));
-
-    rsx! {
-        div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-                div { class: "flex justify-between items-center p-6 border-b",
-                    h2 { class: "text-xl font-bold text-gray-800", "添加机房" }
-                    button {
-                        class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |_| on_close.call(()),
-                        "×"
-                    }
-                }
-                div { class: "p-6",
-                    div { class: "grid grid-cols-2 gap-4",
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房名称 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{room_name}",
-                                oninput: move |e| room_name.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房编码" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{room_code}",
-                                oninput: move |e| room_code.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "所属服务商 *" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{provider_id}",
-                                onchange: move |e| {
-                                    if let Ok(id) = e.value().parse::<i32>() {
-                                        provider_id.set(id);
-                                    }
-                                },
-                                for provider in PROVIDERS_STATE.read().iter() {
-                                    option { value: "{provider.id}", "{provider.short_name}" }
-                                }
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "设施类型 *" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{facility_type}",
-                                onchange: move |e| {
-                                    let new_facility_type = e.value();
-                                    facility_type.set(new_facility_type.clone());
-                                    // 设施类型改变时重置机房类型
-                                    // 数据中心只能选核心机房
-                                    // 服务商机房只能选DMZ机房（公有云）或DMZ机房（政务云）
-                                    if new_facility_type == "数据中心" {
-                                        room_type.set("核心机房".to_string());
-                                    } else if *room_type.read() == "核心机房" {
-                                        room_type.set("DMZ机房（政务云）".to_string());
-                                    }
-                                },
-                                option { value: "数据中心", "数据中心" }
-                                option { value: "服务商机房", "服务商机房" }
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房类型 *" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{room_type}",
-                                onchange: move |e| room_type.set(e.value()),
-                                // 根据设施类型动态显示机房类型选项
-                                if *facility_type.read() == "数据中心" {
-                                    // 数据中心只能选核心机房
-                                    option { value: "核心机房", "核心机房" }
-                                } else {
-                                    // 服务商机房只能选DMZ机房（公有云）或DMZ机房（政务云）
-                                    option { value: "DMZ机房（公有云）", "DMZ机房（公有云）" }
-                                    option { value: "DMZ机房（政务云）", "DMZ机房（政务云）" }
-                                }
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "详细地址 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{address}",
-                                oninput: move |e| address.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "负责人 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_person}",
-                                oninput: move |e| contact_person.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "联系电话 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_phone}",
-                                oninput: move |e| contact_phone.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "楼层" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{floor}",
-                                oninput: move |e| floor.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机柜数量" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{cabinet_count}",
-                                oninput: move |e| cabinet_count.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "面积 (㎡)" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{area_size}",
-                                oninput: move |e| area_size.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "备注" }
-                            textarea {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                rows: "3",
-                                value: "{remarks}",
-                                oninput: move |e| remarks.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{status}",
-                                onchange: move |e| status.set(e.value()),
-                                option { value: "active", "运行中" }
-                                option { value: "inactive", "停用" }
-                            }
-                        }
-                    }
-                }
-                div { class: "flex justify-end gap-3 p-6 border-t bg-gray-50",
-                    button {
-                        class: "px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50",
-                        onclick: move |_| on_close.call(()),
-                        "取消"
-                    }
-                    button {
-                        class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
-                        onclick: move |_| {
-                            let new_id = MACHINE_ROOMS_STATE.read().iter().map(|r| r.id).max().unwrap_or(0) + 1;
-                            let room = MachineRoomConfig {
-                                id: new_id,
-                                room_name: room_name.read().clone(),
-                                room_code: room_code.read().clone(),
-                                facility_type: facility_type.read().clone(),
-                                address: address.read().clone(),
-                                provider_id: *provider_id.read(),
-                                room_type: room_type.read().clone(),
-                                contact_person: contact_person.read().clone(),
-                                contact_phone: contact_phone.read().clone(),
-                                floor: if floor.read().is_empty() { None } else { Some(floor.read().clone()) },
-                                cabinet_count: cabinet_count.read().parse().ok(),
-                                area_size: if area_size.read().is_empty() { None } else { Some(area_size.read().clone()) },
-                                remarks: if remarks.read().is_empty() { None } else { Some(remarks.read().clone()) },
-                                status: status.read().clone(),
-                                created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string(),
-                                updated_at: None,
-                            };
-                            on_save.call(room);
-                        },
-                        "保存"
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// 编辑机房模态框
-#[component]
-fn EditRoomModal(
-    room: MachineRoomConfig,
-    on_close: EventHandler,
-    on_save: EventHandler<MachineRoomConfig>
-) -> Element {
-    let mut room_name = use_signal(|| room.room_name.clone());
-    let mut room_code = use_signal(|| room.room_code.clone());
-    let mut facility_type = use_signal(|| room.facility_type.clone());
-    let mut address = use_signal(|| room.address.clone());
-    let mut provider_id = use_signal(|| room.provider_id);
-    let mut room_type = use_signal(|| room.room_type.clone());
-    let mut contact_person = use_signal(|| room.contact_person.clone());
-    let mut contact_phone = use_signal(|| room.contact_phone.clone());
-    let mut floor = use_signal(|| room.floor.clone().unwrap_or_default());
-    let mut cabinet_count = use_signal(|| room.cabinet_count.map(|v| v.to_string()).unwrap_or_default());
-    let mut area_size = use_signal(|| room.area_size.clone().unwrap_or_default());
-    let mut remarks = use_signal(|| room.remarks.clone().unwrap_or_default());
-    let mut status = use_signal(|| room.status.clone());
-
-    // 当 room prop 变化时更新所有信号
-    use_effect(move || {
-        room_name.set(room.room_name.clone());
-        room_code.set(room.room_code.clone());
-        facility_type.set(room.facility_type.clone());
-        address.set(room.address.clone());
-        provider_id.set(room.provider_id);
-        room_type.set(room.room_type.clone());
-        contact_person.set(room.contact_person.clone());
-        contact_phone.set(room.contact_phone.clone());
-        floor.set(room.floor.clone().unwrap_or_default());
-        cabinet_count.set(room.cabinet_count.map(|v| v.to_string()).unwrap_or_default());
-        area_size.set(room.area_size.clone().unwrap_or_default());
-        remarks.set(room.remarks.clone().unwrap_or_default());
-        status.set(room.status.clone());
-    });
-
-    rsx! {
-        div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-                div { class: "flex justify-between items-center p-6 border-b",
-                    h2 { class: "text-xl font-bold text-gray-800", "编辑机房" }
-                    button {
-                        class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |_| on_close.call(()),
-                        "×"
-                    }
-                }
-                div { class: "p-6",
-                    div { class: "grid grid-cols-2 gap-4",
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房名称 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{room_name}",
-                                oninput: move |e| room_name.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房编码" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{room_code}",
-                                oninput: move |e| room_code.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "所属服务商 *" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{provider_id}",
-                                onchange: move |e| {
-                                    if let Ok(id) = e.value().parse::<i32>() {
-                                        provider_id.set(id);
-                                    }
-                                },
-                                for provider in PROVIDERS_STATE.read().iter() {
-                                    option { value: "{provider.id}", "{provider.short_name}" }
-                                }
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "设施类型 *" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{facility_type}",
-                                onchange: move |e| {
-                                    let new_facility_type = e.value();
-                                    facility_type.set(new_facility_type.clone());
-                                    // 设施类型改变时重置机房类型
-                                    // 数据中心只能选核心机房
-                                    // 服务商机房只能选DMZ机房（公有云）或DMZ机房（政务云）
-                                    if new_facility_type == "数据中心" {
-                                        room_type.set("核心机房".to_string());
-                                    } else if *room_type.read() == "核心机房" {
-                                        room_type.set("DMZ机房（政务云）".to_string());
-                                    }
-                                },
-                                option { value: "数据中心", "数据中心" }
-                                option { value: "服务商机房", "服务商机房" }
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房类型 *" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{room_type}",
-                                onchange: move |e| room_type.set(e.value()),
-                                // 根据设施类型动态显示机房类型选项
-                                if *facility_type.read() == "数据中心" {
-                                    // 数据中心只能选核心机房
-                                    option { value: "核心机房", "核心机房" }
-                                } else {
-                                    // 服务商机房只能选DMZ机房（公有云）或DMZ机房（政务云）
-                                    option { value: "DMZ机房（公有云）", "DMZ机房（公有云）" }
-                                    option { value: "DMZ机房（政务云）", "DMZ机房（政务云）" }
-                                }
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "详细地址 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{address}",
-                                oninput: move |e| address.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "负责人 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_person}",
-                                oninput: move |e| contact_person.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "联系电话 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_phone}",
-                                oninput: move |e| contact_phone.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "楼层" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{floor}",
-                                oninput: move |e| floor.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机柜数量" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{cabinet_count}",
-                                oninput: move |e| cabinet_count.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "面积 (㎡)" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{area_size}",
-                                oninput: move |e| area_size.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "备注" }
-                            textarea {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                rows: "3",
-                                value: "{remarks}",
-                                oninput: move |e| remarks.set(e.value())
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
-                                value: "{status}",
-                                onchange: move |e| status.set(e.value()),
-                                option { value: "active", "运行中" }
-                                option { value: "inactive", "停用" }
-                            }
-                        }
-                    }
-                }
-                div { class: "flex justify-end gap-3 p-6 border-t bg-gray-50",
-                    button {
-                        class: "px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50",
-                        onclick: move |_| on_close.call(()),
-                        "取消"
-                    }
-                    button {
-                        class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
-                        onclick: move |_| {
-                            let updated_room = MachineRoomConfig {
-                                id: room.id,
-                                room_name: room_name.read().clone(),
-                                room_code: room_code.read().clone(),
-                                facility_type: facility_type.read().clone(),
-                                address: address.read().clone(),
-                                provider_id: *provider_id.read(),
-                                room_type: room_type.read().clone(),
-                                contact_person: contact_person.read().clone(),
-                                contact_phone: contact_phone.read().clone(),
-                                floor: if floor.read().is_empty() { None } else { Some(floor.read().clone()) },
-                                cabinet_count: cabinet_count.read().parse().ok(),
-                                area_size: if area_size.read().is_empty() { None } else { Some(area_size.read().clone()) },
-                                remarks: if remarks.read().is_empty() { None } else { Some(remarks.read().clone()) },
-                                status: status.read().clone(),
-                                created_at: room.created_at.clone(),
-                                updated_at: Some(chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string()),
-                            };
-                            on_save.call(updated_room);
-                        },
-                        "保存"
-                    }
                 }
             }
         }

@@ -6,6 +6,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
 };
 use crate::state::service_provider::ServiceProviderConfig;
 use crate::app::PROVIDERS_STATE;
+use super::provider_form::{ProviderForm, ProviderFormData, FormMode};
 
 /// 服务商管理页面
 #[component]
@@ -188,22 +189,23 @@ pub fn ServiceProviderManagement() -> Element {
 
         // 添加服务商模态框
         if *show_add_modal.read() {
-            AddProviderModal {
-                show: show_add_modal,
+            ProviderForm {
+                mode: FormMode::New,
+                provider: None,
                 on_save: move |provider: ServiceProviderConfig| {
                     PROVIDERS_STATE.write().push(provider);
                     show_add_modal.set(false);
                 },
-                on_cancel: move |_| show_add_modal.set(false)
+                on_close: move |_| show_add_modal.set(false),
             }
         }
 
         // 编辑服务商模态框
         if *show_edit_modal.read() {
-            if let Some(provider) = selected_provider.read().as_ref().clone() {
-                EditProviderModal {
-                    show: show_edit_modal,
-                    provider: provider.clone(),
+            if let Some(provider) = selected_provider.read().as_ref().cloned() {
+                ProviderForm {
+                    mode: FormMode::Edit,
+                    provider: Some(provider.clone()),
                     on_save: move |provider: ServiceProviderConfig| {
                         let mut providers = PROVIDERS_STATE.write();
                         if let Some(idx) = providers.iter().position(|p| p.id == provider.id) {
@@ -211,16 +213,15 @@ pub fn ServiceProviderManagement() -> Element {
                         }
                         show_edit_modal.set(false);
                     },
-                    on_cancel: move |_| show_edit_modal.set(false)
+                    on_close: move |_| show_edit_modal.set(false),
                 }
             }
         }
 
         // 查看服务商模态框
         if *show_view_modal.read() {
-            if let Some(provider) = selected_provider.read().as_ref().clone() {
+            if let Some(provider) = selected_provider.read().as_ref().cloned() {
                 ViewProviderModal {
-                    show: show_view_modal,
                     provider: provider.clone(),
                     on_close: move |_| show_view_modal.set(false)
                 }
@@ -229,348 +230,9 @@ pub fn ServiceProviderManagement() -> Element {
     }
 }
 
-/// 添加服务商模态框
-#[component]
-fn AddProviderModal(show: Signal<bool>, on_save: EventHandler<ServiceProviderConfig>, on_cancel: EventHandler<MouseEvent>) -> Element {
-    let mut provider_name = use_signal(|| String::new());
-    let mut provider_code = use_signal(|| String::new());
-    let mut short_name = use_signal(|| String::new());
-    let mut contact_person = use_signal(|| String::new());
-    let mut contact_phone = use_signal(|| String::new());
-    let mut contact_email = use_signal(|| String::new());
-    let mut headquarters = use_signal(|| String::new());
-    let mut service_area = use_signal(|| String::from("全国"));
-    let mut business_license = use_signal(|| String::new());
-    let mut remarks = use_signal(|| String::new());
-    let mut status = use_signal(|| String::from("active"));
-
-    rsx! {
-        div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-screen overflow-y-auto",
-                div { class: "flex justify-between items-center p-6 border-b",
-                    h2 { class: "text-xl font-semibold text-gray-800", "添加服务商" }
-                    button {
-                        class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |e| on_cancel.call(e),
-                        "×"
-                    }
-                }
-                div { class: "p-6",
-                    div { class: "grid grid-cols-2 gap-4",
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商名称" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "中国电信",
-                                value: "{provider_name}",
-                                oninput: move |e| provider_name.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商编码" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "CHINA_TELECOM",
-                                value: "{provider_code}",
-                                oninput: move |e| provider_code.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "简称" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "电信",
-                                value: "{short_name}",
-                                oninput: move |e| short_name.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "负责人" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "张经理",
-                                value: "{contact_person}",
-                                oninput: move |e| contact_person.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "联系电话" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "10000",
-                                value: "{contact_phone}",
-                                oninput: move |e| contact_phone.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "联系邮箱" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "telecom@example.com",
-                                value: "{contact_email}",
-                                oninput: move |e| contact_email.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "总部地址" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "北京市西城区金融大街35号",
-                                value: "{headquarters}",
-                                oninput: move |e| headquarters.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务区域" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{service_area}",
-                                oninput: move |e| service_area.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "营业执照号" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "91110000XXXXXXXX",
-                                value: "{business_license}",
-                                oninput: move |e| business_license.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "备注" }
-                            textarea {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                rows: "2",
-                                placeholder: "服务商备注信息",
-                                value: "{remarks}",
-                                oninput: move |e| remarks.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
-                            select {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{status}",
-                                onchange: move |e| status.set(e.value()),
-                                option { value: "active", "活跃" }
-                                option { value: "inactive", "停用" }
-                            }
-                        }
-                    }
-                }
-                div { class: "flex justify-end gap-3 p-6 border-t bg-gray-50",
-                    button {
-                        class: "px-4 py-2 border rounded-lg hover:bg-gray-100",
-                        onclick: move |e| on_cancel.call(e),
-                        "取消"
-                    }
-                    button {
-                        class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
-                        onclick: move |_| {
-                            let new_provider = ServiceProviderConfig {
-                                id: 0, // 会在后端生成
-                                provider_name: provider_name.read().clone(),
-                                provider_code: provider_code.read().clone(),
-                                short_name: short_name.read().clone(),
-                                logo_url: None,
-                                contact_person: contact_person.read().clone(),
-                                contact_phone: contact_phone.read().clone(),
-                                contact_email: contact_email.read().clone(),
-                                headquarters: headquarters.read().clone(),
-                                service_area: service_area.read().clone(),
-                                business_license: business_license.read().clone(),
-                                remarks: if remarks.read().is_empty() { None } else { Some(remarks.read().clone()) },
-                                status: status.read().clone(),
-                                created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string(),
-                                updated_at: None,
-                            };
-                            on_save.call(new_provider);
-                        },
-                        "保存"
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// 编辑服务商模态框
-#[component]
-fn EditProviderModal(show: Signal<bool>, provider: ServiceProviderConfig, on_save: EventHandler<ServiceProviderConfig>, on_cancel: EventHandler<MouseEvent>) -> Element {
-    let mut provider_name = use_signal(|| provider.provider_name.clone());
-    let mut provider_code = use_signal(|| provider.provider_code.clone());
-    let mut short_name = use_signal(|| provider.short_name.clone());
-    let mut contact_person = use_signal(|| provider.contact_person.clone());
-    let mut contact_phone = use_signal(|| provider.contact_phone.clone());
-    let mut contact_email = use_signal(|| provider.contact_email.clone());
-    let mut headquarters = use_signal(|| provider.headquarters.clone());
-    let mut service_area = use_signal(|| provider.service_area.clone());
-    let mut business_license = use_signal(|| provider.business_license.clone());
-    let mut remarks = use_signal(|| provider.remarks.clone().unwrap_or_default());
-    let mut status = use_signal(|| provider.status.clone());
-
-    // 当 provider prop 变化时更新所有信号
-    use_effect(move || {
-        provider_name.set(provider.provider_name.clone());
-        provider_code.set(provider.provider_code.clone());
-        short_name.set(provider.short_name.clone());
-        contact_person.set(provider.contact_person.clone());
-        contact_phone.set(provider.contact_phone.clone());
-        contact_email.set(provider.contact_email.clone());
-        headquarters.set(provider.headquarters.clone());
-        service_area.set(provider.service_area.clone());
-        business_license.set(provider.business_license.clone());
-        remarks.set(provider.remarks.clone().unwrap_or_default());
-        status.set(provider.status.clone());
-    });
-
-    rsx! {
-        div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-screen overflow-y-auto",
-                div { class: "flex justify-between items-center p-6 border-b",
-                    h2 { class: "text-xl font-semibold text-gray-800", "编辑服务商" }
-                    button {
-                        class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |e| on_cancel.call(e),
-                        "×"
-                    }
-                }
-                div { class: "p-6",
-                    div { class: "grid grid-cols-2 gap-4",
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商名称" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{provider_name}",
-                                oninput: move |e| provider_name.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商编码" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{provider_code}",
-                                oninput: move |e| provider_code.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "简称" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{short_name}",
-                                oninput: move |e| short_name.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "负责人" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_person}",
-                                oninput: move |e| contact_person.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "联系电话" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_phone}",
-                                oninput: move |e| contact_phone.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "联系邮箱" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{contact_email}",
-                                oninput: move |e| contact_email.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "总部地址" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{headquarters}",
-                                oninput: move |e| headquarters.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务区域" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{service_area}",
-                                oninput: move |e| service_area.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2 sm:col-span-1",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "营业执照号" }
-                            input {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{business_license}",
-                                oninput: move |e| business_license.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "备注" }
-                            textarea {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                rows: "2",
-                                value: "{remarks}",
-                                oninput: move |e| remarks.set(e.value())
-                            }
-                        }
-                        div { class: "col-span-2",
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
-                            select {
-                                class: "w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: "{status}",
-                                onchange: move |e| status.set(e.value()),
-                                option { value: "active", "活跃" }
-                                option { value: "inactive", "停用" }
-                            }
-                        }
-                    }
-                }
-                div { class: "flex justify-end gap-3 p-6 border-t bg-gray-50",
-                    button {
-                        class: "px-4 py-2 border rounded-lg hover:bg-gray-100",
-                        onclick: move |e| on_cancel.call(e),
-                        "取消"
-                    }
-                    button {
-                        class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
-                        onclick: move |_| {
-                            let id = provider.id;
-                            let updated_provider = ServiceProviderConfig {
-                                id,
-                                provider_name: provider_name.read().clone(),
-                                provider_code: provider_code.read().clone(),
-                                short_name: short_name.read().clone(),
-                                logo_url: provider.logo_url.clone(),
-                                contact_person: contact_person.read().clone(),
-                                contact_phone: contact_phone.read().clone(),
-                                contact_email: contact_email.read().clone(),
-                                headquarters: headquarters.read().clone(),
-                                service_area: service_area.read().clone(),
-                                business_license: business_license.read().clone(),
-                                remarks: if remarks.read().is_empty() { None } else { Some(remarks.read().clone()) },
-                                status: status.read().clone(),
-                                created_at: provider.created_at.clone(),
-                                updated_at: Some(chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string()),
-                            };
-                            on_save.call(updated_provider);
-                        },
-                        "保存"
-                    }
-                }
-            }
-        }
-    }
-}
-
 /// 查看服务商模态框
 #[component]
-fn ViewProviderModal(show: Signal<bool>, provider: ServiceProviderConfig, on_close: EventHandler<MouseEvent>) -> Element {
+fn ViewProviderModal(provider: ServiceProviderConfig, on_close: EventHandler<()>) -> Element {
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
             div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-screen overflow-y-auto",
@@ -578,7 +240,7 @@ fn ViewProviderModal(show: Signal<bool>, provider: ServiceProviderConfig, on_clo
                     h2 { class: "text-xl font-semibold text-gray-800", "服务商详情" }
                     button {
                         class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |e| on_close.call(e),
+                        onclick: move |_| on_close.call(()),
                         "×"
                     }
                 }
@@ -635,8 +297,7 @@ fn ViewProviderModal(show: Signal<bool>, provider: ServiceProviderConfig, on_clo
                             label { class: "block text-sm font-medium text-gray-500", "总部地址" }
                             p { class: "mt-1 text-sm text-gray-900 flex items-center",
                                 Icon { icon: FaBuilding, width: 14, height: 14, class: "mr-1 text-gray-400" }
-                                "{provider.headquarters}"
-                            }
+                                "{provider.headquarters}"                            }
                         }
                         div { class: "col-span-2 sm:col-span-1",
                             label { class: "block text-sm font-medium text-gray-500", "服务区域" }
@@ -667,7 +328,7 @@ fn ViewProviderModal(show: Signal<bool>, provider: ServiceProviderConfig, on_clo
                 div { class: "flex justify-end p-6 border-t bg-gray-50",
                     button {
                         class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
-                        onclick: move |e| on_close.call(e),
+                        onclick: move |_| on_close.call(()),
                         "关闭"
                     }
                 }
