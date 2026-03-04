@@ -6,7 +6,103 @@
     <title>RustSet - 安全资产管理平台</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    },
+                }
+            }
+        }
+    </script>
     <style>
+        /* Lumen Blocks CSS Variables */
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --primary: 221.2 83.2% 53.3%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --muted: 210 40% 96.1%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --accent: 210 40% 96.1%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --ring: 221.2 83.2% 53.3%;
+            --radius: 0.5rem;
+        }
+
+        .dark {
+            --background: 222.2 84% 4.9%;
+            --foreground: 210 40% 98%;
+            --card: 222.2 84% 4.9%;
+            --card-foreground: 210 40% 98%;
+            --primary: 217.2 91.2% 59.8%;
+            --primary-foreground: 222.2 47.4% 11.2%;
+            --secondary: 217.2 32.6% 17.5%;
+            --secondary-foreground: 210 40% 98%;
+            --muted: 217.2 32.6% 17.5%;
+            --muted-foreground: 215 20.2% 65.1%;
+            --accent: 217.2 32.6% 17.5%;
+            --accent-foreground: 210 40% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 217.2 32.6% 17.5%;
+            --input: 217.2 32.6% 17.5%;
+            --ring: 224.3 76.3% 48%;
+        }
+
+        /* 基础样式重置 */
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
         /* 加载动画 */
         #loading {
             position: fixed;
@@ -35,11 +131,199 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* 自定义动画 */
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fade-out {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        @keyframes slide-in-from-right {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes slide-out-to-right {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
+        @keyframes zoom-in-95 {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes zoom-out-95 {
+            from { transform: scale(1); opacity: 1; }
+            to { transform: scale(0.95); opacity: 0; }
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+            50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+        }
+
+        @keyframes progress {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+
+        /* 动画工具类 */
+        .animate-in {
+            animation-fill-mode: forwards;
+        }
+
+        .fade-in {
+            animation: fade-in 0.2s ease-out;
+        }
+
+        .fade-out {
+            animation: fade-out 0.2s ease-in;
+        }
+
+        .slide-in-from-right {
+            animation: slide-in-from-right 0.3s ease-out;
+        }
+
+        .slide-out-to-right {
+            animation: slide-out-to-right 0.3s ease-in;
+        }
+
+        .zoom-in-95 {
+            animation: zoom-in-95 0.2s ease-out;
+        }
+
+        .zoom-out-95 {
+            animation: zoom-out-95 0.2s ease-in;
+        }
+
+        .animate-pulse-glow {
+            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .animate-progress {
+            animation: progress linear forwards;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+
+        /* 玻璃态效果 */
+        .backdrop-blur-sm {
+            backdrop-filter: blur(4px);
+        }
+
+        /* 表格行悬停效果增强 */
+        tbody tr {
+            transition: background-color 0.15s ease-in-out;
+        }
+
+        /* 按钮悬停效果增强 */
+        button {
+            transition: all 0.15s ease-in-out;
+        }
+
+        /* 输入框聚焦效果增强 */
+        input:focus,
+        select:focus,
+        textarea:focus {
+            transition: all 0.15s ease-in-out;
+        }
+
+        /* Line clamp utility */
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
     <div id="main">
         <div id="loading">正在加载 RustSet...</div>
+        <div id="error" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.15);max-width:80%;"></div>
     </div>
+    <script>
+        // 添加全局错误处理
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error);
+            const errorDiv = document.getElementById('error');
+            if (errorDiv) {
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = '<h3 style="color:red;margin-bottom:10px;">加载错误</h3><pre style="white-space:pre-wrap;word-break:break-all;">' +
+                    e.error?.message + '\n\n' + e.error?.stack + '</pre>';
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // 监听未处理的 Promise 拒绝
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled promise rejection:', e.reason);
+            const errorDiv = document.getElementById('error');
+            if (errorDiv && document.getElementById('loading').style.display !== 'none') {
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = '<h3 style="color:red;margin-bottom:10px;">加载错误</h3><pre style="white-space:pre-wrap;word-break:break-all;">' +
+                    e.reason + '</pre>';
+            }
+        });
+
+        // 监听 Dioxus 应用启动完成事件，隐藏加载提示
+        function hideLoading() {
+            console.log('Hiding loading indicator');
+            const loading = document.getElementById('loading');
+            if (loading) {
+                loading.style.display = 'none';
+            }
+        }
+
+        // 监听多种可能的启动事件
+        window.addEventListener('TrunkApplicationStarted', hideLoading);
+        window.addEventListener('DOMContentLoaded', function() {
+            // 延迟检查，如果应用已经渲染完成
+            setTimeout(function() {
+                const main = document.getElementById('main');
+                if (main && main.children.length > 1) {
+                    hideLoading();
+                }
+            }, 1000);
+        });
+
+        // 定期检查应用是否已启动（最多检查5秒）
+        let checks = 0;
+        var checkInterval = setInterval(function() {
+            checks++;
+            const main = document.getElementById('main');
+            // 如果main元素有内容且不仅仅是loading和error div
+            if (main && main.children.length > 2) {
+                clearInterval(checkInterval);
+                hideLoading();
+            }
+            if (checks > 10) {
+                clearInterval(checkInterval);
+            }
+        }, 500);
+    </script>
 </body>
 </html>

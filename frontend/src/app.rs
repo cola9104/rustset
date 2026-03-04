@@ -2,6 +2,14 @@ use dioxus::prelude::*;
 use dioxus_router::Router;
 
 use crate::router::Route;
+use crate::state::{
+    service_provider::ServiceProviderConfig,
+    machine_room::MachineRoomConfig,
+    cloud_platform::CloudPlatformConfig,
+    init_service_providers,
+    init_machine_rooms,
+    init_cloud_platforms,
+};
 
 /// 主应用组件
 #[allow(non_snake_case)]
@@ -22,6 +30,15 @@ pub struct AuthUser {
 
 /// 全局认证状态
 pub static AUTH_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
+
+/// 全局服务商数据状态
+pub static PROVIDERS_STATE: GlobalSignal<Vec<ServiceProviderConfig>> = Signal::global(init_service_providers);
+
+/// 全局机房数据状态
+pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> = Signal::global(init_machine_rooms);
+
+/// 全局云平台数据状态
+pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> = Signal::global(init_cloud_platforms);
 
 /// 检查是否已认证
 #[allow(dead_code)]

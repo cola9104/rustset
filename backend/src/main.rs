@@ -303,7 +303,7 @@ async fn main() {
     let app = Router::new()
         // Auth
         .route("/api/login", post(login))
-        .route("/api/users/me", get(get_current_user_info)) // 必须在 :id 之前
+        .route("/api/users/me", get(get_current_user_info)) // 必须在 {id} 之前
         .route("/api/users", get(get_users).post(create_user))
         .route("/api/users/{id}", delete(delete_user))
         .route("/api/users/{id}/permissions", put(update_user_permissions))
@@ -357,11 +357,11 @@ async fn main() {
         .route("/api/cloud-service-assets/stats", get(get_cloud_service_stats))
         // IP Zones (TODO: implement handlers)
         // .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
-        // .route("/api/ip-zones/:id", get(get_ip_zone).delete(delete_ip_zone).put(update_ip_zone))
+        // .route("/api/ip-zones/{id}", get(get_ip_zone).delete(delete_ip_zone).put(update_ip_zone))
         // .route("/api/ip-zones/find/:ip", get(find_zone_by_ip))
         // Port Details (端口详细信息表) (TODO: implement handlers)
         // .route("/api/port-details", get(get_port_details).post(create_port_detail))
-        // .route("/api/port-details/:id", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
+        // .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
         // .route("/api/port-details/batch-bind", post(batch_bind_ports))
         // Scanners (扫描器) (TODO: implement handlers)
         // .route("/api/scan-ip", post(scan_ip))
@@ -372,7 +372,7 @@ async fn main() {
         // .route("/api/cloud-assets", get(get_cloud_assets).post(create_cloud_asset))
         // .route("/api/cloud-assets/stats", get(get_cloud_asset_stats))
         // .route("/api/cloud-assets/sync", post(sync_cloud_assets))
-        // .route("/api/cloud-assets/:id", get(get_cloud_asset).put(update_cloud_asset).delete(delete_cloud_asset))
+        // .route("/api/cloud-assets/{id}", get(get_cloud_asset).put(update_cloud_asset).delete(delete_cloud_asset))
         // Scan
         .route("/api/scan", post(trigger_scan))
         .with_state(state)

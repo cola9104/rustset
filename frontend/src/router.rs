@@ -8,7 +8,13 @@ use crate::components::asset::AssetManagement;
 use crate::components::task::TaskCenter;
 use crate::components::risk::RiskCenter;
 use crate::components::audit::AuditLogs;
-use crate::components::business::BusinessApplication;
+use crate::components::user::UserManagement;
+use crate::components::permission::PermissionManagement;
+use crate::components::password::PasswordPolicy;
+use crate::components::resource_ticket::ResourceTicket;
+use crate::components::cloud_platform::CloudPlatformManagement;
+use crate::components::machine_room::MachineRoomManagement;
+use crate::components::service_provider::ServiceProviderManagement;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -40,21 +46,21 @@ pub enum Route {
     #[route("/audit")]
     AuditLogs {},
 
-    // 高级扫描
-    #[route("/scanning")]
-    AdvancedScanning {},
+    // 资源工单
+    #[route("/tickets")]
+    ResourceTicket {},
 
-    // 云服务资产
-    #[route("/cloud-assets")]
-    CloudServiceAsset {},
+    // 云平台管理
+    #[route("/cloud-platforms")]
+    CloudPlatformManagement {},
 
-    // 运维管理
-    #[route("/operations")]
-    OperationsManagement {},
+    // 服务商管理
+    #[route("/service-providers")]
+    ServiceProviderManagement {},
 
-    // 业务申请
-    #[route("/business")]
-    BusinessApplication {},
+    // 机房管理
+    #[route("/machine-rooms")]
+    MachineRoomManagement {},
 
     // 用户管理
     #[route("/users")]
@@ -84,74 +90,6 @@ fn NotFound(route: Vec<String>) -> Element {
             h1 { class: "text-6xl font-bold text-gray-800", "404" }
             p { class: "text-xl text-gray-600 mt-4", "页面未找到" }
             p { class: "text-gray-500 mt-2", "路径: /{route.join(\"/\")}" }
-        }
-    }
-}
-
-/// 高级扫描
-#[component]
-fn AdvancedScanning() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "高级扫描" }
-            p { class: "text-gray-600 mt-2", "配置和执行高级扫描任务" }
-        }
-    }
-}
-
-/// 云服务资产
-#[component]
-fn CloudServiceAsset() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "云服务资产" }
-            p { class: "text-gray-600 mt-2", "管理云平台资产" }
-        }
-    }
-}
-
-/// 运维管理
-#[component]
-fn OperationsManagement() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "运维管理" }
-            p { class: "text-gray-600 mt-2", "系统运维配置" }
-        }
-    }
-}
-
-/// 业务申请 (使用 components/business 模块中的组件)
-
-/// 用户管理
-#[component]
-fn UserManagement() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "用户管理" }
-            p { class: "text-gray-600 mt-2", "管理系统用户" }
-        }
-    }
-}
-
-/// 权限管理
-#[component]
-fn PermissionManagement() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "权限管理" }
-            p { class: "text-gray-600 mt-2", "配置用户权限和角色" }
-        }
-    }
-}
-
-/// 密码策略
-#[component]
-fn PasswordPolicy() -> Element {
-    rsx! {
-        div { class: "p-8",
-            h1 { class: "text-2xl font-bold text-gray-800", "密码策略" }
-            p { class: "text-gray-600 mt-2", "配置密码安全策略" }
         }
     }
 }

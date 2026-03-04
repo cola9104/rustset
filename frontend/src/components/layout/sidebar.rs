@@ -3,7 +3,7 @@ use dioxus_router::Link;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaHouse, FaServer, FaList, FaTriangleExclamation, FaFileLines,
-    FaMagnifyingGlass, FaCloud, FaGear, FaBriefcase, FaUsers, FaKey, FaLock,
+    FaBriefcase, FaUsers, FaKey, FaLock, FaCloud, FaBuilding, FaNetworkWired,
 };
 use crate::router::Route;
 
@@ -76,40 +76,40 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         span { class: "ml-3", "审计日志" }
                     }
                 }
-                // 高级扫描
+                // 资源工单
                 Link {
-                    to: Route::AdvancedScanning {},
-                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaMagnifyingGlass, width: 20, height: 20 }
-                    if !is_collapsed {
-                        span { class: "ml-3", "高级扫描" }
-                    }
-                }
-                // 云服务资产
-                Link {
-                    to: Route::CloudServiceAsset {},
-                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaCloud, width: 20, height: 20 }
-                    if !is_collapsed {
-                        span { class: "ml-3", "云服务资产" }
-                    }
-                }
-                // 运维管理
-                Link {
-                    to: Route::OperationsManagement {},
-                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaGear, width: 20, height: 20 }
-                    if !is_collapsed {
-                        span { class: "ml-3", "运维管理" }
-                    }
-                }
-                // 业务申请
-                Link {
-                    to: Route::BusinessApplication {},
+                    to: Route::ResourceTicket {},
                     class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
                     Icon { icon: FaBriefcase, width: 20, height: 20 }
                     if !is_collapsed {
-                        span { class: "ml-3", "业务申请" }
+                        span { class: "ml-3", "资源工单" }
+                    }
+                }
+                // 云平台管理
+                Link {
+                    to: Route::CloudPlatformManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaCloud, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "云平台管理" }
+                    }
+                }
+                // 服务商管理
+                Link {
+                    to: Route::ServiceProviderManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaNetworkWired, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "服务商管理" }
+                    }
+                }
+                // 机房管理
+                Link {
+                    to: Route::MachineRoomManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaBuilding, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "机房管理" }
                     }
                 }
                 // 用户管理

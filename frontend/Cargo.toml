@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 # Dioxus framework with web and router support
-dioxus = { version = "0.7", features = ["router"] }
+dioxus = { version = "0.7", features = ["web", "router"] }
 dioxus-web = "0.7"
 dioxus-router = "0.7"
 
-# Dioxus icons (Font Awesome icons)
+# Icon library - dioxus-free-icons with Font Awesome icons
 dioxus-free-icons = { version = "0.10", features = ["font-awesome-solid"] }
 
 # Serialization
@@ -34,5 +34,5 @@ console_error_panic_hook = "0.1"
 tracing = "0.1"
 tracing-wasm = "0.2"
 
-# Utils
-gloo-timers = "0.3"
+# UUID for generating unique IDs
+uuid = { version = "1.0", features = ["v4", "js"] }
