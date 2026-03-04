@@ -3,6 +3,7 @@ use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaServer, FaDesktop, FaLaptop, FaCloud
 };
+use crate::app::PROVIDERS_STATE;
 
 /// 标签页类型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,7 +25,38 @@ pub struct HardwareAsset {
     pub cabinet: String,      // 机柜，如 "机柜2"
     pub u_position: String,   // U位，如 "1U-4U"
     pub u_total: String,      // 总U数，如 "4U"
+    pub provider_id: Option<i32>,  // 所属服务商ID
     pub created_at: String,
+}
+
+impl HardwareAsset {
+    /// 获取服务商名称
+    pub fn provider_name(&self) -> String {
+        if let Some(pid) = self.provider_id {
+            PROVIDERS_STATE.read()
+                .iter()
+                .find(|p| p.id == pid)
+                .map(|p| p.short_name.clone())
+                .unwrap_or_else(|| format!("服务商{}", pid))
+        } else {
+            "未分配".to_string()
+        }
+    }
+
+    /// 获取服务商颜色
+    pub fn provider_color(&self) -> &'static str {
+        if let Some(pid) = self.provider_id {
+            match pid {
+                1 => "bg-blue-100 text-blue-800",  // 电信
+                2 => "bg-orange-100 text-orange-800", // 联通
+                3 => "bg-green-100 text-green-800", // 移动
+                4 => "bg-purple-100 text-purple-800", // 广电
+                _ => "bg-gray-100 text-gray-800",
+            }
+        } else {
+            "bg-gray-100 text-gray-600"
+        }
+    }
 }
 
 /// 云服务资产数据模型
@@ -32,7 +64,7 @@ pub struct HardwareAsset {
 pub struct CloudAsset {
     pub id: i32,
     pub name: String,                    // 实例名称
-    pub provider: String,                // 云厂商
+    pub provider_id: Option<i32>,        // 所属服务商ID
     pub cloud_type: String,              // 云类型（公有云、政务云）
     pub foundation: String,              // 底座（阿里云、华为云等）
     pub instance_type: String,           // 实例类型
@@ -42,6 +74,36 @@ pub struct CloudAsset {
     pub region: String,                  // 区域
     pub machine_room: String,            // 机房
     pub created_at: String,
+}
+
+impl CloudAsset {
+    /// 获取服务商名称
+    pub fn provider_name(&self) -> String {
+        if let Some(pid) = self.provider_id {
+            PROVIDERS_STATE.read()
+                .iter()
+                .find(|p| p.id == pid)
+                .map(|p| p.short_name.clone())
+                .unwrap_or_else(|| format!("服务商{}", pid))
+        } else {
+            "未分配".to_string()
+        }
+    }
+
+    /// 获取服务商颜色
+    pub fn provider_color(&self) -> &'static str {
+        if let Some(pid) = self.provider_id {
+            match pid {
+                1 => "bg-blue-100 text-blue-800",  // 电信
+                2 => "bg-orange-100 text-orange-800", // 联通
+                3 => "bg-green-100 text-green-800", // 移动
+                4 => "bg-purple-100 text-purple-800", // 广电
+                _ => "bg-gray-100 text-gray-800",
+            }
+        } else {
+            "bg-gray-100 text-gray-600"
+        }
+    }
 }
 
 /// 资产管理页面
@@ -62,6 +124,7 @@ pub fn AssetManagement() -> Element {
             cabinet: "机柜1".to_string(),
             u_position: "1U-4U".to_string(),
             u_total: "4U".to_string(),
+            provider_id: Some(1),  // 电信
             created_at: "2024-01-15".to_string(),
         },
         HardwareAsset {
@@ -75,6 +138,7 @@ pub fn AssetManagement() -> Element {
             cabinet: "机柜2".to_string(),
             u_position: "5U-8U".to_string(),
             u_total: "4U".to_string(),
+            provider_id: Some(2),  // 联通
             created_at: "2024-01-16".to_string(),
         },
         HardwareAsset {
@@ -88,6 +152,7 @@ pub fn AssetManagement() -> Element {
             cabinet: "".to_string(),
             u_position: "".to_string(),
             u_total: "".to_string(),
+            provider_id: None,  // 未分配
             created_at: "2024-01-20".to_string(),
         },
     ]);
@@ -97,7 +162,7 @@ pub fn AssetManagement() -> Element {
         CloudAsset {
             id: 1,
             name: "web-server-01".to_string(),
-            provider: "阿里云".to_string(),
+            provider_id: Some(1),  // 电信
             cloud_type: "公有云".to_string(),
             foundation: "阿里云".to_string(),
             instance_type: "ecs.g6.large".to_string(),
@@ -111,9 +176,9 @@ pub fn AssetManagement() -> Element {
         CloudAsset {
             id: 2,
             name: "api-server-01".to_string(),
-            provider: "腾讯云".to_string(),
+            provider_id: Some(2),  // 联通
             cloud_type: "公有云".to_string(),
-            foundation: "腾讯云".to_string(),
+            foundation: "华为云".to_string(),
             instance_type: "S5.MEDIUM4".to_string(),
             ip_address: "119.29.67.89".to_string(),
             ports: "22, 8080".to_string(),
@@ -125,7 +190,7 @@ pub fn AssetManagement() -> Element {
         CloudAsset {
             id: 3,
             name: "db-server-01".to_string(),
-            provider: "华为云".to_string(),
+            provider_id: Some(1),  // 电信
             cloud_type: "政务云".to_string(),
             foundation: "华为云".to_string(),
             instance_type: "s6.xlarge.4".to_string(),
@@ -139,7 +204,7 @@ pub fn AssetManagement() -> Element {
         CloudAsset {
             id: 4,
             name: "app-server-02".to_string(),
-            provider: "阿里云".to_string(),
+            provider_id: Some(2),  // 联通
             cloud_type: "政务云".to_string(),
             foundation: "阿里云".to_string(),
             instance_type: "ecs.g7.xlarge".to_string(),
@@ -153,9 +218,9 @@ pub fn AssetManagement() -> Element {
         CloudAsset {
             id: 5,
             name: "cache-server-01".to_string(),
-            provider: "华为云".to_string(),
+            provider_id: Some(3),  // 移动
             cloud_type: "公有云".to_string(),
-            foundation: "华为云".to_string(),
+            foundation: "阿里云".to_string(),
             instance_type: "s6.large.2".to_string(),
             ip_address: "119.9.45.123".to_string(),
             ports: "22, 6379".to_string(),
@@ -167,7 +232,7 @@ pub fn AssetManagement() -> Element {
         CloudAsset {
             id: 6,
             name: "file-server-01".to_string(),
-            provider: "阿里云".to_string(),
+            provider_id: Some(3),  // 移动
             cloud_type: "公有云".to_string(),
             foundation: "阿里云".to_string(),
             instance_type: "ecs.g6.2xlarge".to_string(),
@@ -347,6 +412,7 @@ fn HardwareAssetsTab(
                     tr {
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "名称" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "类型" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务商" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "IP地址" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "开放端口" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
@@ -371,6 +437,12 @@ fn HardwareAssetsTab(
                             td { class: "px-6 py-4 whitespace-nowrap",
                                 span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800",
                                     {asset.asset_type.clone()}
+                                }
+                            }
+                            td { class: "px-6 py-4 whitespace-nowrap",
+                                span {
+                                    class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {asset.provider_color()}",
+                                    {asset.provider_name()}
                                 }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
@@ -481,8 +553,8 @@ fn CloudAssetsTab(
 
     // 计算统计数据
     let total_count = assets.read().len() as i32;
-    let alicloud_count = assets.read().iter().filter(|a| a.provider == "阿里云").count() as i32;
-    let tencent_count = assets.read().iter().filter(|a| a.provider == "腾讯云").count() as i32;
+    let provider_1_count = assets.read().iter().filter(|a| a.provider_id == Some(1)).count() as i32;  // 电信
+    let provider_2_count = assets.read().iter().filter(|a| a.provider_id == Some(2)).count() as i32;  // 联通
     let running_count = assets.read().iter().filter(|a| a.status == "运行中").count() as i32;
 
     // 过滤资产
@@ -533,8 +605,8 @@ fn CloudAssetsTab(
                         Icon { icon: FaCloud, width: 20, height: 20 }
                     }
                     div { class: "ml-3",
-                        p { class: "text-sm text-gray-500", "阿里云" }
-                        p { class: "text-xl font-bold text-gray-800", {alicloud_count.to_string()} }
+                        p { class: "text-sm text-gray-500", "电信" }
+                        p { class: "text-xl font-bold text-gray-800", {provider_1_count.to_string()} }
                     }
                 }
             }
@@ -544,8 +616,8 @@ fn CloudAssetsTab(
                         Icon { icon: FaCloud, width: 20, height: 20 }
                     }
                     div { class: "ml-3",
-                        p { class: "text-sm text-gray-500", "腾讯云" }
-                        p { class: "text-xl font-bold text-gray-800", {tencent_count.to_string()} }
+                        p { class: "text-sm text-gray-500", "联通" }
+                        p { class: "text-xl font-bold text-gray-800", {provider_2_count.to_string()} }
                     }
                 }
             }
@@ -568,7 +640,7 @@ fn CloudAssetsTab(
                 thead { class: "bg-gray-50",
                     tr {
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "实例名称" }
-                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "云厂商" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务商" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "云类型" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "底座" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "实例类型" }
@@ -592,8 +664,11 @@ fn CloudAssetsTab(
                                     }
                                 }
                             }
-                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                {asset.provider.clone()}
+                            td { class: "px-6 py-4 whitespace-nowrap",
+                                span {
+                                    class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {asset.provider_color()}",
+                                    {asset.provider_name()}
+                                }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap",
                                 span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800",
@@ -821,6 +896,7 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                         onclick: {
                             let asset_id = asset.id;
                             let created_at = asset.created_at.clone();
+                            let provider_id = asset.provider_id;
                             move |_| {
                                 let updated = HardwareAsset {
                                     id: asset_id,
@@ -833,6 +909,7 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                                     cabinet: cabinet.read().clone(),
                                     u_position: u_position.read().clone(),
                                     u_total: u_total.read().clone(),
+                                    provider_id,
                                     created_at: created_at.clone(),
                                 };
                                 on_save.call(updated);
@@ -850,7 +927,7 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
 #[component]
 fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: EventHandler<CloudAsset>) -> Element {
     let mut name = use_signal(|| asset.name.clone());
-    let mut provider = use_signal(|| asset.provider.clone());
+    let mut provider_id = use_signal(|| asset.provider_id);
     let mut cloud_type = use_signal(|| asset.cloud_type.clone());
     let mut foundation = use_signal(|| asset.foundation.clone());
     let mut instance_type = use_signal(|| asset.instance_type.clone());
@@ -859,6 +936,7 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
     let mut status = use_signal(|| asset.status.clone());
     let mut region = use_signal(|| asset.region.clone());
     let mut machine_room = use_signal(|| asset.machine_room.clone());
+    let providers = PROVIDERS_STATE.read().clone();
 
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -885,16 +963,22 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
 
                     div { class: "grid grid-cols-2 gap-3",
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "云厂商" }
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商" }
                             select {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                value: provider,
-                                onchange: move |e| provider.set(e.value()),
-                                option { value: "阿里云", "阿里云" }
-                                option { value: "腾讯云", "腾讯云" }
-                                option { value: "华为云", "华为云" }
-                                option { value: "AWS", "AWS" }
-                                option { value: "Azure", "Azure" }
+                                value: "{provider_id.read().unwrap_or(-1)}",
+                                onchange: move |e| {
+                                    let val: i32 = e.value().parse().unwrap_or(-1);
+                                    provider_id.set(if val > 0 { Some(val) } else { None });
+                                },
+                                option { value: "-1", "未分配" }
+                                for provider in providers.iter() {
+                                    option {
+                                        value: "{provider.id}",
+                                        selected: *provider_id.read() == Some(provider.id),
+                                        "{provider.short_name}"
+                                    }
+                                }
                             }
                         }
                         div {
@@ -1008,7 +1092,7 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                                 let updated = CloudAsset {
                                     id: asset_id,
                                     name: name.read().clone(),
-                                    provider: provider.read().clone(),
+                                    provider_id: *provider_id.read(),
                                     cloud_type: cloud_type.read().clone(),
                                     foundation: foundation.read().clone(),
                                     instance_type: instance_type.read().clone(),

@@ -6,9 +6,11 @@ use crate::state::{
     service_provider::ServiceProviderConfig,
     machine_room::MachineRoomConfig,
     cloud_platform::CloudPlatformConfig,
+    network_zone::NetworkZone,
     init_service_providers,
     init_machine_rooms,
     init_cloud_platforms,
+    init_network_zones,
 };
 
 /// 主应用组件
@@ -39,6 +41,14 @@ pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> = Signal::g
 
 /// 全局云平台数据状态
 pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> = Signal::global(init_cloud_platforms);
+
+/// 全局网络区域数据状态
+/// 从云平台和机房数据动态生成网络区域
+pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(|| {
+    let cloud_platforms = init_cloud_platforms();
+    let machine_rooms = init_machine_rooms();
+    init_network_zones(&cloud_platforms, &machine_rooms)
+});
 
 /// 检查是否已认证
 #[allow(dead_code)]

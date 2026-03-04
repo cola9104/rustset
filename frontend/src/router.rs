@@ -12,10 +12,14 @@ use crate::components::user::UserManagement;
 use crate::components::permission::PermissionManagement;
 use crate::components::password::PasswordPolicy;
 use crate::components::resource_ticket::ResourceTicket;
+use crate::components::resource_ticket::cloud_service::CloudServiceRequest;
+use crate::components::resource_ticket::physical_server::PhysicalServerRequest;
+use crate::components::resource_ticket::network_policy::NetworkPolicyRequest;
 use crate::components::cloud_platform::CloudPlatformManagement;
 use crate::components::machine_room::MachineRoomManagement;
 use crate::components::service_provider::ServiceProviderManagement;
 use crate::components::business::BusinessApplication;
+use crate::components::network_zone::NetworkZoneManagement;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -55,6 +59,16 @@ pub enum Route {
     #[route("/tickets")]
     ResourceTicket {},
 
+    // 资源工单分类页面
+    #[route("/tickets/cloud-service")]
+    CloudServiceRequest {},
+
+    #[route("/tickets/physical-server")]
+    PhysicalServerRequest {},
+
+    #[route("/tickets/network-policy")]
+    NetworkPolicyRequest {},
+
     // 云平台管理
     #[route("/cloud-platforms")]
     CloudPlatformManagement {},
@@ -66,6 +80,10 @@ pub enum Route {
     // 机房管理
     #[route("/machine-rooms")]
     MachineRoomManagement {},
+
+    // 网络区域管理
+    #[route("/network-zones")]
+    NetworkZoneManagement {},
 
     // 用户管理
     #[route("/users")]

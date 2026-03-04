@@ -56,11 +56,9 @@ impl UserRole {
             ],
             UserRole::Approver => vec![
                 ApplicationTab::PendingApproval,
-                ApplicationTab::Approved,
             ],
             UserRole::Operator => vec![
                 ApplicationTab::PendingProvision,
-                ApplicationTab::Provisioning,
             ],
             UserRole::Deliverer => vec![
                 ApplicationTab::PendingDelivery,
@@ -70,9 +68,7 @@ impl UserRole {
                 ApplicationTab::MyApplications,
                 ApplicationTab::NewApplication,
                 ApplicationTab::PendingApproval,
-                ApplicationTab::Approved,
                 ApplicationTab::PendingProvision,
-                ApplicationTab::Provisioning,
                 ApplicationTab::PendingDelivery,
                 ApplicationTab::Delivered,
                 ApplicationTab::Archived,
@@ -90,12 +86,8 @@ pub enum ApplicationTab {
     NewApplication,
     /// 待审批
     PendingApproval,
-    /// 已审批
-    Approved,
     /// 待配置
     PendingProvision,
-    /// 配置中
-    Provisioning,
     /// 待交付
     PendingDelivery,
     /// 已交付
@@ -110,9 +102,7 @@ impl ApplicationTab {
             ApplicationTab::MyApplications => "我的申请",
             ApplicationTab::NewApplication => "新建申请",
             ApplicationTab::PendingApproval => "待审批",
-            ApplicationTab::Approved => "已审批",
             ApplicationTab::PendingProvision => "待配置",
-            ApplicationTab::Provisioning => "配置中",
             ApplicationTab::PendingDelivery => "待交付",
             ApplicationTab::Delivered => "已交付",
             ApplicationTab::Archived => "已归档",
@@ -124,9 +114,7 @@ impl ApplicationTab {
             ApplicationTab::MyApplications => "fa-list",
             ApplicationTab::NewApplication => "fa-plus",
             ApplicationTab::PendingApproval => "fa-clock",
-            ApplicationTab::Approved => "fa-check",
             ApplicationTab::PendingProvision => "fa-cog",
-            ApplicationTab::Provisioning => "fa-tools",
             ApplicationTab::PendingDelivery => "fa-truck",
             ApplicationTab::Delivered => "fa-box-open",
             ApplicationTab::Archived => "fa-archive",

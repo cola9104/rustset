@@ -4,7 +4,7 @@ use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaHouse, FaServer, FaList, FaTriangleExclamation, FaFileLines,
     FaBriefcase, FaUsers, FaKey, FaLock, FaCloud, FaBuilding, FaNetworkWired,
-    FaEarthAmericas,
+    FaEarthAmericas, FaShieldHalved,
 };
 use crate::router::Route;
 
@@ -59,6 +59,15 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         span { class: "ml-3", "风险中心" }
                     }
                 }
+                // 资源工单
+                Link {
+                    to: Route::ResourceTicket {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaBriefcase, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "资源工单" }
+                    }
+                }
                 // 资产管理
                 Link {
                     to: Route::AssetManagement {},
@@ -75,15 +84,6 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     Icon { icon: FaEarthAmericas, width: 20, height: 20 }
                     if !is_collapsed {
                         span { class: "ml-3", "业务应用" }
-                    }
-                }
-                // 资源工单
-                Link {
-                    to: Route::ResourceTicket {},
-                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
-                    Icon { icon: FaBriefcase, width: 20, height: 20 }
-                    if !is_collapsed {
-                        span { class: "ml-3", "资源工单" }
                     }
                 }
                 // 云平台管理
@@ -111,6 +111,15 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     Icon { icon: FaBuilding, width: 20, height: 20 }
                     if !is_collapsed {
                         span { class: "ml-3", "机房管理" }
+                    }
+                }
+                // 网络区域管理
+                Link {
+                    to: Route::NetworkZoneManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaShieldHalved, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "网络区域" }
                     }
                 }
                 // 用户管理

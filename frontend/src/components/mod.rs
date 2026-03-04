@@ -13,3 +13,4 @@ pub mod resource_ticket;
 pub mod cloud_platform;
 pub mod machine_room;
 pub mod service_provider;
+pub mod network_zone;
