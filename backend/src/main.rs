@@ -56,6 +56,11 @@ use handlers::{
         get_cloud_service_assets,
         get_cloud_service_stats,
     },
+    resource_tickets::{
+        get_resource_tickets, get_resource_ticket, create_resource_ticket,
+        update_resource_ticket, delete_resource_ticket,
+        approve_ticket, provision_ticket, deliver_ticket,
+    },
 };
 
 #[tokio::main]
@@ -375,6 +380,12 @@ async fn main() {
         // .route("/api/cloud-assets/{id}", get(get_cloud_asset).put(update_cloud_asset).delete(delete_cloud_asset))
         // Scan
         .route("/api/scan", post(trigger_scan))
+        // Resource Tickets (资源工单)
+        .route("/api/resource-tickets", get(get_resource_tickets).post(create_resource_ticket))
+        .route("/api/resource-tickets/{id}", get(get_resource_ticket).put(update_resource_ticket).delete(delete_resource_ticket))
+        .route("/api/resource-tickets/{id}/approve", post(approve_ticket))
+        .route("/api/resource-tickets/{id}/provision", post(provision_ticket))
+        .route("/api/resource-tickets/{id}/deliver", post(deliver_ticket))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());

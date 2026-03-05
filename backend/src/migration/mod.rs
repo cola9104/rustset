@@ -7,6 +7,7 @@ mod m20250204_000001_add_provider_vendor;
 mod m20250204_000002_rename_cloud_platforms_to_cloud_services;
 mod m20250204_000003_add_regions;
 mod m20250301_000001_add_business_resource_fields;
+mod m20250306_000001_create_resource_tickets;
 
 pub struct Migrator;
 
@@ -21,6 +22,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250204_000002_rename_cloud_platforms_to_cloud_services::Migration),
             Box::new(m20250204_000003_add_regions::Migration),
             Box::new(m20250301_000001_add_business_resource_fields::Migration),
+            Box::new(m20250306_000001_create_resource_tickets::Migration),
         ]
     }
 }

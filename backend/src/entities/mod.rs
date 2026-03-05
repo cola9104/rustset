@@ -20,8 +20,10 @@ pub mod network_zone;
 pub mod custom_role;
 pub mod advanced_scan_task;
 pub mod quick_scan_result;
+pub mod resource_ticket;
 
 pub use cloud_zone::Entity as CloudZone;
+pub use resource_ticket::Entity as ResourceTicket;
 pub use cloud_platform::Entity as CloudPlatform;
 pub use cloud_service::Entity as CloudService;
 pub use region::Entity as Region;

@@ -97,6 +97,8 @@ pub enum ResourceType {
     Cloud,           // 云服务器 (ECS/云主机)
     #[serde(rename = "physical")]
     Physical,        // 物理机
+    #[serde(rename = "network")]
+    Network,         // 网络策略
 }
 
 impl ResourceType {
@@ -104,6 +106,7 @@ impl ResourceType {
         match self {
             ResourceType::Cloud => "cloud",
             ResourceType::Physical => "physical",
+            ResourceType::Network => "network",
         }
     }
 
@@ -111,6 +114,7 @@ impl ResourceType {
         match s {
             "cloud" => Some(ResourceType::Cloud),
             "physical" => Some(ResourceType::Physical),
+            "network" => Some(ResourceType::Network),
             _ => None,
         }
     }
@@ -1591,4 +1595,220 @@ pub struct CreateCloudServiceAssetRequest {
     pub status: String,                   // 初始状态：默认为"运行中"
     pub tags: Option<String>,             // 标签（JSON字符串）
     pub remarks: Option<String>,           // 备注
+}
+
+// ============== 资源工单系统 ==============
+
+/// 工单状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TicketStatus {
+    PendingApproval,   // 待审批
+    Approved,          // 已批准
+    Rejected,          // 已拒绝
+    PendingProvision,  // 待配置
+    Provisioning,      // 配置中
+    PendingDelivery,   // 待交付
+    Delivered,         // 已交付
+    Archived,          // 已归档
+}
+
+impl TicketStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TicketStatus::PendingApproval => "pending_approval",
+            TicketStatus::Approved => "approved",
+            TicketStatus::Rejected => "rejected",
+            TicketStatus::PendingProvision => "pending_provision",
+            TicketStatus::Provisioning => "provisioning",
+            TicketStatus::PendingDelivery => "pending_delivery",
+            TicketStatus::Delivered => "delivered",
+            TicketStatus::Archived => "archived",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "pending_approval" => TicketStatus::PendingApproval,
+            "approved" => TicketStatus::Approved,
+            "rejected" => TicketStatus::Rejected,
+            "pending_provision" => TicketStatus::PendingProvision,
+            "provisioning" => TicketStatus::Provisioning,
+            "pending_delivery" => TicketStatus::PendingDelivery,
+            "delivered" => TicketStatus::Delivered,
+            "archived" => TicketStatus::Archived,
+            _ => TicketStatus::PendingApproval,
+        }
+    }
+}
+
+/// 资源工单
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceTicket {
+    pub id: Option<i32>,
+    pub resource_type: ResourceType,
+    pub ecs_name: String,
+    pub ticket_status: TicketStatus,
+
+    // 关联字段
+    pub provider_id: Option<i32>,
+    pub provider_name: Option<String>,
+    pub cloud_platform_id: Option<i32>,
+    pub cloud_platform_name: Option<String>,
+    pub machine_room_id: Option<i32>,
+    pub machine_room_name: Option<String>,
+
+    // 资源配置
+    pub cloud_region: Option<String>,
+    pub cloud_category: Option<String>,
+    pub zone_name: Option<String>,
+    pub zone_cabinet: Option<String>,
+    pub rack_units: i32,
+
+    // 基本信息
+    pub customer_name: Option<String>,
+    pub application_name: Option<String>,
+    pub contract_name: Option<String>,
+    pub ecs_type: Option<String>,
+    pub ecs_os: Option<String>,
+    pub cpu_cores: i32,
+    pub memory_gb: i32,
+    pub system_disk: Option<String>,
+    pub system_disk_size_gb: i32,
+    pub data_disk: Option<String>,
+    pub has_security_product: bool,
+    pub ip_address: Option<String>,
+    pub delivery_status: Option<String>,
+    pub remarks: Option<String>,
+
+    // 时间信息
+    pub created_at: String,
+    pub updated_at: Option<String>,
+    pub created_by: String,
+
+    // 审批信息
+    pub approver: Option<String>,
+    pub approve_time: Option<String>,
+    pub approve_comment: Option<String>,
+
+    // 配置信息
+    pub provisioner: Option<String>,
+    pub provision_time: Option<String>,
+    pub provision_details: Option<String>,
+
+    // 交付信息
+    pub deliverer: Option<String>,
+    pub deliver_time: Option<String>,
+    pub deliver_comment: Option<String>,
+
+    // 网络策略专用字段
+    pub fw_source_zone: Option<String>,
+    pub fw_source_address: Option<String>,
+    pub fw_dest_zone: Option<String>,
+    pub fw_dest_address: Option<String>,
+    pub fw_protocol: Option<String>,
+    pub fw_port: Option<String>,
+    pub fw_direction: Option<String>,
+    pub fw_valid_until: Option<String>,
+    pub fw_firewall_name: Option<String>,
+}
+
+/// 创建资源工单请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateResourceTicketRequest {
+    pub resource_type: ResourceType,
+    pub ecs_name: String,
+
+    // 关联字段
+    pub provider_id: Option<i32>,
+    pub cloud_platform_id: Option<i32>,
+    pub machine_room_id: Option<i32>,
+
+    // 资源配置
+    pub cloud_region: Option<String>,
+    pub cloud_category: Option<String>,
+    pub zone_name: Option<String>,
+    pub zone_cabinet: Option<String>,
+    pub rack_units: Option<i32>,
+
+    // 基本信息
+    pub customer_name: Option<String>,
+    pub application_name: Option<String>,
+    pub contract_name: Option<String>,
+    pub ecs_type: Option<String>,
+    pub ecs_os: Option<String>,
+    pub cpu_cores: Option<i32>,
+    pub memory_gb: Option<i32>,
+    pub system_disk: Option<String>,
+    pub system_disk_size_gb: Option<i32>,
+    pub data_disk: Option<String>,
+    pub has_security_product: Option<bool>,
+    pub ip_address: Option<String>,
+    pub remarks: Option<String>,
+
+    // 网络策略专用字段
+    pub fw_source_zone: Option<String>,
+    pub fw_source_address: Option<String>,
+    pub fw_dest_zone: Option<String>,
+    pub fw_dest_address: Option<String>,
+    pub fw_protocol: Option<String>,
+    pub fw_port: Option<String>,
+    pub fw_direction: Option<String>,
+    pub fw_valid_until: Option<String>,
+    pub fw_firewall_name: Option<String>,
+}
+
+/// 更新资源工单请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateResourceTicketRequest {
+    pub ecs_name: Option<String>,
+    pub provider_id: Option<i32>,
+    pub cloud_platform_id: Option<i32>,
+    pub machine_room_id: Option<i32>,
+    pub cloud_region: Option<String>,
+    pub cloud_category: Option<String>,
+    pub zone_name: Option<String>,
+    pub zone_cabinet: Option<String>,
+    pub rack_units: Option<i32>,
+    pub customer_name: Option<String>,
+    pub application_name: Option<String>,
+    pub contract_name: Option<String>,
+    pub ecs_type: Option<String>,
+    pub ecs_os: Option<String>,
+    pub cpu_cores: Option<i32>,
+    pub memory_gb: Option<i32>,
+    pub system_disk: Option<String>,
+    pub system_disk_size_gb: Option<i32>,
+    pub data_disk: Option<String>,
+    pub has_security_product: Option<bool>,
+    pub ip_address: Option<String>,
+    pub delivery_status: Option<String>,
+    pub remarks: Option<String>,
+}
+
+/// 工单审批请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApproveTicketRequest {
+    pub approved: bool,
+    pub comment: Option<String>,
+}
+
+/// 工单配置请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvisionTicketRequest {
+    pub details: Option<String>,
+}
+
+/// 工单交付请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliverTicketRequest {
+    pub comment: Option<String>,
+}
+
+/// 资源工单查询参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceTicketQuery {
+    pub search_keyword: Option<String>,
+    pub resource_type: Option<String>,
+    pub ticket_status: Option<String>,
+    pub provider_id: Option<i32>,
 }

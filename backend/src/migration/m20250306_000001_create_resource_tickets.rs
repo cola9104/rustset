@@ -1,0 +1,211 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(ResourceTicket::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(ResourceTicket::Id)
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::ResourceType)
+                            .string()
+                            .not_null()
+                            .comment("资源类型: cloud, physical, network"),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::EcsName)
+                            .string()
+                            .not_null()
+                            .comment("资源名称"),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::TicketStatus)
+                            .string()
+                            .not_null()
+                            .default_value("pending_approval")
+                            .comment("工单状态"),
+                    )
+                    // 关联字段
+                    .col(ColumnDef::new(ResourceTicket::ProviderId).integer().null())
+                    .col(ColumnDef::new(ResourceTicket::ProviderName).string().null())
+                    .col(ColumnDef::new(ResourceTicket::CloudPlatformId).integer().null())
+                    .col(ColumnDef::new(ResourceTicket::CloudPlatformName).string().null())
+                    .col(ColumnDef::new(ResourceTicket::MachineRoomId).integer().null())
+                    .col(ColumnDef::new(ResourceTicket::MachineRoomName).string().null())
+                    // 资源配置
+                    .col(ColumnDef::new(ResourceTicket::CloudRegion).string().null())
+                    .col(ColumnDef::new(ResourceTicket::CloudCategory).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ZoneName).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ZoneCabinet).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::RackUnits)
+                            .integer()
+                            .not_null()
+                            .default_value(0),
+                    )
+                    // 基本信息
+                    .col(ColumnDef::new(ResourceTicket::CustomerName).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ApplicationName).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ContractName).string().null())
+                    .col(ColumnDef::new(ResourceTicket::EcsType).string().null())
+                    .col(ColumnDef::new(ResourceTicket::EcsOs).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::CpuCores)
+                            .integer()
+                            .not_null()
+                            .default_value(0),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::MemoryGb)
+                            .integer()
+                            .not_null()
+                            .default_value(0),
+                    )
+                    .col(ColumnDef::new(ResourceTicket::SystemDisk).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::SystemDiskSizeGb)
+                            .integer()
+                            .not_null()
+                            .default_value(0),
+                    )
+                    .col(ColumnDef::new(ResourceTicket::DataDisk).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::HasSecurityProduct)
+                            .integer()
+                            .not_null()
+                            .default_value(0),
+                    )
+                    .col(ColumnDef::new(ResourceTicket::IpAddress).string().null())
+                    .col(ColumnDef::new(ResourceTicket::DeliveryStatus).string().null())
+                    .col(ColumnDef::new(ResourceTicket::Remarks).string().null())
+                    // 时间信息
+                    .col(
+                        ColumnDef::new(ResourceTicket::CreatedAt)
+                            .string()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(ResourceTicket::UpdatedAt).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::CreatedBy)
+                            .string()
+                            .not_null(),
+                    )
+                    // 审批信息
+                    .col(ColumnDef::new(ResourceTicket::Approver).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ApproveTime).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ApproveComment).string().null())
+                    // 配置信息
+                    .col(ColumnDef::new(ResourceTicket::Provisioner).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ProvisionTime).string().null())
+                    .col(ColumnDef::new(ResourceTicket::ProvisionDetails).string().null())
+                    // 交付信息
+                    .col(ColumnDef::new(ResourceTicket::Deliverer).string().null())
+                    .col(ColumnDef::new(ResourceTicket::DeliverTime).string().null())
+                    .col(ColumnDef::new(ResourceTicket::DeliverComment).string().null())
+                    // 网络策略专用字段
+                    .col(ColumnDef::new(ResourceTicket::FwSourceZone).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwSourceAddress).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwDestZone).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwDestAddress).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwProtocol).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwPort).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwDirection).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwValidUntil).string().null())
+                    .col(ColumnDef::new(ResourceTicket::FwFirewallName).string().null())
+                    // 索引
+                    .index(
+                        Index::create()
+                            .name("idx_resource_tickets_type")
+                            .table(ResourceTicket::Table)
+                            .col(ResourceTicket::ResourceType),
+                    )
+                    .index(
+                        Index::create()
+                            .name("idx_resource_tickets_status")
+                            .table(ResourceTicket::Table)
+                            .col(ResourceTicket::TicketStatus),
+                    )
+                    .index(
+                        Index::create()
+                            .name("idx_resource_tickets_provider")
+                            .table(ResourceTicket::Table)
+                            .col(ResourceTicket::ProviderId),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(ResourceTicket::Table).to_owned())
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum ResourceTicket {
+    Table,
+    Id,
+    ResourceType,
+    EcsName,
+    TicketStatus,
+    ProviderId,
+    ProviderName,
+    CloudPlatformId,
+    CloudPlatformName,
+    MachineRoomId,
+    MachineRoomName,
+    CloudRegion,
+    CloudCategory,
+    ZoneName,
+    ZoneCabinet,
+    RackUnits,
+    CustomerName,
+    ApplicationName,
+    ContractName,
+    EcsType,
+    EcsOs,
+    CpuCores,
+    MemoryGb,
+    SystemDisk,
+    SystemDiskSizeGb,
+    DataDisk,
+    HasSecurityProduct,
+    IpAddress,
+    DeliveryStatus,
+    Remarks,
+    CreatedAt,
+    UpdatedAt,
+    CreatedBy,
+    Approver,
+    ApproveTime,
+    ApproveComment,
+    Provisioner,
+    ProvisionTime,
+    ProvisionDetails,
+    Deliverer,
+    DeliverTime,
+    DeliverComment,
+    FwSourceZone,
+    FwSourceAddress,
+    FwDestZone,
+    FwDestAddress,
+    FwProtocol,
+    FwPort,
+    FwDirection,
+    FwValidUntil,
+    FwFirewallName,
+}
