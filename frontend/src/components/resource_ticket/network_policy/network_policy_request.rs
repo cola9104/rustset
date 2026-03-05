@@ -50,7 +50,7 @@ pub enum AccessDirection {
 }
 
 impl AccessDirection {
-    fn display_name(&self) -> &'static str {
+    pub fn display_name(&self) -> &'static str {
         match self {
             AccessDirection::Inbound => "入站",
             AccessDirection::Outbound => "出站",
@@ -69,7 +69,7 @@ pub enum PolicyProtocol {
 }
 
 impl PolicyProtocol {
-    fn display_name(&self) -> &'static str {
+    pub fn display_name(&self) -> &'static str {
         match self {
             PolicyProtocol::Tcp => "TCP",
             PolicyProtocol::Udp => "UDP",
@@ -170,6 +170,7 @@ pub fn NetworkPolicyRequest() -> Element {
     let mut search_query = use_signal(String::new);
     let mut status_filter = use_signal(|| "全部".to_string());
     let mut show_new_form = use_signal(|| false);
+    let mut show_edit_form = use_signal(|| None::<i32>);
 
     // 统计数据
     let total_count = requests.read().len() as i32;
@@ -329,7 +330,9 @@ pub fn NetworkPolicyRequest() -> Element {
                             }
                         } else {
                             for req in filtered_requests.iter() {
-                                tr { class: "hover:bg-gray-50",
+                                tr {
+                                    key: "{req.id}",
+                                    class: "hover:bg-gray-50",
                                     td { class: "px-6 py-4",
                                         div { class: "text-sm font-medium text-gray-900", {req.title.clone()} }
                                         div { class: "text-sm text-gray-500", {req.department.clone()} }
@@ -380,10 +383,16 @@ pub fn NetworkPolicyRequest() -> Element {
                                             title: "查看详情",
                                             Icon { icon: FaEye, width: 16, height: 16 }
                                         }
-                                        button {
-                                            class: "text-green-600 hover:text-green-900 mr-3",
-                                            title: "编辑",
-                                            Icon { icon: FaPen, width: 16, height: 16 }
+                                        {
+                                            let edit_id = req.id;
+                                            rsx! {
+                                                button {
+                                                    class: "text-green-600 hover:text-green-900 mr-3",
+                                                    title: "编辑",
+                                                    onclick: move |_| show_edit_form.set(Some(edit_id)),
+                                                    Icon { icon: FaPen, width: 16, height: 16 }
+                                                }
+                                            }
                                         }
                                         button {
                                             class: "text-red-600 hover:text-red-900",
@@ -398,34 +407,44 @@ pub fn NetworkPolicyRequest() -> Element {
                 }
             }
 
-            // 新建策略表单模态框（待实现）
+            // 新建策略表单
             if *show_new_form.read() {
-                div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-                    div { class: "bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto",
-                        div { class: "flex items-center justify-between p-6 border-b border-gray-200",
-                            h3 { class: "text-lg font-bold text-gray-800", "申请新的网络策略" }
-                            button {
-                                class: "text-gray-400 hover:text-gray-600",
-                                onclick: move |_| show_new_form.set(false),
-                                "×"
-                            }
-                        }
-                        div { class: "p-6",
-                            p { class: "text-gray-500", "表单开发中..." }
-                            div { class: "flex justify-end gap-3 pt-4",
-                                button {
-                                    class: "px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100",
-                                    onclick: move |_| show_new_form.set(false),
-                                    "取消"
-                                }
-                                button {
-                                    class: "px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700",
-                                    "提交申请"
-                                }
-                            }
-                        }
-                    }
+                super::policy_form::NetworkPolicyForm {
+                    mode: crate::components::common::FormMode::New,
+                    request: None,
+                    on_save: move |new_request: NetworkPolicyRequest| {
+                        let mut reqs = requests.write();
+                        let new_id = reqs.iter().map(|r| r.id).max().unwrap_or(0) + 1;
+                        let mut new_request = new_request;
+                        new_request.id = new_id;
+                        reqs.push(new_request);
+                        show_new_form.set(false);
+                    },
+                    on_close: move |_| show_new_form.set(false),
                 }
+            }
+
+            // 编辑策略表单
+            {
+                let edit_id = *show_edit_form.read();
+                edit_id.map(|id| {
+                    let all_requests = requests.read().clone();
+                    let editing_request = all_requests.iter().find(|r| r.id == id).cloned();
+                    editing_request.map(|req| rsx! {
+                        super::policy_form::NetworkPolicyForm {
+                            mode: crate::components::common::FormMode::Edit,
+                            request: Some(req),
+                            on_save: move |updated_request: NetworkPolicyRequest| {
+                                let mut reqs = requests.write();
+                                if let Some(r) = reqs.iter_mut().find(|r| r.id == id) {
+                                    *r = updated_request;
+                                }
+                                show_edit_form.set(None);
+                            },
+                            on_close: move |_| show_edit_form.set(None),
+                        }
+                    })
+                }).flatten()
             }
         }
     }

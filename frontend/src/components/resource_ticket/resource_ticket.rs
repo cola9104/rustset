@@ -15,7 +15,16 @@ use crate::state::cloud_platform::{CloudPlatformConfig, init_cloud_platforms};
 use crate::state::machine_room::{MachineRoomConfig, init_machine_rooms};
 use crate::state::service_provider::{ServiceProviderConfig, init_service_providers};
 use crate::app::PROVIDERS_STATE;
+use crate::app::MACHINE_ROOMS_STATE;
 use crate::components::security_product::security_product_selector::{SecurityProductSelector, SelectedSecurityProducts};
+
+// 导入三个模块的表单组件和请求类型
+use crate::components::resource_ticket::cloud_service::CloudServiceForm;
+use crate::components::resource_ticket::cloud_service::cloud_service_request::{CloudServiceRequest, CloudServiceStatus};
+use crate::components::resource_ticket::physical_server::PhysicalServerForm;
+use crate::components::resource_ticket::physical_server::physical_server_request::{PhysicalServerRequest, PhysicalServerStatus};
+use crate::components::resource_ticket::network_policy::NetworkPolicyForm;
+use crate::components::resource_ticket::network_policy::network_policy_request::{NetworkPolicyRequest, NetworkPolicyStatus};
 
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
 #[allow(non_snake_case)]
@@ -325,15 +334,230 @@ pub fn ResourceTicket() -> Element {
                 }
             }
 
-            // 新建工单模态框（放在最外层）
-            if *show_new_form.read() {
-                NewTicketForm {
-                    tickets: tickets.clone(),
-                    default_resource_type: *resource_type_tab.read(),
-                    on_cancel: move |_| show_new_form.set(false),
-                    on_submit: move |_| {
-                        show_new_form.set(false);
-                    },
+            // 新建工单模态框（放在最外层）- 根据资源类型使用不同的表单组件
+            {
+                let current_resource_type = *resource_type_tab.read();
+                if *show_new_form.read() {
+                    Some(match current_resource_type {
+                        ResourceType::Cloud => rsx! {
+                            CloudServiceForm {
+                                mode: crate::components::common::FormMode::New,
+                                request: None,
+                                on_save: move |req: CloudServiceRequest| {
+                                    // 获取服务商名称
+                                    let provider_name = req.provider_id
+                                        .and_then(|pid| PROVIDERS_STATE.read()
+                                            .iter()
+                                            .find(|p| p.id == pid)
+                                            .map(|p| p.short_name.clone()))
+                                        .unwrap_or_default();
+
+                                    // 转换为 ResourceTicket 并添加
+                                    let new_ticket = ResourceTicket {
+                                        id: (tickets.read().len() + 1) as i32,
+                                        resource_type: ResourceType::Cloud,
+                                        ecs_name: req.title.clone(),
+                                        ticket_status: TicketStatus::PendingApproval,
+                                        provider_id: req.provider_id,
+                                        provider_name,
+                                        cloud_platform_id: None,
+                                        cloud_platform_name: req.cloud_platform.clone(),
+                                        machine_room_id: None,
+                                        machine_room_name: String::new(),
+                                        cloud_region: String::new(),
+                                        cloud_category: "云主机".to_string(),
+                                        zone_name: String::new(),
+                                        zone_cabinet: String::new(),
+                                        rack_units: 0,
+                                        customer_name: String::new(),
+                                        application_name: req.title.clone(),
+                                        contract_name: String::new(),
+                                        ecs_type: req.instance_type.clone(),
+                                        ecs_os: String::new(),
+                                        cpu_cores: 0,
+                                        memory_gb: 0,
+                                        system_disk: String::new(),
+                                        system_disk_size_gb: 0,
+                                        data_disk: String::new(),
+                                        has_security_product: !req.security_products.is_empty(),
+                                        ip_address: String::new(),
+                                        delivery_status: "未交付".to_string(),
+                                        remarks: req.purpose.clone(),
+                                        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+                                        updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+                                        created_by: req.applicant.clone(),
+                                        approver: None,
+                                        approve_time: None,
+                                        approve_comment: None,
+                                        provisioner: None,
+                                        provision_time: None,
+                                        provision_details: None,
+                                        deliverer: None,
+                                        deliver_time: None,
+                                        deliver_comment: None,
+                                        fw_source_zone: None,
+                                        fw_source_address: None,
+                                        fw_dest_zone: None,
+                                        fw_dest_address: None,
+                                        fw_protocol: None,
+                                        fw_port: None,
+                                        fw_direction: None,
+                                        fw_valid_until: None,
+                                        fw_firewall_name: None,
+                                    };
+                                    tickets.with_mut(|t| t.push(new_ticket));
+                                    show_new_form.set(false);
+                                },
+                                on_close: move |_| show_new_form.set(false),
+                            }
+                        },
+                        ResourceType::Physical => rsx! {
+                            PhysicalServerForm {
+                                mode: crate::components::common::FormMode::New,
+                                request: None,
+                                on_save: move |req: PhysicalServerRequest| {
+                                    // 获取服务商名称
+                                    let provider_name = req.provider_id
+                                        .and_then(|pid| PROVIDERS_STATE.read()
+                                            .iter()
+                                            .find(|p| p.id == pid)
+                                            .map(|p| p.short_name.clone()))
+                                        .unwrap_or_default();
+
+                                    // 获取机房名称
+                                    let machine_room_name = req.machine_room_id
+                                        .and_then(|rid| MACHINE_ROOMS_STATE.read()
+                                            .iter()
+                                            .find(|r| r.id == rid)
+                                            .map(|r| r.room_name.clone()))
+                                        .unwrap_or_default();
+
+                                    // 转换为 ResourceTicket 并添加
+                                    let new_ticket = ResourceTicket {
+                                        id: (tickets.read().len() + 1) as i32,
+                                        resource_type: ResourceType::Physical,
+                                        ecs_name: req.title.clone(),
+                                        ticket_status: TicketStatus::PendingApproval,
+                                        provider_id: req.provider_id,
+                                        provider_name,
+                                        cloud_platform_id: None,
+                                        cloud_platform_name: String::new(),
+                                        machine_room_id: req.machine_room_id,
+                                        machine_room_name,
+                                        cloud_region: String::new(),
+                                        cloud_category: "物理机".to_string(),
+                                        zone_name: String::new(),
+                                        zone_cabinet: String::new(),
+                                        rack_units: 0,
+                                        customer_name: String::new(),
+                                        application_name: req.title.clone(),
+                                        contract_name: String::new(),
+                                        ecs_type: req.server_type.clone(),
+                                        ecs_os: String::new(),
+                                        cpu_cores: 0,
+                                        memory_gb: 0,
+                                        system_disk: String::new(),
+                                        system_disk_size_gb: 0,
+                                        data_disk: String::new(),
+                                        has_security_product: !req.security_products.is_empty(),
+                                        ip_address: String::new(),
+                                        delivery_status: "未交付".to_string(),
+                                        remarks: req.purpose.clone(),
+                                        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+                                        updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+                                        created_by: req.applicant.clone(),
+                                        approver: None,
+                                        approve_time: None,
+                                        approve_comment: None,
+                                        provisioner: None,
+                                        provision_time: None,
+                                        provision_details: None,
+                                        deliverer: None,
+                                        deliver_time: None,
+                                        deliver_comment: None,
+                                        fw_source_zone: None,
+                                        fw_source_address: None,
+                                        fw_dest_zone: None,
+                                        fw_dest_address: None,
+                                        fw_protocol: None,
+                                        fw_port: None,
+                                        fw_direction: None,
+                                        fw_valid_until: None,
+                                        fw_firewall_name: None,
+                                    };
+                                    tickets.with_mut(|t| t.push(new_ticket));
+                                    show_new_form.set(false);
+                                },
+                                on_close: move |_| show_new_form.set(false),
+                            }
+                        },
+                        ResourceType::Network => rsx! {
+                            NetworkPolicyForm {
+                                mode: crate::components::common::FormMode::New,
+                                request: None,
+                                on_save: move |req: NetworkPolicyRequest| {
+                                    // 转换为 ResourceTicket 并添加
+                                    let new_ticket = ResourceTicket {
+                                        id: (tickets.read().len() + 1) as i32,
+                                        resource_type: ResourceType::Network,
+                                        ecs_name: req.title.clone(),
+                                        ticket_status: TicketStatus::PendingApproval,
+                                        provider_id: None,
+                                        provider_name: String::new(),
+                                        cloud_platform_id: None,
+                                        cloud_platform_name: String::new(),
+                                        machine_room_id: None,
+                                        machine_room_name: String::new(),
+                                        cloud_region: String::new(),
+                                        cloud_category: "网络策略".to_string(),
+                                        zone_name: String::new(),
+                                        zone_cabinet: String::new(),
+                                        rack_units: 0,
+                                        customer_name: String::new(),
+                                        application_name: req.title.clone(),
+                                        contract_name: String::new(),
+                                        ecs_type: String::new(),
+                                        ecs_os: String::new(),
+                                        cpu_cores: 0,
+                                        memory_gb: 0,
+                                        system_disk: String::new(),
+                                        system_disk_size_gb: 0,
+                                        data_disk: String::new(),
+                                        has_security_product: false,
+                                        ip_address: String::new(),
+                                        delivery_status: "未交付".to_string(),
+                                        remarks: String::new(),
+                                        created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+                                        updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+                                        created_by: req.applicant.clone(),
+                                        approver: None,
+                                        approve_time: None,
+                                        approve_comment: None,
+                                        provisioner: None,
+                                        provision_time: None,
+                                        provision_details: None,
+                                        deliverer: None,
+                                        deliver_time: None,
+                                        deliver_comment: None,
+                                        fw_source_zone: Some(req.source_zone.clone()),
+                                        fw_source_address: None,
+                                        fw_dest_zone: Some(req.destination_zone.clone()),
+                                        fw_dest_address: None,
+                                        fw_protocol: Some(req.protocol.display_name().to_string()),
+                                        fw_port: Some(req.port_range.clone()),
+                                        fw_direction: Some(req.direction.display_name().to_string()),
+                                        fw_valid_until: Some(req.valid_until.clone()),
+                                        fw_firewall_name: None,
+                                    };
+                                    tickets.with_mut(|t| t.push(new_ticket));
+                                    show_new_form.set(false);
+                                },
+                                on_close: move |_| show_new_form.set(false),
+                            }
+                        },
+                    })
+                } else {
+                    None
                 }
             }
         }
@@ -691,8 +915,7 @@ fn TicketDetailView(
                             InfoRow { label: "客户名称", value: ticket.customer_name.clone() }
                             InfoRow { label: "资源类型", value: ticket.resource_type.display_name() }
                             InfoRow { label: "云平台", value: ticket.cloud_platform_name.clone() }
-                            InfoRow { label: "区域", value: ticket.cloud_region.clone() }
-                            InfoRow { label: "可用区", value: ticket.zone_name.clone() }
+                            InfoRow { label: "云服务商", value: ticket.provider_name.clone() }
                             InfoRow { label: "申请人", value: ticket.created_by.clone() }
                             InfoRowElement { label: "申请状态",
                                 value: rsx! {
@@ -1468,15 +1691,6 @@ fn NewTicketForm(
                                             "{room.display_name()}"
                                         }
                                     }
-                                }
-                            }
-                            div {
-                                label { class: "block text-xs font-medium text-gray-600 mb-0.5", "区域" }
-                                input {
-                                    class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
-                                    placeholder: "如：A区",
-                                    value: "{zone_name}",
-                                    oninput: move |e| zone_name.set(e.value())
                                 }
                             }
                             div {

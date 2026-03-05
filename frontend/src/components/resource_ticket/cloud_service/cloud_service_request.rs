@@ -161,6 +161,7 @@ pub fn CloudServiceRequest() -> Element {
     let mut search_query = use_signal(String::new);
     let mut status_filter = use_signal(|| "全部".to_string());
     let mut show_new_form = use_signal(|| false);
+    let mut show_edit_form = use_signal(|| None::<i32>);
 
     // 统计数据
     let total_count = requests.read().len() as i32;
@@ -318,7 +319,9 @@ pub fn CloudServiceRequest() -> Element {
                             }
                         } else {
                             for req in filtered_requests.iter() {
-                                tr { class: "hover:bg-gray-50",
+                                tr {
+                                    key: "{req.id}",
+                                    class: "hover:bg-gray-50",
                                     td { class: "px-6 py-4",
                                         div { class: "text-sm font-medium text-gray-900", {req.title.clone()} }
                                         div { class: "text-sm text-gray-500", {req.department.clone()} }
@@ -356,10 +359,16 @@ pub fn CloudServiceRequest() -> Element {
                                             title: "查看详情",
                                             Icon { icon: FaEye, width: 16, height: 16 }
                                         }
-                                        button {
-                                            class: "text-green-600 hover:text-green-900 mr-3",
-                                            title: "编辑",
-                                            Icon { icon: FaPen, width: 16, height: 16 }
+                                        {
+                                            let edit_id = req.id;
+                                            rsx! {
+                                                button {
+                                                    class: "text-green-600 hover:text-green-900 mr-3",
+                                                    title: "编辑",
+                                                    onclick: move |_| show_edit_form.set(Some(edit_id)),
+                                                    Icon { icon: FaPen, width: 16, height: 16 }
+                                                }
+                                            }
                                         }
                                         button {
                                             class: "text-red-600 hover:text-red-900",
@@ -374,11 +383,12 @@ pub fn CloudServiceRequest() -> Element {
                 }
             }
 
-            // 新建申请表单模态框
+            // 新建申请表单
             if *show_new_form.read() {
-                NewCloudServiceForm {
-                    on_close: move |_| show_new_form.set(false),
-                    on_submit: move |new_request: CloudServiceRequest| {
+                super::service_form::CloudServiceForm {
+                    mode: crate::components::common::FormMode::New,
+                    request: None,
+                    on_save: move |new_request: CloudServiceRequest| {
                         let mut reqs = requests.write();
                         let new_id = reqs.iter().map(|r| r.id).max().unwrap_or(0) + 1;
                         let mut new_request = new_request;
@@ -386,246 +396,31 @@ pub fn CloudServiceRequest() -> Element {
                         reqs.push(new_request);
                         show_new_form.set(false);
                     },
+                    on_close: move |_| show_new_form.set(false),
                 }
             }
-        }
-    }
-}
 
-/// 新建云服务申请表单
-#[component]
-fn NewCloudServiceForm(
-    on_close: EventHandler<()>,
-    on_submit: EventHandler<CloudServiceRequest>,
-) -> Element {
-    let mut title = use_signal(String::new);
-    let mut applicant = use_signal(String::new);
-    let mut department = use_signal(String::new);
-    let mut provider_id = use_signal(|| None::<i32>);
-    let mut cloud_platform = use_signal(String::new);
-    let mut instance_type = use_signal(String::new);
-    let mut instance_count = use_signal(|| 1i32);
-    let mut duration = use_signal(|| "1年".to_string());
-    let mut purpose = use_signal(String::new);
-    let mut security_products = use_signal(SelectedSecurityProducts::new);
-    let mut show_security_selector = use_signal(|| false);
-
-    let providers = PROVIDERS_STATE.read();
-    let cloud_platforms = CLOUD_PLATFORMS_STATE.read();
-
-    rsx! {
-        div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
-            div { class: "bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto",
-                div { class: "flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white",
-                    h3 { class: "text-lg font-bold text-gray-800", "申请新的云服务资源" }
-                    button {
-                        class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |_| on_close.call(()),
-                        "×"
-                    }
-                }
-
-                div { class: "p-6 space-y-4",
-                    // 基本信息
-                    div { class: "grid grid-cols-2 gap-4",
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "申请标题 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "如：OA系统云服务器扩容",
-                                value: "{title}",
-                                oninput: move |e| title.set(e.value()),
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "申请人 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "申请人姓名",
-                                value: "{applicant}",
-                                oninput: move |e| applicant.set(e.value()),
-                            }
-                        }
-                    }
-
-                    div { class: "grid grid-cols-2 gap-4",
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "申请部门 *" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                placeholder: "如：信息部",
-                                value: "{department}",
-                                oninput: move |e| department.set(e.value()),
-                            }
-                        }
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                onchange: move |e| provider_id.set(e.value().parse::<i32>().ok()),
-                                option { value: "", "请选择服务商" }
-                                for provider in providers.iter() {
-                                    option { value: "{provider.id}", "{provider.short_name}" }
+            // 编辑申请表单
+            {
+                let edit_id = *show_edit_form.read();
+                edit_id.map(|id| {
+                    let all_requests = requests.read().clone();
+                    let editing_request = all_requests.iter().find(|r| r.id == id).cloned();
+                    editing_request.map(|req| rsx! {
+                        super::service_form::CloudServiceForm {
+                            mode: crate::components::common::FormMode::Edit,
+                            request: Some(req),
+                            on_save: move |updated_request: CloudServiceRequest| {
+                                let mut reqs = requests.write();
+                                if let Some(r) = reqs.iter_mut().find(|r| r.id == id) {
+                                    *r = updated_request;
                                 }
-                            }
+                                show_edit_form.set(None);
+                            },
+                            on_close: move |_| show_edit_form.set(None),
                         }
-                    }
-
-                    // 云资源配置
-                    div { class: "border-t pt-4 mt-2",
-                        h4 { class: "text-sm font-medium text-gray-700 mb-2", "云资源配置" }
-                        div { class: "grid grid-cols-2 gap-4",
-                            div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "云平台" }
-                                select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                    value: "{cloud_platform}",
-                                    onchange: move |e| cloud_platform.set(e.value()),
-                                    option { value: "", "请选择云平台" }
-                                    for platform in cloud_platforms.iter() {
-                                        option { value: "{platform.platform_name}", "{platform.platform_name}" }
-                                    }
-                                }
-                            }
-                            div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "实例类型" }
-                                input {
-                                    r#type: "text",
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                    placeholder: "如：ecs.g6.xlarge",
-                                    value: "{instance_type}",
-                                    oninput: move |e| instance_type.set(e.value()),
-                                }
-                            }
-                        }
-                        div { class: "grid grid-cols-2 gap-4 mt-4",
-                            div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "实例数量" }
-                                input {
-                                    r#type: "number",
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                    min: "1",
-                                    value: "{instance_count}",
-                                    oninput: move |e| instance_count.set(e.value().parse::<i32>().unwrap_or(1)),
-                                }
-                            }
-                            div {
-                                label { class: "block text-sm font-medium text-gray-700 mb-1", "使用时长" }
-                                select {
-                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                                    value: "{duration}",
-                                    onchange: move |e| duration.set(e.value()),
-                                    option { value: "1个月", "1个月" }
-                                    option { value: "3个月", "3个月" }
-                                    option { value: "6个月", "6个月" }
-                                    option { value: "1年", "1年" }
-                                    option { value: "2年", "2年" }
-                                    option { value: "3年", "3年" }
-                                }
-                            }
-                        }
-                    }
-
-                    // 用途说明
-                    div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "用途说明 *" }
-                        textarea {
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            rows: 3,
-                            placeholder: "请详细说明申请用途...",
-                            value: "{purpose}",
-                            oninput: move |e| purpose.set(e.value()),
-                        }
-                    }
-
-                    // 安全产品选择
-                    div { class: "border-t pt-4 mt-2",
-                        div { class: "flex items-center justify-between mb-2",
-                            h4 { class: "text-sm font-medium text-gray-700", "安全产品选择" }
-                            {
-                                let is_expanded = *show_security_selector.read();
-                                rsx! {
-                                    button {
-                                        class: "text-sm text-blue-600 hover:text-blue-800",
-                                        onclick: move |_| show_security_selector.set(!is_expanded),
-                                        if is_expanded {
-                                            "收起选择器"
-                                        } else {
-                                            "展开选择器"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        p { class: "text-xs text-gray-500 mb-3", "选择需要绑定的安全产品，每个分类只能选择一个" }
-
-                        if *show_security_selector.read() {
-                            crate::components::security_product::security_product_selector::SecurityProductSelector {
-                                selected: security_products,
-                                active_only: true,
-                            }
-                        } else {
-                            // 显示已选择的安全产品摘要
-                            div { class: "bg-gray-50 rounded-lg p-3",
-                                if security_products.read().is_empty() {
-                                    p { class: "text-sm text-gray-400", "尚未选择安全产品" }
-                                } else {
-                                    div { class: "space-y-1",
-                                        for (category, product_id) in security_products.read().products.iter() {
-                                            {
-                                                let products = SECURITY_PRODUCTS_STATE.read();
-                                                let product_name = products.iter()
-                                                    .find(|p| p.id == *product_id)
-                                                    .map(|p| p.name.clone())
-                                                    .unwrap_or_else(|| format!("产品{}", product_id));
-                                                rsx! {
-                                                    div { class: "flex items-center text-sm",
-                                                        Icon { icon: FaShieldHalved, width: 14, height: 14, class: "text-indigo-500 mr-2" }
-                                                        span { class: "text-gray-600", "{category.display_name()}: " }
-                                                        span { class: "font-medium text-gray-800", "{product_name}" }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                div { class: "flex justify-end gap-3 p-6 border-t sticky bottom-0 bg-white",
-                    button {
-                        class: "px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100",
-                        onclick: move |_| on_close.call(()),
-                        "取消"
-                    }
-                    button {
-                        class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
-                        onclick: move |_| {
-                            let new_request = CloudServiceRequest {
-                                id: 0,
-                                title: title.read().clone(),
-                                applicant: applicant.read().clone(),
-                                department: department.read().clone(),
-                                provider_id: *provider_id.read(),
-                                cloud_platform: cloud_platform.read().clone(),
-                                instance_type: instance_type.read().clone(),
-                                instance_count: *instance_count.read(),
-                                duration: duration.read().clone(),
-                                purpose: purpose.read().clone(),
-                                security_products: security_products.read().clone(),
-                                status: CloudServiceStatus::Pending,
-                                created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-                            };
-                            on_submit.call(new_request);
-                        },
-                        "提交申请"
-                    }
-                }
+                    })
+                }).flatten()
             }
         }
     }

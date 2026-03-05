@@ -136,13 +136,13 @@ pub fn ZoneForm(props: ZoneFormProps) -> Element {
         .collect();
 
     // 删除 CIDR 网段
-    let remove_cidr = move |index: usize| {
+    let mut remove_cidr = move |index: usize| {
         let mut data = form_data.write();
         data.cidr_blocks.remove(index);
     };
 
     // 删除 IP 范围
-    let remove_ip_range = move |index: usize| {
+    let mut remove_ip_range = move |index: usize| {
         let mut data = form_data.write();
         data.ip_ranges.remove(index);
     };
