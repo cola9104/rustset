@@ -24,6 +24,25 @@ impl ResourceType {
             ResourceType::Network => "fa-shield-halved",
         }
     }
+
+    /// 转换为后端API字符串
+    pub fn to_api_str(&self) -> &'static str {
+        match self {
+            ResourceType::Physical => "physical",
+            ResourceType::Cloud => "cloud",
+            ResourceType::Network => "network",
+        }
+    }
+
+    /// 从后端API字符串解析
+    pub fn from_api_str(s: &str) -> Self {
+        match s {
+            "physical" => ResourceType::Physical,
+            "cloud" => ResourceType::Cloud,
+            "network" => ResourceType::Network,
+            _ => ResourceType::Cloud,
+        }
+    }
 }
 
 /// 网络区域
@@ -159,6 +178,39 @@ impl TicketStatus {
             TicketStatus::PendingDelivery => "bg-orange-100 text-orange-800",
             TicketStatus::Delivered => "bg-teal-100 text-teal-800",
             TicketStatus::Archived => "bg-gray-100 text-gray-600",
+        }
+    }
+
+    /// 转换为后端API字符串
+    pub fn to_api_str(&self) -> &'static str {
+        match self {
+            TicketStatus::Draft => "draft",
+            TicketStatus::Submitted => "submitted",
+            TicketStatus::PendingApproval => "pending_approval",
+            TicketStatus::Approved => "approved",
+            TicketStatus::Rejected => "rejected",
+            TicketStatus::PendingProvision => "pending_provision",
+            TicketStatus::Provisioning => "provisioning",
+            TicketStatus::PendingDelivery => "pending_delivery",
+            TicketStatus::Delivered => "delivered",
+            TicketStatus::Archived => "archived",
+        }
+    }
+
+    /// 从后端API字符串解析
+    pub fn from_api_str(s: &str) -> Self {
+        match s {
+            "draft" => TicketStatus::Draft,
+            "submitted" => TicketStatus::Submitted,
+            "pending_approval" => TicketStatus::PendingApproval,
+            "approved" => TicketStatus::Approved,
+            "rejected" => TicketStatus::Rejected,
+            "pending_provision" => TicketStatus::PendingProvision,
+            "provisioning" => TicketStatus::Provisioning,
+            "pending_delivery" => TicketStatus::PendingDelivery,
+            "delivered" => TicketStatus::Delivered,
+            "archived" => TicketStatus::Archived,
+            _ => TicketStatus::Draft,
         }
     }
 }

@@ -34,7 +34,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(ResourceTicket::TicketStatus)
                             .string()
                             .not_null()
-                            .default_value("pending_approval")
+                            .default("pending_approval")
                             .comment("工单状态"),
                     )
                     // 关联字段
@@ -53,7 +53,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(ResourceTicket::RackUnits)
                             .integer()
                             .not_null()
-                            .default_value(0),
+                            .default(0),
                     )
                     // 基本信息
                     .col(ColumnDef::new(ResourceTicket::CustomerName).string().null())
@@ -65,27 +65,27 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(ResourceTicket::CpuCores)
                             .integer()
                             .not_null()
-                            .default_value(0),
+                            .default(0),
                     )
                     .col(
                         ColumnDef::new(ResourceTicket::MemoryGb)
                             .integer()
                             .not_null()
-                            .default_value(0),
+                            .default(0),
                     )
                     .col(ColumnDef::new(ResourceTicket::SystemDisk).string().null())
                     .col(
                         ColumnDef::new(ResourceTicket::SystemDiskSizeGb)
                             .integer()
                             .not_null()
-                            .default_value(0),
+                            .default(0),
                     )
                     .col(ColumnDef::new(ResourceTicket::DataDisk).string().null())
                     .col(
                         ColumnDef::new(ResourceTicket::HasSecurityProduct)
                             .integer()
                             .not_null()
-                            .default_value(0),
+                            .default(0),
                     )
                     .col(ColumnDef::new(ResourceTicket::IpAddress).string().null())
                     .col(ColumnDef::new(ResourceTicket::DeliveryStatus).string().null())

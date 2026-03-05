@@ -26,16 +26,48 @@ use crate::components::resource_ticket::physical_server::physical_server_request
 use crate::components::resource_ticket::network_policy::NetworkPolicyForm;
 use crate::components::resource_ticket::network_policy::network_policy_request::{NetworkPolicyRequest, NetworkPolicyStatus};
 
+// 导入API服务
+use crate::services::resource_ticket_api::{
+    fetch_resource_tickets,
+    create_resource_ticket,
+    approve_ticket,
+    provision_ticket,
+    deliver_ticket,
+};
+
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
 #[allow(non_snake_case)]
 pub fn ResourceTicket() -> Element {
     let auth = use_auth();
-    let mut tickets = use_signal(init_test_tickets);
+    let mut tickets = use_signal(Vec::new);
+    let mut is_loading = use_signal(|| true);
     let mut resource_type_tab = use_signal(|| ResourceType::Cloud);
     let mut workflow_tab = use_signal(|| auth.read().role.accessible_tabs().first().copied().unwrap_or(ApplicationTab::MyApplications));
     let mut search_query = use_signal(|| String::new());
     let mut selected_ticket = use_signal(|| Option::<i32>::None);
     let mut show_new_form = use_signal(|| false);
+
+    // 组件挂载时从API加载数据
+    {
+        let mut tickets_clone = tickets.clone();
+        let mut is_loading_clone = is_loading.clone();
+        use_effect(move || {
+            spawn(async move {
+                match fetch_resource_tickets().await {
+                    Ok(data) => {
+                        tickets_clone.set(data);
+                        is_loading_clone.set(false);
+                    }
+                    Err(e) => {
+                        tracing::error!("加载工单数据失败: {}", e);
+                        // 加载失败时使用测试数据
+                        tickets_clone.set(init_test_tickets());
+                        is_loading_clone.set(false);
+                    }
+                }
+            });
+        });
+    }
 
     let accessible_tabs = auth.read().role.accessible_tabs();
     let current_role = auth.read().role;
@@ -405,8 +437,19 @@ pub fn ResourceTicket() -> Element {
                                         fw_valid_until: None,
                                         fw_firewall_name: None,
                                     };
-                                    tickets.with_mut(|t| t.push(new_ticket));
-                                    show_new_form.set(false);
+                                    let mut tickets_ref = tickets.clone();
+                                    let mut form_close = show_new_form.clone();
+                                    spawn(async move {
+                                        match create_resource_ticket(&new_ticket).await {
+                                            Ok(created) => {
+                                                tickets_ref.with_mut(|t| t.push(created));
+                                                form_close.set(false);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("创建云服务工单失败: {}", e);
+                                            }
+                                        }
+                                    });
                                 },
                                 on_close: move |_| show_new_form.set(false),
                             }
@@ -485,8 +528,19 @@ pub fn ResourceTicket() -> Element {
                                         fw_valid_until: None,
                                         fw_firewall_name: None,
                                     };
-                                    tickets.with_mut(|t| t.push(new_ticket));
-                                    show_new_form.set(false);
+                                    let mut tickets_ref = tickets.clone();
+                                    let mut form_close = show_new_form.clone();
+                                    spawn(async move {
+                                        match create_resource_ticket(&new_ticket).await {
+                                            Ok(created) => {
+                                                tickets_ref.with_mut(|t| t.push(created));
+                                                form_close.set(false);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("创建物理机工单失败: {}", e);
+                                            }
+                                        }
+                                    });
                                 },
                                 on_close: move |_| show_new_form.set(false),
                             }
@@ -549,8 +603,19 @@ pub fn ResourceTicket() -> Element {
                                         fw_valid_until: Some(req.valid_until.clone()),
                                         fw_firewall_name: None,
                                     };
-                                    tickets.with_mut(|t| t.push(new_ticket));
-                                    show_new_form.set(false);
+                                    let mut tickets_ref = tickets.clone();
+                                    let mut form_close = show_new_form.clone();
+                                    spawn(async move {
+                                        match create_resource_ticket(&new_ticket).await {
+                                            Ok(created) => {
+                                                tickets_ref.with_mut(|t| t.push(created));
+                                                form_close.set(false);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("创建网络策略工单失败: {}", e);
+                                            }
+                                        }
+                                    });
                                 },
                                 on_close: move |_| show_new_form.set(false),
                             }
@@ -1061,7 +1126,7 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
     let ticket_clone2 = ticket.clone();
     let mut tickets_clone2 = tickets.clone();
     let mut comment = use_signal(|| String::new());
-    let _is_approving = use_signal(|| false);
+    let mut is_approving = use_signal(|| false);
 
     rsx! {
         div { class: "space-y-4",
@@ -1075,17 +1140,25 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
             }
             div { class: "flex gap-2",
                 button {
-                    class: "flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors",
+                    class: "flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50",
+                    disabled: *is_approving.read(),
                     onclick: move |_| {
-                        let mut ticket = ticket_clone.clone();
-                        ticket.ticket_status = TicketStatus::Approved;
-                        ticket.approver = Some("当前用户".to_string());
-                        ticket.approve_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
-                        ticket.approve_comment = if !comment.read().is_empty() { Some(comment.read().clone()) } else { None };
-                        let id = ticket.id;
-                        tickets_clone.with_mut(|tickets| {
-                            if let Some(t) = tickets.iter_mut().find(|t| t.id == id) {
-                                *t = ticket;
+                        let ticket_id = ticket_clone.id;
+                        let comment_val = if !comment.read().is_empty() { Some(comment.read().clone()) } else { None };
+                        let mut tickets_ref = tickets_clone.clone();
+                        is_approving.set(true);
+                        spawn(async move {
+                            match approve_ticket(ticket_id, true, comment_val).await {
+                                Ok(updated) => {
+                                    tickets_ref.with_mut(|tickets| {
+                                        if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
+                                            *t = updated;
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::error!("审批失败: {}", e);
+                                }
                             }
                         });
                     },
@@ -1093,17 +1166,25 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                     "通过"
                 }
                 button {
-                    class: "flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 transition-colors",
+                    class: "flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50",
+                    disabled: *is_approving.read(),
                     onclick: move |_| {
-                        let mut ticket = ticket_clone2.clone();
-                        ticket.ticket_status = TicketStatus::Rejected;
-                        ticket.approver = Some("当前用户".to_string());
-                        ticket.approve_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
-                        ticket.approve_comment = if !comment.read().is_empty() { Some(comment.read().clone()) } else { Some("拒绝".to_string()) };
-                        let id = ticket.id;
-                        tickets_clone2.with_mut(|tickets| {
-                            if let Some(t) = tickets.iter_mut().find(|t| t.id == id) {
-                                *t = ticket;
+                        let ticket_id = ticket_clone2.id;
+                        let comment_val = if !comment.read().is_empty() { Some(comment.read().clone()) } else { Some("拒绝".to_string()) };
+                        let mut tickets_ref = tickets_clone2.clone();
+                        is_approving.set(true);
+                        spawn(async move {
+                            match approve_ticket(ticket_id, false, comment_val).await {
+                                Ok(updated) => {
+                                    tickets_ref.with_mut(|tickets| {
+                                        if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
+                                            *t = updated;
+                                        }
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::error!("审批拒绝失败: {}", e);
+                                }
                             }
                         });
                     },
@@ -1122,6 +1203,7 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
     let mut tickets_clone = tickets.clone();
     let mut details = use_signal(|| String::new());
     let mut ip_address = use_signal(|| ticket.ip_address.clone());
+    let mut is_provisioning = use_signal(|| false);
 
     rsx! {
         div { class: "space-y-4",
@@ -1143,18 +1225,26 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
                 oninput: move |e| details.set(e.value())
             }
             button {
-                class: "w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2 transition-colors",
+                class: "w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50",
+                disabled: *is_provisioning.read(),
                 onclick: move |_| {
-                    let mut ticket = ticket_clone.clone();
-                    ticket.ticket_status = TicketStatus::PendingDelivery;
-                    ticket.ip_address = ip_address.read().clone();
-                    ticket.provisioner = Some("当前用户".to_string());
-                    ticket.provision_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
-                    ticket.provision_details = if !details.read().is_empty() { Some(details.read().clone()) } else { None };
-                    let id = ticket.id;
-                    tickets_clone.with_mut(|tickets| {
-                        if let Some(t) = tickets.iter_mut().find(|t| t.id == id) {
-                            *t = ticket;
+                    let ticket_id = ticket_clone.id;
+                    let ip_val = if !ip_address.read().is_empty() { Some(ip_address.read().clone()) } else { None };
+                    let details_val = if !details.read().is_empty() { Some(details.read().clone()) } else { None };
+                    let mut tickets_ref = tickets_clone.clone();
+                    is_provisioning.set(true);
+                    spawn(async move {
+                        match provision_ticket(ticket_id, ip_val, details_val).await {
+                            Ok(updated) => {
+                                tickets_ref.with_mut(|tickets| {
+                                    if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
+                                        *t = updated;
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("配置失败: {}", e);
+                            }
                         }
                     });
                 },
@@ -1171,6 +1261,7 @@ fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
     let ticket_clone = ticket.clone();
     let mut tickets_clone = tickets.clone();
     let mut comment = use_signal(|| String::new());
+    let mut is_delivering = use_signal(|| false);
 
     rsx! {
         div { class: "space-y-4",
@@ -1192,18 +1283,25 @@ fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                 oninput: move |e| comment.set(e.value())
             }
             button {
-                class: "w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2 transition-colors",
+                class: "w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50",
+                disabled: *is_delivering.read(),
                 onclick: move |_| {
-                    let mut ticket = ticket_clone.clone();
-                    ticket.ticket_status = TicketStatus::Delivered;
-                    ticket.delivery_status = "已交付".to_string();
-                    ticket.deliverer = Some("当前用户".to_string());
-                    ticket.deliver_time = Some(chrono::Local::now().format("%Y-%m-%d %H:%M").to_string());
-                    ticket.deliver_comment = if !comment.read().is_empty() { Some(comment.read().clone()) } else { None };
-                    let id = ticket.id;
-                    tickets_clone.with_mut(|tickets| {
-                        if let Some(t) = tickets.iter_mut().find(|t| t.id == id) {
-                            *t = ticket;
+                    let ticket_id = ticket_clone.id;
+                    let comment_val = if !comment.read().is_empty() { Some(comment.read().clone()) } else { None };
+                    let mut tickets_ref = tickets_clone.clone();
+                    is_delivering.set(true);
+                    spawn(async move {
+                        match deliver_ticket(ticket_id, comment_val).await {
+                            Ok(updated) => {
+                                tickets_ref.with_mut(|tickets| {
+                                    if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
+                                        *t = updated;
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("交付失败: {}", e);
+                            }
                         }
                     });
                 },
@@ -1553,10 +1651,21 @@ fn NewTicketForm(
                             None
                         },
                     };
-                    tickets.with_mut(|apps| {
-                        apps.push(new_app);
+                    let mut tickets_ref = tickets.clone();
+                    let on_submit_callback = on_submit.clone();
+                    spawn(async move {
+                        match create_resource_ticket(&new_app).await {
+                            Ok(created) => {
+                                tickets_ref.with_mut(|apps| {
+                                    apps.push(created);
+                                });
+                                on_submit_callback.call(());
+                            }
+                            Err(e) => {
+                                tracing::error!("创建工单失败: {}", e);
+                            }
+                        }
                     });
-                    on_submit.call(());
                 },
 
                 // 基本信息

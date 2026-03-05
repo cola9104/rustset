@@ -1,6 +1,7 @@
 mod app;
 mod components;
 mod router;
+mod services;
 mod state;
 
 fn main() {
