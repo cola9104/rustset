@@ -36,6 +36,20 @@ impl SelectedSecurityProducts {
     pub fn is_empty(&self) -> bool {
         self.products.is_empty()
     }
+
+    /// 将选中的安全产品转换为逗号分隔的名称字符串
+    pub fn to_names_string(&self, all_products: &[SecurityProduct]) -> String {
+        self.products
+            .iter()
+            .filter_map(|(_, product_id)| {
+                all_products
+                    .iter()
+                    .find(|p| p.id == *product_id)
+                    .map(|p| format!("{}({})", p.name, p.vendor))
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 /// 安全产品选择器组件属性

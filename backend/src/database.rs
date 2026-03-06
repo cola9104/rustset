@@ -116,7 +116,7 @@ impl Database {
     /// Execute a raw SQL query
     pub async fn execute(&self, sql: &str) -> Result<u64, DbErr> {
         let stmt = Statement::from_string(self.conn.get_database_backend(), sql.to_string());
-        let result = self.conn.execute(stmt).await?;
+        let result = self.conn.execute_raw(stmt).await?;
         Ok(result.rows_affected())
     }
 }

@@ -15,6 +15,7 @@ use shared::{
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
+use sea_orm::ConnectionTrait;
 
 mod state;
 mod utils;
@@ -171,7 +172,6 @@ async fn main() {
 
     // 添加新的申请与交付状态字段（如果不存在）
     // 注意：这些 SQL 语句会在表已存在时执行，用于升级现有数据库
-    use sea_orm::{ConnectionTrait, Statement, DatabaseBackend, ExecResult};
     let alter_sqls = vec![
         "ALTER TABLE business_resources ADD COLUMN application_status TEXT DEFAULT '待审核'",
         "ALTER TABLE business_resources ADD COLUMN delivery_status TEXT DEFAULT '待交付'",
@@ -180,9 +180,8 @@ async fn main() {
     ];
     // 尝试执行 ALTER TABLE，如果字段已存在会忽略错误
     for sql in alter_sqls {
-        // SQLite 需要明确指定后端
-        let stmt = Statement::from_string(DatabaseBackend::Sqlite, sql.to_string());
-        match db_conn.execute(stmt).await {
+        // 使用 execute_unprepared 执行原生 SQL
+        match db_conn.execute_unprepared(sql).await {
             Ok(result) => {
                 println!("Added new column(s), result: {:?}", result);
             },

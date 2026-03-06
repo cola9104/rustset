@@ -16,6 +16,7 @@ use crate::state::machine_room::{MachineRoomConfig, init_machine_rooms};
 use crate::state::service_provider::{ServiceProviderConfig, init_service_providers};
 use crate::app::PROVIDERS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
+use crate::app::SECURITY_PRODUCTS_STATE;
 use crate::components::security_product::security_product_selector::{SecurityProductSelector, SelectedSecurityProducts};
 
 // 导入三个模块的表单组件和请求类型
@@ -412,6 +413,7 @@ pub fn ResourceTicket() -> Element {
                                         system_disk_size_gb: 0,
                                         data_disk: String::new(),
                                         has_security_product: !req.security_products.is_empty(),
+                                        security_products: req.security_products.to_names_string(&SECURITY_PRODUCTS_STATE.read()),
                                         ip_address: String::new(),
                                         delivery_status: "未交付".to_string(),
                                         remarks: req.purpose.clone(),
@@ -503,6 +505,7 @@ pub fn ResourceTicket() -> Element {
                                         system_disk_size_gb: 0,
                                         data_disk: String::new(),
                                         has_security_product: !req.security_products.is_empty(),
+                                        security_products: req.security_products.to_names_string(&SECURITY_PRODUCTS_STATE.read()),
                                         ip_address: String::new(),
                                         delivery_status: "未交付".to_string(),
                                         remarks: req.purpose.clone(),
@@ -578,6 +581,7 @@ pub fn ResourceTicket() -> Element {
                                         system_disk_size_gb: 0,
                                         data_disk: String::new(),
                                         has_security_product: false,
+                                        security_products: String::new(),
                                         ip_address: String::new(),
                                         delivery_status: "未交付".to_string(),
                                         remarks: String::new(),
@@ -1030,7 +1034,11 @@ fn TicketDetailView(
                                 InfoRow { label: "数据盘", value: ticket.data_disk.clone() }
                                 InfoRow { label: "IP地址", value: if ticket.ip_address.is_empty() { "未分配".to_string() } else { ticket.ip_address.clone() } }
                                 InfoRow { label: "安全产品",
-                                    value: if ticket.has_security_product { "是" } else { "否" }
+                                    value: if ticket.security_products.is_empty() {
+                                        "无".to_string()
+                                    } else {
+                                        ticket.security_products.clone()
+                                    }
                                 }
                             }
                         }
@@ -1587,6 +1595,11 @@ fn NewTicketForm(
                             false
                         } else {
                             *has_security.read()
+                        },
+                        security_products: if resource_type == ResourceType::Network {
+                            String::new()
+                        } else {
+                            selected_security_products.read().to_names_string(&SECURITY_PRODUCTS_STATE.read())
                         },
                         ip_address: String::new(),
                         delivery_status: "未交付".to_string(),

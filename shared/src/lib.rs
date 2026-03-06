@@ -429,6 +429,7 @@ pub struct UpdateBusinessResourceRequest {
     pub completion_time: Option<DateTime<Utc>>,
     pub release_time: Option<DateTime<Utc>>,
     pub has_security_product: Option<bool>,
+    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub ecs_login_method: Option<String>,
     pub ecs_login_username: Option<String>,
@@ -1676,6 +1677,7 @@ pub struct ResourceTicket {
     pub system_disk_size_gb: i32,
     pub data_disk: Option<String>,
     pub has_security_product: bool,
+    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub delivery_status: Option<String>,
     pub remarks: Option<String>,
@@ -1742,6 +1744,7 @@ pub struct CreateResourceTicketRequest {
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
     pub has_security_product: Option<bool>,
+    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub remarks: Option<String>,
 
@@ -1780,6 +1783,7 @@ pub struct UpdateResourceTicketRequest {
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
     pub has_security_product: Option<bool>,
+    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub delivery_status: Option<String>,
     pub remarks: Option<String>,

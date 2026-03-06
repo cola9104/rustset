@@ -52,8 +52,8 @@ start_backend() {
         cargo build --bin backend
     fi
 
-    # 启动后端 (使用相对路径)
-    DATABASE_URL="sqlite:data/rustset.db" nohup ./target/debug/backend > /tmp/rustset-backend.log 2>&1 &
+    # 启动后端 (使用 PostgreSQL)
+    DATABASE_URL="postgres://rustset:rustset123@localhost:5432/rustset" nohup ./target/debug/backend > /tmp/rustset-backend.log 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > /tmp/rustset-backend.pid
 
@@ -84,7 +84,7 @@ start_frontend() {
 
     # 启动前端服务
     cd "$PROJECT_ROOT"
-    nohup python3 -m http.server 8080 --directory frontend/dist > /tmp/rustset-frontend.log 2>&1 &
+    nohup python3 -m http.server 8080 --directory /home/cola/tools/rustset/frontend/dist > /tmp/rustset-frontend.log 2>&1 &
     FRONTEND_PID=$!
     echo $FRONTEND_PID > /tmp/rustset-frontend.pid
 

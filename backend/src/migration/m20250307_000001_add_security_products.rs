@@ -1,7 +1,5 @@
 use sea_orm_migration::prelude::*;
-use sea_orm_migration::schema::pk_auto;
 
-#[derive(DeriveMigrationName)]
 pub struct Migration;
 
 #[async_trait::async_trait]
@@ -15,7 +13,6 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(ResourceTicket::SecurityProducts)
                             .text()
                             .null()
-                            .default_value("")
                     )
             )
             .await
