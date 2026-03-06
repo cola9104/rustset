@@ -1643,3 +1643,603 @@ pub async fn delete_cloud_virtual_machine(
     Ok(())
 }
 
+// ==================== Service Provider CRUD ====================
+
+use crate::entities::{service_provider, machine_room, cloud_platform_config, security_product, ServiceProvider, MachineRoom, SecurityProduct};
+use sea_orm::QueryFilter;
+
+/// 服务商数据返回结构
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct DbServiceProvider {
+    pub id: i32,
+    pub provider_name: String,
+    pub provider_code: String,
+    pub short_name: String,
+    pub logo_url: Option<String>,
+    pub contact_person: String,
+    pub contact_phone: String,
+    pub contact_email: String,
+    pub headquarters: String,
+    pub service_area: String,
+    pub business_license: String,
+    pub remarks: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
+impl From<service_provider::Model> for DbServiceProvider {
+    fn from(m: service_provider::Model) -> Self {
+        Self {
+            id: m.id,
+            provider_name: m.provider_name,
+            provider_code: m.provider_code,
+            short_name: m.short_name,
+            logo_url: m.logo_url,
+            contact_person: m.contact_person,
+            contact_phone: m.contact_phone,
+            contact_email: m.contact_email,
+            headquarters: m.headquarters,
+            service_area: m.service_area,
+            business_license: m.business_license,
+            remarks: m.remarks,
+            status: m.status,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        }
+    }
+}
+
+pub async fn get_all_service_providers(conn: &DatabaseConnection) -> Result<Vec<DbServiceProvider>, DbErr> {
+    let providers = service_provider::Entity::find()
+        .all(conn)
+        .await?;
+    Ok(providers.into_iter().map(|p| p.into()).collect())
+}
+
+pub async fn get_service_provider_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbServiceProvider>, DbErr> {
+    let provider = service_provider::Entity::find_by_id(id)
+        .one(conn)
+        .await?;
+    Ok(provider.map(|p| p.into()))
+}
+
+pub async fn insert_service_provider(
+    conn: &DatabaseConnection,
+    provider_name: &str,
+    provider_code: &str,
+    short_name: &str,
+    logo_url: Option<&str>,
+    contact_person: &str,
+    contact_phone: &str,
+    contact_email: &str,
+    headquarters: &str,
+    service_area: &str,
+    business_license: &str,
+    remarks: Option<&str>,
+    status: &str,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let provider = service_provider::ActiveModel {
+        id: NotSet,
+        provider_name: Set(provider_name.to_string()),
+        provider_code: Set(provider_code.to_string()),
+        short_name: Set(short_name.to_string()),
+        logo_url: Set(logo_url.map(|s| s.to_string())),
+        contact_person: Set(contact_person.to_string()),
+        contact_phone: Set(contact_phone.to_string()),
+        contact_email: Set(contact_email.to_string()),
+        headquarters: Set(headquarters.to_string()),
+        service_area: Set(service_area.to_string()),
+        business_license: Set(business_license.to_string()),
+        remarks: Set(remarks.map(|s| s.to_string())),
+        status: Set(status.to_string()),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    let result = provider.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_service_provider(
+    conn: &DatabaseConnection,
+    id: i32,
+    provider_name: Option<&str>,
+    provider_code: Option<&str>,
+    short_name: Option<&str>,
+    logo_url: Option<&str>,
+    contact_person: Option<&str>,
+    contact_phone: Option<&str>,
+    contact_email: Option<&str>,
+    headquarters: Option<&str>,
+    service_area: Option<&str>,
+    business_license: Option<&str>,
+    remarks: Option<&str>,
+    status: Option<&str>,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    if let Some(provider) = service_provider::Entity::find_by_id(id).one(conn).await? {
+        let mut provider_active: service_provider::ActiveModel = provider.into();
+        if let Some(v) = provider_name { provider_active.provider_name = Set(v.to_string()); }
+        if let Some(v) = provider_code { provider_active.provider_code = Set(v.to_string()); }
+        if let Some(v) = short_name { provider_active.short_name = Set(v.to_string()); }
+        if let Some(v) = logo_url { provider_active.logo_url = Set(Some(v.to_string())); }
+        if let Some(v) = contact_person { provider_active.contact_person = Set(v.to_string()); }
+        if let Some(v) = contact_phone { provider_active.contact_phone = Set(v.to_string()); }
+        if let Some(v) = contact_email { provider_active.contact_email = Set(v.to_string()); }
+        if let Some(v) = headquarters { provider_active.headquarters = Set(v.to_string()); }
+        if let Some(v) = service_area { provider_active.service_area = Set(v.to_string()); }
+        if let Some(v) = business_license { provider_active.business_license = Set(v.to_string()); }
+        if let Some(v) = remarks { provider_active.remarks = Set(Some(v.to_string())); }
+        if let Some(v) = status { provider_active.status = Set(v.to_string()); }
+        if let Some(v) = updated_at { provider_active.updated_at = Set(Some(v.to_string())); }
+        provider_active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_service_provider(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    service_provider::Entity::delete_by_id(id)
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+
+// ==================== Machine Room CRUD ====================
+
+/// 机房数据返回结构
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct DbMachineRoom {
+    pub id: i32,
+    pub room_name: String,
+    pub room_code: String,
+    pub facility_type: String,
+    pub address: String,
+    pub provider_id: i32,
+    pub room_type: String,
+    pub contact_person: String,
+    pub contact_phone: String,
+    pub floor: Option<String>,
+    pub cabinet_count: Option<i32>,
+    pub area_size: Option<String>,
+    pub remarks: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
+impl From<machine_room::Model> for DbMachineRoom {
+    fn from(m: machine_room::Model) -> Self {
+        Self {
+            id: m.id,
+            room_name: m.room_name,
+            room_code: m.room_code,
+            facility_type: m.facility_type,
+            address: m.address,
+            provider_id: m.provider_id,
+            room_type: m.room_type,
+            contact_person: m.contact_person,
+            contact_phone: m.contact_phone,
+            floor: m.floor,
+            cabinet_count: m.cabinet_count,
+            area_size: m.area_size,
+            remarks: m.remarks,
+            status: m.status,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        }
+    }
+}
+
+pub async fn get_all_machine_rooms(conn: &DatabaseConnection) -> Result<Vec<DbMachineRoom>, DbErr> {
+    let rooms = machine_room::Entity::find()
+        .all(conn)
+        .await?;
+    Ok(rooms.into_iter().map(|r| r.into()).collect())
+}
+
+pub async fn get_machine_room_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbMachineRoom>, DbErr> {
+    let room = machine_room::Entity::find_by_id(id)
+        .one(conn)
+        .await?;
+    Ok(room.map(|r| r.into()))
+}
+
+pub async fn insert_machine_room(
+    conn: &DatabaseConnection,
+    room_name: &str,
+    room_code: &str,
+    facility_type: &str,
+    address: &str,
+    provider_id: i32,
+    room_type: &str,
+    contact_person: &str,
+    contact_phone: &str,
+    floor: Option<&str>,
+    cabinet_count: Option<i32>,
+    area_size: Option<&str>,
+    remarks: Option<&str>,
+    status: &str,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let room = machine_room::ActiveModel {
+        id: NotSet,
+        room_name: Set(room_name.to_string()),
+        room_code: Set(room_code.to_string()),
+        facility_type: Set(facility_type.to_string()),
+        address: Set(address.to_string()),
+        provider_id: Set(provider_id),
+        room_type: Set(room_type.to_string()),
+        contact_person: Set(contact_person.to_string()),
+        contact_phone: Set(contact_phone.to_string()),
+        floor: Set(floor.map(|s| s.to_string())),
+        cabinet_count: Set(cabinet_count),
+        area_size: Set(area_size.map(|s| s.to_string())),
+        remarks: Set(remarks.map(|s| s.to_string())),
+        status: Set(status.to_string()),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    let result = room.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_machine_room(
+    conn: &DatabaseConnection,
+    id: i32,
+    room_name: Option<&str>,
+    room_code: Option<&str>,
+    facility_type: Option<&str>,
+    address: Option<&str>,
+    provider_id: Option<i32>,
+    room_type: Option<&str>,
+    contact_person: Option<&str>,
+    contact_phone: Option<&str>,
+    floor: Option<&str>,
+    cabinet_count: Option<i32>,
+    area_size: Option<&str>,
+    remarks: Option<&str>,
+    status: Option<&str>,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    if let Some(room) = machine_room::Entity::find_by_id(id).one(conn).await? {
+        let mut room_active: machine_room::ActiveModel = room.into();
+        if let Some(v) = room_name { room_active.room_name = Set(v.to_string()); }
+        if let Some(v) = room_code { room_active.room_code = Set(v.to_string()); }
+        if let Some(v) = facility_type { room_active.facility_type = Set(v.to_string()); }
+        if let Some(v) = address { room_active.address = Set(v.to_string()); }
+        if let Some(v) = provider_id { room_active.provider_id = Set(v); }
+        if let Some(v) = room_type { room_active.room_type = Set(v.to_string()); }
+        if let Some(v) = contact_person { room_active.contact_person = Set(v.to_string()); }
+        if let Some(v) = contact_phone { room_active.contact_phone = Set(v.to_string()); }
+        if let Some(v) = floor { room_active.floor = Set(Some(v.to_string())); }
+        if let Some(v) = cabinet_count { room_active.cabinet_count = Set(Some(v)); }
+        if let Some(v) = area_size { room_active.area_size = Set(Some(v.to_string())); }
+        if let Some(v) = remarks { room_active.remarks = Set(Some(v.to_string())); }
+        if let Some(v) = status { room_active.status = Set(v.to_string()); }
+        if let Some(v) = updated_at { room_active.updated_at = Set(Some(v.to_string())); }
+        room_active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_machine_room(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    machine_room::Entity::delete_by_id(id)
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+
+// ==================== Cloud Platform Config CRUD ====================
+
+/// 云平台配置数据返回结构
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct DbCloudPlatformConfig {
+    pub id: i32,
+    pub platform_name: String,
+    pub provider_id: i32,
+    pub cloud_type: String,
+    pub foundation: String,
+    pub region_id: String,
+    pub machine_room_id: i32,
+    pub access_key_id: String,
+    pub access_key_secret: String,
+    pub remarks: Option<String>,
+    pub status: String,
+    pub last_test_time: Option<String>,
+    pub last_test_result: Option<String>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
+impl From<cloud_platform_config::Model> for DbCloudPlatformConfig {
+    fn from(m: cloud_platform_config::Model) -> Self {
+        Self {
+            id: m.id,
+            platform_name: m.platform_name,
+            provider_id: m.provider_id,
+            cloud_type: m.cloud_type,
+            foundation: m.foundation,
+            region_id: m.region_id,
+            machine_room_id: m.machine_room_id,
+            access_key_id: m.access_key_id,
+            access_key_secret: m.access_key_secret,
+            remarks: m.remarks,
+            status: m.status,
+            last_test_time: m.last_test_time,
+            last_test_result: m.last_test_result,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+        }
+    }
+}
+
+pub async fn get_all_cloud_platform_configs(conn: &DatabaseConnection) -> Result<Vec<DbCloudPlatformConfig>, DbErr> {
+    let configs = cloud_platform_config::Entity::find()
+        .all(conn)
+        .await?;
+    Ok(configs.into_iter().map(|c| c.into()).collect())
+}
+
+pub async fn get_cloud_platform_config_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbCloudPlatformConfig>, DbErr> {
+    let config = cloud_platform_config::Entity::find_by_id(id)
+        .one(conn)
+        .await?;
+    Ok(config.map(|c| c.into()))
+}
+
+pub async fn insert_cloud_platform_config(
+    conn: &DatabaseConnection,
+    platform_name: &str,
+    provider_id: i32,
+    cloud_type: &str,
+    foundation: &str,
+    region_id: &str,
+    machine_room_id: i32,
+    access_key_id: &str,
+    access_key_secret: &str,
+    remarks: Option<&str>,
+    status: &str,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let config = cloud_platform_config::ActiveModel {
+        id: NotSet,
+        platform_name: Set(platform_name.to_string()),
+        provider_id: Set(provider_id),
+        cloud_type: Set(cloud_type.to_string()),
+        foundation: Set(foundation.to_string()),
+        region_id: Set(region_id.to_string()),
+        machine_room_id: Set(machine_room_id),
+        access_key_id: Set(access_key_id.to_string()),
+        access_key_secret: Set(access_key_secret.to_string()),
+        remarks: Set(remarks.map(|s| s.to_string())),
+        status: Set(status.to_string()),
+        last_test_time: Set(None),
+        last_test_result: Set(None),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    let result = config.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_cloud_platform_config(
+    conn: &DatabaseConnection,
+    id: i32,
+    platform_name: Option<&str>,
+    provider_id: Option<i32>,
+    cloud_type: Option<&str>,
+    foundation: Option<&str>,
+    region_id: Option<&str>,
+    machine_room_id: Option<i32>,
+    access_key_id: Option<&str>,
+    access_key_secret: Option<&str>,
+    remarks: Option<&str>,
+    status: Option<&str>,
+    last_test_time: Option<&str>,
+    last_test_result: Option<&str>,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    if let Some(config) = cloud_platform_config::Entity::find_by_id(id).one(conn).await? {
+        let mut config_active: cloud_platform_config::ActiveModel = config.into();
+        if let Some(v) = platform_name { config_active.platform_name = Set(v.to_string()); }
+        if let Some(v) = provider_id { config_active.provider_id = Set(v); }
+        if let Some(v) = cloud_type { config_active.cloud_type = Set(v.to_string()); }
+        if let Some(v) = foundation { config_active.foundation = Set(v.to_string()); }
+        if let Some(v) = region_id { config_active.region_id = Set(v.to_string()); }
+        if let Some(v) = machine_room_id { config_active.machine_room_id = Set(v); }
+        if let Some(v) = access_key_id { config_active.access_key_id = Set(v.to_string()); }
+        if let Some(v) = access_key_secret { config_active.access_key_secret = Set(v.to_string()); }
+        if let Some(v) = remarks { config_active.remarks = Set(Some(v.to_string())); }
+        if let Some(v) = status { config_active.status = Set(v.to_string()); }
+        if let Some(v) = last_test_time { config_active.last_test_time = Set(Some(v.to_string())); }
+        if let Some(v) = last_test_result { config_active.last_test_result = Set(Some(v.to_string())); }
+        if let Some(v) = updated_at { config_active.updated_at = Set(Some(v.to_string())); }
+        config_active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_cloud_platform_config(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    cloud_platform_config::Entity::delete_by_id(id)
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+
+// ==================== Security Product CRUD ====================
+
+/// 安全产品数据返回结构
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct DbSecurityProduct {
+    pub id: i32,
+    pub name: String,
+    pub category: String,
+    pub vendor: String,
+    pub model: String,
+    pub version: String,
+    pub serial_number: Option<String>,
+    pub license_type: String,
+    pub license_expiry: Option<String>,
+    pub management_ip: Option<String>,
+    pub deployment_mode: String,
+    pub cloud_platform_id: Option<i32>,
+    pub machine_room_id: Option<i32>,
+    pub provider_id: Option<i32>,
+    pub status: String,
+    pub features: Option<String>,
+    pub throughput: Option<String>,
+    pub contact_person: String,
+    pub contact_phone: String,
+    pub remarks: Option<String>,
+    pub created_at: String,
+}
+
+impl From<security_product::Model> for DbSecurityProduct {
+    fn from(m: security_product::Model) -> Self {
+        Self {
+            id: m.id,
+            name: m.name,
+            category: m.category,
+            vendor: m.vendor,
+            model: m.model,
+            version: m.version,
+            serial_number: m.serial_number,
+            license_type: m.license_type,
+            license_expiry: m.license_expiry,
+            management_ip: m.management_ip,
+            deployment_mode: m.deployment_mode,
+            cloud_platform_id: m.cloud_platform_id,
+            machine_room_id: m.machine_room_id,
+            provider_id: m.provider_id,
+            status: m.status,
+            features: m.features,
+            throughput: m.throughput,
+            contact_person: m.contact_person,
+            contact_phone: m.contact_phone,
+            remarks: m.remarks,
+            created_at: m.created_at,
+        }
+    }
+}
+
+pub async fn get_all_security_products(conn: &DatabaseConnection) -> Result<Vec<DbSecurityProduct>, DbErr> {
+    let products = security_product::Entity::find()
+        .all(conn)
+        .await?;
+    Ok(products.into_iter().map(|p| p.into()).collect())
+}
+
+pub async fn get_security_product_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbSecurityProduct>, DbErr> {
+    let product = security_product::Entity::find_by_id(id)
+        .one(conn)
+        .await?;
+    Ok(product.map(|p| p.into()))
+}
+
+pub async fn insert_security_product(
+    conn: &DatabaseConnection,
+    name: &str,
+    category: &str,
+    vendor: &str,
+    model: &str,
+    version: &str,
+    serial_number: Option<&str>,
+    license_type: &str,
+    license_expiry: Option<&str>,
+    management_ip: Option<&str>,
+    deployment_mode: &str,
+    cloud_platform_id: Option<i32>,
+    machine_room_id: Option<i32>,
+    provider_id: Option<i32>,
+    status: &str,
+    features: Option<&str>,
+    throughput: Option<&str>,
+    contact_person: &str,
+    contact_phone: &str,
+    remarks: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let product = security_product::ActiveModel {
+        id: NotSet,
+        name: Set(name.to_string()),
+        category: Set(category.to_string()),
+        vendor: Set(vendor.to_string()),
+        model: Set(model.to_string()),
+        version: Set(version.to_string()),
+        serial_number: Set(serial_number.map(|s| s.to_string())),
+        license_type: Set(license_type.to_string()),
+        license_expiry: Set(license_expiry.map(|s| s.to_string())),
+        management_ip: Set(management_ip.map(|s| s.to_string())),
+        deployment_mode: Set(deployment_mode.to_string()),
+        cloud_platform_id: Set(cloud_platform_id),
+        machine_room_id: Set(machine_room_id),
+        provider_id: Set(provider_id),
+        status: Set(status.to_string()),
+        features: Set(features.map(|s| s.to_string())),
+        throughput: Set(throughput.map(|s| s.to_string())),
+        contact_person: Set(contact_person.to_string()),
+        contact_phone: Set(contact_phone.to_string()),
+        remarks: Set(remarks.map(|s| s.to_string())),
+        created_at: Set(created_at.to_string()),
+    };
+    let result = product.insert(conn).await?;
+    Ok(result.id)
+}
+
+pub async fn update_security_product(
+    conn: &DatabaseConnection,
+    id: i32,
+    name: Option<&str>,
+    category: Option<&str>,
+    vendor: Option<&str>,
+    model: Option<&str>,
+    version: Option<&str>,
+    serial_number: Option<&str>,
+    license_type: Option<&str>,
+    license_expiry: Option<&str>,
+    management_ip: Option<&str>,
+    deployment_mode: Option<&str>,
+    cloud_platform_id: Option<i32>,
+    machine_room_id: Option<i32>,
+    provider_id: Option<i32>,
+    status: Option<&str>,
+    features: Option<&str>,
+    throughput: Option<&str>,
+    contact_person: Option<&str>,
+    contact_phone: Option<&str>,
+    remarks: Option<&str>,
+) -> Result<(), DbErr> {
+    if let Some(product) = security_product::Entity::find_by_id(id).one(conn).await? {
+        let mut product_active: security_product::ActiveModel = product.into();
+        if let Some(v) = name { product_active.name = Set(v.to_string()); }
+        if let Some(v) = category { product_active.category = Set(v.to_string()); }
+        if let Some(v) = vendor { product_active.vendor = Set(v.to_string()); }
+        if let Some(v) = model { product_active.model = Set(v.to_string()); }
+        if let Some(v) = version { product_active.version = Set(v.to_string()); }
+        if let Some(v) = serial_number { product_active.serial_number = Set(Some(v.to_string())); }
+        if let Some(v) = license_type { product_active.license_type = Set(v.to_string()); }
+        if let Some(v) = license_expiry { product_active.license_expiry = Set(Some(v.to_string())); }
+        if let Some(v) = management_ip { product_active.management_ip = Set(Some(v.to_string())); }
+        if let Some(v) = deployment_mode { product_active.deployment_mode = Set(v.to_string()); }
+        if let Some(v) = cloud_platform_id { product_active.cloud_platform_id = Set(Some(v)); }
+        if let Some(v) = machine_room_id { product_active.machine_room_id = Set(Some(v)); }
+        if let Some(v) = provider_id { product_active.provider_id = Set(Some(v)); }
+        if let Some(v) = status { product_active.status = Set(v.to_string()); }
+        if let Some(v) = features { product_active.features = Set(Some(v.to_string())); }
+        if let Some(v) = throughput { product_active.throughput = Set(Some(v.to_string())); }
+        if let Some(v) = contact_person { product_active.contact_person = Set(v.to_string()); }
+        if let Some(v) = contact_phone { product_active.contact_phone = Set(v.to_string()); }
+        if let Some(v) = remarks { product_active.remarks = Set(Some(v.to_string())); }
+        product_active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_security_product(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    security_product::Entity::delete_by_id(id)
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+

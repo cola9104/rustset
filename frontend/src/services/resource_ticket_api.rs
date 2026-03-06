@@ -1,8 +1,13 @@
 use gloo_net::http::Request;
 use serde_json::json;
 use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
+use crate::utils::storage::get_token;
 
 const API_BASE: &str = "http://localhost:3003/api";
+
+fn auth_header() -> Result<String, String> {
+    get_token().ok_or_else(|| "未登录，请先登录".to_string())
+}
 
 /// 后端返回的资源工单结构（与shared库匹配）
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -120,7 +125,9 @@ impl BackendResourceTicket {
 
 /// 获取资源工单列表
 pub async fn fetch_resource_tickets() -> Result<Vec<ResourceTicket>, String> {
+    let token = auth_header()?;
     let response = Request::get(&format!("{}/resource-tickets", API_BASE))
+        .header("Authorization", &token)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
@@ -217,9 +224,11 @@ impl From<&ResourceTicket> for CreateTicketRequest {
 
 /// 创建资源工单
 pub async fn create_resource_ticket(ticket: &ResourceTicket) -> Result<ResourceTicket, String> {
+    let token = auth_header()?;
     let request_body = CreateTicketRequest::from(ticket);
 
     let response = Request::post(&format!("{}/resource-tickets", API_BASE))
+        .header("Authorization", &token)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -246,9 +255,11 @@ pub async fn create_resource_ticket(ticket: &ResourceTicket) -> Result<ResourceT
 
 /// 更新资源工单
 pub async fn update_resource_ticket(id: i32, ticket: &ResourceTicket) -> Result<ResourceTicket, String> {
+    let token = auth_header()?;
     let request_body = CreateTicketRequest::from(ticket);
 
     let response = Request::put(&format!("{}/resource-tickets/{}", API_BASE, id))
+        .header("Authorization", &token)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -275,7 +286,9 @@ pub async fn update_resource_ticket(id: i32, ticket: &ResourceTicket) -> Result<
 
 /// 删除资源工单
 pub async fn delete_resource_ticket(id: i32) -> Result<(), String> {
+    let token = auth_header()?;
     let response = Request::delete(&format!("{}/resource-tickets/{}", API_BASE, id))
+        .header("Authorization", &token)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
@@ -289,12 +302,14 @@ pub async fn delete_resource_ticket(id: i32) -> Result<(), String> {
 
 /// 审批工单
 pub async fn approve_ticket(id: i32, approved: bool, comment: Option<String>) -> Result<ResourceTicket, String> {
+    let token = auth_header()?;
     let body = json!({
         "approved": approved,
         "comment": comment
     });
 
     let response = Request::post(&format!("{}/resource-tickets/{}/approve", API_BASE, id))
+        .header("Authorization", &token)
         .json(&body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -321,12 +336,14 @@ pub async fn approve_ticket(id: i32, approved: bool, comment: Option<String>) ->
 
 /// 配置工单
 pub async fn provision_ticket(id: i32, ip_address: Option<String>, details: Option<String>) -> Result<ResourceTicket, String> {
+    let token = auth_header()?;
     let body = json!({
         "details": details,
         "ip_address": ip_address
     });
 
     let response = Request::post(&format!("{}/resource-tickets/{}/provision", API_BASE, id))
+        .header("Authorization", &token)
         .json(&body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -353,11 +370,13 @@ pub async fn provision_ticket(id: i32, ip_address: Option<String>, details: Opti
 
 /// 交付工单
 pub async fn deliver_ticket(id: i32, comment: Option<String>) -> Result<ResourceTicket, String> {
+    let token = auth_header()?;
     let body = json!({
         "comment": comment
     });
 
     let response = Request::post(&format!("{}/resource-tickets/{}/deliver", API_BASE, id))
+        .header("Authorization", &token)
         .json(&body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()

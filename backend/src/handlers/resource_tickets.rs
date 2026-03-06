@@ -160,6 +160,7 @@ pub async fn create_resource_ticket(
         system_disk_size_gb: req.system_disk_size_gb.unwrap_or(0),
         data_disk: req.data_disk,
         has_security_product: req.has_security_product.unwrap_or(false),
+        security_products: req.security_products.clone(),
         ip_address: req.ip_address,
         delivery_status: Some("未交付".to_string()),
         remarks: req.remarks,

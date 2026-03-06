@@ -1,5 +1,6 @@
 use sea_orm_migration::prelude::*;
 
+#[derive(DeriveMigrationName)]
 pub struct Migration;
 
 #[async_trait::async_trait]
@@ -14,6 +15,7 @@ impl MigrationTrait for Migration {
                             .text()
                             .null()
                     )
+                    .to_owned()
             )
             .await
     }
@@ -24,6 +26,7 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(ResourceTicket::Table)
                     .drop_column(ResourceTicket::SecurityProducts)
+                    .to_owned()
             )
             .await
     }

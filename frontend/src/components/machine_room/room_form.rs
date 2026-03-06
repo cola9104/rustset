@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::state::machine_room::MachineRoomConfig;
-use crate::app::{MACHINE_ROOMS_STATE, PROVIDERS_STATE};
+use crate::app::PROVIDERS_STATE;
 use crate::components::common::{Modal, ModalFooter, ErrorMessage};
 
 /// 表单模式
@@ -178,13 +178,9 @@ pub fn RoomForm(props: RoomFormProps) -> Element {
                         // 根据模式构建机房配置对象
                         let config = match props.mode {
                             FormMode::New => {
-                                let max_id = MACHINE_ROOMS_STATE.read()
-                                    .iter()
-                                    .map(|r| r.id)
-                                    .max()
-                                    .unwrap_or(0) + 1;
+                                // 新建时ID由后端生成，前端传0
                                 data.to_config(
-                                    max_id,
+                                    0,
                                     chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string(),
                                     None,
                                 )

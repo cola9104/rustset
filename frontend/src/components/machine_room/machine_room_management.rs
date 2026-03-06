@@ -2,9 +2,12 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{FaPlus, FaPenToSquare, FaEye, FaTrash, FaMagnifyingGlass, FaBuilding};
 use crate::state::machine_room::MachineRoomConfig;
- use crate::app::MACHINE_ROOMS_STATE;
- use crate::app::PROVIDERS_STATE;
- use super::room_form::{RoomForm, RoomFormData, FormMode};
+use crate::app::PROVIDERS_STATE;
+use crate::services::{
+    fetch_machine_rooms, create_machine_room, update_machine_room, delete_machine_room,
+    fetch_service_providers,
+};
+use super::room_form::{RoomForm, FormMode};
 
 /// 机房管理页面
 #[component]
@@ -17,6 +20,58 @@ pub fn MachineRoomManagement() -> Element {
     let mut provider_filter = use_signal(|| String::from("all"));
     let mut room_type_filter = use_signal(|| String::from("all"));
 
+    // 数据和加载状态
+    let mut rooms = use_signal(Vec::<MachineRoomConfig>::new);
+    let mut is_loading = use_signal(|| true);
+
+    // 加载数据 - 包括机房和服务商
+    {
+        let mut rooms_clone = rooms.clone();
+        let mut is_loading_clone = is_loading.clone();
+        use_effect(move || {
+            spawn(async move {
+                // 加载服务商数据（用于下拉选择）
+                match fetch_service_providers().await {
+                    Ok(providers) => {
+                        *PROVIDERS_STATE.write() = providers;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载服务商数据失败: {}", e);
+                    }
+                }
+                // 加载机房数据
+                match fetch_machine_rooms().await {
+                    Ok(data) => {
+                        rooms_clone.set(data);
+                        is_loading_clone.set(false);
+                    }
+                    Err(e) => {
+                        tracing::error!("加载机房数据失败: {}", e);
+                        is_loading_clone.set(false);
+                    }
+                }
+            });
+        });
+    }
+
+    // 刷新数据的函数
+    let refresh_data = {
+        let mut rooms = rooms.clone();
+        move || {
+            let mut rooms = rooms.clone();
+            spawn(async move {
+                match fetch_machine_rooms().await {
+                    Ok(data) => {
+                        rooms.set(data);
+                    }
+                    Err(e) => {
+                        tracing::error!("刷新机房数据失败: {}", e);
+                    }
+                }
+            });
+        }
+    };
+
     // 获取服务商名称的辅助函数
     let get_provider_name = |provider_id: i32| -> String {
         PROVIDERS_STATE.read()
@@ -27,7 +82,7 @@ pub fn MachineRoomManagement() -> Element {
     };
 
     // 过滤机房
-    let filtered_rooms = MACHINE_ROOMS_STATE.read().iter().filter(|room| {
+    let filtered_rooms = rooms.read().iter().filter(|room| {
         let matches_search = search_query.read().is_empty()
             || room.room_name.contains(search_query.read().as_str())
             || room.facility_type.contains(search_query.read().as_str())
@@ -43,17 +98,17 @@ pub fn MachineRoomManagement() -> Element {
     }).cloned().collect::<Vec<_>>();
 
     // 统计数据
-    let total_count = MACHINE_ROOMS_STATE.read().len() as i32;
-    let active_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.status == "active").count() as i32;
-    let core_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.room_type == "核心机房").count() as i32;
-    let dmz_public_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.room_type == "DMZ机房（公有云）").count() as i32;
-    let dmz_gov_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.room_type == "DMZ机房（政务云）").count() as i32;
+    let total_count = rooms.read().len() as i32;
+    let active_count = rooms.read().iter().filter(|r| r.status == "active").count() as i32;
+    let core_count = rooms.read().iter().filter(|r| r.room_type == "核心机房").count() as i32;
+    let dmz_public_count = rooms.read().iter().filter(|r| r.room_type == "DMZ机房（公有云）").count() as i32;
+    let dmz_gov_count = rooms.read().iter().filter(|r| r.room_type == "DMZ机房（政务云）").count() as i32;
 
     // 按服务商统计
-    let telecom_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.provider_id == 1).count() as i32;
-    let unicom_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.provider_id == 2).count() as i32;
-    let mobile_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.provider_id == 3).count() as i32;
-    let broadcasting_count = MACHINE_ROOMS_STATE.read().iter().filter(|r| r.provider_id == 4).count() as i32;
+    let telecom_count = rooms.read().iter().filter(|r| r.provider_id == 1).count() as i32;
+    let unicom_count = rooms.read().iter().filter(|r| r.provider_id == 2).count() as i32;
+    let mobile_count = rooms.read().iter().filter(|r| r.provider_id == 3).count() as i32;
+    let broadcasting_count = rooms.read().iter().filter(|r| r.provider_id == 4).count() as i32;
 
     // 预计算服务商名称
     let rooms_with_provider_names: Vec<(MachineRoomConfig, String)> = filtered_rooms
@@ -156,110 +211,128 @@ pub fn MachineRoomManagement() -> Element {
                 }
             }
 
-            // 机房列表表格
-            div { class: "bg-white rounded-lg border border-gray-200 overflow-hidden",
-                div { class: "overflow-x-auto",
-                    table { class: "w-full",
-                        thead {
-                            tr { class: "bg-gray-50 border-b border-gray-200",
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房名称" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房编码" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "设施类型" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务商" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房类型" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "负责人" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机柜数" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
-                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
-                            }
-                        }
-                        tbody {
-                            if filtered_rooms.is_empty() {
-                                tr {
-                                    td { class: "px-6 py-8 text-center text-gray-500", colspan: "9",
-                                        "暂无数据"
-                                    }
+            // 加载状态
+            if *is_loading.read() {
+                div { class: "bg-white rounded-lg border border-gray-200 p-12 text-center",
+                    div { class: "text-gray-500", "加载数据中..." }
+                }
+            } else {
+                // 机房列表表格
+                div { class: "bg-white rounded-lg border border-gray-200 overflow-hidden",
+                    div { class: "overflow-x-auto",
+                        table { class: "w-full",
+                            thead {
+                                tr { class: "bg-gray-50 border-b border-gray-200",
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房名称" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房编码" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "设施类型" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务商" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机房类型" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "负责人" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "机柜数" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
+                                    th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
                                 }
-                            } else {
-                                for (room, provider_name) in rooms_with_provider_names.iter() {
-                                    tr { class: "hover:bg-gray-50 border-b border-gray-100 transition-colors",
-                                        td { class: "px-6 py-4",
-                                            div { class: "font-medium text-gray-900", "{room.room_name}" }
-                                            div { class: "text-sm text-gray-500", "{room.address}" }
+                            }
+                            tbody {
+                                if filtered_rooms.is_empty() {
+                                    tr {
+                                        td { class: "px-6 py-8 text-center text-gray-500", colspan: "9",
+                                            "暂无数据"
                                         }
-                                        td { class: "px-6 py-4 text-sm text-gray-600 font-mono", "{room.room_code}" }
-                                        td { class: "px-6 py-4",
-                                            div { class: "text-sm text-gray-900", "{room.facility_type}" }
-                                            if let Some(floor) = &room.floor {
-                                                div { class: "text-xs text-gray-500", "{floor}" }
+                                    }
+                                } else {
+                                    for (room, provider_name) in rooms_with_provider_names.iter() {
+                                        tr { class: "hover:bg-gray-50 border-b border-gray-100 transition-colors",
+                                            td { class: "px-6 py-4",
+                                                div { class: "font-medium text-gray-900", "{room.room_name}" }
+                                                div { class: "text-sm text-gray-500", "{room.address}" }
                                             }
-                                        }
-                                        td { class: "px-6 py-4 text-sm",
-                                            span {
-                                                class: match room.provider_id {
-                                                    1 => "px-2 py-1 rounded-full text-xs font-medium bg-sky-100 text-sky-800",
-                                                    2 => "px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800",
-                                                    3 => "px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800",
-                                                    _ => "px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800",
-                                                },
-                                                "{provider_name}"
-                                            }
-                                        }
-                                        td { class: "px-6 py-4 text-sm text-gray-600", "{room.room_type}" }
-                                        td { class: "px-6 py-4",
-                                            div { class: "text-sm text-gray-900", "{room.contact_person}" }
-                                            div { class: "text-xs text-gray-500", "{room.contact_phone}" }
-                                        }
-                                        td { class: "px-6 py-4 text-sm text-gray-600",
-                                            if let Some(count) = room.cabinet_count {
-                                                "{count} 个"
-                                            } else {
-                                                "-"
-                                            }
-                                        }
-                                        td { class: "px-6 py-4 text-sm",
-                                            if room.status == "active" {
-                                                span { class: "px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800", "运行中" }
-                                            } else {
-                                                span { class: "px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800", "停用" }
-                                            }
-                                        }
-                                        td { class: "px-6 py-4 text-sm",
-                                            div { class: "flex gap-2",
-                                                button {
-                                                    class: "text-blue-600 hover:text-blue-800 transition-colors",
-                                                    title: "查看",
-                                                    onclick: {
-                                                        let room = room.clone();
-                                                        move |_| {
-                                                            selected_room.set(Some(room.clone()));
-                                                            show_view_modal.set(true);
-                                                        }
-                                                    },
-                                                    Icon { icon: FaEye, width: 16, height: 16 }
+                                            td { class: "px-6 py-4 text-sm text-gray-600 font-mono", "{room.room_code}" }
+                                            td { class: "px-6 py-4",
+                                                div { class: "text-sm text-gray-900", "{room.facility_type}" }
+                                                if let Some(floor) = &room.floor {
+                                                    div { class: "text-xs text-gray-500", "{floor}" }
                                                 }
-                                                button {
-                                                    class: "text-yellow-600 hover:text-yellow-800 transition-colors",
-                                                    title: "编辑",
-                                                    onclick: {
-                                                        let room = room.clone();
-                                                        move |_| {
-                                                            selected_room.set(Some(room.clone()));
-                                                            show_edit_modal.set(true);
-                                                        }
+                                            }
+                                            td { class: "px-6 py-4 text-sm",
+                                                span {
+                                                    class: match room.provider_id {
+                                                        1 => "px-2 py-1 rounded-full text-xs font-medium bg-sky-100 text-sky-800",
+                                                        2 => "px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800",
+                                                        3 => "px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800",
+                                                        _ => "px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800",
                                                     },
-                                                    Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                                    "{provider_name}"
                                                 }
-                                                button {
-                                                    class: "text-red-600 hover:text-red-800 transition-colors",
-                                                    title: "删除",
-                                                    onclick: {
-                                                        let room_id = room.id;
-                                                        move |_| {
-                                                            MACHINE_ROOMS_STATE.write().retain(|r| r.id != room_id);
-                                                        }
-                                                    },
-                                                    Icon { icon: FaTrash, width: 16, height: 16 }
+                                            }
+                                            td { class: "px-6 py-4 text-sm text-gray-600", "{room.room_type}" }
+                                            td { class: "px-6 py-4",
+                                                div { class: "text-sm text-gray-900", "{room.contact_person}" }
+                                                div { class: "text-xs text-gray-500", "{room.contact_phone}" }
+                                            }
+                                            td { class: "px-6 py-4 text-sm text-gray-600",
+                                                if let Some(count) = room.cabinet_count {
+                                                    "{count} 个"
+                                                } else {
+                                                    "-"
+                                                }
+                                            }
+                                            td { class: "px-6 py-4 text-sm",
+                                                if room.status == "active" {
+                                                    span { class: "px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800", "运行中" }
+                                                } else {
+                                                    span { class: "px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800", "停用" }
+                                                }
+                                            }
+                                            td { class: "px-6 py-4 text-sm",
+                                                div { class: "flex gap-2",
+                                                    button {
+                                                        class: "text-blue-600 hover:text-blue-800 transition-colors",
+                                                        title: "查看",
+                                                        onclick: {
+                                                            let room = room.clone();
+                                                            move |_| {
+                                                                selected_room.set(Some(room.clone()));
+                                                                show_view_modal.set(true);
+                                                            }
+                                                        },
+                                                        Icon { icon: FaEye, width: 16, height: 16 }
+                                                    }
+                                                    button {
+                                                        class: "text-yellow-600 hover:text-yellow-800 transition-colors",
+                                                        title: "编辑",
+                                                        onclick: {
+                                                            let room = room.clone();
+                                                            move |_| {
+                                                                selected_room.set(Some(room.clone()));
+                                                                show_edit_modal.set(true);
+                                                            }
+                                                        },
+                                                        Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                                    }
+                                                    button {
+                                                        class: "text-red-600 hover:text-red-800 transition-colors",
+                                                        title: "删除",
+                                                        onclick: {
+                                                            let room_id = room.id;
+                                                            let refresh_data = refresh_data.clone();
+                                                            move |_| {
+                                                                let refresh_data = refresh_data.clone();
+                                                                spawn(async move {
+                                                                    match delete_machine_room(room_id).await {
+                                                                        Ok(()) => {
+                                                                            refresh_data();
+                                                                        }
+                                                                        Err(e) => {
+                                                                            tracing::error!("删除机房失败: {}", e);
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }
+                                                        },
+                                                        Icon { icon: FaTrash, width: 16, height: 16 }
+                                                    }
                                                 }
                                             }
                                         }
@@ -278,7 +351,17 @@ pub fn MachineRoomManagement() -> Element {
                 mode: FormMode::New,
                 room: None,
                 on_save: move |room: MachineRoomConfig| {
-                    MACHINE_ROOMS_STATE.write().push(room);
+                    let refresh_data = refresh_data.clone();
+                    spawn(async move {
+                        match create_machine_room(&room).await {
+                            Ok(_) => {
+                                refresh_data();
+                            }
+                            Err(e) => {
+                                tracing::error!("创建机房失败: {}", e);
+                            }
+                        }
+                    });
                     show_add_modal.set(false);
                 },
                 on_close: move |_| show_add_modal.set(false),
@@ -292,11 +375,17 @@ pub fn MachineRoomManagement() -> Element {
                     mode: FormMode::Edit,
                     room: Some(room.clone()),
                     on_save: move |updated: MachineRoomConfig| {
-                        let id = updated.id;
-                        let idx = MACHINE_ROOMS_STATE.read().iter().position(|r| r.id == id);
-                        if let Some(idx) = idx {
-                            MACHINE_ROOMS_STATE.write()[idx] = updated;
-                        }
+                        let refresh_data = refresh_data.clone();
+                        spawn(async move {
+                            match update_machine_room(updated.id, &updated).await {
+                                Ok(_) => {
+                                    refresh_data();
+                                }
+                                Err(e) => {
+                                    tracing::error!("更新机房失败: {}", e);
+                                }
+                            }
+                        });
                         show_edit_modal.set(false);
                     },
                     on_close: move |_| show_edit_modal.set(false),

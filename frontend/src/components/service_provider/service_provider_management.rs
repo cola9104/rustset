@@ -5,8 +5,10 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaEnvelope, FaCircleCheck, FaCircleXmark,
 };
 use crate::state::service_provider::ServiceProviderConfig;
-use crate::app::PROVIDERS_STATE;
-use super::provider_form::{ProviderForm, ProviderFormData, FormMode};
+use crate::services::{
+    fetch_service_providers, create_service_provider, update_service_provider, delete_service_provider,
+};
+use super::provider_form::{ProviderForm, FormMode};
 
 /// 服务商管理页面
 #[component]
@@ -14,19 +16,61 @@ pub fn ServiceProviderManagement() -> Element {
     let mut search_query = use_signal(|| String::new());
     let mut status_filter = use_signal(|| String::from("all"));
 
+    // 数据和加载状态
+    let mut providers = use_signal(Vec::<ServiceProviderConfig>::new);
+    let mut is_loading = use_signal(|| true);
+
     // 模态框状态
     let mut show_add_modal = use_signal(|| false);
     let mut show_edit_modal = use_signal(|| false);
     let mut show_view_modal = use_signal(|| false);
     let mut selected_provider = use_signal(|| None);
 
+    // 组件挂载时从API加载数据
+    {
+        let mut providers_clone = providers.clone();
+        let mut is_loading_clone = is_loading.clone();
+        use_effect(move || {
+            spawn(async move {
+                match fetch_service_providers().await {
+                    Ok(data) => {
+                        providers_clone.set(data);
+                        is_loading_clone.set(false);
+                    }
+                    Err(e) => {
+                        tracing::error!("加载服务商数据失败: {}", e);
+                        is_loading_clone.set(false);
+                    }
+                }
+            });
+        });
+    }
+
+    // 刷新数据的函数
+    let refresh_data = {
+        let mut providers = providers.clone();
+        move || {
+            let mut providers = providers.clone();
+            spawn(async move {
+                match fetch_service_providers().await {
+                    Ok(data) => {
+                        providers.set(data);
+                    }
+                    Err(e) => {
+                        tracing::error!("刷新服务商数据失败: {}", e);
+                    }
+                }
+            });
+        }
+    };
+
     // 统计数据
-    let total_count = PROVIDERS_STATE.read().len() as i32;
-    let active_count = PROVIDERS_STATE.read().iter().filter(|p| p.status == "active").count() as i32;
-    let inactive_count = PROVIDERS_STATE.read().iter().filter(|p| p.status == "inactive").count() as i32;
+    let total_count = providers.read().len() as i32;
+    let active_count = providers.read().iter().filter(|p| p.status == "active").count() as i32;
+    let inactive_count = providers.read().iter().filter(|p| p.status == "inactive").count() as i32;
 
     // 筛选逻辑
-    let filtered_providers = PROVIDERS_STATE.read().iter().filter(|provider| {
+    let filtered_providers = providers.read().iter().filter(|provider| {
         let matches_search = search_query.read().is_empty()
             || provider.provider_name.contains(search_query.read().as_str())
             || provider.short_name.contains(search_query.read().as_str())
@@ -90,93 +134,108 @@ pub fn ServiceProviderManagement() -> Element {
                 }
             }
 
-            // 服务商列表
-            div { class: "bg-white rounded-lg shadow overflow-hidden",
-                table { class: "w-full",
-                    thead { class: "bg-gray-50",
-                        tr {
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "ID" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务商名称" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "简称" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "负责人" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "联系电话" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务区域" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
-                        }
-                    }
-                    tbody {
-                        if filtered_providers.is_empty() {
+            // 加载状态
+            if *is_loading.read() {
+                div { class: "bg-white rounded-lg shadow p-12 text-center",
+                    div { class: "text-gray-500", "加载数据中..." }
+                }
+            } else {
+                // 服务商列表
+                div { class: "bg-white rounded-lg shadow overflow-hidden",
+                    table { class: "w-full",
+                        thead { class: "bg-gray-50",
                             tr {
-                                td { colspan: "8", class: "px-6 py-12 text-center text-gray-500",
-                                    "暂无服务商数据"
-                                }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "ID" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务商名称" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "简称" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "负责人" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "联系电话" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "服务区域" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
                             }
-                        } else {
-                            for provider in filtered_providers.iter() {
-                                tr { class: "hover:bg-gray-50 border-b",
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.id}" }
-                                    td { class: "px-6 py-4 whitespace-nowrap",
-                                        div { class: "flex items-center",
-                                            div { class: "flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center",
-                                                span { class: "text-blue-600 font-semibold", "{provider.short_name.chars().next().unwrap()}" }
-                                            }
-                                            div { class: "ml-4",
-                                                div { class: "text-sm font-medium text-gray-900", "{provider.provider_name}" }
-                                                div { class: "text-sm text-gray-500", "{provider.provider_code}" }
-                                            }
-                                        }
+                        }
+                        tbody {
+                            if filtered_providers.is_empty() {
+                                tr {
+                                    td { colspan: "8", class: "px-6 py-12 text-center text-gray-500",
+                                        "暂无服务商数据"
                                     }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.short_name}" }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.contact_person}" }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.contact_phone}" }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.service_area}" }
-                                    td { class: "px-6 py-4 whitespace-nowrap",
-                                        if provider.status == "active" {
-                                            span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800",
-                                                "活跃"
-                                            }
-                                        } else {
-                                            span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800",
-                                                "停用"
-                                            }
-                                        }
-                                    }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
-                                        button {
-                                            class: "text-blue-600 hover:text-blue-900 mr-3",
-                                            onclick: {
-                                                let provider = provider.clone();
-                                                move |_| {
-                                                    selected_provider.set(Some(provider.clone()));
-                                                    show_view_modal.set(true);
+                                }
+                            } else {
+                                for provider in filtered_providers.iter() {
+                                    tr { class: "hover:bg-gray-50 border-b",
+                                        td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.id}" }
+                                        td { class: "px-6 py-4 whitespace-nowrap",
+                                            div { class: "flex items-center",
+                                                div { class: "flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center",
+                                                    span { class: "text-blue-600 font-semibold", "{provider.short_name.chars().next().unwrap()}" }
                                                 }
-                                            },
-                                            "查看"
-                                        }
-                                        button {
-                                            class: "text-indigo-600 hover:text-indigo-900 mr-3",
-                                            onclick: {
-                                                let provider = provider.clone();
-                                                move |_| {
-                                                    selected_provider.set(Some(provider.clone()));
-                                                    show_edit_modal.set(true);
+                                                div { class: "ml-4",
+                                                    div { class: "text-sm font-medium text-gray-900", "{provider.provider_name}" }
+                                                    div { class: "text-sm text-gray-500", "{provider.provider_code}" }
                                                 }
-                                            },
-                                            "编辑"
+                                            }
                                         }
-                                        button {
-                                            class: "text-red-600 hover:text-red-900",
-                                            onclick: {
-                                                let provider_id = provider.id;
-                                                move |_| {
-                                                    let mut providers = PROVIDERS_STATE.write();
-                                                    if let Some(pos) = providers.iter().position(|p| p.id == provider_id) {
-                                                        providers.remove(pos);
+                                        td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.short_name}" }
+                                        td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.contact_person}" }
+                                        td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.contact_phone}" }
+                                        td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900", "{provider.service_area}" }
+                                        td { class: "px-6 py-4 whitespace-nowrap",
+                                            if provider.status == "active" {
+                                                span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800",
+                                                    "活跃"
+                                                }
+                                            } else {
+                                                span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800",
+                                                    "停用"
+                                                }
+                                            }
+                                        }
+                                        td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
+                                            button {
+                                                class: "text-blue-600 hover:text-blue-900 mr-3",
+                                                onclick: {
+                                                    let provider = provider.clone();
+                                                    move |_| {
+                                                        selected_provider.set(Some(provider.clone()));
+                                                        show_view_modal.set(true);
                                                     }
-                                                }
-                                            },
-                                            "删除"
+                                                },
+                                                "查看"
+                                            }
+                                            button {
+                                                class: "text-indigo-600 hover:text-indigo-900 mr-3",
+                                                onclick: {
+                                                    let provider = provider.clone();
+                                                    move |_| {
+                                                        selected_provider.set(Some(provider.clone()));
+                                                        show_edit_modal.set(true);
+                                                    }
+                                                },
+                                                "编辑"
+                                            }
+                                            button {
+                                                class: "text-red-600 hover:text-red-900",
+                                                onclick: {
+                                                    let provider_id = provider.id;
+                                                    let refresh_data = refresh_data.clone();
+                                                    move |_| {
+                                                        let refresh_data = refresh_data.clone();
+                                                        spawn(async move {
+                                                            match delete_service_provider(provider_id).await {
+                                                                Ok(()) => {
+                                                                    refresh_data();
+                                                                }
+                                                                Err(e) => {
+                                                                    tracing::error!("删除服务商失败: {}", e);
+                                                                }
+                                                            }
+                                                        });
+                                                    }
+                                                },
+                                                "删除"
+                                            }
                                         }
                                     }
                                 }
@@ -193,7 +252,17 @@ pub fn ServiceProviderManagement() -> Element {
                 mode: FormMode::New,
                 provider: None,
                 on_save: move |provider: ServiceProviderConfig| {
-                    PROVIDERS_STATE.write().push(provider);
+                    let refresh_data = refresh_data.clone();
+                    spawn(async move {
+                        match create_service_provider(&provider).await {
+                            Ok(_) => {
+                                refresh_data();
+                            }
+                            Err(e) => {
+                                tracing::error!("创建服务商失败: {}", e);
+                            }
+                        }
+                    });
                     show_add_modal.set(false);
                 },
                 on_close: move |_| show_add_modal.set(false),
@@ -207,10 +276,17 @@ pub fn ServiceProviderManagement() -> Element {
                     mode: FormMode::Edit,
                     provider: Some(provider.clone()),
                     on_save: move |provider: ServiceProviderConfig| {
-                        let mut providers = PROVIDERS_STATE.write();
-                        if let Some(idx) = providers.iter().position(|p| p.id == provider.id) {
-                            providers[idx] = provider;
-                        }
+                        let refresh_data = refresh_data.clone();
+                        spawn(async move {
+                            match update_service_provider(provider.id, &provider).await {
+                                Ok(_) => {
+                                    refresh_data();
+                                }
+                                Err(e) => {
+                                    tracing::error!("更新服务商失败: {}", e);
+                                }
+                            }
+                        });
                         show_edit_modal.set(false);
                     },
                     on_close: move |_| show_edit_modal.set(false),

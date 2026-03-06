@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use crate::state::cloud_platform::CloudPlatformConfig;
-use crate::app::{PROVIDERS_STATE, CLOUD_PLATFORMS_STATE};
+use crate::app::PROVIDERS_STATE;
 use crate::components::common::{Modal, ModalFooter, ErrorMessage};
 
 /// 表单模式
@@ -118,13 +118,9 @@ pub fn PlatformForm(props: PlatformFormProps) -> Element {
                         // 根据模式构建配置对象
                         let config = match props.mode {
                             FormMode::New => {
-                                let max_id = CLOUD_PLATFORMS_STATE.read()
-                                    .iter()
-                                    .map(|c| c.id)
-                                    .max()
-                                    .unwrap_or(0);
+                                // 新建时ID由后端生成，前端传0
                                 CloudPlatformConfig {
-                                    id: max_id + 1,
+                                    id: 0,
                                     platform_name: data.platform_name.clone(),
                                     provider_id: data.provider_id,
                                     cloud_type: data.cloud_type.clone(),

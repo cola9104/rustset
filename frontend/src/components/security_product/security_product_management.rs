@@ -7,7 +7,11 @@ use dioxus_free_icons::icons::fa_solid_icons::{
 use crate::state::security_product::{
     SecurityProduct, SecurityProductCategory, SecurityProductStatus,
 };
-use crate::app::{SECURITY_PRODUCTS_STATE, PROVIDERS_STATE, CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE};
+use crate::app::{PROVIDERS_STATE, CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE};
+use crate::services::{
+    fetch_security_products, create_security_product, update_security_product, delete_security_product,
+    fetch_service_providers, fetch_machine_rooms, fetch_cloud_platform_configs,
+};
 use super::product_form::{ProductForm, FormMode};
 
 /// 安全产品管理页面
@@ -22,15 +26,85 @@ pub fn SecurityProductManagement() -> Element {
     let mut editing_product = use_signal(|| None::<SecurityProduct>);
     let mut viewing_product = use_signal(|| None::<SecurityProduct>);
 
+    // 数据和加载状态
+    let mut products = use_signal(Vec::<SecurityProduct>::new);
+    let mut is_loading = use_signal(|| true);
+
+    // 加载数据 - 包括安全产品、服务商、机房和云平台
+    {
+        let mut products_clone = products.clone();
+        let mut is_loading_clone = is_loading.clone();
+        use_effect(move || {
+            spawn(async move {
+                // 加载服务商数据
+                match fetch_service_providers().await {
+                    Ok(providers) => {
+                        *PROVIDERS_STATE.write() = providers;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载服务商数据失败: {}", e);
+                    }
+                }
+                // 加载机房数据
+                match fetch_machine_rooms().await {
+                    Ok(rooms) => {
+                        *MACHINE_ROOMS_STATE.write() = rooms;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载机房数据失败: {}", e);
+                    }
+                }
+                // 加载云平台数据
+                match fetch_cloud_platform_configs().await {
+                    Ok(platforms) => {
+                        *CLOUD_PLATFORMS_STATE.write() = platforms;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载云平台数据失败: {}", e);
+                    }
+                }
+                // 加载安全产品数据
+                match fetch_security_products().await {
+                    Ok(data) => {
+                        products_clone.set(data);
+                        is_loading_clone.set(false);
+                    }
+                    Err(e) => {
+                        tracing::error!("加载安全产品数据失败: {}", e);
+                        is_loading_clone.set(false);
+                    }
+                }
+            });
+        });
+    }
+
+    // 刷新数据的函数
+    let refresh_data = {
+        let mut products = products.clone();
+        move || {
+            let mut products = products.clone();
+            spawn(async move {
+                match fetch_security_products().await {
+                    Ok(data) => {
+                        products.set(data);
+                    }
+                    Err(e) => {
+                        tracing::error!("刷新安全产品数据失败: {}", e);
+                    }
+                }
+            });
+        }
+    };
+
     // 统计数据
-    let total_count = SECURITY_PRODUCTS_STATE.read().len() as i32;
-    let active_count = SECURITY_PRODUCTS_STATE.read()
+    let total_count = products.read().len() as i32;
+    let active_count = products.read()
         .iter()
         .filter(|p| p.status == SecurityProductStatus::Active)
         .count() as i32;
 
     // 过滤逻辑
-    let filtered_products: Vec<SecurityProduct> = SECURITY_PRODUCTS_STATE.read()
+    let filtered_products: Vec<SecurityProduct> = products.read()
         .iter()
         .filter(|product| {
             let matches_search = search_query.read().is_empty()
@@ -84,7 +158,7 @@ pub fn SecurityProductManagement() -> Element {
                 }
                 // 显示各分类数量
                 {
-                    let firewall_count = SECURITY_PRODUCTS_STATE.read()
+                    let firewall_count = products.read()
                         .iter()
                         .filter(|p| p.category == SecurityProductCategory::Firewall && p.status == SecurityProductStatus::Active)
                         .count() as i32;
@@ -97,7 +171,7 @@ pub fn SecurityProductManagement() -> Element {
                     }
                 }
                 {
-                    let waf_count = SECURITY_PRODUCTS_STATE.read()
+                    let waf_count = products.read()
                         .iter()
                         .filter(|p| p.category == SecurityProductCategory::Waf && p.status == SecurityProductStatus::Active)
                         .count() as i32;
@@ -150,97 +224,112 @@ pub fn SecurityProductManagement() -> Element {
                 }
             }
 
-            // 产品列表表格
-            div { class: "bg-white rounded-lg shadow overflow-hidden",
-                table { class: "min-w-full divide-y divide-gray-200",
-                    thead { class: "bg-gray-50",
-                        tr {
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "产品名称" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "分类" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "厂商/型号" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "版本" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "管理IP" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "部署位置" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
-                        }
-                    }
-                    tbody { class: "bg-white divide-y divide-gray-200",
-                        if is_empty {
+            // 加载状态
+            if *is_loading.read() {
+                div { class: "bg-white rounded-lg shadow p-12 text-center",
+                    div { class: "text-gray-500", "加载数据中..." }
+                }
+            } else {
+                // 产品列表表格
+                div { class: "bg-white rounded-lg shadow overflow-hidden",
+                    table { class: "min-w-full divide-y divide-gray-200",
+                        thead { class: "bg-gray-50",
                             tr {
-                                td { colspan: 8, class: "px-6 py-12 text-center text-gray-500",
-                                    "暂无安全产品数据"
-                                }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "产品名称" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "分类" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "厂商/型号" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "版本" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "管理IP" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "部署位置" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
+                                th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
                             }
-                        } else {
-                            for product in filtered_products.iter() {
-                                {
-                                    let deployment_location = get_deployment_location(&product);
-                                    rsx! {
-                                        tr { class: "hover:bg-gray-50",
-                                            td { class: "px-6 py-4 whitespace-nowrap",
-                                                div { class: "flex items-center",
-                                                    div { class: "flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center",
-                                                        Icon { icon: FaShieldHalved, width: 20, height: 20, class: "text-indigo-600" }
-                                                    }
-                                                    div { class: "ml-4",
-                                                        div { class: "text-sm font-medium text-gray-900", "{product.name}" }
-                                                        div { class: "text-sm text-gray-500", "{product.vendor} {product.model}" }
-                                                    }
-                                                }
-                                            }
-                                            td { class: "px-6 py-4 whitespace-nowrap",
-                                                span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800",
-                                                    "{product.category.display_name()}"
-                                                }
-                                            }
-                                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                                "{product.version}"
-                                            }
-                                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                                if let Some(ref ip) = product.management_ip {
-                                                    "{ip}"
-                                                } else {
-                                                    "-"
-                                                }
-                                            }
-                                            td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                                "{deployment_location}"
-                                            }
-                                            td { class: "px-6 py-4 whitespace-nowrap",
-                                                span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {product.status.color_class()}",
-                                                    "{product.status.display_name()}"
-                                                }
-                                            }
-                                            td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
-                                                button {
-                                                    class: "text-blue-600 hover:text-blue-900 mr-3",
-                                                    onclick: {
-                                                        let product = product.clone();
-                                                        move |_| viewing_product.set(Some(product.clone()))
-                                                    },
-                                                    Icon { icon: FaEye, width: 16, height: 16 }
-                                                }
-                                                button {
-                                                    class: "text-indigo-600 hover:text-indigo-900 mr-3",
-                                                    onclick: {
-                                                        let product = product.clone();
-                                                        move |_| editing_product.set(Some(product.clone()))
-                                                    },
-                                                    Icon { icon: FaPenToSquare, width: 16, height: 16 }
-                                                }
-                                                button {
-                                                    class: "text-red-600 hover:text-red-900",
-                                                    onclick: {
-                                                        let product_id = product.id;
-                                                        move |_| {
-                                                            let mut products = SECURITY_PRODUCTS_STATE.write();
-                                                            if let Some(pos) = products.iter().position(|p| p.id == product_id) {
-                                                                products.remove(pos);
-                                                            }
+                        }
+                        tbody { class: "bg-white divide-y divide-gray-200",
+                            if is_empty {
+                                tr {
+                                    td { colspan: 8, class: "px-6 py-12 text-center text-gray-500",
+                                        "暂无安全产品数据"
+                                    }
+                                }
+                            } else {
+                                for product in filtered_products.iter() {
+                                    {
+                                        let deployment_location = get_deployment_location(&product);
+                                        rsx! {
+                                            tr { class: "hover:bg-gray-50",
+                                                td { class: "px-6 py-4 whitespace-nowrap",
+                                                    div { class: "flex items-center",
+                                                        div { class: "flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center",
+                                                            Icon { icon: FaShieldHalved, width: 20, height: 20, class: "text-indigo-600" }
                                                         }
-                                                    },
-                                                    Icon { icon: FaTrash, width: 16, height: 16 }
+                                                        div { class: "ml-4",
+                                                            div { class: "text-sm font-medium text-gray-900", "{product.name}" }
+                                                            div { class: "text-sm text-gray-500", "{product.vendor} {product.model}" }
+                                                        }
+                                                    }
+                                                }
+                                                td { class: "px-6 py-4 whitespace-nowrap",
+                                                    span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-indigo-100 text-indigo-800",
+                                                        "{product.category.display_name()}"
+                                                    }
+                                                }
+                                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                                    "{product.version}"
+                                                }
+                                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                                    if let Some(ref ip) = product.management_ip {
+                                                        "{ip}"
+                                                    } else {
+                                                        "-"
+                                                    }
+                                                }
+                                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
+                                                    "{deployment_location}"
+                                                }
+                                                td { class: "px-6 py-4 whitespace-nowrap",
+                                                    span { class: "px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {product.status.color_class()}",
+                                                        "{product.status.display_name()}"
+                                                    }
+                                                }
+                                                td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
+                                                    button {
+                                                        class: "text-blue-600 hover:text-blue-900 mr-3",
+                                                        onclick: {
+                                                            let product = product.clone();
+                                                            move |_| viewing_product.set(Some(product.clone()))
+                                                        },
+                                                        Icon { icon: FaEye, width: 16, height: 16 }
+                                                    }
+                                                    button {
+                                                        class: "text-indigo-600 hover:text-indigo-900 mr-3",
+                                                        onclick: {
+                                                            let product = product.clone();
+                                                            move |_| editing_product.set(Some(product.clone()))
+                                                        },
+                                                        Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                                    }
+                                                    button {
+                                                        class: "text-red-600 hover:text-red-900",
+                                                        onclick: {
+                                                            let product_id = product.id;
+                                                            let refresh_data = refresh_data.clone();
+                                                            move |_| {
+                                                                let refresh_data = refresh_data.clone();
+                                                                spawn(async move {
+                                                                    match delete_security_product(product_id).await {
+                                                                        Ok(()) => {
+                                                                            refresh_data();
+                                                                        }
+                                                                        Err(e) => {
+                                                                            tracing::error!("删除安全产品失败: {}", e);
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }
+                                                        },
+                                                        Icon { icon: FaTrash, width: 16, height: 16 }
+                                                    }
                                                 }
                                             }
                                         }
@@ -259,12 +348,17 @@ pub fn SecurityProductManagement() -> Element {
                 mode: FormMode::New,
                 product: None,
                 on_save: move |new_product: SecurityProduct| {
-                    let mut products = SECURITY_PRODUCTS_STATE.write();
-                    // 生成新ID
-                    let new_id = products.iter().map(|p| p.id).max().unwrap_or(0) + 1;
-                    let mut new_product = new_product;
-                    new_product.id = new_id;
-                    products.push(new_product);
+                    let refresh_data = refresh_data.clone();
+                    spawn(async move {
+                        match create_security_product(&new_product).await {
+                            Ok(_) => {
+                                refresh_data();
+                            }
+                            Err(e) => {
+                                tracing::error!("创建安全产品失败: {}", e);
+                            }
+                        }
+                    });
                     show_add_modal.set(false);
                 },
                 on_close: move |_| show_add_modal.set(false)
@@ -277,10 +371,17 @@ pub fn SecurityProductManagement() -> Element {
                 mode: FormMode::Edit,
                 product: Some(product.clone()),
                 on_save: move |updated: SecurityProduct| {
-                    let mut products = SECURITY_PRODUCTS_STATE.write();
-                    if let Some(idx) = products.iter().position(|p| p.id == updated.id) {
-                        products[idx] = updated;
-                    }
+                    let refresh_data = refresh_data.clone();
+                    spawn(async move {
+                        match update_security_product(updated.id, &updated).await {
+                            Ok(_) => {
+                                refresh_data();
+                            }
+                            Err(e) => {
+                                tracing::error!("更新安全产品失败: {}", e);
+                            }
+                        }
+                    });
                     editing_product.set(None);
                 },
                 on_close: move |_| editing_product.set(None)

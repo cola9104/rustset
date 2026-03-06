@@ -21,6 +21,10 @@ pub mod custom_role;
 pub mod advanced_scan_task;
 pub mod quick_scan_result;
 pub mod resource_ticket;
+pub mod service_provider;
+pub mod machine_room;
+pub mod cloud_platform_config;
+pub mod security_product;
 
 pub use cloud_zone::Entity as CloudZone;
 pub use resource_ticket::Entity as ResourceTicket;
@@ -40,6 +44,10 @@ pub use network_zone::Entity as NetworkZone;
 pub use custom_role::Entity as CustomRole;
 pub use advanced_scan_task::Entity as AdvancedScanTask;
 pub use quick_scan_result::Entity as QuickScanResult;
+pub use service_provider::Entity as ServiceProvider;
+pub use machine_room::Entity as MachineRoom;
+pub use cloud_platform_config::Entity as CloudPlatformConfig;
+pub use security_product::Entity as SecurityProduct;
 
 // Re-export the models for convenience
 pub mod prelude {

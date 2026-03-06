@@ -511,6 +511,7 @@ impl Default for UpdateBusinessResourceRequest {
             completion_time: None,
             release_time: None,
             has_security_product: None,
+            security_products: None,
             ip_address: None,
             ecs_login_method: None,
             ecs_login_username: None,

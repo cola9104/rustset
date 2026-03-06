@@ -62,6 +62,22 @@ use handlers::{
         update_resource_ticket, delete_resource_ticket,
         approve_ticket, provision_ticket, deliver_ticket,
     },
+    service_providers::{
+        get_service_providers, get_service_provider, create_service_provider,
+        update_service_provider, delete_service_provider,
+    },
+    machine_rooms::{
+        get_machine_rooms, get_machine_room, create_machine_room,
+        update_machine_room, delete_machine_room,
+    },
+    security_products::{
+        get_security_products, get_security_product, create_security_product,
+        update_security_product, delete_security_product,
+    },
+    cloud_platform_configs::{
+        get_cloud_platform_configs, get_cloud_platform_config, create_cloud_platform_config,
+        update_cloud_platform_config, delete_cloud_platform_config,
+    },
 };
 
 #[tokio::main]
@@ -385,6 +401,18 @@ async fn main() {
         .route("/api/resource-tickets/{id}/approve", post(approve_ticket))
         .route("/api/resource-tickets/{id}/provision", post(provision_ticket))
         .route("/api/resource-tickets/{id}/deliver", post(deliver_ticket))
+        // Service Providers (服务商管理)
+        .route("/api/service-providers", get(get_service_providers).post(create_service_provider))
+        .route("/api/service-providers/{id}", get(get_service_provider).put(update_service_provider).delete(delete_service_provider))
+        // Machine Rooms (机房管理)
+        .route("/api/machine-rooms", get(get_machine_rooms).post(create_machine_room))
+        .route("/api/machine-rooms/{id}", get(get_machine_room).put(update_machine_room).delete(delete_machine_room))
+        // Security Products (安全产品管理)
+        .route("/api/security-products", get(get_security_products).post(create_security_product))
+        .route("/api/security-products/{id}", get(get_security_product).put(update_security_product).delete(delete_security_product))
+        // Cloud Platform Configs (云平台配置管理)
+        .route("/api/cloud-platform-configs", get(get_cloud_platform_configs).post(create_cloud_platform_config))
+        .route("/api/cloud-platform-configs/{id}", get(get_cloud_platform_config).put(update_cloud_platform_config).delete(delete_cloud_platform_config))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());

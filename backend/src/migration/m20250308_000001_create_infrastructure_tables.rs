@@ -1,0 +1,284 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Create service_providers table
+        manager
+            .create_table(
+                Table::create()
+                    .table(ServiceProviders::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(ServiceProviders::Id)
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(ServiceProviders::ProviderName).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::ProviderCode).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::ShortName).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::LogoUrl).text().null())
+                    .col(ColumnDef::new(ServiceProviders::ContactPerson).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::ContactPhone).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::ContactEmail).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::Headquarters).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::ServiceArea).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::BusinessLicense).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::Remarks).text().null())
+                    .col(ColumnDef::new(ServiceProviders::Status).text().not_null().default("active"))
+                    .col(ColumnDef::new(ServiceProviders::CreatedAt).text().not_null())
+                    .col(ColumnDef::new(ServiceProviders::UpdatedAt).text().null())
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create machine_rooms table
+        manager
+            .create_table(
+                Table::create()
+                    .table(MachineRooms::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(MachineRooms::Id)
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(MachineRooms::RoomName).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::RoomCode).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::FacilityType).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::Address).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::ProviderId).integer().not_null())
+                    .col(ColumnDef::new(MachineRooms::RoomType).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::ContactPerson).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::ContactPhone).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::Floor).text().null())
+                    .col(ColumnDef::new(MachineRooms::CabinetCount).integer().null())
+                    .col(ColumnDef::new(MachineRooms::AreaSize).text().null())
+                    .col(ColumnDef::new(MachineRooms::Remarks).text().null())
+                    .col(ColumnDef::new(MachineRooms::Status).text().not_null().default("active"))
+                    .col(ColumnDef::new(MachineRooms::CreatedAt).text().not_null())
+                    .col(ColumnDef::new(MachineRooms::UpdatedAt).text().null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_machine_room_provider")
+                            .from(MachineRooms::Table, MachineRooms::ProviderId)
+                            .to(ServiceProviders::Table, ServiceProviders::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create cloud_platform_configs table
+        manager
+            .create_table(
+                Table::create()
+                    .table(CloudPlatformConfigs::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::Id)
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(CloudPlatformConfigs::PlatformName).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::ProviderId).integer().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::CloudType).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::Foundation).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::RegionId).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::MachineRoomId).integer().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::AccessKeyId).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::AccessKeySecret).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::Remarks).text().null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::Status).text().not_null().default("active"))
+                    .col(ColumnDef::new(CloudPlatformConfigs::LastTestTime).text().null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::LastTestResult).text().null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::CreatedAt).text().not_null())
+                    .col(ColumnDef::new(CloudPlatformConfigs::UpdatedAt).text().null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_cloud_platform_provider")
+                            .from(CloudPlatformConfigs::Table, CloudPlatformConfigs::ProviderId)
+                            .to(ServiceProviders::Table, ServiceProviders::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_cloud_platform_machine_room")
+                            .from(CloudPlatformConfigs::Table, CloudPlatformConfigs::MachineRoomId)
+                            .to(MachineRooms::Table, MachineRooms::Id)
+                            .on_delete(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        // Create security_products table
+        manager
+            .create_table(
+                Table::create()
+                    .table(SecurityProducts::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(SecurityProducts::Id)
+                            .integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(SecurityProducts::Name).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::Category).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::Vendor).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::Model).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::Version).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::SerialNumber).text().null())
+                    .col(ColumnDef::new(SecurityProducts::LicenseType).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::LicenseExpiry).text().null())
+                    .col(ColumnDef::new(SecurityProducts::ManagementIp).text().null())
+                    .col(ColumnDef::new(SecurityProducts::DeploymentMode).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::CloudPlatformId).integer().null())
+                    .col(ColumnDef::new(SecurityProducts::MachineRoomId).integer().null())
+                    .col(ColumnDef::new(SecurityProducts::ProviderId).integer().null())
+                    .col(ColumnDef::new(SecurityProducts::Status).text().not_null().default("active"))
+                    .col(ColumnDef::new(SecurityProducts::Features).text().null())
+                    .col(ColumnDef::new(SecurityProducts::Throughput).text().null())
+                    .col(ColumnDef::new(SecurityProducts::ContactPerson).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::ContactPhone).text().not_null())
+                    .col(ColumnDef::new(SecurityProducts::Remarks).text().null())
+                    .col(ColumnDef::new(SecurityProducts::CreatedAt).text().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_security_product_cloud_platform")
+                            .from(SecurityProducts::Table, SecurityProducts::CloudPlatformId)
+                            .to(CloudPlatformConfigs::Table, CloudPlatformConfigs::Id)
+                            .on_delete(ForeignKeyAction::SetNull),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_security_product_machine_room")
+                            .from(SecurityProducts::Table, SecurityProducts::MachineRoomId)
+                            .to(MachineRooms::Table, MachineRooms::Id)
+                            .on_delete(ForeignKeyAction::SetNull),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_security_product_provider")
+                            .from(SecurityProducts::Table, SecurityProducts::ProviderId)
+                            .to(ServiceProviders::Table, ServiceProviders::Id)
+                            .on_delete(ForeignKeyAction::SetNull),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(SecurityProducts::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(CloudPlatformConfigs::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(MachineRooms::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(ServiceProviders::Table).to_owned())
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum ServiceProviders {
+    Table,
+    Id,
+    ProviderName,
+    ProviderCode,
+    ShortName,
+    LogoUrl,
+    ContactPerson,
+    ContactPhone,
+    ContactEmail,
+    Headquarters,
+    ServiceArea,
+    BusinessLicense,
+    Remarks,
+    Status,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+enum MachineRooms {
+    Table,
+    Id,
+    RoomName,
+    RoomCode,
+    FacilityType,
+    Address,
+    ProviderId,
+    RoomType,
+    ContactPerson,
+    ContactPhone,
+    Floor,
+    CabinetCount,
+    AreaSize,
+    Remarks,
+    Status,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+enum CloudPlatformConfigs {
+    Table,
+    Id,
+    PlatformName,
+    ProviderId,
+    CloudType,
+    Foundation,
+    RegionId,
+    MachineRoomId,
+    AccessKeyId,
+    AccessKeySecret,
+    Remarks,
+    Status,
+    LastTestTime,
+    LastTestResult,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+enum SecurityProducts {
+    Table,
+    Id,
+    Name,
+    Category,
+    Vendor,
+    Model,
+    Version,
+    SerialNumber,
+    LicenseType,
+    LicenseExpiry,
+    ManagementIp,
+    DeploymentMode,
+    CloudPlatformId,
+    MachineRoomId,
+    ProviderId,
+    Status,
+    Features,
+    Throughput,
+    ContactPerson,
+    ContactPhone,
+    Remarks,
+    CreatedAt,
+}

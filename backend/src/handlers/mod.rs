@@ -13,3 +13,7 @@ pub mod cloud_zones;
 pub mod cloud_platforms;
 pub mod cloud_service_assets;
 pub mod resource_tickets;
+pub mod service_providers;
+pub mod machine_rooms;
+pub mod security_products;
+pub mod cloud_platform_configs;
