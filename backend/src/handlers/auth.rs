@@ -6,41 +6,46 @@ use shared::{LoginRequest, LoginResponse};
 use crate::state::AppState;
 use crate::utils::log_action;
 use crate::password;
+use crate::middleware::ApiError;
 use chrono::Utc;
 
 pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>
-) -> Result<Json<LoginResponse>, (StatusCode, String)> {
+) -> Result<Json<LoginResponse>, ApiError> {
     // Read password policy (using read lock for better performance)
-    let policy = state.password_policy.read().unwrap().clone();
+    let policy = state.password_policy.read()
+        .map_err(|e| ApiError::internal(format!("Failed to read password policy: {}", e)))?
+        .clone();
 
     // Check if user exists (read lock)
     let user_idx = {
-        let users = state.users.read().unwrap();
+        let users = state.users.read()
+            .map_err(|e| ApiError::internal(format!("Failed to acquire read lock: {}", e)))?;
         users.iter().position(|u| u.username == req.username)
     };
 
     if user_idx.is_none() {
-        return Err((StatusCode::UNAUTHORIZED, "用户名或密码错误".to_string()));
+        return Err(ApiError::unauthorized("用户名或密码错误"));
     }
 
     let user_idx = user_idx.unwrap();
 
     // Acquire write lock to check and update user state
-    let mut users = state.users.write().unwrap();
+    let mut users = state.users.write()
+        .map_err(|e| ApiError::internal(format!("Failed to acquire write lock: {}", e)))?;
     let user = &mut users[user_idx];
 
     // 检查账户是否被禁用
     if user.status.as_ref().map(|s| s.as_str()) == Some("disabled") {
-        return Err((StatusCode::FORBIDDEN, "账户已被禁用".to_string()));
+        return Err(ApiError::forbidden("账户已被禁用"));
     }
 
     // 检查账户是否被锁定
     if let Some(locked_until) = user.locked_until {
         if Utc::now() < locked_until {
             let remaining = (locked_until - Utc::now()).num_minutes() + 1;
-            return Err((StatusCode::FORBIDDEN, format!("账户已锁定，请在 {} 分钟后重试", remaining)));
+            return Err(ApiError::forbidden(format!("账户已锁定，请在 {} 分钟后重试", remaining)));
         } else {
             // 锁定期已过，清除锁定状态
             user.locked_until = None;
@@ -51,7 +56,7 @@ pub async fn login(
 
     // 验证密码 (使用 Argon2 哈希验证)
     let password_valid = password::verify_password(&req.password, &user.password)
-        .unwrap_or(false);
+        .map_err(|e| ApiError::internal(format!("Password verification failed: {}", e)))?;
 
     if password_valid {
         // 登录成功，清除失败计数
@@ -82,8 +87,9 @@ pub async fn login(
                 log_action(&state.audit_logs, user, "ACCOUNT_LOCKED", &user.username,
                            &format!("Account locked after {} failed login attempts", current_attempts));
 
-                return Err((StatusCode::LOCKED,
-                           format!("登录失败次数过多，账户已锁定 {} 分钟", policy.lockout_duration_minutes)));
+                return Err(ApiError::forbidden(
+                    format!("登录失败次数过多，账户已锁定 {} 分钟", policy.lockout_duration_minutes)
+                ));
             }
         }
 
@@ -94,10 +100,11 @@ pub async fn login(
 
         let remaining = policy.max_login_attempts.map(|max| max - current_attempts);
         match remaining {
-            Some(0) => Err((StatusCode::LOCKED, "账户已被锁定".to_string())),
-            Some(n) => Err((StatusCode::UNAUTHORIZED,
-                           format!("密码错误，还有 {} 次尝试机会", n))),
-            None => Err((StatusCode::UNAUTHORIZED, "密码错误".to_string())),
+            Some(0) => Err(ApiError::forbidden("账户已被锁定")),
+            Some(n) => Err(ApiError::unauthorized(
+                format!("密码错误，还有 {} 次尝试机会", n)
+            )),
+            None => Err(ApiError::unauthorized("密码错误")),
         }
     }
 }

@@ -26,6 +26,7 @@ mod database;
 mod config;
 mod entities;
 mod migration;
+mod middleware;
 
 use state::AppState;
 use handlers::{

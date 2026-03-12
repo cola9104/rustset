@@ -7,6 +7,7 @@ use shared::{User, CreateUserRequest, Role, Permissions, PasswordPolicy};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
 use crate::database::{get_users as db_get_users, insert_user as db_insert_user, delete_user as db_delete_user, update_user as db_update_user};
+use crate::middleware::ApiError;
 use uuid::Uuid;
 use chrono::Utc;
 
@@ -88,39 +89,46 @@ fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Result<(
     Ok(())
 }
 
-pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<User>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<User>>, ApiError> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if user.role != Role::SysAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
     }
 
     // 使用新的 database API
     match db_get_users().await {
         Ok(db_users) => {
             // Update in-memory cache
-            *state.users.write().unwrap() = db_users.clone();
+            *state.users.write()
+                .map_err(|e| ApiError::internal(format!("Failed to write users cache: {}", e)))? = db_users.clone();
             return Ok(Json(db_users));
         }
         Err(e) => {
             eprintln!("Error loading users from database: {}", e);
             // Fallback to memory cache
-            let users = state.users.read().unwrap();
+            let users = state.users.read()
+                .map_err(|e| ApiError::internal(format!("Failed to read users cache: {}", e)))?;
             Ok(Json(users.clone()))
         }
     }
 }
 
-pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateUserRequest>) -> Result<Json<User>, (StatusCode, String)> {
-    let current_user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateUserRequest>) -> Result<Json<User>, ApiError> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if current_user.role != Role::SysAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
     }
 
     // Check if username exists in memory
     {
-        let users = state.users.read().unwrap();
+        let users = state.users.read()
+            .map_err(|e| ApiError::internal(format!("Failed to read users: {}", e)))?;
         if users.iter().any(|u| u.username == req.username) {
-            return Err((StatusCode::BAD_REQUEST, "Username exists".to_string()));
+            return Err(ApiError::conflict("Username already exists"));
         }
     }
 
@@ -152,7 +160,8 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
 
     // Add to in-memory storage
     {
-        let mut users = state.users.write().unwrap();
+        let mut users = state.users.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write users: {}", e)))?;
         users.push(new_user.clone());
     }
 
@@ -166,14 +175,17 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
     Ok(Json(new_user))
 }
 
-pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, (StatusCode, String)> {
-    let current_user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if current_user.role != Role::SysAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
     }
 
     let removed = {
-        let mut users = state.users.write().unwrap();
+        let mut users = state.users.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write users: {}", e)))?;
         users.iter().position(|u| u.id == id).map(|idx| users.remove(idx))
     };
 
@@ -186,7 +198,7 @@ pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path
         log_action(&state.audit_logs, &current_user, "DELETE_USER", &removed_user.username, "Deleted user");
         Ok(Json("Deleted".to_string()))
     } else {
-        Err((StatusCode::NOT_FOUND, "User not found".to_string()))
+        Err(ApiError::not_found(format!("User with ID '{}' not found", id)))
     }
 }
 
