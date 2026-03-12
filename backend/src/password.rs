@@ -8,6 +8,7 @@ use thiserror::Error;
 pub enum PasswordError {
     #[error("Hashing failed: {0}")]
     HashError(String),
+    #[allow(dead_code)]
     #[error("Verification failed")]
     VerifyError,
 }

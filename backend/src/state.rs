@@ -18,6 +18,8 @@ pub struct AppState {
     pub scan_manager: Arc<TokioRwLock<Option<ScanManager>>>,
     pub password_policy: Arc<StdRwLock<PasswordPolicy>>,
     pub password_history: Arc<StdRwLock<Vec<(String, String, DateTime<Utc>)>>>,
+    #[allow(dead_code)]
     pub cloud_zones: Arc<StdRwLock<Vec<CloudZone>>>,
+    #[allow(dead_code)]
     pub cloud_platforms: Arc<StdRwLock<Vec<CloudPlatform>>>,
 }

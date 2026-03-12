@@ -106,7 +106,6 @@ impl Database {
 
     async fn run_migrations(&self) -> Result<(), DbErr> {
         // Run SeaORM migrations
-        use sea_orm_migration::prelude::*;
         use crate::migration::{Migrator, MigratorTrait};
 
         Migrator::up(&self.conn, None).await?;
