@@ -68,7 +68,7 @@ pub async fn execute_advanced_scan(
     let _ = insert_advanced_scan_task_wrapper(&task).await;
 
     // Store task in memory
-    state.advanced_tasks.lock().unwrap().push(task.clone());
+    state.advanced_tasks.write().unwrap().push(task.clone());
 
     // Spawn background scan task using spawn_blocking for scan operations
     let state_clone = state.clone();
@@ -78,7 +78,7 @@ pub async fn execute_advanced_scan(
         let rt = tokio::runtime::Runtime::new().unwrap();
 
         let result = rt.block_on(async {
-            let scan_manager_guard = state_clone.scan_manager.lock().await;
+            let scan_manager_guard = state_clone.scan_manager.write().await;
             if let Some(ref scan_manager) = *scan_manager_guard {
                 scan_manager.execute_advanced_scan(
                     task_id_clone.clone(),
@@ -95,7 +95,7 @@ pub async fn execute_advanced_scan(
             let rt2 = tokio::runtime::Runtime::new().unwrap();
             rt2.block_on(async {
                 {
-                    let mut tasks = state_clone.advanced_tasks.lock().unwrap();
+                    let mut tasks = state_clone.advanced_tasks.write().unwrap();
                     if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_clone) {
                         *t = completed_task.clone();
                     }
@@ -130,13 +130,13 @@ pub async fn get_advanced_tasks(
                 tasks_with_results.push(task);
             }
             // Update in-memory cache
-            *state.advanced_tasks.lock().unwrap() = tasks_with_results.clone();
+            *state.advanced_tasks.write().unwrap() = tasks_with_results.clone();
             tasks_with_results
         }
         Err(e) => {
             eprintln!("Error loading advanced scan tasks from database: {}", e);
             // Fallback to memory cache
-            state.advanced_tasks.lock().unwrap().clone()
+            state.advanced_tasks.read().unwrap().clone()
         }
     };
 
@@ -161,7 +161,7 @@ pub async fn get_advanced_task(
     }
 
     // Fallback to memory cache
-    let tasks = state.advanced_tasks.lock().unwrap();
+    let tasks = state.advanced_tasks.read().unwrap();
     let task = tasks.iter().find(|t| t.id == id)
         .cloned()
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -175,7 +175,7 @@ pub async fn delete_advanced_scan(
 ) -> Result<impl IntoResponse, StatusCode> {
     // Remove from in-memory storage
     {
-        let mut tasks = state.advanced_tasks.lock().unwrap();
+        let mut tasks = state.advanced_tasks.write().unwrap();
         let idx = tasks.iter().position(|t| t.id == id)
             .ok_or(StatusCode::NOT_FOUND)?;
         tasks.remove(idx);
@@ -194,7 +194,7 @@ pub async fn cancel_advanced_scan(
 ) -> Result<impl IntoResponse, StatusCode> {
     // Update task status
     let (found, task_to_update) = {
-        let mut tasks = state.advanced_tasks.lock().unwrap();
+        let mut tasks = state.advanced_tasks.write().unwrap();
         if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
             if task.status == TaskStatus::Running {
                 task.status = TaskStatus::Failed;
@@ -247,7 +247,7 @@ pub async fn export_scan_results(
         }
         Err(_) => {
             // Fallback to memory cache
-            let tasks = state.advanced_tasks.lock().unwrap();
+            let tasks = state.advanced_tasks.read().unwrap();
             let task = tasks.iter().find(|t| t.id == id)
                 .ok_or(StatusCode::NOT_FOUND)?;
             task.results.clone()
@@ -280,7 +280,7 @@ pub async fn export_scan_results(
 pub async fn get_scan_engines_status(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let scan_manager_guard = state.scan_manager.lock().await;
+    let scan_manager_guard = state.scan_manager.read().await;
 
     let status = if let Some(ref scan_manager) = *scan_manager_guard {
         ScanEnginesStatus {
@@ -312,7 +312,7 @@ pub async fn scan_progress_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let tasks = state.advanced_tasks.lock().unwrap();
+    let tasks = state.advanced_tasks.read().unwrap();
     let task = tasks.iter().find(|t| t.id == id);
 
     if let Some(task) = task {
@@ -355,7 +355,7 @@ pub async fn quick_scan(
     State(state): State<AppState>,
     Json(req): Json<QuickScanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let scan_manager_guard = state.scan_manager.lock().await;
+    let scan_manager_guard = state.scan_manager.read().await;
 
     let scan_manager = scan_manager_guard.as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
@@ -398,7 +398,7 @@ pub async fn batch_scan(
     State(state): State<AppState>,
     Json(req): Json<BatchScanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let scan_manager_guard = state.scan_manager.lock().await;
+    let scan_manager_guard = state.scan_manager.read().await;
 
     let scan_manager = scan_manager_guard.as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
