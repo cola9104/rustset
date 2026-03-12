@@ -17,7 +17,7 @@ use crate::database::{
 
 /// 获取云平台（技术底座）配置列表
 pub async fn get_cloud_provider_configs(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> impl IntoResponse {
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,

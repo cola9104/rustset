@@ -16,13 +16,13 @@ pub async fn get_zones(State(state): State<AppState>, headers: HeaderMap) -> Res
         Ok(db_zones) => {
             let zones: Vec<ZoneConfig> = db_zones.into_iter().map(db_zone_to_shared).collect();
             // Update in-memory cache
-            *state.zones.lock().unwrap() = zones.clone();
+            *state.zones.write().unwrap() = zones.clone();
             return Ok(Json(zones));
         }
         Err(e) => {
             eprintln!("Error loading zones from database: {}", e);
             // Fallback to memory cache
-            let zones = state.zones.lock().unwrap();
+            let zones = state.zones.read().unwrap();
             Ok(Json(zones.clone()))
         }
     }
@@ -41,7 +41,7 @@ pub async fn create_zone(State(state): State<AppState>, headers: HeaderMap, Json
 
     // Add to in-memory storage
     {
-        let mut zones = state.zones.lock().unwrap();
+        let mut zones = state.zones.write().unwrap();
         zones.push(new_zone.clone());
     }
 
@@ -60,7 +60,7 @@ pub async fn update_zone(State(state): State<AppState>, headers: HeaderMap, Path
 
     // Find and update zone, then release lock before async operations
     let (found, updated_zone) = {
-        let mut zones = state.zones.lock().unwrap();
+        let mut zones = state.zones.write().unwrap();
         if let Some(zone) = zones.iter_mut().find(|z| z.id == id) {
             zone.name = req.name.clone();
             zone.cidr = req.cidr.clone();
@@ -89,7 +89,7 @@ pub async fn delete_zone(State(state): State<AppState>, headers: HeaderMap, Path
     }
 
     let zone_name = {
-        let zones = state.zones.lock().unwrap();
+        let zones = state.zones.read().unwrap();
         if let Some(z) = zones.iter().find(|z| z.id == id) {
             z.name.clone()
         } else {
@@ -99,7 +99,7 @@ pub async fn delete_zone(State(state): State<AppState>, headers: HeaderMap, Path
 
     // Remove from in-memory storage
     {
-        let mut zones = state.zones.lock().unwrap();
+        let mut zones = state.zones.write().unwrap();
         zones.retain(|z| z.id != id);
     }
 

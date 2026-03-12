@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use sea_orm_migration::schema::{string, integer};
+use sea_orm_migration::schema::string;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde_json::json;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use chrono::Utc;
 
 use crate::state::AppState;
@@ -14,7 +14,6 @@ use crate::database::{
     insert_business_resource_wrapper as db_insert_business_resource,
     update_business_resource as db_update_business_resource,
     delete_business_resource as db_delete_business_resource,
-    get_business_resource_by_id as db_get_business_resource_by_id,
     get_physical_machine_by_business_resource_id,
     get_cloud_virtual_machine_by_business_resource_id,
     DbPhysicalMachine, DbCloudVirtualMachine,
@@ -25,7 +24,7 @@ use shared::{
 };
 
 // 业务资源存储 (内存缓存 + 数据库持久化)
-pub static BUSINESS_RESOURCES: Mutex<Vec<BusinessResource>> = Mutex::new(Vec::new());
+pub static BUSINESS_RESOURCES: RwLock<Vec<BusinessResource>> = RwLock::new(Vec::new());
 
 /// 辅助函数：将 DbPhysicalMachine 转换为 PhysicalMachineInfo
 fn db_to_physical_machine_info(db: DbPhysicalMachine) -> PhysicalMachineInfo {
@@ -64,7 +63,7 @@ async fn db_to_business_resource_with_details(
     db: crate::database::DbBusinessResource,
     conn: &sea_orm::DatabaseConnection,
 ) -> BusinessResource {
-    use chrono::TimeZone;
+    
 
     // Load detail information based on resource type
     let physical_machine_info = if db.resource_type == "physical" {
@@ -166,7 +165,7 @@ async fn db_to_business_resource_with_details(
 
 /// 简化版本：不包含详情信息的转换（用于兼容旧代码）
 fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessResource {
-    use chrono::TimeZone;
+    
     BusinessResource {
         id: Some(db.id),
         resource_type: db.resource_type,
@@ -272,7 +271,7 @@ pub async fn get_business_resources(
                 }
 
                 // 更新内存缓存
-                *BUSINESS_RESOURCES.lock().unwrap() = resources.clone();
+                *BUSINESS_RESOURCES.write().unwrap() = resources.clone();
 
                 return Json(resources).into_response();
             }
@@ -283,7 +282,7 @@ pub async fn get_business_resources(
     }
 
     // 回退到内存缓存，也过滤已交付的资源
-    let resources = BUSINESS_RESOURCES.lock().unwrap();
+    let resources = BUSINESS_RESOURCES.read().unwrap();
     let filtered: Vec<_> = resources.iter()
         .filter(|r| r.delivery_status.as_ref().map(|s| s != "已交付").unwrap_or(true))
         .cloned()
@@ -434,7 +433,7 @@ pub async fn create_business_resource(
 
     // 添加到内存缓存
     {
-        let mut resources = BUSINESS_RESOURCES.lock().unwrap();
+        let mut resources = BUSINESS_RESOURCES.write().unwrap();
         resources.push(new_resource.clone());
     }
 
@@ -472,7 +471,7 @@ pub async fn update_business_resource(
 
     // 检查资源是否存在
     let resource_exists = {
-        let resources = BUSINESS_RESOURCES.lock().unwrap();
+        let resources = BUSINESS_RESOURCES.read().unwrap();
         resources.iter().any(|r| r.id == Some(id))
     };
 
@@ -486,7 +485,7 @@ pub async fn update_business_resource(
     // 更新内存缓存中的资源
     let now = Utc::now();
     let updated_resource = {
-        let mut resources = BUSINESS_RESOURCES.lock().unwrap();
+        let mut resources = BUSINESS_RESOURCES.write().unwrap();
         if let Some(resource) = resources.iter_mut().find(|r| r.id == Some(id)) {
             // 应用更新 - 对于 String 类型的字段，直接赋值
             if let Some(v) = req.resource_type { resource.resource_type = v; }
@@ -635,14 +634,14 @@ pub async fn delete_business_resource(
 
     // 检查资源是否存在
     let found = {
-        let mut resources = BUSINESS_RESOURCES.lock().unwrap();
+        let resources = BUSINESS_RESOURCES.read().unwrap();
         resources.iter().position(|r| r.id == Some(id))
     };
 
     if let Some(pos) = found {
         // 从内存中删除
         {
-            let mut resources = BUSINESS_RESOURCES.lock().unwrap();
+            let mut resources = BUSINESS_RESOURCES.write().unwrap();
             resources.remove(pos);
         }
 

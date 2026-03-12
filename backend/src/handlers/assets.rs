@@ -16,13 +16,13 @@ pub async fn get_assets(State(state): State<AppState>, headers: HeaderMap) -> Re
         Ok(db_assets) => {
             let assets: Vec<Asset> = db_assets.into_iter().map(db_asset_to_shared).collect();
             // Update in-memory cache
-            *state.assets.lock().unwrap() = assets.clone();
+            *state.assets.write().unwrap() = assets.clone();
             return Ok(Json(assets));
         }
         Err(e) => {
             eprintln!("Error loading assets from database: {}", e);
             // Fallback to memory cache
-            let assets = state.assets.lock().unwrap();
+            let assets = state.assets.read().unwrap();
             Ok(Json(assets.clone()))
         }
     }
@@ -39,12 +39,12 @@ pub async fn add_asset(State(state): State<AppState>, headers: HeaderMap, Json(m
     }
 
     {
-        let zones = state.zones.lock().unwrap();
+        let zones = state.zones.read().unwrap();
         asset.zone = determine_zone(&asset.ip, &zones);
     }
 
     let new_asset = {
-        let mut assets = state.assets.lock().unwrap();
+        let mut assets = state.assets.write().unwrap();
         let new_id = assets.len() as i32 + 1;
         asset.id = Some(new_id);
         asset.created_by = Some(user.username.clone());
@@ -72,13 +72,13 @@ pub async fn update_asset(State(state): State<AppState>, headers: HeaderMap, Pat
 
     // Clone zones data before acquiring assets lock
     let zones = {
-        let zones_lock = state.zones.lock().unwrap();
+        let zones_lock = state.zones.read().unwrap();
         zones_lock.clone()
     };
 
     // Find and update asset, then release lock before async operations
     let (found, updated_asset) = {
-        let mut assets = state.assets.lock().unwrap();
+        let mut assets = state.assets.write().unwrap();
         if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
             asset.name = req.name.clone();
             if asset.ip != req.ip {
@@ -118,7 +118,7 @@ pub async fn delete_asset(State(state): State<AppState>, headers: HeaderMap, Pat
 
     // Remove from in-memory storage
     {
-        let mut assets = state.assets.lock().unwrap();
+        let mut assets = state.assets.write().unwrap();
         assets.retain(|a| a.id != Some(id));
     }
 
@@ -135,7 +135,7 @@ pub async fn add_asset_port(State(state): State<AppState>, headers: HeaderMap, P
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut assets = state.assets.lock().unwrap();
+    let mut assets = state.assets.write().unwrap();
     if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
         if !asset.ports.iter().any(|p| p.port == port_info.port) {
             port_info.created_by = Some(user.username.clone());
@@ -155,7 +155,7 @@ pub async fn update_asset_port(State(state): State<AppState>, headers: HeaderMap
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut assets = state.assets.lock().unwrap();
+    let mut assets = state.assets.write().unwrap();
     if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
         if let Some(p) = asset.ports.iter_mut().find(|p| p.port == port) {
             *p = port_info;
@@ -175,7 +175,7 @@ pub async fn delete_asset_port(State(state): State<AppState>, headers: HeaderMap
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut assets = state.assets.lock().unwrap();
+    let mut assets = state.assets.write().unwrap();
     if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
         asset.ports.retain(|p| p.port != port);
         log_action(&state.audit_logs, &user, "DELETE_PORT", &format!("{}:{}", asset.ip, port), "Deleted port");
@@ -195,7 +195,7 @@ pub async fn bind_port(
         return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
     }
 
-    let mut assets = state.assets.lock().unwrap();
+    let mut assets = state.assets.write().unwrap();
     if let Some(asset) = assets.iter_mut().find(|a| a.ip == ip) {
         if let Some(p) = asset.ports.iter_mut().find(|p| p.port == port) {
             p.is_bound = true;

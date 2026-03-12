@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 // Import schema helper functions
-use sea_orm_migration::schema::{pk_auto, string, integer, text, boolean, timestamp, timestamp_with_time_zone, float};
+use sea_orm_migration::schema::{pk_auto, string, integer, text, boolean, float};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

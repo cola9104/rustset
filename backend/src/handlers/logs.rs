@@ -7,7 +7,6 @@ use shared::{AuditLog, Role};
 use crate::state::AppState;
 use crate::utils::get_current_user;
 use crate::database::get_audit_logs as db_get_audit_logs;
-use std::sync::Mutex;
 
 pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<AuditLog>>, (StatusCode, String)> {
     let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
@@ -34,7 +33,7 @@ pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -
                 }
             }).collect();
             // Update in-memory cache
-            *state.audit_logs.lock().unwrap() = logs.clone();
+            *state.audit_logs.write().unwrap() = logs.clone();
             return Ok(Json(logs));
         }
         Err(e) => {
@@ -44,6 +43,6 @@ pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -
     }
 
     // Fallback to memory cache
-    let logs = state.audit_logs.lock().unwrap();
+    let logs = state.audit_logs.read().unwrap();
     Ok(Json(logs.clone()))
 }

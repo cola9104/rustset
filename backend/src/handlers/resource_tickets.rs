@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde_json::json;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use chrono::Utc;
 
 use crate::state::AppState;
@@ -17,7 +17,7 @@ use shared::{
 };
 
 // 内存缓存
-pub static RESOURCE_TICKETS: Mutex<Vec<ResourceTicket>> = Mutex::new(Vec::new());
+pub static RESOURCE_TICKETS: RwLock<Vec<ResourceTicket>> = RwLock::new(Vec::new());
 
 /// 获取资源工单列表
 pub async fn get_resource_tickets(
@@ -30,7 +30,7 @@ pub async fn get_resource_tickets(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
     };
 
-    let tickets = RESOURCE_TICKETS.lock().unwrap();
+    let tickets = RESOURCE_TICKETS.read().unwrap();
     let mut filtered: Vec<_> = tickets.iter()
         .filter(|t| {
             let mut matches = true;
@@ -94,7 +94,7 @@ pub async fn get_resource_ticket(
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
     };
 
-    let tickets = RESOURCE_TICKETS.lock().unwrap();
+    let tickets = RESOURCE_TICKETS.read().unwrap();
     if let Some(ticket) = tickets.iter().find(|t| t.id == Some(id)) {
         Json(ticket.clone()).into_response()
     } else {
@@ -123,7 +123,7 @@ pub async fn create_resource_ticket(
 
     // 获取新的ID
     let new_id = {
-        let tickets = RESOURCE_TICKETS.lock().unwrap();
+        let tickets = RESOURCE_TICKETS.read().unwrap();
         tickets.iter().filter_map(|t| t.id).max().unwrap_or(0) + 1
     };
 
@@ -194,7 +194,7 @@ pub async fn create_resource_ticket(
 
     // 添加到内存
     {
-        let mut tickets = RESOURCE_TICKETS.lock().unwrap();
+        let mut tickets = RESOURCE_TICKETS.write().unwrap();
         tickets.push(ticket.clone());
     }
 
@@ -231,7 +231,7 @@ pub async fn update_resource_ticket(
     let now = Utc::now();
     let updated_at_str = now.format("%Y-%m-%d %H:%M").to_string();
 
-    let mut tickets = RESOURCE_TICKETS.lock().unwrap();
+    let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         // 更新字段
         if let Some(v) = req.ecs_name { ticket.ecs_name = v; }
@@ -294,7 +294,7 @@ pub async fn delete_resource_ticket(
         return (StatusCode::FORBIDDEN, "Only SysAdmin can delete tickets".to_string()).into_response();
     }
 
-    let mut tickets = RESOURCE_TICKETS.lock().unwrap();
+    let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(pos) = tickets.iter().position(|t| t.id == Some(id)) {
         tickets.remove(pos);
 
@@ -334,7 +334,7 @@ pub async fn approve_ticket(
     let now = Utc::now();
     let time_str = now.format("%Y-%m-%d %H:%M").to_string();
 
-    let mut tickets = RESOURCE_TICKETS.lock().unwrap();
+    let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         if ticket.ticket_status != TicketStatus::PendingApproval {
             return (StatusCode::BAD_REQUEST, "只能审批待审批状态的工单".to_string()).into_response();
@@ -391,7 +391,7 @@ pub async fn provision_ticket(
     let now = Utc::now();
     let time_str = now.format("%Y-%m-%d %H:%M").to_string();
 
-    let mut tickets = RESOURCE_TICKETS.lock().unwrap();
+    let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         if ticket.ticket_status != TicketStatus::Approved {
             return (StatusCode::BAD_REQUEST, "只能配置已批准的工单".to_string()).into_response();
@@ -442,7 +442,7 @@ pub async fn deliver_ticket(
     let now = Utc::now();
     let time_str = now.format("%Y-%m-%d %H:%M").to_string();
 
-    let mut tickets = RESOURCE_TICKETS.lock().unwrap();
+    let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         if ticket.ticket_status != TicketStatus::PendingDelivery {
             return (StatusCode::BAD_REQUEST, "只能交付待交付状态的工单".to_string()).into_response();
@@ -475,7 +475,7 @@ pub async fn deliver_ticket(
 }
 
 /// 辅助函数：获取关联名称
-fn get_related_names(req: &CreateResourceTicketRequest) -> (Option<String>, Option<String>, Option<String>) {
+fn get_related_names(_req: &CreateResourceTicketRequest) -> (Option<String>, Option<String>, Option<String>) {
     // 这里简化处理，实际应该从数据库查询
     // 暂时返回 None，前端会提供名称
     (None, None, None)

@@ -16,13 +16,13 @@ pub async fn get_roles(
         Ok(db_roles) => {
             let roles: Vec<CustomRole> = db_roles.into_iter().map(db_custom_role_to_shared).collect();
             // Update in-memory cache
-            *state.custom_roles.lock().unwrap() = roles.clone();
+            *state.custom_roles.write().unwrap() = roles.clone();
             roles
         }
         Err(e) => {
             eprintln!("Error loading custom roles from database: {}", e);
             // Fallback to memory cache
-            state.custom_roles.lock().unwrap().clone()
+            state.custom_roles.read().unwrap().clone()
         }
     };
 
@@ -124,7 +124,7 @@ pub async fn get_role(
             Err(e) => {
                 eprintln!("Error loading custom roles from database: {}", e);
                 // Fallback to memory cache
-                let custom_roles = state.custom_roles.lock().unwrap();
+                let custom_roles = state.custom_roles.read().unwrap();
                 if let Some(role) = custom_roles.iter().find(|r| r.id == Some(role_id)) {
                     return Ok(Json(serde_json::json!({
                         "id": role.id.map(|id| id.to_string()),
@@ -150,7 +150,7 @@ pub async fn create_role(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // 检查角色名称是否已存在
     {
-        let custom_roles = state.custom_roles.lock().unwrap();
+        let custom_roles = state.custom_roles.read().unwrap();
         if custom_roles.iter().any(|r| r.name == req.name) {
             return Ok(Json(serde_json::json!({
                 "error": "角色名称已存在"
@@ -175,7 +175,7 @@ pub async fn create_role(
         Err(e) => {
             eprintln!("Error inserting custom role to database: {}", e);
             // Fallback to in-memory with generated ID
-            let mut custom_roles = state.custom_roles.lock().unwrap();
+            let mut custom_roles = state.custom_roles.write().unwrap();
             let id = custom_roles.len() as i32 + 1;
             let mut role_with_id = new_role.clone();
             role_with_id.id = Some(id);
@@ -190,7 +190,7 @@ pub async fn create_role(
 
     // Update in-memory cache
     {
-        let mut custom_roles = state.custom_roles.lock().unwrap();
+        let mut custom_roles = state.custom_roles.write().unwrap();
         let mut role_with_id = new_role.clone();
         role_with_id.id = Some(new_id);
         custom_roles.push(role_with_id);
@@ -224,7 +224,7 @@ pub async fn update_role(
 
     // Find current role data
     let (found, current_role) = {
-        let custom_roles = state.custom_roles.lock().unwrap();
+        let custom_roles = state.custom_roles.read().unwrap();
         if let Some(role) = custom_roles.iter().find(|r| r.id == Some(target_id)) {
             (true, role.clone())
         } else {
@@ -264,7 +264,7 @@ pub async fn update_role(
 
     // Update in-memory cache
     {
-        let mut custom_roles = state.custom_roles.lock().unwrap();
+        let mut custom_roles = state.custom_roles.write().unwrap();
         if let Some(role) = custom_roles.iter_mut().find(|r| r.id == Some(target_id)) {
             *role = updated_role.clone();
         }
@@ -295,7 +295,7 @@ pub async fn delete_role(
 
     // Check if role exists
     {
-        let custom_roles = state.custom_roles.lock().unwrap();
+        let custom_roles = state.custom_roles.read().unwrap();
         if !custom_roles.iter().any(|r| r.id == Some(target_id)) {
             return Err(StatusCode::NOT_FOUND);
         }
@@ -303,7 +303,7 @@ pub async fn delete_role(
 
     // Remove from in-memory storage
     {
-        let mut custom_roles = state.custom_roles.lock().unwrap();
+        let mut custom_roles = state.custom_roles.write().unwrap();
         custom_roles.retain(|r| r.id != Some(target_id));
     }
 

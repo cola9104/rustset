@@ -26,7 +26,7 @@ pub async fn get_cloud_service_assets(
     };
 
     // Load cloud provider configs for provider name lookup
-    let provider_configs = if let Some(db_conn) = crate::database::get_db() {
+    let _provider_configs = if let Some(db_conn) = crate::database::get_db() {
         match get_all_cloud_provider_configs(&db_conn).await {
             Ok(configs) => {
                 // Convert to shared::CloudProviderConfig

@@ -1,17 +1,17 @@
 use axum::http::HeaderMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use shared::{User, AuditLog, ZoneConfig, NetworkZone};
 use chrono::Utc;
 use uuid::Uuid;
 use std::net::IpAddr;
 use ipnetwork::IpNetwork;
 
-pub fn get_current_user(headers: &HeaderMap, users: &Arc<Mutex<Vec<User>>>) -> Option<User> {
+pub fn get_current_user(headers: &HeaderMap, users: &Arc<RwLock<Vec<User>>>) -> Option<User> {
     if let Some(auth_header) = headers.get("Authorization") {
         if let Ok(token) = auth_header.to_str() {
             // Simple Mock: Token is just the username (trimmed to handle whitespace)
             let token = token.trim();
-            let users_guard = users.lock().unwrap();
+            let users_guard = users.read().unwrap();
             return users_guard.iter().find(|u| u.username == token).cloned();
         }
     }
@@ -19,7 +19,7 @@ pub fn get_current_user(headers: &HeaderMap, users: &Arc<Mutex<Vec<User>>>) -> O
 }
 
 pub fn log_action(
-    logs: &Arc<Mutex<Vec<AuditLog>>>,
+    logs: &Arc<RwLock<Vec<AuditLog>>>,
     user: &User,
     action: &str,
     target: &str,
@@ -37,7 +37,7 @@ pub fn log_action(
 
     // Add to in-memory storage
     {
-        let mut logs_guard = logs.lock().unwrap();
+        let mut logs_guard = logs.write().unwrap();
         logs_guard.push(log_entry.clone());
     }
 

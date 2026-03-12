@@ -9,9 +9,9 @@ use crate::entities::{
     user, audit_log, asset, task, risk, network_zone, custom_role, advanced_scan_task, quick_scan_result,
     CloudZone, CloudService, CloudProviderConfig, BusinessResource,
     PhysicalMachine, CloudVirtualMachine,
-    User, AuditLog, Asset, Task, Risk, NetworkZone, CustomRole, AdvancedScanTask, QuickScanResult,
+    User, AuditLog, Asset, Task, Risk, NetworkZone, CustomRole, AdvancedScanTask,
 };
-use shared::{User as SharedUser, Role, Permissions, PasswordPolicy};
+use shared::User as SharedUser;
 use std::sync::Arc;
 use chrono::Utc;
 use uuid;
@@ -126,7 +126,7 @@ impl Database {
 /// Convert DbUser (entity) to shared User
 pub fn db_user_to_shared(db: user::Model) -> SharedUser {
     use shared::Role;
-    use chrono::{TimeZone, Utc};
+    use chrono::Utc;
 
     let role = match db.role.as_str() {
         "SysAdmin" => Role::SysAdmin,
@@ -1008,7 +1008,7 @@ pub async fn delete_user(id: &str) -> Result<(), DbErr> {
     delete_user_by_id(&conn, id).await
 }
 
-pub async fn update_user(id: &str, user: &SharedUser) -> Result<(), DbErr> {
+pub async fn update_user(_id: &str, user: &SharedUser) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     update_user_by_id(&conn, user).await
 }
@@ -1645,7 +1645,7 @@ pub async fn delete_cloud_virtual_machine(
 
 // ==================== Service Provider CRUD ====================
 
-use crate::entities::{service_provider, machine_room, cloud_platform_config, security_product, ServiceProvider, MachineRoom, SecurityProduct};
+use crate::entities::{service_provider, machine_room, cloud_platform_config, security_product};
 use sea_orm::QueryFilter;
 
 /// 服务商数据返回结构

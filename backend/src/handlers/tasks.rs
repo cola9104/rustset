@@ -17,13 +17,13 @@ pub async fn get_tasks(State(state): State<AppState>, headers: HeaderMap) -> Res
         Ok(db_tasks) => {
             let tasks: Vec<Task> = db_tasks.into_iter().map(db_task_to_shared).collect();
             // Update in-memory cache
-            *state.tasks.lock().unwrap() = tasks.clone();
+            *state.tasks.write().unwrap() = tasks.clone();
             return Ok(Json(tasks));
         }
         Err(e) => {
             eprintln!("Error loading tasks from database: {}", e);
             // Fallback to memory cache
-            let tasks = state.tasks.lock().unwrap();
+            let tasks = state.tasks.read().unwrap();
             Ok(Json(tasks.clone()))
         }
     }
@@ -54,7 +54,7 @@ pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json
 
     // Add to in-memory storage
     {
-        let mut tasks = state.tasks.lock().unwrap();
+        let mut tasks = state.tasks.write().unwrap();
         tasks.push(new_task.clone());
     }
 
@@ -73,7 +73,7 @@ pub async fn update_task(State(state): State<AppState>, headers: HeaderMap, Path
     }
 
     let (found, updated_task) = {
-        let mut tasks = state.tasks.lock().unwrap();
+        let mut tasks = state.tasks.write().unwrap();
         if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
             task.name = req.name.clone();
             task.target = req.target;
@@ -122,7 +122,7 @@ pub async fn delete_task(State(state): State<AppState>, headers: HeaderMap, Path
 
     // Remove from in-memory storage
     {
-        let mut tasks = state.tasks.lock().unwrap();
+        let mut tasks = state.tasks.write().unwrap();
         tasks.retain(|t| t.id != id);
     }
 
@@ -244,7 +244,7 @@ pub async fn trigger_scan(State(state): State<AppState>, headers: HeaderMap, Jso
 
         // Update assets state
         if !discovered_ports.is_empty() {
-            let mut assets = assets_handle.lock().unwrap();
+            let mut assets = assets_handle.write().unwrap();
             if let Some(asset) = assets.iter_mut().find(|a| a.ip == target_ip_clone) {
                 for p in discovered_ports {
                     // Update existing or add new
@@ -264,7 +264,7 @@ pub async fn trigger_scan(State(state): State<AppState>, headers: HeaderMap, Jso
         // Update risks state
         if !discovered_risks.is_empty() {
              use shared::{Risk, RiskStatus};
-             let mut risks = risks_handle.lock().unwrap();
+             let mut risks = risks_handle.write().unwrap();
              for (port, severity, desc, sol) in discovered_risks {
                  // Avoid duplicates
                  if !risks.iter().any(|r| r.asset_ip == target_ip_clone && r.port == port && r.description == desc && r.status != RiskStatus::Resolved) {

@@ -15,13 +15,13 @@ pub async fn get_risks(State(state): State<AppState>, headers: HeaderMap) -> Res
         Ok(db_risks) => {
             let risks: Vec<Risk> = db_risks.into_iter().map(db_risk_to_shared).collect();
             // Update in-memory cache
-            *state.risks.lock().unwrap() = risks.clone();
+            *state.risks.write().unwrap() = risks.clone();
             return Ok(Json(risks));
         }
         Err(e) => {
             eprintln!("Error loading risks from database: {}", e);
             // Fallback to memory cache
-            let risks = state.risks.lock().unwrap();
+            let risks = state.risks.read().unwrap();
             Ok(Json(risks.clone()))
         }
     }
@@ -46,7 +46,7 @@ pub async fn update_risk_status(State(state): State<AppState>, headers: HeaderMa
     };
 
     let (found, updated_risk) = {
-        let mut risks = state.risks.lock().unwrap();
+        let mut risks = state.risks.write().unwrap();
         if let Some(risk) = risks.iter_mut().find(|r| r.id == id) {
             risk.status = new_status;
             risk.updated_at = Some(Utc::now());
@@ -83,7 +83,7 @@ pub async fn resolve_risk(State(state): State<AppState>, headers: HeaderMap, Pat
     }
 
     let (found, updated_risk) = {
-        let mut risks = state.risks.lock().unwrap();
+        let mut risks = state.risks.write().unwrap();
         if let Some(risk) = risks.iter_mut().find(|r| r.id == id) {
             risk.status = RiskStatus::Resolved;
             risk.updated_at = Some(Utc::now());

@@ -27,10 +27,7 @@ pub mod cloud_platform_config;
 pub mod security_product;
 
 pub use cloud_zone::Entity as CloudZone;
-pub use resource_ticket::Entity as ResourceTicket;
-pub use cloud_platform::Entity as CloudPlatform;
 pub use cloud_service::Entity as CloudService;
-pub use region::Entity as Region;
 pub use cloud_provider_config::Entity as CloudProviderConfig;
 pub use business_resource::Entity as BusinessResource;
 pub use physical_machine::Entity as PhysicalMachine;
@@ -43,11 +40,6 @@ pub use risk::Entity as Risk;
 pub use network_zone::Entity as NetworkZone;
 pub use custom_role::Entity as CustomRole;
 pub use advanced_scan_task::Entity as AdvancedScanTask;
-pub use quick_scan_result::Entity as QuickScanResult;
-pub use service_provider::Entity as ServiceProvider;
-pub use machine_room::Entity as MachineRoom;
-pub use cloud_platform_config::Entity as CloudPlatformConfig;
-pub use security_product::Entity as SecurityProduct;
 
 // Re-export the models for convenience
 pub mod prelude {
