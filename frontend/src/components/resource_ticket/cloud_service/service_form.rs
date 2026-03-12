@@ -108,7 +108,7 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
     let mut form_data = use_signal(|| initial_data);
     let mut error_msg = use_signal(|| String::new());
     let mut show_security_selector = use_signal(|| false);
-    let mut security_products_signal = use_signal(|| form_data.read().security_products.clone());
+    let security_products_signal = use_signal(|| form_data.read().security_products.clone());
 
     // 获取服务商和云平台列表
     let providers = PROVIDERS_STATE.read().clone();

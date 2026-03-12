@@ -27,8 +27,8 @@ pub fn SecurityProductManagement() -> Element {
     let mut viewing_product = use_signal(|| None::<SecurityProduct>);
 
     // 数据和加载状态
-    let mut products = use_signal(Vec::<SecurityProduct>::new);
-    let mut is_loading = use_signal(|| true);
+    let products = use_signal(Vec::<SecurityProduct>::new);
+    let is_loading = use_signal(|| true);
 
     // 加载数据 - 包括安全产品、服务商、机房和云平台
     {
@@ -80,7 +80,7 @@ pub fn SecurityProductManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let mut products = products.clone();
+        let products = products.clone();
         move || {
             let mut products = products.clone();
             spawn(async move {

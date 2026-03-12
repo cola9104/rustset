@@ -4,7 +4,6 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaMagnifyingGlass, FaShieldHalved, FaCheck, FaClock, FaXmark,
     FaCircleCheck, FaPen, FaEye, FaArrowRight, FaArrowLeft
 };
-use crate::app::NETWORK_ZONES_STATE;
 
 /// 网络策略申请状态
 #[derive(Clone, Debug, PartialEq)]

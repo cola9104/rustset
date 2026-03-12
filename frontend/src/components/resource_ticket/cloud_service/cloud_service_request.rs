@@ -2,13 +2,10 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaMagnifyingGlass, FaCloud, FaCheck, FaClock, FaXmark,
-    FaCircleCheck, FaCircleXmark, FaPen, FaEye, FaShieldHalved
+    FaCircleCheck, FaPen, FaEye
 };
-use crate::app::CLOUD_PLATFORMS_STATE;
 use crate::app::PROVIDERS_STATE;
-use crate::app::SECURITY_PRODUCTS_STATE;
 use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
-use crate::state::security_product::{SecurityProductCategory, SecurityProductStatus};
 
 /// 云服务申请状态
 #[derive(Clone, Debug, PartialEq)]

@@ -86,7 +86,7 @@ impl Default for SecurityPolicy {
 #[allow(non_snake_case)]
 pub fn PasswordPolicy() -> Element {
     // 使用全局状态
-    let mut policy = use_signal(|| SECURITY_POLICY_STATE.read().clone());
+    let policy = use_signal(|| SECURITY_POLICY_STATE.read().clone());
     let mut show_success = use_signal(|| false);
     let mut active_section = use_signal(|| "password".to_string());
 

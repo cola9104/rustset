@@ -11,9 +11,9 @@ use crate::state::user_role::{use_auth, UserRole, ApplicationTab};
 use crate::state::resource_ticket::{
     TicketStatus, ResourceTicket, ResourceType, init_test_tickets,
 };
-use crate::state::cloud_platform::{CloudPlatformConfig, init_cloud_platforms};
-use crate::state::machine_room::{MachineRoomConfig, init_machine_rooms};
-use crate::state::service_provider::{ServiceProviderConfig, init_service_providers};
+use crate::state::cloud_platform::init_cloud_platforms;
+use crate::state::machine_room::init_machine_rooms;
+use crate::state::service_provider::init_service_providers;
 use crate::app::PROVIDERS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
 use crate::app::SECURITY_PRODUCTS_STATE;
@@ -21,11 +21,11 @@ use crate::components::security_product::security_product_selector::{SecurityPro
 
 // 导入三个模块的表单组件和请求类型
 use crate::components::resource_ticket::cloud_service::CloudServiceForm;
-use crate::components::resource_ticket::cloud_service::cloud_service_request::{CloudServiceRequest, CloudServiceStatus};
+use crate::components::resource_ticket::cloud_service::cloud_service_request::CloudServiceRequest;
 use crate::components::resource_ticket::physical_server::PhysicalServerForm;
-use crate::components::resource_ticket::physical_server::physical_server_request::{PhysicalServerRequest, PhysicalServerStatus};
+use crate::components::resource_ticket::physical_server::physical_server_request::PhysicalServerRequest;
 use crate::components::resource_ticket::network_policy::NetworkPolicyForm;
-use crate::components::resource_ticket::network_policy::network_policy_request::{NetworkPolicyRequest, NetworkPolicyStatus};
+use crate::components::resource_ticket::network_policy::network_policy_request::NetworkPolicyRequest;
 
 // 导入API服务
 use crate::services::resource_ticket_api::{
@@ -40,8 +40,8 @@ use crate::services::resource_ticket_api::{
 #[allow(non_snake_case)]
 pub fn ResourceTicket() -> Element {
     let auth = use_auth();
-    let mut tickets = use_signal(Vec::new);
-    let mut is_loading = use_signal(|| true);
+    let tickets = use_signal(Vec::new);
+    let is_loading = use_signal(|| true);
     let mut resource_type_tab = use_signal(|| ResourceType::Cloud);
     let mut workflow_tab = use_signal(|| auth.read().role.accessible_tabs().first().copied().unwrap_or(ApplicationTab::MyApplications));
     let mut search_query = use_signal(|| String::new());
@@ -1130,9 +1130,9 @@ fn TicketDetailView(
 #[component]
 fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -> Element {
     let ticket_clone = ticket.clone();
-    let mut tickets_clone = tickets.clone();
+    let tickets_clone = tickets.clone();
     let ticket_clone2 = ticket.clone();
-    let mut tickets_clone2 = tickets.clone();
+    let tickets_clone2 = tickets.clone();
     let mut comment = use_signal(|| String::new());
     let mut is_approving = use_signal(|| false);
 
@@ -1208,7 +1208,7 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
 #[component]
 fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -> Element {
     let ticket_clone = ticket.clone();
-    let mut tickets_clone = tickets.clone();
+    let tickets_clone = tickets.clone();
     let mut details = use_signal(|| String::new());
     let mut ip_address = use_signal(|| ticket.ip_address.clone());
     let mut is_provisioning = use_signal(|| false);
@@ -1267,7 +1267,7 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
 #[component]
 fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -> Element {
     let ticket_clone = ticket.clone();
-    let mut tickets_clone = tickets.clone();
+    let tickets_clone = tickets.clone();
     let mut comment = use_signal(|| String::new());
     let mut is_delivering = use_signal(|| false);
 
@@ -1454,7 +1454,7 @@ fn NewTicketForm(
     let mut selected_cloud_platform_id = use_signal(|| Option::<i32>::None);
     let mut selected_machine_room_id = use_signal(|| Option::<i32>::None);
     let resource_type = default_resource_type;  // 直接使用传入的类型，不可切换
-    let mut zone_name = use_signal(|| String::new());       // 区域
+    let zone_name = use_signal(|| String::new());       // 区域
     let mut zone_cabinet = use_signal(|| String::new());    // 机柜
     let mut rack_units = use_signal(|| 0i32);               // 机位(U数)
     let mut ecs_type = use_signal(|| "ecs.g6.xlarge".to_string());
@@ -1465,9 +1465,9 @@ fn NewTicketForm(
     let mut memory_gb = use_signal(|| 16);
     let mut system_disk = use_signal(|| "SSD".to_string());
     let mut system_disk_size = use_signal(|| 100);
-    let mut has_security = use_signal(|| true);
+    let has_security = use_signal(|| true);
     // 初始化安全产品选择，只为堡垒机、VPN、SIEM设置默认值（这些分类只有一个产品）
-    let mut selected_security_products = use_signal(|| {
+    let selected_security_products = use_signal(|| {
         let mut products = SelectedSecurityProducts::new();
         use crate::state::security_product::SecurityProductCategory;
         // 只预选指定的三个分类（堡垒机ID=8, VPN ID=7, SIEM ID=9）

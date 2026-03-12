@@ -2,11 +2,9 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaCloud,
-    FaCheck, FaKey, FaEye, FaVial, FaPowerOff, FaBuilding, FaXmark,
+    FaCheck, FaEye, FaVial, FaPowerOff, FaXmark,
 };
 use crate::state::cloud_platform::CloudPlatformConfig;
-use crate::state::service_provider::ServiceProviderConfig;
-use crate::state::machine_room::MachineRoomConfig;
 use crate::app::{PROVIDERS_STATE, MACHINE_ROOMS_STATE};
 use crate::services::{
     fetch_cloud_platform_configs, create_cloud_platform_config, update_cloud_platform_config, delete_cloud_platform_config,
@@ -36,8 +34,8 @@ pub fn CloudPlatformManagement() -> Element {
     let mut test_result = use_signal(|| TestConnectionResult::Idle);
 
     // 数据和加载状态
-    let mut platforms = use_signal(Vec::<CloudPlatformConfig>::new);
-    let mut is_loading = use_signal(|| true);
+    let platforms = use_signal(Vec::<CloudPlatformConfig>::new);
+    let is_loading = use_signal(|| true);
 
     // 加载数据 - 包括云平台、服务商和机房
     {
@@ -80,7 +78,7 @@ pub fn CloudPlatformManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let mut platforms = platforms.clone();
+        let platforms = platforms.clone();
         move || {
             let mut platforms = platforms.clone();
             spawn(async move {

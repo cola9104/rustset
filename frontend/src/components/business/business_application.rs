@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaBuilding,
-    FaServer, FaDatabase, FaCheck, FaCircleXmark, FaEye, FaCloud
+    FaServer, FaCheck, FaCircleXmark, FaEye, FaCloud
 };
 use crate::app::CLOUD_PLATFORMS_STATE;
 use crate::app::PROVIDERS_STATE;
@@ -717,7 +717,7 @@ fn AppForm(
         on_close(());
     };
 
-    let modal_title = if is_editing { "编辑应用" } else { "添加应用" };
+    let _modal_title = if is_editing { "编辑应用" } else { "添加应用" };
     let button_text = if is_editing { "保存" } else { "添加" };
 
     rsx! {

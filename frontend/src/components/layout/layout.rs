@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_router::{Outlet, navigator};
 use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{FaBars, FaRightFromBracket, FaUser};
+use dioxus_free_icons::icons::fa_solid_icons::{FaBars, FaRightFromBracket};
 
 use super::Sidebar;
 use crate::router::Route;

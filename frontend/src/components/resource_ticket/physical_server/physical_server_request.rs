@@ -2,11 +2,10 @@ use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaMagnifyingGlass, FaServer, FaCheck, FaClock, FaXmark,
-    FaCircleCheck, FaPen, FaEye, FaShieldHalved
+    FaCircleCheck, FaPen, FaEye
 };
 use crate::app::PROVIDERS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
-use crate::app::SECURITY_PRODUCTS_STATE;
 use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
 
 /// 物理机申请状态

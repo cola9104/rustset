@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaBuilding, FaPhone,
+    FaPlus, FaMagnifyingGlass, FaBuilding, FaPhone,
     FaEnvelope, FaCircleCheck, FaCircleXmark,
 };
 use crate::state::service_provider::ServiceProviderConfig;
@@ -17,8 +17,8 @@ pub fn ServiceProviderManagement() -> Element {
     let mut status_filter = use_signal(|| String::from("all"));
 
     // 数据和加载状态
-    let mut providers = use_signal(Vec::<ServiceProviderConfig>::new);
-    let mut is_loading = use_signal(|| true);
+    let providers = use_signal(Vec::<ServiceProviderConfig>::new);
+    let is_loading = use_signal(|| true);
 
     // 模态框状态
     let mut show_add_modal = use_signal(|| false);
@@ -48,7 +48,7 @@ pub fn ServiceProviderManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let mut providers = providers.clone();
+        let providers = providers.clone();
         move || {
             let mut providers = providers.clone();
             spawn(async move {

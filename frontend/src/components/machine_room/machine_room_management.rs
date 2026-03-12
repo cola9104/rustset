@@ -21,8 +21,8 @@ pub fn MachineRoomManagement() -> Element {
     let mut room_type_filter = use_signal(|| String::from("all"));
 
     // 数据和加载状态
-    let mut rooms = use_signal(Vec::<MachineRoomConfig>::new);
-    let mut is_loading = use_signal(|| true);
+    let rooms = use_signal(Vec::<MachineRoomConfig>::new);
+    let is_loading = use_signal(|| true);
 
     // 加载数据 - 包括机房和服务商
     {
@@ -56,7 +56,7 @@ pub fn MachineRoomManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let mut rooms = rooms.clone();
+        let rooms = rooms.clone();
         move || {
             let mut rooms = rooms.clone();
             spawn(async move {
@@ -107,8 +107,8 @@ pub fn MachineRoomManagement() -> Element {
     // 按服务商统计
     let telecom_count = rooms.read().iter().filter(|r| r.provider_id == 1).count() as i32;
     let unicom_count = rooms.read().iter().filter(|r| r.provider_id == 2).count() as i32;
-    let mobile_count = rooms.read().iter().filter(|r| r.provider_id == 3).count() as i32;
-    let broadcasting_count = rooms.read().iter().filter(|r| r.provider_id == 4).count() as i32;
+    let _mobile_count = rooms.read().iter().filter(|r| r.provider_id == 3).count() as i32;
+    let _broadcasting_count = rooms.read().iter().filter(|r| r.provider_id == 4).count() as i32;
 
     // 预计算服务商名称
     let rooms_with_provider_names: Vec<(MachineRoomConfig, String)> = filtered_rooms

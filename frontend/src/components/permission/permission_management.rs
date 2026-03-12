@@ -640,7 +640,7 @@ fn EditPermissionModal(permission: Permission, on_close: EventHandler<()>, on_sa
 fn AddRoleModal(on_close: EventHandler<()>, on_save: EventHandler<Role>) -> Element {
     let mut name = use_signal(String::new);
     let mut description = use_signal(String::new);
-    let mut selected_permissions = use_signal(|| Vec::<String>::new());
+    let selected_permissions = use_signal(|| Vec::<String>::new());
     let module_groups = get_module_permission_groups();
 
     rsx! {
@@ -684,7 +684,7 @@ fn AddRoleModal(on_close: EventHandler<()>, on_save: EventHandler<Role>) -> Elem
 fn EditRoleModal(role: Role, on_close: EventHandler<()>, on_save: EventHandler<Role>) -> Element {
     let mut name = use_signal(|| role.name.clone());
     let mut description = use_signal(|| role.description.clone());
-    let mut selected_permissions = use_signal(|| role.permissions.clone());
+    let selected_permissions = use_signal(|| role.permissions.clone());
     let module_groups = get_module_permission_groups();
 
     rsx! {
