@@ -6,33 +6,39 @@ use shared::{Task, CreateTaskRequest, TaskStatus, ScanRequest, PortInfo, Role};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
 use crate::database::{get_tasks as db_get_tasks, insert_task_wrapper as db_insert_task, update_task as db_update_task, delete_task as db_delete_task, db_task_to_shared};
+use crate::middleware::ApiError;
 use uuid::Uuid;
 use chrono::Utc;
 
-pub async fn get_tasks(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<Task>>, (StatusCode, String)> {
-    let _user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn get_tasks(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<Task>>, ApiError> {
+    let _user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     // Try to load from database first
     match db_get_tasks().await {
         Ok(db_tasks) => {
             let tasks: Vec<Task> = db_tasks.into_iter().map(db_task_to_shared).collect();
             // Update in-memory cache
-            *state.tasks.write().unwrap() = tasks.clone();
+            *state.tasks.write()
+                .map_err(|e| ApiError::internal(format!("Failed to write tasks cache: {}", e)))? = tasks.clone();
             return Ok(Json(tasks));
         }
         Err(e) => {
             eprintln!("Error loading tasks from database: {}", e);
             // Fallback to memory cache
-            let tasks = state.tasks.read().unwrap();
+            let tasks = state.tasks.read()
+                .map_err(|e| ApiError::internal(format!("Failed to read tasks cache: {}", e)))?;
             Ok(Json(tasks.clone()))
         }
     }
 }
 
-pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateTaskRequest>) -> Result<Json<Task>, ApiError> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if user.role != Role::SecAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
+        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
     let new_task = Task {
@@ -54,7 +60,8 @@ pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json
 
     // Add to in-memory storage
     {
-        let mut tasks = state.tasks.write().unwrap();
+        let mut tasks = state.tasks.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write tasks: {}", e)))?;
         tasks.push(new_task.clone());
     }
 
@@ -66,14 +73,17 @@ pub async fn create_task(State(state): State<AppState>, headers: HeaderMap, Json
     Ok(Json(new_task))
 }
 
-pub async fn update_task(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Json(req): Json<CreateTaskRequest>) -> Result<Json<Option<Task>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn update_task(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Json(req): Json<CreateTaskRequest>) -> Result<Json<Option<Task>>, ApiError> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if user.role != Role::SecAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
+        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
     let (found, updated_task) = {
-        let mut tasks = state.tasks.write().unwrap();
+        let mut tasks = state.tasks.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write tasks: {}", e)))?;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
             task.name = req.name.clone();
             task.target = req.target;
@@ -114,15 +124,18 @@ pub async fn update_task(State(state): State<AppState>, headers: HeaderMap, Path
     }
 }
 
-pub async fn delete_task(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn delete_task(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if user.role != Role::SecAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
+        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
     // Remove from in-memory storage
     {
-        let mut tasks = state.tasks.write().unwrap();
+        let mut tasks = state.tasks.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write tasks: {}", e)))?;
         tasks.retain(|t| t.id != id);
     }
 
@@ -136,10 +149,12 @@ pub async fn delete_task(State(state): State<AppState>, headers: HeaderMap, Path
 use std::io::Read;
 use std::net::SocketAddr;
 
-pub async fn trigger_scan(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<ScanRequest>) -> Result<Json<String>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn trigger_scan(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<ScanRequest>) -> Result<Json<String>, ApiError> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     if user.role != Role::SecAdmin {
-        return Err((StatusCode::FORBIDDEN, "Access denied: SecAdmin only".to_string()));
+        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
     let target_ip = req.target_ip.clone();

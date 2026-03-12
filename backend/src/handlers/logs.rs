@@ -7,13 +7,15 @@ use shared::{AuditLog, Role};
 use crate::state::AppState;
 use crate::utils::get_current_user;
 use crate::database::get_audit_logs as db_get_audit_logs;
+use crate::middleware::ApiError;
 
-pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<AuditLog>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<AuditLog>>, ApiError> {
+    let user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     // SecAdmin、SysAdmin 和 Auditor 可以查看审计日志
     if user.role != Role::SecAdmin && user.role != Role::SysAdmin && user.role != Role::Auditor {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(ApiError::forbidden("Access denied: SecAdmin, SysAdmin, or Auditor only"));
     }
 
     // Try to load from database first
@@ -33,7 +35,8 @@ pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -
                 }
             }).collect();
             // Update in-memory cache
-            *state.audit_logs.write().unwrap() = logs.clone();
+            *state.audit_logs.write()
+                .map_err(|e| ApiError::internal(format!("Failed to write audit logs cache: {}", e)))? = logs.clone();
             return Ok(Json(logs));
         }
         Err(e) => {
@@ -43,6 +46,7 @@ pub async fn get_audit_logs(State(state): State<AppState>, headers: HeaderMap) -
     }
 
     // Fallback to memory cache
-    let logs = state.audit_logs.read().unwrap();
+    let logs = state.audit_logs.read()
+        .map_err(|e| ApiError::internal(format!("Failed to read audit logs cache: {}", e)))?;
     Ok(Json(logs.clone()))
 }
