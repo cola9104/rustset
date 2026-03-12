@@ -25,3 +25,7 @@ regex = "1.11"
 futures = "0.3"
 async-stream = "0.3"
 tokio-stream = "0.1"
+# Password hashing
+argon2 = "0.5"
+password-hash = "0.5"
+thiserror = "1.0"

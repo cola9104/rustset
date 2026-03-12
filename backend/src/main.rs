@@ -3,8 +3,8 @@ use axum::{
     Router,
 };
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex as StdMutex};
-use tokio::sync::Mutex as TokioMutex;
+use std::sync::{Arc, RwLock as StdRwLock};
+use tokio::sync::RwLock as TokioRwLock;
 use tower_http::{
     cors::CorsLayer,
     trace::TraceLayer,
@@ -13,12 +13,13 @@ use shared::{
     Asset, NetworkZone, PortInfo, ZoneConfig,
     User, Role, PasswordPolicy,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 use sea_orm::ConnectionTrait;
 
 mod state;
 mod utils;
+mod password;
 mod handlers;
 mod scanners;
 mod database;
@@ -118,58 +119,89 @@ async fn main() {
         }
     ];
 
-    // Default Users
+    // Default Users (with password hashing)
     let initial_users = vec![
-        User {
-            id: Uuid::new_v4().to_string(),
-            username: "admin".to_string(),
-            password: "admin".to_string(), // Plain text for demo
-            role: Role::SysAdmin,
-            permissions: Some(shared::Permissions::sys_admin()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("weak".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: Some("admin@rustset.local".to_string()),
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
+        {
+            let admin_password = "admin";
+            let password_hash = password::hash_password(admin_password)
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to hash admin password: {}", e);
+                    // Fallback to plain text (not recommended for production)
+                    admin_password.to_string()
+                });
+            User {
+                id: Uuid::new_v4().to_string(),
+                username: "admin".to_string(),
+                password: password_hash, // ✅ Store hashed password
+                role: Role::SysAdmin,
+                permissions: Some(shared::Permissions::sys_admin()),
+                created_at: Utc::now(),
+                password_changed_at: Some(Utc::now()),
+                password_strength: Some(password::get_strength_label(
+                    password::check_password_strength(admin_password)
+                ).to_string()),
+                force_password_change: Some(true), // Force change on first login for security
+                last_login_at: None,
+                email: Some("admin@rustset.local".to_string()),
+                phone: None,
+                status: Some("active".to_string()),
+                failed_login_attempts: Some(0),
+                locked_until: None,
+            }
         },
-        User {
-            id: Uuid::new_v4().to_string(),
-            username: "sec".to_string(),
-            password: "sec".to_string(),
-            role: Role::SecAdmin,
-            permissions: Some(shared::Permissions::sec_admin()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("weak".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: Some("sec@rustset.local".to_string()),
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
+        {
+            let sec_password = "sec";
+            let password_hash = password::hash_password(sec_password)
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to hash sec password: {}", e);
+                    sec_password.to_string()
+                });
+            User {
+                id: Uuid::new_v4().to_string(),
+                username: "sec".to_string(),
+                password: password_hash, // ✅ Store hashed password
+                role: Role::SecAdmin,
+                permissions: Some(shared::Permissions::sec_admin()),
+                created_at: Utc::now(),
+                password_changed_at: Some(Utc::now()),
+                password_strength: Some(password::get_strength_label(
+                    password::check_password_strength(sec_password)
+                ).to_string()),
+                force_password_change: Some(true), // Force change on first login for security
+                last_login_at: None,
+                email: Some("sec@rustset.local".to_string()),
+                phone: None,
+                status: Some("active".to_string()),
+                failed_login_attempts: Some(0),
+                locked_until: None,
+            }
         },
-        User {
-            id: Uuid::new_v4().to_string(),
-            username: "audit".to_string(),
-            password: "audit".to_string(),
-            role: Role::Auditor,
-            permissions: Some(shared::Permissions::auditor()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("weak".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: Some("audit@rustset.local".to_string()),
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
+        {
+            let audit_password = "audit";
+            let password_hash = password::hash_password(audit_password)
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to hash audit password: {}", e);
+                    audit_password.to_string()
+                });
+            User {
+                id: Uuid::new_v4().to_string(),
+                username: "audit".to_string(),
+                password: password_hash, // ✅ Store hashed password
+                role: Role::Auditor,
+                permissions: Some(shared::Permissions::auditor()),
+                created_at: Utc::now(),
+                password_changed_at: Some(Utc::now()),
+                password_strength: Some(password::get_strength_label(
+                    password::check_password_strength(audit_password)
+                ).to_string()),
+                force_password_change: Some(true), // Force change on first login for security
+                last_login_at: None,
+                email: Some("audit@rustset.local".to_string()),
+                phone: None,
+                status: Some("active".to_string()),
+                failed_login_attempts: Some(0),
+                locked_until: None,
+            }
         },
     ];
 
@@ -227,22 +259,22 @@ async fn main() {
     let scan_manager = scanners::engine::ScanManager::new().await.ok();
 
     let state = AppState {
-        assets: Arc::new(StdMutex::new(initial_assets)),
-        tasks: Arc::new(StdMutex::new(vec![])),
-        risks: Arc::new(StdMutex::new(vec![])),
-        zones: Arc::new(StdMutex::new(vec![
+        assets: Arc::new(StdRwLock::new(initial_assets)),
+        tasks: Arc::new(StdRwLock::new(vec![])),
+        risks: Arc::new(StdRwLock::new(vec![])),
+        zones: Arc::new(StdRwLock::new(vec![
             ZoneConfig { id: "1".to_string(), name: "Intranet".to_string(), cidr: "192.168.0.0/16".to_string(), priority: 10 },
             ZoneConfig { id: "2".to_string(), name: "DMZ".to_string(), cidr: "10.0.0.0/8".to_string(), priority: 20 },
         ])),
-        users: Arc::new(StdMutex::new(initial_users)),
-        audit_logs: Arc::new(StdMutex::new(loaded_audit_logs)),
-        advanced_tasks: Arc::new(StdMutex::new(vec![])),
-        custom_roles: Arc::new(StdMutex::new(vec![])),
-        scan_manager: Arc::new(TokioMutex::new(scan_manager)),
-        password_policy: Arc::new(StdMutex::new(PasswordPolicy::default())),
-        password_history: Arc::new(StdMutex::new(vec![])),
-        cloud_zones: Arc::new(StdMutex::new(loaded_cloud_zones)),
-        cloud_platforms: Arc::new(StdMutex::new(loaded_cloud_platforms)),
+        users: Arc::new(StdRwLock::new(initial_users)),
+        audit_logs: Arc::new(StdRwLock::new(loaded_audit_logs)),
+        advanced_tasks: Arc::new(StdRwLock::new(vec![])),
+        custom_roles: Arc::new(StdRwLock::new(vec![])),
+        scan_manager: Arc::new(TokioRwLock::new(scan_manager)),
+        password_policy: Arc::new(StdRwLock::new(PasswordPolicy::default())),
+        password_history: Arc::new(StdRwLock::new(vec![])),
+        cloud_zones: Arc::new(StdRwLock::new(loaded_cloud_zones)),
+        cloud_platforms: Arc::new(StdRwLock::new(loaded_cloud_platforms)),
     };
 
     // 数据加载辅助函数 (使用 SeaORM)
@@ -281,7 +313,7 @@ async fn main() {
 
     async fn load_cloud_zones_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::CloudZone> {
         use crate::database::get_all_cloud_zones;
-        use chrono::TimeZone;
+        
         match get_all_cloud_zones(conn).await {
             Ok(zones) => zones.into_iter().map(|db| shared::CloudZone {
                 id: Some(db.id),
@@ -301,7 +333,7 @@ async fn main() {
 
     async fn load_cloud_platforms_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::CloudPlatform> {
         use crate::database::get_all_cloud_platforms;
-        use chrono::TimeZone;
+        
         match get_all_cloud_platforms(conn).await {
             Ok(platforms) => platforms.into_iter().map(|db| shared::CloudPlatform {
                 id: Some(db.id),
