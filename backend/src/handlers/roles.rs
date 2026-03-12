@@ -6,23 +6,27 @@ use axum::{
 use shared::{CustomRole, CreateRoleRequest, UpdateRoleRequest};
 use crate::state::AppState;
 use crate::database::{get_custom_roles, insert_custom_role_wrapper, update_custom_role, delete_custom_role, db_custom_role_to_shared};
+use crate::middleware::ApiError;
 
 /// 获取所有角色(包括系统预定义角色和自定义角色)
 pub async fn get_roles(
     State(state): State<AppState>,
-) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
+) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
     // Try to load custom roles from database first
     let custom_roles = match get_custom_roles().await {
         Ok(db_roles) => {
             let roles: Vec<CustomRole> = db_roles.into_iter().map(db_custom_role_to_shared).collect();
             // Update in-memory cache
-            *state.custom_roles.write().unwrap() = roles.clone();
+            *state.custom_roles.write()
+                .map_err(|e| ApiError::internal(format!("Failed to write custom roles cache: {}", e)))? = roles.clone();
             roles
         }
         Err(e) => {
             eprintln!("Error loading custom roles from database: {}", e);
             // Fallback to memory cache
-            state.custom_roles.read().unwrap().clone()
+            state.custom_roles.read()
+                .map_err(|e| ApiError::internal(format!("Failed to read custom roles cache: {}", e)))?
+                .clone()
         }
     };
 
@@ -71,7 +75,7 @@ pub async fn get_roles(
 pub async fn get_role(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     // 检查系统角色
     match id.as_str() {
         "sys_admin" => {
@@ -124,7 +128,8 @@ pub async fn get_role(
             Err(e) => {
                 eprintln!("Error loading custom roles from database: {}", e);
                 // Fallback to memory cache
-                let custom_roles = state.custom_roles.read().unwrap();
+                let custom_roles = state.custom_roles.read()
+                    .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
                 if let Some(role) = custom_roles.iter().find(|r| r.id == Some(role_id)) {
                     return Ok(Json(serde_json::json!({
                         "id": role.id.map(|id| id.to_string()),
@@ -140,17 +145,18 @@ pub async fn get_role(
         }
     }
 
-    Err(StatusCode::NOT_FOUND)
+    Err(ApiError::not_found(format!("Role with ID '{}' not found", id)))
 }
 
 /// 创建自定义角色
 pub async fn create_role(
     State(state): State<AppState>,
     Json(req): Json<CreateRoleRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     // 检查角色名称是否已存在
     {
-        let custom_roles = state.custom_roles.read().unwrap();
+        let custom_roles = state.custom_roles.read()
+            .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
         if custom_roles.iter().any(|r| r.name == req.name) {
             return Ok(Json(serde_json::json!({
                 "error": "角色名称已存在"
@@ -175,7 +181,8 @@ pub async fn create_role(
         Err(e) => {
             eprintln!("Error inserting custom role to database: {}", e);
             // Fallback to in-memory with generated ID
-            let mut custom_roles = state.custom_roles.write().unwrap();
+            let mut custom_roles = state.custom_roles.write()
+                .map_err(|e| ApiError::internal(format!("Failed to write custom roles: {}", e)))?;
             let id = custom_roles.len() as i32 + 1;
             let mut role_with_id = new_role.clone();
             role_with_id.id = Some(id);
@@ -190,7 +197,8 @@ pub async fn create_role(
 
     // Update in-memory cache
     {
-        let mut custom_roles = state.custom_roles.write().unwrap();
+        let mut custom_roles = state.custom_roles.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write custom roles: {}", e)))?;
         let mut role_with_id = new_role.clone();
         role_with_id.id = Some(new_id);
         custom_roles.push(role_with_id);
@@ -208,7 +216,7 @@ pub async fn update_role(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<UpdateRoleRequest>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     // 不允许修改系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
         return Ok(Json(serde_json::json!({
@@ -216,15 +224,14 @@ pub async fn update_role(
         })));
     }
 
-    let role_id = id.parse::<i32>();
-    if role_id.is_err() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    let target_id = role_id.unwrap();
+    let role_id = id.parse::<i32>()
+        .map_err(|_| ApiError::bad_request("Invalid role ID format"))?;
+    let target_id = role_id;
 
     // Find current role data
     let (found, current_role) = {
-        let custom_roles = state.custom_roles.read().unwrap();
+        let custom_roles = state.custom_roles.read()
+            .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
         if let Some(role) = custom_roles.iter().find(|r| r.id == Some(target_id)) {
             (true, role.clone())
         } else {
@@ -240,7 +247,7 @@ pub async fn update_role(
     };
 
     if !found {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(ApiError::not_found(format!("Role with ID '{}' not found", id)));
     }
 
     // Build updated role
@@ -264,7 +271,8 @@ pub async fn update_role(
 
     // Update in-memory cache
     {
-        let mut custom_roles = state.custom_roles.write().unwrap();
+        let mut custom_roles = state.custom_roles.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write custom roles: {}", e)))?;
         if let Some(role) = custom_roles.iter_mut().find(|r| r.id == Some(target_id)) {
             *role = updated_role.clone();
         }
@@ -279,7 +287,7 @@ pub async fn update_role(
 pub async fn delete_role(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     // 不允许删除系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
         return Ok(Json(serde_json::json!({
@@ -287,23 +295,23 @@ pub async fn delete_role(
         })));
     }
 
-    let role_id = id.parse::<i32>();
-    if role_id.is_err() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    let target_id = role_id.unwrap();
+    let role_id = id.parse::<i32>()
+        .map_err(|_| ApiError::bad_request("Invalid role ID format"))?;
+    let target_id = role_id;
 
     // Check if role exists
     {
-        let custom_roles = state.custom_roles.read().unwrap();
+        let custom_roles = state.custom_roles.read()
+            .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
         if !custom_roles.iter().any(|r| r.id == Some(target_id)) {
-            return Err(StatusCode::NOT_FOUND);
+            return Err(ApiError::not_found(format!("Role with ID '{}' not found", id)));
         }
     }
 
     // Remove from in-memory storage
     {
-        let mut custom_roles = state.custom_roles.write().unwrap();
+        let mut custom_roles = state.custom_roles.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write custom roles: {}", e)))?;
         custom_roles.retain(|r| r.id != Some(target_id));
     }
 
