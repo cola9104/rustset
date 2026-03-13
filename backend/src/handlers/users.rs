@@ -18,7 +18,7 @@ pub struct ChangePasswordRequest {
 }
 
 // 计算密码强度
-fn calculate_password_strength(password: &str) -> (String, u32) {
+pub fn calculate_password_strength(password: &str) -> (String, u32) {
     let mut score = 0;
 
     // 长度检查
@@ -47,7 +47,7 @@ fn calculate_password_strength(password: &str) -> (String, u32) {
 }
 
 // 根据策略验证密码
-fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Result<(), String> {
+pub fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Result<(), String> {
     // 长度检查
     if password.len() < policy.min_length as usize {
         return Err(format!("密码长度至少为 {}", policy.min_length));

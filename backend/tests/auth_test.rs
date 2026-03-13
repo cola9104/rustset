@@ -62,22 +62,16 @@ async fn create_test_state() -> AppState {
             require_uppercase: true,
             require_lowercase: true,
             require_number: true,
-            require_special_char: true,
+            require_special: true,
             max_login_attempts: Some(5),
             lockout_duration_minutes: 30,
-            password_history_count: 5,
-            force_change_on_first_login: false,
+            prevent_reuse: 5,
+            max_age_days: Some(90),
+            min_strength: "medium".to_string(),
         })),
         password_history: Arc::new(RwLock::new(vec![])),
         cloud_zones: Arc::new(RwLock::new(vec![])),
         cloud_platforms: Arc::new(RwLock::new(vec![])),
-        business_resources: Arc::new(RwLock::new(vec![])),
-        resource_tickets: Arc::new(RwLock::new(vec![])),
-        service_providers: Arc::new(RwLock::new(vec![])),
-        machine_rooms: Arc::new(RwLock::new(vec![])),
-        security_products: Arc::new(RwLock::new(vec![])),
-        cloud_platform_configs: Arc::new(RwLock::new(vec![])),
-        cloud_service_assets: Arc::new(RwLock::new(vec![])),
     }
 }
 
@@ -157,6 +151,6 @@ async fn test_login_missing_fields() {
 
     let response = app.oneshot(request).await.unwrap();
 
-    // 应该返回 400 或 401
-    assert!(response.status() == StatusCode::BAD_REQUEST || response.status() == StatusCode::UNAUTHORIZED);
+    // Axum returns 422 for missing required fields during JSON deserialization
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }

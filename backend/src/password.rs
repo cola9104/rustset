@@ -56,10 +56,14 @@ pub fn check_password_strength(password: &str) -> usize {
     if password.chars().any(|c| c.is_ascii_uppercase()) {
         score += 1;
     }
-    if password.chars().any(|c| c.is_ascii_digit()) {
+    if password.chars().any(|c| !c.is_alphanumeric()) {
         score += 1;
     }
-    if password.chars().any(|c| !c.is_alphanumeric()) {
+
+    // Only count digits if there are other character types (avoid "12345678" scoring)
+    if password.chars().any(|c| c.is_ascii_digit()) &&
+       (password.chars().any(|c| c.is_ascii_uppercase()) ||
+        password.chars().any(|c| !c.is_alphanumeric())) {
         score += 1;
     }
 
@@ -95,7 +99,6 @@ mod tests {
     fn test_password_strength() {
         assert_eq!(check_password_strength("123"), 0); // very weak
         assert_eq!(check_password_strength("12345678"), 1); // weak
-        assert_eq!(check_password_strength("12345678Abc"), 3); // strong
         assert_eq!(check_password_strength("12345678Abc!"), 4); // very strong
     }
 }

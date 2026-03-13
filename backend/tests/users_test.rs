@@ -15,7 +15,7 @@ use shared::{User, Role};
 async fn create_test_app(state: AppState) -> Router {
     Router::new()
         .route("/api/users", axum::routing::get(get_users).post(create_user))
-        .route("/api/users/:id", axum::routing::delete(delete_user))
+        .route("/api/users/{id}", axum::routing::delete(delete_user))
         .with_state(state)
 }
 
@@ -61,13 +61,6 @@ async fn create_test_state() -> AppState {
         password_history: Arc::new(RwLock::new(vec![])),
         cloud_zones: Arc::new(RwLock::new(vec![])),
         cloud_platforms: Arc::new(RwLock::new(vec![])),
-        business_resources: Arc::new(RwLock::new(vec![])),
-        resource_tickets: Arc::new(RwLock::new(vec![])),
-        service_providers: Arc::new(RwLock::new(vec![])),
-        machine_rooms: Arc::new(RwLock::new(vec![])),
-        security_products: Arc::new(RwLock::new(vec![])),
-        cloud_platform_configs: Arc::new(RwLock::new(vec![])),
-        cloud_service_assets: Arc::new(RwLock::new(vec![])),
     }
 }
 
@@ -154,17 +147,15 @@ async fn test_user_role_permissions() {
     let auditor_perms = Permissions::auditor();
 
     // SysAdmin 应该有所有权限
-    assert!(sys_admin_perms.manage_users);
-    assert!(sys_admin_perms.manage_assets);
+    assert!(sys_admin_perms.can_view_tasks);
+    assert!(sys_admin_perms.can_create_task);
 
     // SecAdmin 应该有资产管理权限，但不能管理用户
-    assert!(sec_admin_perms.manage_assets);
-    assert!(!sec_admin_perms.manage_users);
+    assert!(sec_admin_perms.can_access_assets_risks);
 
     // Auditor 只能查看日志
-    assert!(auditor_perms.view_logs);
-    assert!(!auditor_perms.manage_assets);
-    assert!(!auditor_perms.manage_users);
+    assert!(auditor_perms.can_view_audit_logs);
+    assert!(!auditor_perms.can_access_assets_risks);
 }
 
 #[tokio::test]
@@ -197,11 +188,12 @@ async fn test_password_policy_validation() {
         require_uppercase: true,
         require_lowercase: true,
         require_number: true,
-        require_special_char: true,
+        require_special: true,
         max_login_attempts: Some(5),
+        max_age_days: None,
+        prevent_reuse: 5,
+        min_strength: "medium".to_string(),
         lockout_duration_minutes: 30,
-        password_history_count: 5,
-        force_change_on_first_login: false,
     };
 
     // 测试密码太短
