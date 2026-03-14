@@ -17,6 +17,36 @@ use chrono::Utc;
 use uuid::Uuid;
 use sea_orm::ConnectionTrait;
 
+// 加载 .env 文件
+fn load_env() {
+    if std::path::Path::new(".env").exists() {
+        if let Ok(content) = std::fs::read_to_string(".env") {
+            for line in content.lines() {
+                if let Some((key, value)) = line.split_once('=') {
+                    if key.starts_with('#') { continue; }
+                    // 只有环境变量不存在时才设置
+                    if std::env::var(key).is_err() {
+                        std::env::set_var(key.trim(), value.trim());
+                    }
+                }
+            }
+        }
+    }
+    // 也检查 backend/.env
+    if std::path::Path::new("backend/.env").exists() {
+        if let Ok(content) = std::fs::read_to_string("backend/.env") {
+            for line in content.lines() {
+                if let Some((key, value)) = line.split_once('=') {
+                    if key.starts_with('#') { continue; }
+                    if std::env::var(key).is_err() {
+                        std::env::set_var(key.trim(), value.trim());
+                    }
+                }
+            }
+        }
+    }
+}
+
 mod state;
 mod utils;
 mod password;
@@ -84,6 +114,9 @@ use handlers::{
 
 #[tokio::main]
 async fn main() {
+    // 加载 .env 文件（优先级最低，不会覆盖现有环境变量）
+    load_env();
+    
     tracing_subscriber::fmt::init();
 
     // Initial mock data
@@ -249,11 +282,17 @@ async fn main() {
     let initial_users = if loaded_users.is_empty() {
         println!("Database empty, inserting initial users...");
         for user in &initial_users {
-            if let Err(e) = database::insert_user_with_conn(&db_conn, user).await {
+            // 确保 last_login_at 有默认值
+            let user_with_defaults = shared::User {
+                last_login_at: Some(Utc::now()),
+                ..user.clone()
+            };
+            if let Err(e) = database::insert_user_with_conn(&db_conn, &user_with_defaults).await {
                 eprintln!("Failed to insert initial user {}: {}", user.username, e);
             }
         }
-        initial_users
+        // 重新加载用户
+        load_users_from_db(&db_conn).await
     } else { 
         loaded_users 
     };
