@@ -1,6 +1,6 @@
 use axum::{
     extract::{State, Json, Path},
-    http::{StatusCode, HeaderMap},
+    http::HeaderMap,
 };
 use shared::{Task, CreateTaskRequest, TaskStatus, ScanRequest, PortInfo, Role};
 use crate::state::AppState;

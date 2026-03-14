@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NetworkZone {
@@ -748,7 +749,7 @@ pub struct UpdateRoleRequest {
 }
 
 /// 细化权限位掩码
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Permissions {
     // ========== 通用模块 ==========
     pub can_access_general: bool,           // 顶级：访问通用模块
@@ -827,55 +828,6 @@ pub struct Permissions {
 
     // 审计日志
     pub can_view_audit_logs: bool,          // 子级：查看审计日志
-}
-
-impl Default for Permissions {
-    fn default() -> Self {
-        Self {
-            can_access_general: false,
-            can_view_dashboard: false,
-            can_view_tasks: false,
-            can_create_task: false,
-            can_delete_task: false,
-            can_update_task: false,
-            can_view_advanced_scan: false,
-            can_create_scan: false,
-            can_delete_scan: false,
-            can_export_scan: false,
-            can_access_assets_risks: false,
-            can_view_cloud_assets: false,
-            can_create_cloud_asset: false,
-            can_update_cloud_asset: false,
-            can_delete_cloud_asset: false,
-            can_view_risks: false,
-            can_resolve_risk: false,
-            can_delete_risk: false,
-            can_view_business_process: false,
-            can_view_business_applications: false,
-            can_create_business_application: false,
-            can_approve_business_application: false,
-            can_supplement_business_application: false,
-            can_delete_business_application: false,
-            can_view_operations_management: false,
-            can_manage_operations: false,
-            can_view_automation_orchestration: false,
-            can_execute_orchestration: false,
-            can_manage_orchestration: false,
-            can_access_cloud: false,
-            can_view_cloud_providers: false,
-            can_manage_cloud_providers: false,
-            can_access_user_management: false,
-            can_view_users: false,
-            can_create_user: false,
-            can_update_user: false,
-            can_delete_user: false,
-            can_manage_permissions: false,
-            can_view_password_policy: false,
-            can_manage_password_policy: false,
-            can_access_audit: false,
-            can_view_audit_logs: false,
-        }
-    }
 }
 
 impl Permissions {
@@ -1627,18 +1579,22 @@ impl TicketStatus {
             TicketStatus::Archived => "archived",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Self {
+impl FromStr for TicketStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "pending_approval" => TicketStatus::PendingApproval,
-            "approved" => TicketStatus::Approved,
-            "rejected" => TicketStatus::Rejected,
-            "pending_provision" => TicketStatus::PendingProvision,
-            "provisioning" => TicketStatus::Provisioning,
-            "pending_delivery" => TicketStatus::PendingDelivery,
-            "delivered" => TicketStatus::Delivered,
-            "archived" => TicketStatus::Archived,
-            _ => TicketStatus::PendingApproval,
+            "pending_approval" => Ok(TicketStatus::PendingApproval),
+            "approved" => Ok(TicketStatus::Approved),
+            "rejected" => Ok(TicketStatus::Rejected),
+            "pending_provision" => Ok(TicketStatus::PendingProvision),
+            "provisioning" => Ok(TicketStatus::Provisioning),
+            "pending_delivery" => Ok(TicketStatus::PendingDelivery),
+            "delivered" => Ok(TicketStatus::Delivered),
+            "archived" => Ok(TicketStatus::Archived),
+            _ => Err(format!("Unknown ticket status: {}", s)),
         }
     }
 }

@@ -1,6 +1,5 @@
 use axum::{
     extract::{State, Json},
-    http::StatusCode,
 };
 use shared::{LoginRequest, LoginResponse};
 use crate::state::AppState;
