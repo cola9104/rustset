@@ -100,10 +100,17 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
     // 使用新的 database API
     match db_get_users().await {
         Ok(db_users) => {
-            // Update in-memory cache
-            *state.users.write()
-                .map_err(|e| ApiError::internal(format!("Failed to write users cache: {}", e)))? = db_users.clone();
-            Ok(Json(db_users))
+            // 只有数据库有数据时才更新内存缓存
+            if !db_users.is_empty() {
+                *state.users.write()
+                    .map_err(|e| ApiError::internal(format!("Failed to write users cache: {}", e)))? = db_users.clone();
+                Ok(Json(db_users))
+            } else {
+                // 数据库为空，使用内存缓存（可能是初始用户）
+                let users = state.users.read()
+                    .map_err(|e| ApiError::internal(format!("Failed to read users cache: {}", e)))?;
+                Ok(Json(users.clone()))
+            }
         }
         Err(e) => {
             eprintln!("Error loading users from database: {}", e);

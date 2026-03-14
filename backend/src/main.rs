@@ -244,7 +244,19 @@ async fn main() {
     // 从数据库加载数据 (使用 SeaORM)
     let loaded_users = load_users_from_db(&db_conn).await;
     println!("Loaded {} users from database", loaded_users.len());
-    let initial_users = if loaded_users.is_empty() { initial_users } else { loaded_users };
+    
+    // 如果数据库为空，插入初始用户到数据库
+    let initial_users = if loaded_users.is_empty() {
+        println!("Database empty, inserting initial users...");
+        for user in &initial_users {
+            if let Err(e) = database::insert_user_with_conn(&db_conn, user).await {
+                eprintln!("Failed to insert initial user {}: {}", user.username, e);
+            }
+        }
+        initial_users
+    } else { 
+        loaded_users 
+    };
 
     let loaded_audit_logs = load_audit_logs_from_db(&db_conn).await;
     println!("Loaded {} audit logs from database", loaded_audit_logs.len());
