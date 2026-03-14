@@ -60,7 +60,7 @@ mod middleware;
 
 use state::AppState;
 use handlers::{
-    auth::login,
+    auth::{login, logout, refresh_token},
     users::{get_users, create_user, delete_user, update_user_permissions, change_password, get_password_policy, update_password_policy, get_current_user_info},
     logs::get_audit_logs,
     assets::{get_assets, add_asset, update_asset, delete_asset, add_asset_port, update_asset_port, delete_asset_port, bind_port},
@@ -419,6 +419,8 @@ async fn main() {
     let app = Router::new()
         // Auth
         .route("/api/login", post(login))
+        .route("/api/logout", post(logout))
+        .route("/api/refresh-token", post(refresh_token))
         .route("/api/users/me", get(get_current_user_info)) // 必须在 {id} 之前
         .route("/api/users", get(get_users).post(create_user))
         .route("/api/users/{id}", delete(delete_user))

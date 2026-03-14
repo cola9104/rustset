@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: rustset-db
+    environment:
+      POSTGRES_USER: rustset
+      POSTGRES_PASSWORD: rustset_password
+      POSTGRES_DB: rustset
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rustset"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rustset-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rustset-backend
+    environment:
+      DATABASE_URL: postgres://rustset:rustset_password@db:5432/rustset
+      RUST_LOG: info
+    ports:
+      - "3003:3003"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - rustset-network
+    restart: unless-stopped
+
+  # Optional: Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: rustset-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rustset-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  rustset-network:
+    driver: bridge

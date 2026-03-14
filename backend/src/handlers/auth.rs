@@ -1,5 +1,6 @@
 use axum::{
     extract::{State, Json},
+    http::{HeaderMap, header::AUTHORIZATION},
 };
 use shared::{LoginRequest, LoginResponse};
 use crate::state::AppState;
@@ -106,4 +107,56 @@ pub async fn login(
             None => Err(ApiError::unauthorized("密码错误")),
         }
     }
+}
+
+/// 登出
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let username = headers.get(AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown");
+
+    // 记录审计日志
+    if let Some(user) = state.users.read().ok().and_then(|u| u.iter().find(|u| u.username == username).cloned()) {
+        log_action(&state.audit_logs, &user, "LOGOUT", &username, "User logged out");
+    }
+
+    Ok(Json(serde_json::json!({
+        "message": "Logged out successfully"
+    })))
+}
+
+/// 刷新 Token
+pub async fn refresh_token(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<LoginResponse>, ApiError> {
+    let username = headers.get(AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| ApiError::unauthorized("No authorization token"))?;
+
+    let users = state.users.read()
+        .map_err(|e| ApiError::internal(format!("Failed to read users: {}", e)))?;
+
+    let user = users.iter()
+        .find(|u| u.username == username)
+        .ok_or_else(|| ApiError::unauthorized("User not found"))?;
+
+    // 检查用户状态
+    if user.status.as_deref() == Some("disabled") {
+        return Err(ApiError::forbidden("账户已被禁用"));
+    }
+
+    if let Some(locked_until) = user.locked_until {
+        if Utc::now() < locked_until {
+            return Err(ApiError::forbidden("账户已锁定"));
+        }
+    }
+
+    Ok(Json(LoginResponse {
+        token: user.username.clone(),
+        user: user.clone(),
+    }))
 }
