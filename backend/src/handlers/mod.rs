@@ -7,6 +7,7 @@ pub mod cloud_platforms;
 pub mod cloud_providers;
 pub mod cloud_service_assets;
 pub mod cloud_zones;
+pub mod health;
 pub mod ip_zones;
 pub mod logs;
 pub mod machine_rooms;

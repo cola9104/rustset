@@ -99,6 +99,9 @@ use handlers::{
     scanners::{
         scan_ip, batch_scan_ips, get_scan_results, get_scan_result,
     },
+    health::{
+        health_check, readiness_check, liveness_check, metrics,
+    },
     resource_tickets::{
         get_resource_tickets, get_resource_ticket, create_resource_ticket,
         update_resource_ticket, delete_resource_ticket,
@@ -417,6 +420,11 @@ async fn main() {
     }
 
     let app = Router::new()
+        // Health & Metrics
+        .route("/api/health", get(health_check))
+        .route("/api/ready", get(readiness_check))
+        .route("/api/live", get(liveness_check))
+        .route("/api/metrics", get(metrics))
         // Auth
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
