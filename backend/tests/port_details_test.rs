@@ -1,20 +1,17 @@
-//! 集成测试：auth.rs - 登录、权限验证
+//! 集成测试：port_details.rs - 端口详细信息管理
 
 use axum::{
     body::Body,
     http::{header, Method, Request, StatusCode},
     Router,
 };
-use serde_json::json;
 use tower::ServiceExt;
 use backend::state::AppState;
-use backend::handlers::auth::login;
-use shared::LoginRequest;
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
     Router::new()
-        .route("/api/login", axum::routing::post(login))
+        .route("/api/port-details", axum::routing::get(backend::handlers::port_details::get_port_details).post(backend::handlers::port_details::create_port_detail))
         .with_state(state)
 }
 
@@ -23,15 +20,12 @@ async fn create_test_state() -> AppState {
     use std::sync::{Arc, RwLock};
     use shared::{User, Role};
     use chrono::Utc;
-    use backend::password;
 
-    // 创建测试用户
-    let password_hash = password::hash_password("admin123").unwrap();
     let test_users = vec![
         User {
             id: "test_user_1".to_string(),
             username: "admin".to_string(),
-            password: password_hash,
+            password: "test_hash".to_string(),
             role: Role::SysAdmin,
             permissions: Some(shared::Permissions::sys_admin()),
             created_at: Utc::now(),
@@ -57,18 +51,7 @@ async fn create_test_state() -> AppState {
         advanced_tasks: Arc::new(RwLock::new(vec![])),
         custom_roles: Arc::new(RwLock::new(vec![])),
         scan_manager: Arc::new(tokio::sync::RwLock::new(None)),
-        password_policy: Arc::new(RwLock::new(shared::PasswordPolicy {
-            min_length: 8,
-            require_uppercase: true,
-            require_lowercase: true,
-            require_number: true,
-            require_special: true,
-            max_login_attempts: Some(5),
-            lockout_duration_minutes: 30,
-            prevent_reuse: 5,
-            max_age_days: Some(90),
-            min_strength: "medium".to_string(),
-        })),
+        password_policy: Arc::new(RwLock::new(shared::PasswordPolicy::default())),
         password_history: Arc::new(RwLock::new(vec![])),
         cloud_zones: Arc::new(RwLock::new(vec![])),
         cloud_platforms: Arc::new(RwLock::new(vec![])),
@@ -78,18 +61,15 @@ async fn create_test_state() -> AppState {
 }
 
 #[tokio::test]
-async fn test_login_success() {
+async fn test_get_port_details() {
     let state = create_test_state().await;
     let app = create_test_app(state).await;
 
     let request = Request::builder()
-        .method(Method::POST)
-        .uri("/api/login")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin",
-            "password": "admin123"
-        }).to_string()))
+        .method(Method::GET)
+        .uri("/api/port-details")
+        .header("Authorization", "admin")
+        .body(Body::empty())
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -98,61 +78,49 @@ async fn test_login_success() {
 }
 
 #[tokio::test]
-async fn test_login_invalid_credentials() {
+async fn test_create_port_detail_with_service_detection() {
     let state = create_test_state().await;
     let app = create_test_app(state).await;
 
     let request = Request::builder()
         .method(Method::POST)
-        .uri("/api/login")
+        .uri("/api/port-details")
+        .header("Authorization", "admin")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin",
-            "password": "wrongpassword"
-        }).to_string()))
+        .body(Body::from(r#"{"port":22,"protocol":"tcp"}"#))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    
+    assert_eq!(result["port"], 22);
+    assert_eq!(result["service"], "SSH");
 }
 
 #[tokio::test]
-async fn test_login_user_not_found() {
+async fn test_create_port_detail_http() {
     let state = create_test_state().await;
     let app = create_test_app(state).await;
 
     let request = Request::builder()
         .method(Method::POST)
-        .uri("/api/login")
+        .uri("/api/port-details")
+        .header("Authorization", "admin")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "nonexistent",
-            "password": "password"
-        }).to_string()))
+        .body(Body::from(r#"{"port":443,"protocol":"tcp"}"#))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn test_login_missing_fields() {
-    let state = create_test_state().await;
-    let app = create_test_app(state).await;
-
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/api/login")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin"
-        }).to_string()))
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-
-    // Axum returns 422 for missing required fields during JSON deserialization
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    
+    assert_eq!(result["port"], 443);
+    assert_eq!(result["service"], "HTTPS");
 }

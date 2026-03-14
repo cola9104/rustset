@@ -1,20 +1,19 @@
-//! 集成测试：auth.rs - 登录、权限验证
+//! 集成测试：scanners.rs - 扫描器接口
 
 use axum::{
     body::Body,
     http::{header, Method, Request, StatusCode},
     Router,
 };
-use serde_json::json;
 use tower::ServiceExt;
 use backend::state::AppState;
-use backend::handlers::auth::login;
-use shared::LoginRequest;
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
     Router::new()
-        .route("/api/login", axum::routing::post(login))
+        .route("/api/scan-ip", axum::routing::post(backend::handlers::scanners::scan_ip))
+        .route("/api/batch-scan-ips", axum::routing::post(backend::handlers::scanners::batch_scan_ips))
+        .route("/api/scan-results", axum::routing::get(backend::handlers::scanners::get_scan_results))
         .with_state(state)
 }
 
@@ -23,15 +22,12 @@ async fn create_test_state() -> AppState {
     use std::sync::{Arc, RwLock};
     use shared::{User, Role};
     use chrono::Utc;
-    use backend::password;
 
-    // 创建测试用户
-    let password_hash = password::hash_password("admin123").unwrap();
     let test_users = vec![
         User {
             id: "test_user_1".to_string(),
             username: "admin".to_string(),
-            password: password_hash,
+            password: "test_hash".to_string(),
             role: Role::SysAdmin,
             permissions: Some(shared::Permissions::sys_admin()),
             created_at: Utc::now(),
@@ -57,18 +53,7 @@ async fn create_test_state() -> AppState {
         advanced_tasks: Arc::new(RwLock::new(vec![])),
         custom_roles: Arc::new(RwLock::new(vec![])),
         scan_manager: Arc::new(tokio::sync::RwLock::new(None)),
-        password_policy: Arc::new(RwLock::new(shared::PasswordPolicy {
-            min_length: 8,
-            require_uppercase: true,
-            require_lowercase: true,
-            require_number: true,
-            require_special: true,
-            max_login_attempts: Some(5),
-            lockout_duration_minutes: 30,
-            prevent_reuse: 5,
-            max_age_days: Some(90),
-            min_strength: "medium".to_string(),
-        })),
+        password_policy: Arc::new(RwLock::new(shared::PasswordPolicy::default())),
         password_history: Arc::new(RwLock::new(vec![])),
         cloud_zones: Arc::new(RwLock::new(vec![])),
         cloud_platforms: Arc::new(RwLock::new(vec![])),
@@ -78,18 +63,63 @@ async fn create_test_state() -> AppState {
 }
 
 #[tokio::test]
-async fn test_login_success() {
+async fn test_scan_ip() {
     let state = create_test_state().await;
     let app = create_test_app(state).await;
 
     let request = Request::builder()
         .method(Method::POST)
-        .uri("/api/login")
+        .uri("/api/scan-ip")
+        .header("Authorization", "admin")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin",
-            "password": "admin123"
-        }).to_string()))
+        .body(Body::from(r#"{"target":"192.168.1.1"}"#))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    
+    assert_eq!(result["target"], "192.168.1.1");
+    assert_eq!(result["status"], "completed");
+}
+
+#[tokio::test]
+async fn test_batch_scan_ips() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/batch-scan-ips")
+        .header("Authorization", "admin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"targets":["192.168.1.1","192.168.1.2","192.168.1.3"]}"#))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    
+    assert!(result.is_array());
+    assert_eq!(result.as_array().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn test_get_scan_results() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/api/scan-results")
+        .header("Authorization", "admin")
+        .body(Body::empty())
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -98,61 +128,26 @@ async fn test_login_success() {
 }
 
 #[tokio::test]
-async fn test_login_invalid_credentials() {
+async fn test_scan_with_custom_ports() {
     let state = create_test_state().await;
     let app = create_test_app(state).await;
 
     let request = Request::builder()
         .method(Method::POST)
-        .uri("/api/login")
+        .uri("/api/scan-ip")
+        .header("Authorization", "admin")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin",
-            "password": "wrongpassword"
-        }).to_string()))
+        .body(Body::from(r#"{"target":"192.168.1.1","ports":[22,80,443]}"#))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn test_login_user_not_found() {
-    let state = create_test_state().await;
-    let app = create_test_app(state).await;
-
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/api/login")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "nonexistent",
-            "password": "password"
-        }).to_string()))
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn test_login_missing_fields() {
-    let state = create_test_state().await;
-    let app = create_test_app(state).await;
-
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri("/api/login")
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin"
-        }).to_string()))
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-
-    // Axum returns 422 for missing required fields during JSON deserialization
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    
+    assert!(result["ports"].is_array());
+    // 应该有 3 个端口结果
+    assert_eq!(result["ports"].as_array().unwrap().len(), 3);
 }
