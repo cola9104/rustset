@@ -2,8 +2,8 @@
 //!
 //! This module provides database connectivity and CRUD operations using SeaORM.
 
-use sea_orm::{Database as SeaDatabase, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, Statement, QuerySelect, QueryOrder, ColumnTrait};
-pub use sea_orm::{DatabaseConnection, DbErr};
+pub use sea_orm::{DatabaseConnection, DbErr, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, QuerySelect, QueryOrder, QueryFilter, ColumnTrait};
+use sea_orm::{Database as SeaDatabase, Statement};
 use crate::entities::{
     cloud_zone, cloud_service, cloud_provider_config, business_resource,
     physical_machine, cloud_virtual_machine,
@@ -15,7 +15,6 @@ use crate::entities::{
 use shared::User as SharedUser;
 use std::sync::Arc;
 use chrono::Utc;
-use uuid;
 
 // Re-export entities for convenience
 pub use crate::entities::prelude::*;
@@ -1655,7 +1654,6 @@ pub async fn delete_cloud_virtual_machine(
 // ==================== Service Provider CRUD ====================
 
 use crate::entities::{service_provider, machine_room, cloud_platform_config, security_product};
-use sea_orm::QueryFilter;
 
 /// 服务商数据返回结构
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

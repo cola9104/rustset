@@ -120,7 +120,7 @@ pub async fn logout(
 
     // 记录审计日志
     if let Some(user) = state.users.read().ok().and_then(|u| u.iter().find(|u| u.username == username).cloned()) {
-        log_action(&state.audit_logs, &user, "LOGOUT", &username, "User logged out");
+        log_action(&state.audit_logs, &user, "LOGOUT", username, "User logged out");
     }
 
     Ok(Json(serde_json::json!({

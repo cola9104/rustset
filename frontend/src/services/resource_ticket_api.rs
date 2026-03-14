@@ -253,53 +253,6 @@ pub async fn create_resource_ticket(ticket: &ResourceTicket) -> Result<ResourceT
     }
 }
 
-/// 更新资源工单
-pub async fn update_resource_ticket(id: i32, ticket: &ResourceTicket) -> Result<ResourceTicket, String> {
-    let token = auth_header()?;
-    let request_body = CreateTicketRequest::from(ticket);
-
-    let response = Request::put(&format!("{}/resource-tickets/{}", API_BASE, id))
-        .header("Authorization", &token)
-        .json(&request_body)
-        .map_err(|e| format!("构建请求失败: {}", e))?
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-
-    if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
-    }
-
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("解析失败: {}", e))?;
-
-    if let Some(data) = json.get("data") {
-        let updated: BackendResourceTicket = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
-        Ok(updated.to_frontend())
-    } else {
-        Err("响应格式错误".to_string())
-    }
-}
-
-/// 删除资源工单
-pub async fn delete_resource_ticket(id: i32) -> Result<(), String> {
-    let token = auth_header()?;
-    let response = Request::delete(&format!("{}/resource-tickets/{}", API_BASE, id))
-        .header("Authorization", &token)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-
-    if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
-    }
-
-    Ok(())
-}
-
 /// 审批工单
 pub async fn approve_ticket(id: i32, approved: bool, comment: Option<String>) -> Result<ResourceTicket, String> {
     let token = auth_header()?;

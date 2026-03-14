@@ -372,15 +372,3 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
         },
     ]
 }
-
-/// 获取指定分类的产品
-pub fn get_products_by_category(products: &[SecurityProduct], category: SecurityProductCategory) -> Vec<&SecurityProduct> {
-    products.iter().filter(|p| p.category == category).collect()
-}
-
-/// 获取指定分类的运行中产品
-pub fn get_active_products_by_category(products: &[SecurityProduct], category: SecurityProductCategory) -> Vec<&SecurityProduct> {
-    products.iter()
-        .filter(|p| p.category == category && p.status == SecurityProductStatus::Active)
-        .collect()
-}

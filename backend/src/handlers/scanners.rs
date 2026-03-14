@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use chrono::Utc;
 
 use crate::state::AppState;
-use crate::utils::get_current_user;
 use crate::middleware::ApiError;
 
 /// 扫描请求
@@ -171,8 +170,7 @@ pub async fn get_scan_results(
             }
             true
         })
-        .cloned()
-        .take(query.limit.unwrap_or(100))
+        .take(query.limit.unwrap_or(100)).cloned()
         .collect();
 
     Ok(Json(filtered))

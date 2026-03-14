@@ -68,24 +68,3 @@ pub fn SimpleFilterSelect(
         }
     }
 }
-
-/// Hook: 计算已分配ID集合（排除当前编辑项）
-///
-/// # 参数
-/// - `all_assigned`: 所有已分配的ID列表
-/// - `editing_id`: 当前正在编辑的项ID（这个ID会被排除在结果之外）
-///
-/// # 返回
-/// - 响应式的已分配ID集合
-pub fn use_assigned_ids_excluding(
-    all_assigned: Vec<i32>,
-    editing_id: Option<i32>,
-) -> Memo<HashSet<i32>> {
-    use_memo(move || {
-        all_assigned
-            .iter()
-            .filter(|id| Some(**id) != editing_id)
-            .copied()
-            .collect()
-    })
-}

@@ -3,7 +3,7 @@
 //! 提供 API 健康检查和指标端点
 
 use axum::{extract::State, Json};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use chrono::Utc;
 
 use crate::state::AppState;
