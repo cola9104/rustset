@@ -14,6 +14,7 @@ pub mod port_details;
 pub mod resource_tickets;
 pub mod risks;
 pub mod roles;
+pub mod scanners;
 pub mod security_products;
 pub mod service_providers;
 pub mod tasks;

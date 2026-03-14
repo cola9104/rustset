@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, AdvancedScanTask, PasswordPolicy, CustomRole, CloudZone, CloudPlatform};
 use crate::scanners::engine::ScanManager;
 use crate::handlers::port_details::PortDetail;
+use crate::handlers::scanners::ScanResult;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -24,4 +25,5 @@ pub struct AppState {
     #[allow(dead_code)]
     pub cloud_platforms: Arc<StdRwLock<Vec<CloudPlatform>>>,
     pub port_details: Arc<StdRwLock<Vec<PortDetail>>>,
+    pub scan_results: Arc<StdRwLock<Vec<ScanResult>>>,
 }

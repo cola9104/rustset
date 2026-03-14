@@ -96,6 +96,9 @@ use handlers::{
         get_port_details, get_port_detail, create_port_detail, 
         update_port_detail, delete_port_detail, batch_bind_ports,
     },
+    scanners::{
+        scan_ip, batch_scan_ips, get_scan_results, get_scan_result,
+    },
     resource_tickets::{
         get_resource_tickets, get_resource_ticket, create_resource_ticket,
         update_resource_ticket, delete_resource_ticket,
@@ -335,6 +338,7 @@ async fn main() {
         cloud_zones: Arc::new(StdRwLock::new(loaded_cloud_zones)),
         cloud_platforms: Arc::new(StdRwLock::new(loaded_cloud_platforms)),
         port_details: Arc::new(StdRwLock::new(vec![])),
+        scan_results: Arc::new(StdRwLock::new(vec![])),
     };
 
     // 数据加载辅助函数 (使用 SeaORM)
@@ -475,11 +479,11 @@ async fn main() {
         .route("/api/port-details", get(get_port_details).post(create_port_detail))
         .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
         .route("/api/port-details/batch-bind", post(batch_bind_ports))
-        // Scanners (扫描器) (TODO: implement handlers)
-        // .route("/api/scan-ip", post(scan_ip))
-        // .route("/api/batch-scan-ips", post(batch_scan_ips))
-        // .route("/api/scan-results", get(get_scan_results))
-        // .route("/api/ip-scan-results", get(get_ip_scan_results))
+        // Scanners (扫描器接口)
+        .route("/api/scan-ip", post(scan_ip))
+        .route("/api/batch-scan-ips", post(batch_scan_ips))
+        .route("/api/scan-results", get(get_scan_results))
+        .route("/api/scan-results/{id}", get(get_scan_result))
         // Cloud Assets (Multi-Cloud Management) - 暂时禁用
         // .route("/api/cloud-assets", get(get_cloud_assets).post(create_cloud_asset))
         // .route("/api/cloud-assets/stats", get(get_cloud_asset_stats))

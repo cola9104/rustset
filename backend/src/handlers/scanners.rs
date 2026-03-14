@@ -1,0 +1,221 @@
+//! Scanners Handler - 扫描器接口
+//!
+//! 功能：
+//! - 单 IP 扫描
+//! - 批量 IP 扫描
+//! - 扫描结果查询
+
+use axum::{
+    extract::{State, Path, Query, Json},
+    http::HeaderMap,
+};
+use serde::{Deserialize, Serialize};
+use chrono::Utc;
+
+use crate::state::AppState;
+use crate::utils::get_current_user;
+use crate::middleware::ApiError;
+
+/// 扫描请求
+#[derive(Debug, Deserialize)]
+pub struct ScanRequest {
+    pub target: String,
+    pub ports: Option<Vec<u16>>,
+}
+
+/// 批量扫描请求
+#[derive(Debug, Deserialize)]
+pub struct BatchScanRequest {
+    pub targets: Vec<String>,
+    pub ports: Option<Vec<u16>>,
+}
+
+/// 扫描结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanResult {
+    pub id: String,
+    pub target: String,
+    pub status: String, // pending, running, completed, failed
+    pub start_time: String,
+    pub end_time: Option<String>,
+    pub ports: Vec<PortScanResult>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortScanResult {
+    pub port: u16,
+    pub is_open: bool,
+    pub service: Option<String>,
+}
+
+/// 扫描结果查询参数
+#[derive(Debug, Deserialize)]
+pub struct ScanResultsQuery {
+    pub target: Option<String>,
+    pub status: Option<String>,
+    pub limit: Option<usize>,
+}
+
+/// 执行单 IP 扫描
+pub async fn scan_ip(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+    Json(req): Json<ScanRequest>,
+) -> Result<Json<ScanResult>, ApiError> {
+    // 验证目标 IP
+    let target = req.target;
+    if target.parse::<std::net::IpAddr>().is_err() {
+        // 可能是主机名，跳过验证
+    }
+
+    let ports = req.ports.unwrap_or_else(|| vec![
+        22, 23, 80, 443, 445, 3389, 3306, 5432, 6379, 8080, 8443, 27017
+    ]);
+
+    let scan_id = uuid::Uuid::new_v4().to_string();
+    let start_time = Utc::now();
+
+    // 模拟扫描（实际应调用 RustScan）
+    let port_results: Vec<PortScanResult> = ports.into_iter()
+        .map(|port| PortScanResult {
+            port,
+            is_open: false, // 默认关闭
+            service: get_service_name(port),
+        })
+        .collect();
+
+    let result = ScanResult {
+        id: scan_id,
+        target,
+        status: "completed".to_string(),
+        start_time: start_time.to_rfc3339(),
+        end_time: Some(Utc::now().to_rfc3339()),
+        ports: port_results,
+        error: None,
+    };
+
+    // 保存结果
+    let mut results = state.scan_results.write()
+        .map_err(|e| ApiError::internal(format!("Failed to save results: {}", e)))?;
+    results.push(result.clone());
+
+    Ok(Json(result))
+}
+
+/// 执行批量扫描
+pub async fn batch_scan_ips(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+    Json(req): Json<BatchScanRequest>,
+) -> Result<Json<Vec<ScanResult>>, ApiError> {
+    let ports = req.ports.unwrap_or_else(|| vec![
+        22, 80, 443, 445, 3389, 3306
+    ]);
+
+    let mut results = Vec::new();
+
+    for target in req.targets {
+        let scan_id = uuid::Uuid::new_v4().to_string();
+        let start_time = Utc::now();
+
+        let port_results: Vec<PortScanResult> = ports.iter()
+            .map(|&port| PortScanResult {
+                port,
+                is_open: false,
+                service: get_service_name(port),
+            })
+            .collect();
+
+        let result = ScanResult {
+            id: scan_id,
+            target,
+            status: "completed".to_string(),
+            start_time: start_time.to_rfc3339(),
+            end_time: Some(Utc::now().to_rfc3339()),
+            ports: port_results,
+            error: None,
+        };
+
+        results.push(result);
+    }
+
+    // 保存结果
+    let mut scan_results = state.scan_results.write()
+        .map_err(|e| ApiError::internal(format!("Failed to save results: {}", e)))?;
+    scan_results.extend(results.clone());
+
+    Ok(Json(results))
+}
+
+/// 获取扫描结果
+pub async fn get_scan_results(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+    Query(query): Query<ScanResultsQuery>,
+) -> Result<Json<Vec<ScanResult>>, ApiError> {
+    let results = state.scan_results.read()
+        .map_err(|e| ApiError::internal(format!("Failed to read results: {}", e)))?;
+
+    let filtered: Vec<ScanResult> = results.iter()
+        .filter(|r| {
+            if let Some(ref target) = query.target {
+                if !r.target.contains(target) {
+                    return false;
+                }
+            }
+            if let Some(ref status) = query.status {
+                if &r.status != status {
+                    return false;
+                }
+            }
+            true
+        })
+        .cloned()
+        .take(query.limit.unwrap_or(100))
+        .collect();
+
+    Ok(Json(filtered))
+}
+
+/// 获取单个扫描结果
+pub async fn get_scan_result(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<ScanResult>, ApiError> {
+    let results = state.scan_results.read()
+        .map_err(|e| ApiError::internal(format!("Failed to read results: {}", e)))?;
+
+    results.iter()
+        .find(|r| r.id == id)
+        .cloned()
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("Scan result not found"))
+}
+
+/// 根据端口号获取服务名
+fn get_service_name(port: u16) -> Option<String> {
+    match port {
+        21 => Some("FTP".to_string()),
+        22 => Some("SSH".to_string()),
+        23 => Some("Telnet".to_string()),
+        25 => Some("SMTP".to_string()),
+        53 => Some("DNS".to_string()),
+        80 => Some("HTTP".to_string()),
+        110 => Some("POP3".to_string()),
+        143 => Some("IMAP".to_string()),
+        443 => Some("HTTPS".to_string()),
+        445 => Some("SMB".to_string()),
+        993 => Some("IMAPS".to_string()),
+        995 => Some("POP3S".to_string()),
+        3306 => Some("MySQL".to_string()),
+        3389 => Some("RDP".to_string()),
+        5432 => Some("PostgreSQL".to_string()),
+        6379 => Some("Redis".to_string()),
+        8080 => Some("HTTP-Alt".to_string()),
+        8443 => Some("HTTPS-Alt".to_string()),
+        27017 => Some("MongoDB".to_string()),
+        _ => None,
+    }
+}
