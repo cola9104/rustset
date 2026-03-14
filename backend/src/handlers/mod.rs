@@ -10,6 +10,7 @@ pub mod cloud_zones;
 pub mod ip_zones;
 pub mod logs;
 pub mod machine_rooms;
+pub mod port_details;
 pub mod resource_tickets;
 pub mod risks;
 pub mod roles;

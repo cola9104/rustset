@@ -92,6 +92,10 @@ use handlers::{
     ip_zones::{
         find_zone_by_ip, get_ip_zones, create_ip_zone, delete_ip_zone,
     },
+    port_details::{
+        get_port_details, get_port_detail, create_port_detail, 
+        update_port_detail, delete_port_detail, batch_bind_ports,
+    },
     resource_tickets::{
         get_resource_tickets, get_resource_ticket, create_resource_ticket,
         update_resource_ticket, delete_resource_ticket,
@@ -330,6 +334,7 @@ async fn main() {
         password_history: Arc::new(StdRwLock::new(vec![])),
         cloud_zones: Arc::new(StdRwLock::new(loaded_cloud_zones)),
         cloud_platforms: Arc::new(StdRwLock::new(loaded_cloud_platforms)),
+        port_details: Arc::new(StdRwLock::new(vec![])),
     };
 
     // 数据加载辅助函数 (使用 SeaORM)
@@ -466,10 +471,10 @@ async fn main() {
         .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
         .route("/api/ip-zones/{id}", delete(delete_ip_zone))
         .route("/api/ip-zones/find", get(find_zone_by_ip))
-        // Port Details (端口详细信息表) (TODO: implement handlers)
-        // .route("/api/port-details", get(get_port_details).post(create_port_detail))
-        // .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
-        // .route("/api/port-details/batch-bind", post(batch_bind_ports))
+        // Port Details (端口详细信息管理)
+        .route("/api/port-details", get(get_port_details).post(create_port_detail))
+        .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
+        .route("/api/port-details/batch-bind", post(batch_bind_ports))
         // Scanners (扫描器) (TODO: implement handlers)
         // .route("/api/scan-ip", post(scan_ip))
         // .route("/api/batch-scan-ips", post(batch_scan_ips))

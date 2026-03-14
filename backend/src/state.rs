@@ -3,6 +3,7 @@ use tokio::sync::RwLock as TokioRwLock;
 use chrono::{DateTime, Utc};
 use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, AdvancedScanTask, PasswordPolicy, CustomRole, CloudZone, CloudPlatform};
 use crate::scanners::engine::ScanManager;
+use crate::handlers::port_details::PortDetail;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -22,4 +23,5 @@ pub struct AppState {
     pub cloud_zones: Arc<StdRwLock<Vec<CloudZone>>>,
     #[allow(dead_code)]
     pub cloud_platforms: Arc<StdRwLock<Vec<CloudPlatform>>>,
+    pub port_details: Arc<StdRwLock<Vec<PortDetail>>>,
 }
