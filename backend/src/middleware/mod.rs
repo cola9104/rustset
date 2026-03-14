@@ -4,4 +4,5 @@
 
 pub mod error_handler;
 
+#[allow(unused_imports)]
 pub use error_handler::{ApiError, ErrorResponse, IntoApiError};

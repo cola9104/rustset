@@ -21,14 +21,23 @@ use uuid;
 pub use crate::entities::prelude::*;
 
 // Legacy type aliases for compatibility with handlers
+#[allow(dead_code)]
 pub type DbUser = user::Model;
+#[allow(dead_code)]
 pub type DbAuditLog = audit_log::Model;
+#[allow(dead_code)]
 pub type DbBusinessResource = business_resource::Model;
+#[allow(dead_code)]
 pub type DbPhysicalMachine = physical_machine::Model;
+#[allow(dead_code)]
 pub type DbCloudVirtualMachine = cloud_virtual_machine::Model;
+#[allow(dead_code)]
 pub type DbAsset = asset::Model;
+#[allow(dead_code)]
 pub type DbTask = task::Model;
+#[allow(dead_code)]
 pub type DbRisk = risk::Model;
+#[allow(dead_code)]
 pub type DbZone = network_zone::Model;
 
 /// Global database connection (Arc-wrapped for sharing across threads)
