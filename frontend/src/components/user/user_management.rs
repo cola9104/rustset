@@ -262,7 +262,7 @@ pub fn UserManagement() -> Element {
                 user: user.clone(),
                 on_close: move |_| editing_user.set(None),
                 on_save: {
-                    let mut editing_user_signal = editing_user.clone();
+                    let mut editing_user_signal = editing_user;
                     move |updated: User| {
                         let mut list = users.write();
                         if let Some(u) = list.iter_mut().find(|u| u.id == updated.id) {

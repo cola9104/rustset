@@ -20,10 +20,10 @@ pub fn NetworkZoneManagement() -> Element {
         .iter()
         .filter(|zone| {
             let search_query = search_query.read().to_lowercase();
-            let matches_search = search_query.is_empty()
+            
+            search_query.is_empty()
                 || zone.name.to_lowercase().contains(&search_query)
-                || zone.description.to_lowercase().contains(&search_query);
-            matches_search
+                || zone.description.to_lowercase().contains(&search_query)
         })
         .cloned()
         .collect();

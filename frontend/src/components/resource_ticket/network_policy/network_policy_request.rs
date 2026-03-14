@@ -426,7 +426,7 @@ pub fn NetworkPolicyRequest() -> Element {
             // 编辑策略表单
             {
                 let edit_id = *show_edit_form.read();
-                edit_id.map(|id| {
+                edit_id.and_then(|id| {
                     let all_requests = requests.read().clone();
                     let editing_request = all_requests.iter().find(|r| r.id == id).cloned();
                     editing_request.map(|req| rsx! {
@@ -443,7 +443,7 @@ pub fn NetworkPolicyRequest() -> Element {
                             on_close: move |_| show_edit_form.set(None),
                         }
                     })
-                }).flatten()
+                })
             }
         }
     }

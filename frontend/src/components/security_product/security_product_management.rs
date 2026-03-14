@@ -17,7 +17,7 @@ use super::product_form::{ProductForm, FormMode};
 /// 安全产品管理页面
 #[component]
 pub fn SecurityProductManagement() -> Element {
-    let mut search_query = use_signal(|| String::new());
+    let mut search_query = use_signal(String::new);
     let mut category_filter = use_signal(|| String::from("all"));
     let mut status_filter = use_signal(|| String::from("all"));
 
@@ -32,8 +32,8 @@ pub fn SecurityProductManagement() -> Element {
 
     // 加载数据 - 包括安全产品、服务商、机房和云平台
     {
-        let mut products_clone = products.clone();
-        let mut is_loading_clone = is_loading.clone();
+        let mut products_clone = products;
+        let mut is_loading_clone = is_loading;
         use_effect(move || {
             spawn(async move {
                 // 加载服务商数据
@@ -80,9 +80,9 @@ pub fn SecurityProductManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let products = products.clone();
+        let products = products;
         move || {
-            let mut products = products.clone();
+            let mut products = products;
             spawn(async move {
                 match fetch_security_products().await {
                     Ok(data) => {
@@ -255,7 +255,7 @@ pub fn SecurityProductManagement() -> Element {
                             } else {
                                 for product in filtered_products.iter() {
                                     {
-                                        let deployment_location = get_deployment_location(&product);
+                                        let deployment_location = get_deployment_location(product);
                                         rsx! {
                                             tr { class: "hover:bg-gray-50",
                                                 td { class: "px-6 py-4 whitespace-nowrap",
@@ -313,9 +313,9 @@ pub fn SecurityProductManagement() -> Element {
                                                         class: "text-red-600 hover:text-red-900",
                                                         onclick: {
                                                             let product_id = product.id;
-                                                            let refresh_data = refresh_data.clone();
+                                                            let refresh_data = refresh_data;
                                                             move |_| {
-                                                                let refresh_data = refresh_data.clone();
+                                                                let refresh_data = refresh_data;
                                                                 spawn(async move {
                                                                     match delete_security_product(product_id).await {
                                                                         Ok(()) => {
@@ -348,7 +348,7 @@ pub fn SecurityProductManagement() -> Element {
                 mode: FormMode::New,
                 product: None,
                 on_save: move |new_product: SecurityProduct| {
-                    let refresh_data = refresh_data.clone();
+                    let refresh_data = refresh_data;
                     spawn(async move {
                         match create_security_product(&new_product).await {
                             Ok(_) => {
@@ -371,7 +371,7 @@ pub fn SecurityProductManagement() -> Element {
                 mode: FormMode::Edit,
                 product: Some(product.clone()),
                 on_save: move |updated: SecurityProduct| {
-                    let refresh_data = refresh_data.clone();
+                    let refresh_data = refresh_data;
                     spawn(async move {
                         match update_security_product(updated.id, &updated).await {
                             Ok(_) => {

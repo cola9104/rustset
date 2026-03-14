@@ -138,7 +138,7 @@ pub fn PlatformForm(props: PlatformFormProps) -> Element {
                                 }
                             }
                             FormMode::Edit => {
-                                if let Some(ref original) = props.config.as_ref() {
+                                if let Some(original) = props.config.as_ref() {
                                     CloudPlatformConfig {
                                         id: original.id,
                                         platform_name: data.platform_name.clone(),

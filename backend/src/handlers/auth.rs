@@ -36,7 +36,7 @@ pub async fn login(
     let user = &mut users[user_idx];
 
     // 检查账户是否被禁用
-    if user.status.as_ref().map(|s| s.as_str()) == Some("disabled") {
+    if user.status.as_deref() == Some("disabled") {
         return Err(ApiError::forbidden("账户已被禁用"));
     }
 

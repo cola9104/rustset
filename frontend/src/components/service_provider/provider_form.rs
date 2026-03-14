@@ -142,7 +142,7 @@ pub fn ProviderForm(props: ProviderFormProps) -> Element {
         .unwrap_or_default();
 
     let mut form_data = use_signal(|| initial_data);
-    let mut error_msg = use_signal(|| String::new());
+    let mut error_msg = use_signal(String::new);
 
     rsx! {
         Modal {
@@ -175,7 +175,7 @@ pub fn ProviderForm(props: ProviderFormProps) -> Element {
                                 )
                             }
                             FormMode::Edit => {
-                                if let Some(ref original) = props.provider.as_ref() {
+                                if let Some(original) = props.provider.as_ref() {
                                     data.to_config(
                                         original.id,
                                         original.created_at.clone(),

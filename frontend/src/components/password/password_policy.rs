@@ -166,22 +166,22 @@ pub fn PasswordPolicy() -> Element {
                 div { class: "p-6",
                     // 密码策略部分
                     if *active_section.read() == "password" {
-                        PasswordPolicySection { policy: policy.clone() }
+                        PasswordPolicySection { policy: policy }
                     }
 
                     // 账户锁定部分
                     if *active_section.read() == "account" {
-                        AccountLockoutSection { policy: policy.clone() }
+                        AccountLockoutSection { policy: policy }
                     }
 
                     // 会话管理部分
                     if *active_section.read() == "session" {
-                        SessionManagementSection { policy: policy.clone() }
+                        SessionManagementSection { policy: policy }
                     }
 
                     // 登录安全部分
                     if *active_section.read() == "login" {
-                        LoginSecuritySection { policy: policy.clone() }
+                        LoginSecuritySection { policy: policy }
                     }
                 }
             }

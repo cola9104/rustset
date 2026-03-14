@@ -20,7 +20,7 @@ pub async fn get_zones(State(state): State<AppState>, headers: HeaderMap) -> Res
             // Update in-memory cache
             *state.zones.write()
                 .map_err(|e| ApiError::internal(format!("Failed to write zones cache: {}", e)))? = zones.clone();
-            return Ok(Json(zones));
+            Ok(Json(zones))
         }
         Err(e) => {
             eprintln!("Error loading zones from database: {}", e);

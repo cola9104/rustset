@@ -539,7 +539,7 @@ fn render_role_permissions_grouped(permissions: Vec<String>) -> Element {
     for perm in permissions {
         let parts: Vec<&str> = perm.split(':').collect();
         if parts.len() == 2 {
-            grouped.entry(parts[0].to_string()).or_insert_with(Vec::new).push(parts[1].to_string());
+            grouped.entry(parts[0].to_string()).or_default().push(parts[1].to_string());
         }
     }
     let modules: Vec<String> = grouped.keys().cloned().collect();
@@ -640,7 +640,7 @@ fn EditPermissionModal(permission: Permission, on_close: EventHandler<()>, on_sa
 fn AddRoleModal(on_close: EventHandler<()>, on_save: EventHandler<Role>) -> Element {
     let mut name = use_signal(String::new);
     let mut description = use_signal(String::new);
-    let selected_permissions = use_signal(|| Vec::<String>::new());
+    let selected_permissions = use_signal(Vec::<String>::new);
     let module_groups = get_module_permission_groups();
 
     rsx! {
@@ -661,7 +661,7 @@ fn AddRoleModal(on_close: EventHandler<()>, on_save: EventHandler<Role>) -> Elem
                         label { class: "block text-sm font-medium text-gray-700 mb-2", "选择权限（按模块分组）" }
                         div { class: "space-y-4 max-h-96 overflow-y-auto",
                             for group in module_groups.iter() {
-                                {render_module_permission_group(group.module.clone(), group.permissions.clone(), selected_permissions.clone())}
+                                {render_module_permission_group(group.module.clone(), group.permissions.clone(), selected_permissions)}
                             }
                         }
                     }
@@ -705,7 +705,7 @@ fn EditRoleModal(role: Role, on_close: EventHandler<()>, on_save: EventHandler<R
                         label { class: "block text-sm font-medium text-gray-700 mb-2", "选择权限（按模块分组）" }
                         div { class: "space-y-4 max-h-96 overflow-y-auto",
                             for group in module_groups.iter() {
-                                {render_module_permission_group(group.module.clone(), group.permissions.clone(), selected_permissions.clone())}
+                                {render_module_permission_group(group.module.clone(), group.permissions.clone(), selected_permissions)}
                             }
                         }
                     }

@@ -202,7 +202,7 @@ pub async fn create_security_product(
                         machine_room_id: req.machine_room_id,
                         provider_id: req.provider_id,
                         status,
-                        features: features,
+                        features,
                         throughput: req.throughput.clone(),
                         contact_person: req.contact_person.clone(),
                         contact_phone: req.contact_phone.clone(),

@@ -44,14 +44,14 @@ pub fn ResourceTicket() -> Element {
     let is_loading = use_signal(|| true);
     let mut resource_type_tab = use_signal(|| ResourceType::Cloud);
     let mut workflow_tab = use_signal(|| auth.read().role.accessible_tabs().first().copied().unwrap_or(ApplicationTab::MyApplications));
-    let mut search_query = use_signal(|| String::new());
+    let mut search_query = use_signal(String::new);
     let mut selected_ticket = use_signal(|| Option::<i32>::None);
     let mut show_new_form = use_signal(|| false);
 
     // 组件挂载时从API加载数据
     {
-        let mut tickets_clone = tickets.clone();
-        let mut is_loading_clone = is_loading.clone();
+        let mut tickets_clone = tickets;
+        let mut is_loading_clone = is_loading;
         use_effect(move || {
             spawn(async move {
                 match fetch_resource_tickets().await {
@@ -345,7 +345,7 @@ pub fn ResourceTicket() -> Element {
                             rsx! {
                                 TicketDetailView {
                                     ticket,
-                                    tickets: tickets.clone(),
+                                    tickets: tickets,
                                     current_role,
                                     on_back: move |_| selected_ticket.set(None),
                                 }
@@ -359,7 +359,7 @@ pub fn ResourceTicket() -> Element {
                     TicketListViewByTypeAndWorkflow {
                         resource_type: *resource_type_tab.read(),
                         workflow_tab: *workflow_tab.read(),
-                        tickets: tickets.clone(),
+                        tickets: tickets,
                         search_query: (*search_query.read()).clone(),
                         current_role,
                         on_select: move |id| selected_ticket.set(Some(id)),
@@ -439,8 +439,8 @@ pub fn ResourceTicket() -> Element {
                                         fw_valid_until: None,
                                         fw_firewall_name: None,
                                     };
-                                    let mut tickets_ref = tickets.clone();
-                                    let mut form_close = show_new_form.clone();
+                                    let mut tickets_ref = tickets;
+                                    let mut form_close = show_new_form;
                                     spawn(async move {
                                         match create_resource_ticket(&new_ticket).await {
                                             Ok(created) => {
@@ -531,8 +531,8 @@ pub fn ResourceTicket() -> Element {
                                         fw_valid_until: None,
                                         fw_firewall_name: None,
                                     };
-                                    let mut tickets_ref = tickets.clone();
-                                    let mut form_close = show_new_form.clone();
+                                    let mut tickets_ref = tickets;
+                                    let mut form_close = show_new_form;
                                     spawn(async move {
                                         match create_resource_ticket(&new_ticket).await {
                                             Ok(created) => {
@@ -607,8 +607,8 @@ pub fn ResourceTicket() -> Element {
                                         fw_valid_until: Some(req.valid_until.clone()),
                                         fw_firewall_name: None,
                                     };
-                                    let mut tickets_ref = tickets.clone();
-                                    let mut form_close = show_new_form.clone();
+                                    let mut tickets_ref = tickets;
+                                    let mut form_close = show_new_form;
                                     spawn(async move {
                                         match create_resource_ticket(&new_ticket).await {
                                             Ok(created) => {
@@ -1062,7 +1062,7 @@ fn TicketDetailView(
                             } else {
                                 ApprovalPanel {
                                     ticket: ticket.clone(),
-                                    tickets: tickets.clone(),
+                                    tickets: tickets,
                                 }
                             }
                         }
@@ -1086,7 +1086,7 @@ fn TicketDetailView(
                             } else {
                                 ProvisionPanel {
                                     ticket: ticket.clone(),
-                                    tickets: tickets.clone(),
+                                    tickets: tickets,
                                 }
                             }
                         }
@@ -1110,7 +1110,7 @@ fn TicketDetailView(
                             } else {
                                 DeliveryPanel {
                                     ticket: ticket.clone(),
-                                    tickets: tickets.clone(),
+                                    tickets: tickets,
                                 }
                             }
                         }
@@ -1130,10 +1130,10 @@ fn TicketDetailView(
 #[component]
 fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -> Element {
     let ticket_clone = ticket.clone();
-    let tickets_clone = tickets.clone();
+    let tickets_clone = tickets;
     let ticket_clone2 = ticket.clone();
-    let tickets_clone2 = tickets.clone();
-    let mut comment = use_signal(|| String::new());
+    let tickets_clone2 = tickets;
+    let mut comment = use_signal(String::new);
     let mut is_approving = use_signal(|| false);
 
     rsx! {
@@ -1153,7 +1153,7 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                     onclick: move |_| {
                         let ticket_id = ticket_clone.id;
                         let comment_val = if !comment.read().is_empty() { Some(comment.read().clone()) } else { None };
-                        let mut tickets_ref = tickets_clone.clone();
+                        let mut tickets_ref = tickets_clone;
                         is_approving.set(true);
                         spawn(async move {
                             match approve_ticket(ticket_id, true, comment_val).await {
@@ -1179,7 +1179,7 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                     onclick: move |_| {
                         let ticket_id = ticket_clone2.id;
                         let comment_val = if !comment.read().is_empty() { Some(comment.read().clone()) } else { Some("拒绝".to_string()) };
-                        let mut tickets_ref = tickets_clone2.clone();
+                        let mut tickets_ref = tickets_clone2;
                         is_approving.set(true);
                         spawn(async move {
                             match approve_ticket(ticket_id, false, comment_val).await {
@@ -1208,8 +1208,8 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
 #[component]
 fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -> Element {
     let ticket_clone = ticket.clone();
-    let tickets_clone = tickets.clone();
-    let mut details = use_signal(|| String::new());
+    let tickets_clone = tickets;
+    let mut details = use_signal(String::new);
     let mut ip_address = use_signal(|| ticket.ip_address.clone());
     let mut is_provisioning = use_signal(|| false);
 
@@ -1239,7 +1239,7 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
                     let ticket_id = ticket_clone.id;
                     let ip_val = if !ip_address.read().is_empty() { Some(ip_address.read().clone()) } else { None };
                     let details_val = if !details.read().is_empty() { Some(details.read().clone()) } else { None };
-                    let mut tickets_ref = tickets_clone.clone();
+                    let mut tickets_ref = tickets_clone;
                     is_provisioning.set(true);
                     spawn(async move {
                         match provision_ticket(ticket_id, ip_val, details_val).await {
@@ -1267,8 +1267,8 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
 #[component]
 fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -> Element {
     let ticket_clone = ticket.clone();
-    let tickets_clone = tickets.clone();
-    let mut comment = use_signal(|| String::new());
+    let tickets_clone = tickets;
+    let mut comment = use_signal(String::new);
     let mut is_delivering = use_signal(|| false);
 
     rsx! {
@@ -1296,7 +1296,7 @@ fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                 onclick: move |_| {
                     let ticket_id = ticket_clone.id;
                     let comment_val = if !comment.read().is_empty() { Some(comment.read().clone()) } else { None };
-                    let mut tickets_ref = tickets_clone.clone();
+                    let mut tickets_ref = tickets_clone;
                     is_delivering.set(true);
                     spawn(async move {
                         match deliver_ticket(ticket_id, comment_val).await {
@@ -1435,10 +1435,10 @@ fn NewTicketForm(
     on_cancel: Callback<()>,
     on_submit: Callback<()>,
 ) -> Element {
-    let mut ecs_name = use_signal(|| String::new());
-    let mut application_name = use_signal(|| String::new());
-    let mut contract_name = use_signal(|| String::new());
-    let mut customer_name = use_signal(|| String::new());
+    let mut ecs_name = use_signal(String::new);
+    let mut application_name = use_signal(String::new);
+    let mut contract_name = use_signal(String::new);
+    let mut customer_name = use_signal(String::new);
     // 选中的服务商
     let mut selected_provider_id = use_signal(|| 1i32);
 
@@ -1454,13 +1454,13 @@ fn NewTicketForm(
     let mut selected_cloud_platform_id = use_signal(|| Option::<i32>::None);
     let mut selected_machine_room_id = use_signal(|| Option::<i32>::None);
     let resource_type = default_resource_type;  // 直接使用传入的类型，不可切换
-    let zone_name = use_signal(|| String::new());       // 区域
-    let mut zone_cabinet = use_signal(|| String::new());    // 机柜
+    let zone_name = use_signal(String::new);       // 区域
+    let mut zone_cabinet = use_signal(String::new);    // 机柜
     let mut rack_units = use_signal(|| 0i32);               // 机位(U数)
     let mut ecs_type = use_signal(|| "ecs.g6.xlarge".to_string());
     let mut ecs_os = use_signal(|| "CentOS 7.9".to_string());
-    let mut data_disk_type = use_signal(|| String::new());
-    let mut data_disk_size = use_signal(|| String::new());
+    let mut data_disk_type = use_signal(String::new);
+    let mut data_disk_size = use_signal(String::new);
     let mut cpu_cores = use_signal(|| 4);
     let mut memory_gb = use_signal(|| 16);
     let mut system_disk = use_signal(|| "SSD".to_string());
@@ -1477,18 +1477,18 @@ fn NewTicketForm(
         products
     });
     let mut show_security_selector = use_signal(|| false);
-    let mut remarks = use_signal(|| String::new());
+    let mut remarks = use_signal(String::new);
 
     // 网络策略专用字段
-    let mut fw_source_zone = use_signal(|| String::new());
-    let mut fw_source_address = use_signal(|| String::new());
-    let mut fw_dest_zone = use_signal(|| String::new());
-    let mut fw_dest_address = use_signal(|| String::new());
+    let mut fw_source_zone = use_signal(String::new);
+    let mut fw_source_address = use_signal(String::new);
+    let mut fw_dest_zone = use_signal(String::new);
+    let mut fw_dest_address = use_signal(String::new);
     let mut fw_protocol = use_signal(|| "TCP".to_string());
-    let mut fw_port = use_signal(|| String::new());
+    let mut fw_port = use_signal(String::new);
     let mut fw_direction = use_signal(|| "入站".to_string());
-    let mut fw_valid_until = use_signal(|| String::new());
-    let mut fw_firewall_name = use_signal(|| String::new());
+    let mut fw_valid_until = use_signal(String::new);
+    let mut fw_firewall_name = use_signal(String::new);
 
     rsx! {
         // 模态框背景层
@@ -1559,7 +1559,7 @@ fn NewTicketForm(
 
                     let new_app = ResourceTicket {
                         id,
-                        resource_type: resource_type,
+                        resource_type,
                         ecs_name: ecs_name.read().clone(),
                         ticket_status: TicketStatus::PendingApproval,
                         provider_id,
@@ -1664,8 +1664,8 @@ fn NewTicketForm(
                             None
                         },
                     };
-                    let mut tickets_ref = tickets.clone();
-                    let on_submit_callback = on_submit.clone();
+                    let mut tickets_ref = tickets;
+                    let on_submit_callback = on_submit;
                     spawn(async move {
                         match create_resource_ticket(&new_app).await {
                             Ok(created) => {

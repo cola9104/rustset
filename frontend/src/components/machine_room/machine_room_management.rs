@@ -16,7 +16,7 @@ pub fn MachineRoomManagement() -> Element {
     let mut show_edit_modal = use_signal(|| false);
     let mut show_view_modal = use_signal(|| false);
     let mut selected_room = use_signal(|| None::<MachineRoomConfig>);
-    let mut search_query = use_signal(|| String::new());
+    let mut search_query = use_signal(String::new);
     let mut provider_filter = use_signal(|| String::from("all"));
     let mut room_type_filter = use_signal(|| String::from("all"));
 
@@ -26,8 +26,8 @@ pub fn MachineRoomManagement() -> Element {
 
     // 加载数据 - 包括机房和服务商
     {
-        let mut rooms_clone = rooms.clone();
-        let mut is_loading_clone = is_loading.clone();
+        let mut rooms_clone = rooms;
+        let mut is_loading_clone = is_loading;
         use_effect(move || {
             spawn(async move {
                 // 加载服务商数据（用于下拉选择）
@@ -56,9 +56,9 @@ pub fn MachineRoomManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let rooms = rooms.clone();
+        let rooms = rooms;
         move || {
-            let mut rooms = rooms.clone();
+            let mut rooms = rooms;
             spawn(async move {
                 match fetch_machine_rooms().await {
                     Ok(data) => {
@@ -316,9 +316,9 @@ pub fn MachineRoomManagement() -> Element {
                                                         title: "删除",
                                                         onclick: {
                                                             let room_id = room.id;
-                                                            let refresh_data = refresh_data.clone();
+                                                            let refresh_data = refresh_data;
                                                             move |_| {
-                                                                let refresh_data = refresh_data.clone();
+                                                                let refresh_data = refresh_data;
                                                                 spawn(async move {
                                                                     match delete_machine_room(room_id).await {
                                                                         Ok(()) => {
@@ -351,7 +351,7 @@ pub fn MachineRoomManagement() -> Element {
                 mode: FormMode::New,
                 room: None,
                 on_save: move |room: MachineRoomConfig| {
-                    let refresh_data = refresh_data.clone();
+                    let refresh_data = refresh_data;
                     spawn(async move {
                         match create_machine_room(&room).await {
                             Ok(_) => {
@@ -375,7 +375,7 @@ pub fn MachineRoomManagement() -> Element {
                     mode: FormMode::Edit,
                     room: Some(room.clone()),
                     on_save: move |updated: MachineRoomConfig| {
-                        let refresh_data = refresh_data.clone();
+                        let refresh_data = refresh_data;
                         spawn(async move {
                             match update_machine_room(updated.id, &updated).await {
                                 Ok(_) => {

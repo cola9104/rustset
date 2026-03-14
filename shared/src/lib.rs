@@ -404,6 +404,7 @@ pub struct CreateBusinessResourceRequest {
 
 /// 更新业务资源请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct UpdateBusinessResourceRequest {
     pub resource_type: Option<String>,         // 资源类型
     pub ecs_name: Option<String>,
@@ -484,81 +485,6 @@ pub struct UpdateBusinessResourceRequest {
     pub delivery_confirmed_by: Option<String>,     // 交付确认人
 }
 
-impl Default for UpdateBusinessResourceRequest {
-    fn default() -> Self {
-        Self {
-            resource_type: None,
-            ecs_name: None,
-            ecs_status: None,
-            resource_id: None,
-            cloud_region: None,
-            cloud_category: None,
-            cloud_provider_config_id: None,
-            zone_name: None,
-            platform_name: None,
-            county_city: None,
-            vdc_name: None,
-            customer_name: None,
-            application_name: None,
-            contract_name: None,
-            instance_id: None,
-            ecs_type: None,
-            ecs_os: None,
-            cpu_cores: None,
-            memory_gb: None,
-            system_disk: None,
-            system_disk_size_gb: None,
-            data_disk: None,
-            completion_time: None,
-            release_time: None,
-            has_security_product: None,
-            security_products: None,
-            ip_address: None,
-            ecs_login_method: None,
-            ecs_login_username: None,
-            ecs_initial_password: None,
-            bastion_address: None,
-            bastion_admin_account: None,
-            bastion_initial_password: None,
-            physical_machine_info: None,
-            cloud_vm_info: None,
-            remarks: None,
-            // 申请流程相关
-            applicant: None,
-            department: None,
-            approver: None,
-            approval_time: None,
-            approval_remarks: None,
-            rejection_reason: None,
-            // 资源配置相关
-            bandwidth_mbps: None,
-            bandwidth_type: None,
-            public_ip_count: None,
-            network_type: None,
-            // 业务关联相关
-            project_name: None,
-            project_code: None,
-            business_owner: None,
-            tech_owner: None,
-            contact_phone: None,
-            // 费用相关
-            billing_method: None,
-            purchase_duration: None,
-            cost_center: None,
-            // 合规相关
-            security_level: None,
-            data_sensitivity: None,
-            // 其他
-            purpose: None,
-            expected_delivery_time: None,
-            // 状态管理
-            application_status: None,
-            delivery_status: None,
-            delivery_confirmed_at: None,
-            delivery_confirmed_by: None,
-        }
-    }
-}
 
 /// 业务资源查询参数
 #[derive(Debug, Clone, Serialize, Deserialize)]

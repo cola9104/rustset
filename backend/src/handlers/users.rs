@@ -103,7 +103,7 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
             // Update in-memory cache
             *state.users.write()
                 .map_err(|e| ApiError::internal(format!("Failed to write users cache: {}", e)))? = db_users.clone();
-            return Ok(Json(db_users));
+            Ok(Json(db_users))
         }
         Err(e) => {
             eprintln!("Error loading users from database: {}", e);

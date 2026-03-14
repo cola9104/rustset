@@ -169,7 +169,7 @@ pub fn ProductForm(props: ProductFormProps) -> Element {
         .unwrap_or_default();
 
     let mut form_data = use_signal(|| initial_data);
-    let mut error_msg = use_signal(|| String::new());
+    let mut error_msg = use_signal(String::new);
 
     // 获取关联数据
     let providers = PROVIDERS_STATE.read().clone();

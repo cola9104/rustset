@@ -13,7 +13,7 @@ use super::provider_form::{ProviderForm, FormMode};
 /// 服务商管理页面
 #[component]
 pub fn ServiceProviderManagement() -> Element {
-    let mut search_query = use_signal(|| String::new());
+    let mut search_query = use_signal(String::new);
     let mut status_filter = use_signal(|| String::from("all"));
 
     // 数据和加载状态
@@ -28,8 +28,8 @@ pub fn ServiceProviderManagement() -> Element {
 
     // 组件挂载时从API加载数据
     {
-        let mut providers_clone = providers.clone();
-        let mut is_loading_clone = is_loading.clone();
+        let mut providers_clone = providers;
+        let mut is_loading_clone = is_loading;
         use_effect(move || {
             spawn(async move {
                 match fetch_service_providers().await {
@@ -48,9 +48,9 @@ pub fn ServiceProviderManagement() -> Element {
 
     // 刷新数据的函数
     let refresh_data = {
-        let providers = providers.clone();
+        let providers = providers;
         move || {
-            let mut providers = providers.clone();
+            let mut providers = providers;
             spawn(async move {
                 match fetch_service_providers().await {
                     Ok(data) => {
@@ -219,9 +219,9 @@ pub fn ServiceProviderManagement() -> Element {
                                                 class: "text-red-600 hover:text-red-900",
                                                 onclick: {
                                                     let provider_id = provider.id;
-                                                    let refresh_data = refresh_data.clone();
+                                                    let refresh_data = refresh_data;
                                                     move |_| {
-                                                        let refresh_data = refresh_data.clone();
+                                                        let refresh_data = refresh_data;
                                                         spawn(async move {
                                                             match delete_service_provider(provider_id).await {
                                                                 Ok(()) => {
@@ -252,7 +252,7 @@ pub fn ServiceProviderManagement() -> Element {
                 mode: FormMode::New,
                 provider: None,
                 on_save: move |provider: ServiceProviderConfig| {
-                    let refresh_data = refresh_data.clone();
+                    let refresh_data = refresh_data;
                     spawn(async move {
                         match create_service_provider(&provider).await {
                             Ok(_) => {
@@ -276,7 +276,7 @@ pub fn ServiceProviderManagement() -> Element {
                     mode: FormMode::Edit,
                     provider: Some(provider.clone()),
                     on_save: move |provider: ServiceProviderConfig| {
-                        let refresh_data = refresh_data.clone();
+                        let refresh_data = refresh_data;
                         spawn(async move {
                             match update_service_provider(provider.id, &provider).await {
                                 Ok(_) => {

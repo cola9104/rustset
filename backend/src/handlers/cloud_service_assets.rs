@@ -157,10 +157,10 @@ pub async fn get_cloud_service_assets(
         assets.retain(|a| a.customer_name.contains(customer_name));
     }
     if let Some(department) = &query.department {
-        assets.retain(|a| a.department.as_ref().map_or(false, |d| d.contains(department)));
+        assets.retain(|a| a.department.as_ref().is_some_and(|d| d.contains(department)));
     }
     if let Some(project) = &query.project {
-        assets.retain(|a| a.project.as_ref().map_or(false, |p| p.contains(project)));
+        assets.retain(|a| a.project.as_ref().is_some_and(|p| p.contains(project)));
     }
     if let Some(keyword) = &query.search_keyword {
         assets.retain(|a| {

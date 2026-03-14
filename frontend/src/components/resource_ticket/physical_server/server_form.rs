@@ -109,7 +109,7 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
         .unwrap_or_default();
 
     let mut form_data = use_signal(|| initial_data);
-    let mut error_msg = use_signal(|| String::new());
+    let mut error_msg = use_signal(String::new);
     let mut show_security_selector = use_signal(|| false);
     let security_products_signal = use_signal(|| form_data.read().security_products.clone());
 

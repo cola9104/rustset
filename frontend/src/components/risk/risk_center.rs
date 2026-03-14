@@ -141,8 +141,8 @@ pub fn RiskCenter() -> Element {
     let filtered_risks: Vec<Risk> = risks.read()
         .iter()
         .filter(|risk| {
-            let level_match = level_filter.read().as_ref().map_or(true, |l| risk.level == *l);
-            let status_match = status_filter.read().as_ref().map_or(true, |s| risk.status == *s);
+            let level_match = level_filter.read().as_ref().is_none_or(|l| risk.level == *l);
+            let status_match = status_filter.read().as_ref().is_none_or(|s| risk.status == *s);
             level_match && status_match
         })
         .cloned()

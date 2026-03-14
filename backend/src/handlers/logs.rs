@@ -1,6 +1,6 @@
 use axum::{
     extract::State,
-    http::{StatusCode, HeaderMap},
+    http::HeaderMap,
     Json,
 };
 use shared::{AuditLog, Role};

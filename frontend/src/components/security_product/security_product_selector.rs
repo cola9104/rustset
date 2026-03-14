@@ -63,7 +63,7 @@ pub fn SecurityProductSelector(
     active_only: Option<bool>,
 ) -> Element {
     let active_only = active_only.unwrap_or(true);
-    let display_categories = categories.unwrap_or_else(|| SecurityProductCategory::all_categories());
+    let display_categories = categories.unwrap_or_else(SecurityProductCategory::all_categories);
 
     let products = SECURITY_PRODUCTS_STATE.read();
     let selected_products = selected.read();

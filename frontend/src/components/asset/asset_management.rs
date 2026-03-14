@@ -518,7 +518,7 @@ fn HardwareAssetsTab(
                 asset: asset.clone(),
                 on_close: move |_| editing_asset.set(None),
                 on_save: {
-                    let mut editing_asset_signal = editing_asset.clone();
+                    let mut editing_asset_signal = editing_asset;
                     move |updated: HardwareAsset| {
                         let mut list = assets.write();
                         if let Some(a) = list.iter_mut().find(|a| a.id == updated.id) {
@@ -731,7 +731,7 @@ fn CloudAssetsTab(
                 asset: asset.clone(),
                 on_close: move |_| editing_asset.set(None),
                 on_save: {
-                    let mut editing_asset_signal = editing_asset.clone();
+                    let mut editing_asset_signal = editing_asset;
                     move |updated: CloudAsset| {
                         let mut list = assets.write();
                         if let Some(a) = list.iter_mut().find(|a| a.id == updated.id) {

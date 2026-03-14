@@ -225,11 +225,8 @@ impl ServiceDetector {
                 let mut buffer = vec![0u8; 1024];
                 let mut response = String::new();
 
-                match timeout(Duration::from_millis(500), stream.read(&mut buffer)).await {
-                    Ok(Ok(n)) => {
-                        response = String::from_utf8_lossy(&buffer[..n]).to_string();
-                    }
-                    _ => {}
+                if let Ok(Ok(n)) = timeout(Duration::from_millis(500), stream.read(&mut buffer)).await {
+                    response = String::from_utf8_lossy(&buffer[..n]).to_string();
                 }
 
                 // Analyze response

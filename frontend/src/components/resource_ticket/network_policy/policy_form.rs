@@ -122,7 +122,7 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
         .unwrap_or_default();
 
     let mut form_data = use_signal(|| initial_data);
-    let mut error_msg = use_signal(|| String::new());
+    let mut error_msg = use_signal(String::new);
 
     // 获取网络区域列表
     let network_zones = NETWORK_ZONES_STATE.read().clone();

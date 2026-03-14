@@ -111,8 +111,8 @@ pub fn ZoneForm(props: ZoneFormProps) -> Element {
         .unwrap_or_default();
 
     let mut form_data = use_signal(|| initial_data);
-    let mut error_msg = use_signal(|| String::new());
-    let mut new_cidr = use_signal(|| String::new());
+    let mut error_msg = use_signal(String::new);
+    let mut new_cidr = use_signal(String::new);
 
     // 获取云平台和机房列表
     let cloud_platforms = CLOUD_PLATFORMS_STATE.read().clone();
@@ -188,7 +188,7 @@ pub fn ZoneForm(props: ZoneFormProps) -> Element {
                                 data.to_zone(max_id)
                             }
                             FormMode::Edit => {
-                                if let Some(ref original) = props.zone.as_ref() {
+                                if let Some(original) = props.zone.as_ref() {
                                     data.to_zone(original.id)
                                 } else {
                                     return;

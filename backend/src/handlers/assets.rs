@@ -19,7 +19,7 @@ pub async fn get_assets(State(state): State<AppState>, headers: HeaderMap) -> Re
             let assets: Vec<Asset> = db_assets.into_iter().map(db_asset_to_shared).collect();
             // Update in-memory cache
             *state.assets.write().map_err(|e| ApiError::internal(format!("Failed to write assets cache: {}", e)))? = assets.clone();
-            return Ok(Json(assets));
+            Ok(Json(assets))
         }
         Err(e) => {
             eprintln!("Error loading assets from database: {}", e);

@@ -150,7 +150,7 @@ pub fn RoomForm(props: RoomFormProps) -> Element {
         .unwrap_or_default();
 
     let mut form_data = use_signal(|| initial_data);
-    let mut error_msg = use_signal(|| String::new());
+    let mut error_msg = use_signal(String::new);
 
     // 获取服务商列表
     let providers = PROVIDERS_STATE.read().clone();
@@ -186,7 +186,7 @@ pub fn RoomForm(props: RoomFormProps) -> Element {
                                 )
                             }
                             FormMode::Edit => {
-                                if let Some(ref original) = props.room.as_ref() {
+                                if let Some(original) = props.room.as_ref() {
                                     data.to_config(
                                         original.id,
                                         original.created_at.clone(),

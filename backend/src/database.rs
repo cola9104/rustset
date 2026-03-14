@@ -2,7 +2,8 @@
 //!
 //! This module provides database connectivity and CRUD operations using SeaORM.
 
-use sea_orm::{Database as SeaDatabase, DatabaseConnection, DbErr, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, Statement, QuerySelect, QueryOrder, ColumnTrait};
+use sea_orm::{Database as SeaDatabase, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, Statement, QuerySelect, QueryOrder, ColumnTrait};
+pub use sea_orm::{DatabaseConnection, DbErr};
 use crate::entities::{
     cloud_zone, cloud_service, cloud_provider_config, business_resource,
     physical_machine, cloud_virtual_machine,
@@ -160,7 +161,7 @@ pub fn db_user_to_shared(db: user::Model) -> SharedUser {
 
 /// Convert shared User to DbUser active model
 pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
-    let permissions_json = user.permissions.as_ref().map(|p| serde_json::to_string(p).ok()).flatten();
+    let permissions_json = user.permissions.as_ref().and_then(|p| serde_json::to_string(p).ok());
 
     user::ActiveModel {
         id: Set(user.id.clone()),
@@ -785,7 +786,7 @@ pub async fn insert_business_resource(
         resource_type: Set(req.resource_type.clone()),
         ecs_name: Set(req.ecs_name.clone()),
         ecs_status: Set(req.ecs_status.clone()),
-        resource_id: Set(req.resource_id.clone().unwrap_or_else(|| "".to_string())),
+        resource_id: Set(req.resource_id.clone().unwrap_or_default()),
         cloud_region: Set(req.cloud_region.clone()),
         cloud_category: Set(req.cloud_category.clone()),
         cloud_provider_config_id: Set(req.cloud_provider_config_id),
@@ -796,7 +797,7 @@ pub async fn insert_business_resource(
         customer_name: Set(req.customer_name.clone()),
         application_name: Set(req.application_name.clone()),
         contract_name: Set(req.contract_name.clone()),
-        instance_id: Set(req.instance_id.clone().unwrap_or_else(|| "".to_string())),
+        instance_id: Set(req.instance_id.clone().unwrap_or_default()),
         ecs_type: Set(req.ecs_type.clone()),
         ecs_os: Set(req.ecs_os.clone()),
         cpu_cores: Set(req.cpu_cores as i32),

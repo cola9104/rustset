@@ -20,7 +20,7 @@ pub async fn get_risks(State(state): State<AppState>, headers: HeaderMap) -> Res
             // Update in-memory cache
             *state.risks.write()
                 .map_err(|e| ApiError::internal(format!("Failed to write risks cache: {}", e)))? = risks.clone();
-            return Ok(Json(risks));
+            Ok(Json(risks))
         }
         Err(e) => {
             eprintln!("Error loading risks from database: {}", e);
