@@ -89,6 +89,9 @@ use handlers::{
         get_cloud_service_assets,
         get_cloud_service_stats,
     },
+    ip_zones::{
+        find_zone_by_ip, get_ip_zones, create_ip_zone, delete_ip_zone,
+    },
     resource_tickets::{
         get_resource_tickets, get_resource_ticket, create_resource_ticket,
         update_resource_ticket, delete_resource_ticket,
@@ -459,10 +462,10 @@ async fn main() {
         // Cloud Service Assets (云服务资产 - 统一视图)
         .route("/api/cloud-service-assets", get(get_cloud_service_assets))
         .route("/api/cloud-service-assets/stats", get(get_cloud_service_stats))
-        // IP Zones (TODO: implement handlers)
-        // .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
-        // .route("/api/ip-zones/{id}", get(get_ip_zone).delete(delete_ip_zone).put(update_ip_zone))
-        // .route("/api/ip-zones/find/:ip", get(find_zone_by_ip))
+        // IP Zones (IP 区域管理)
+        .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
+        .route("/api/ip-zones/{id}", delete(delete_ip_zone))
+        .route("/api/ip-zones/find", get(find_zone_by_ip))
         // Port Details (端口详细信息表) (TODO: implement handlers)
         // .route("/api/port-details", get(get_port_details).post(create_port_detail))
         // .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
