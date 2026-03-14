@@ -313,9 +313,9 @@ pub fn SecurityProductManagement() -> Element {
                                                         class: "text-red-600 hover:text-red-900",
                                                         onclick: {
                                                             let product_id = product.id;
-                                                            let refresh_data = refresh_data;
+                                                            // refresh_data
                                                             move |_| {
-                                                                let refresh_data = refresh_data;
+                                                                // refresh_data
                                                                 spawn(async move {
                                                                     match delete_security_product(product_id).await {
                                                                         Ok(()) => {
@@ -348,7 +348,7 @@ pub fn SecurityProductManagement() -> Element {
                 mode: FormMode::New,
                 product: None,
                 on_save: move |new_product: SecurityProduct| {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     spawn(async move {
                         match create_security_product(&new_product).await {
                             Ok(_) => {
@@ -371,7 +371,7 @@ pub fn SecurityProductManagement() -> Element {
                 mode: FormMode::Edit,
                 product: Some(product.clone()),
                 on_save: move |updated: SecurityProduct| {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     spawn(async move {
                         match update_security_product(updated.id, &updated).await {
                             Ok(_) => {

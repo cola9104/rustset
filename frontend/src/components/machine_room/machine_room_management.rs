@@ -316,9 +316,9 @@ pub fn MachineRoomManagement() -> Element {
                                                         title: "删除",
                                                         onclick: {
                                                             let room_id = room.id;
-                                                            let refresh_data = refresh_data;
+                                                            // refresh_data
                                                             move |_| {
-                                                                let refresh_data = refresh_data;
+                                                                // refresh_data
                                                                 spawn(async move {
                                                                     match delete_machine_room(room_id).await {
                                                                         Ok(()) => {
@@ -351,7 +351,7 @@ pub fn MachineRoomManagement() -> Element {
                 mode: FormMode::New,
                 room: None,
                 on_save: move |room: MachineRoomConfig| {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     spawn(async move {
                         match create_machine_room(&room).await {
                             Ok(_) => {
@@ -375,7 +375,7 @@ pub fn MachineRoomManagement() -> Element {
                     mode: FormMode::Edit,
                     room: Some(room.clone()),
                     on_save: move |updated: MachineRoomConfig| {
-                        let refresh_data = refresh_data;
+                        // refresh_data
                         spawn(async move {
                             match update_machine_room(updated.id, &updated).await {
                                 Ok(_) => {

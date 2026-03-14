@@ -404,9 +404,9 @@ pub fn CloudPlatformManagement() -> Element {
                                                     class: "text-red-600 hover:text-red-900",
                                                     onclick: {
                                                         let config_id = config.id;
-                                                        let refresh_data = refresh_data;
+                                                        // refresh_data
                                                         move |_| {
-                                                            let refresh_data = refresh_data;
+                                                            // refresh_data
                                                             spawn(async move {
                                                                 match delete_cloud_platform_config(config_id).await {
                                                                     Ok(()) => {
@@ -438,7 +438,7 @@ pub fn CloudPlatformManagement() -> Element {
                 mode: FormMode::New,
                 config: None,
                 on_save: move |config: CloudPlatformConfig| {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     spawn(async move {
                         match create_cloud_platform_config(&config).await {
                             Ok(_) => {
@@ -461,7 +461,7 @@ pub fn CloudPlatformManagement() -> Element {
                 mode: FormMode::Edit,
                 config: Some(config.clone()),
                 on_save: move |updated: CloudPlatformConfig| {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     spawn(async move {
                         match update_cloud_platform_config(updated.id, &updated).await {
                             Ok(_) => {
@@ -503,12 +503,12 @@ pub fn CloudPlatformManagement() -> Element {
                     test_result.set(result);
                 },
                 on_toggle_status: {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     move |_| {
                         if let Some(id) = toggle_config_id {
                             let status = toggle_status.as_deref().unwrap_or("inactive");
                             let new_status = if status == "active" { "inactive" } else { "active" };
-                            let refresh_data = refresh_data;
+                            // refresh_data
                             // Find the config and update it
                             if let Some(config) = platforms.read().iter().find(|c| c.id == id).cloned() {
                                 let mut updated = config.clone();

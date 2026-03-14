@@ -219,9 +219,9 @@ pub fn ServiceProviderManagement() -> Element {
                                                 class: "text-red-600 hover:text-red-900",
                                                 onclick: {
                                                     let provider_id = provider.id;
-                                                    let refresh_data = refresh_data;
+                                                    // refresh_data
                                                     move |_| {
-                                                        let refresh_data = refresh_data;
+                                                        // refresh_data
                                                         spawn(async move {
                                                             match delete_service_provider(provider_id).await {
                                                                 Ok(()) => {
@@ -252,7 +252,7 @@ pub fn ServiceProviderManagement() -> Element {
                 mode: FormMode::New,
                 provider: None,
                 on_save: move |provider: ServiceProviderConfig| {
-                    let refresh_data = refresh_data;
+                    // refresh_data
                     spawn(async move {
                         match create_service_provider(&provider).await {
                             Ok(_) => {
@@ -276,7 +276,7 @@ pub fn ServiceProviderManagement() -> Element {
                     mode: FormMode::Edit,
                     provider: Some(provider.clone()),
                     on_save: move |provider: ServiceProviderConfig| {
-                        let refresh_data = refresh_data;
+                        // refresh_data
                         spawn(async move {
                             match update_service_provider(provider.id, &provider).await {
                                 Ok(_) => {
