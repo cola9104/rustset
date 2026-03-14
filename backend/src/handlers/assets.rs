@@ -60,7 +60,9 @@ pub async fn add_asset(State(state): State<AppState>, headers: HeaderMap, Json(m
     };
 
     // Persist to database (after releasing lock)
-    let _ = db_insert_asset(&new_asset).await;
+    if let Err(e) = db_insert_asset(&new_asset).await {
+        eprintln!("Failed to persist asset to database: {}", e);
+    }
 
     log_action(&state.audit_logs, &user, "CREATE_ASSET", &new_asset.name, &format!("IP: {}", new_asset.ip));
 
