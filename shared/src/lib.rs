@@ -110,13 +110,17 @@ impl ResourceType {
             ResourceType::Network => "network",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for ResourceType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "cloud" => Some(ResourceType::Cloud),
-            "physical" => Some(ResourceType::Physical),
-            "network" => Some(ResourceType::Network),
-            _ => None,
+            "cloud" => Ok(ResourceType::Cloud),
+            "physical" => Ok(ResourceType::Physical),
+            "network" => Ok(ResourceType::Network),
+            _ => Err(format!("Invalid resource type: {}", s)),
         }
     }
 }

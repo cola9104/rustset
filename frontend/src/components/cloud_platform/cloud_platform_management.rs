@@ -77,21 +77,18 @@ pub fn CloudPlatformManagement() -> Element {
     }
 
     // 刷新数据的函数
-    let refresh_data = {
-        let platforms = platforms;
-        move || {
-            let mut platforms = platforms;
-            spawn(async move {
-                match fetch_cloud_platform_configs().await {
-                    Ok(data) => {
-                        platforms.set(data);
-                    }
-                    Err(e) => {
-                        tracing::error!("刷新云平台数据失败: {}", e);
-                    }
+    let refresh_data = move || {
+        let mut platforms = platforms;
+        spawn(async move {
+            match fetch_cloud_platform_configs().await {
+                Ok(data) => {
+                    platforms.set(data);
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::error!("刷新云平台数据失败: {}", e);
+                }
+            }
+        });
     };
 
     // 获取服务商名称的辅助函数

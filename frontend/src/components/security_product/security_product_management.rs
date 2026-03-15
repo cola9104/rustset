@@ -79,21 +79,18 @@ pub fn SecurityProductManagement() -> Element {
     }
 
     // 刷新数据的函数
-    let refresh_data = {
-        let products = products;
-        move || {
-            let mut products = products;
-            spawn(async move {
-                match fetch_security_products().await {
-                    Ok(data) => {
-                        products.set(data);
-                    }
-                    Err(e) => {
-                        tracing::error!("刷新安全产品数据失败: {}", e);
-                    }
+    let refresh_data = move || {
+        let mut products = products;
+        spawn(async move {
+            match fetch_security_products().await {
+                Ok(data) => {
+                    products.set(data);
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::error!("刷新安全产品数据失败: {}", e);
+                }
+            }
+        });
     };
 
     // 统计数据

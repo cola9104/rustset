@@ -47,21 +47,18 @@ pub fn ServiceProviderManagement() -> Element {
     }
 
     // 刷新数据的函数
-    let refresh_data = {
-        let providers = providers;
-        move || {
-            let mut providers = providers;
-            spawn(async move {
-                match fetch_service_providers().await {
-                    Ok(data) => {
-                        providers.set(data);
-                    }
-                    Err(e) => {
-                        tracing::error!("刷新服务商数据失败: {}", e);
-                    }
+    let refresh_data = move || {
+        let mut providers = providers;
+        spawn(async move {
+            match fetch_service_providers().await {
+                Ok(data) => {
+                    providers.set(data);
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::error!("刷新服务商数据失败: {}", e);
+                }
+            }
+        });
     };
 
     // 统计数据

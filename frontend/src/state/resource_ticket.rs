@@ -26,7 +26,7 @@ impl ResourceType {
     }
 
     /// 转换为后端API字符串
-    pub fn to_api_str(&self) -> &'static str {
+    pub fn to_api_str(self) -> &'static str {
         match self {
             ResourceType::Physical => "physical",
             ResourceType::Cloud => "cloud",
@@ -182,7 +182,7 @@ impl TicketStatus {
     }
 
     /// 转换为后端API字符串
-    pub fn to_api_str(&self) -> &'static str {
+    pub fn to_api_str(self) -> &'static str {
         match self {
             TicketStatus::Draft => "draft",
             TicketStatus::Submitted => "submitted",

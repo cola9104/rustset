@@ -55,21 +55,18 @@ pub fn MachineRoomManagement() -> Element {
     }
 
     // 刷新数据的函数
-    let refresh_data = {
-        let rooms = rooms;
-        move || {
-            let mut rooms = rooms;
-            spawn(async move {
-                match fetch_machine_rooms().await {
-                    Ok(data) => {
-                        rooms.set(data);
-                    }
-                    Err(e) => {
-                        tracing::error!("刷新机房数据失败: {}", e);
-                    }
+    let refresh_data = move || {
+        let mut rooms = rooms;
+        spawn(async move {
+            match fetch_machine_rooms().await {
+                Ok(data) => {
+                    rooms.set(data);
                 }
-            });
-        }
+                Err(e) => {
+                    tracing::error!("刷新机房数据失败: {}", e);
+                }
+            }
+        });
     };
 
     // 获取服务商名称的辅助函数
