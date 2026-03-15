@@ -1,11 +1,13 @@
 use axum::{
     extract::{Path, State},
     Json,
+    http::HeaderMap,
 };
 use shared::{CustomRole, CreateRoleRequest, UpdateRoleRequest};
 use crate::state::AppState;
 use crate::database::{get_custom_roles, insert_custom_role_wrapper, update_custom_role, delete_custom_role, db_custom_role_to_shared};
 use crate::middleware::ApiError;
+use crate::utils::{get_current_user, log_action};
 
 /// 获取所有角色(包括系统预定义角色和自定义角色)
 pub async fn get_roles(
@@ -150,8 +152,12 @@ pub async fn get_role(
 /// 创建自定义角色
 pub async fn create_role(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<CreateRoleRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // Get current user for audit logging
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
     // 检查角色名称是否已存在
     {
         let custom_roles = state.custom_roles.read()
@@ -186,6 +192,11 @@ pub async fn create_role(
             let mut role_with_id = new_role.clone();
             role_with_id.id = Some(id);
             custom_roles.push(role_with_id);
+
+            // Audit log
+            log_action(&state.audit_logs, &current_user, "ROLE_CREATED", &req.name,
+                      &format!("Created custom role with ID {}", id));
+
             return Ok(Json(serde_json::json!({
                 "id": id,
                 "name": req.name,
@@ -203,6 +214,10 @@ pub async fn create_role(
         custom_roles.push(role_with_id);
     }
 
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "ROLE_CREATED", &req.name,
+              &format!("Created custom role with ID {}", new_id));
+
     Ok(Json(serde_json::json!({
         "id": new_id,
         "name": req.name,
@@ -213,9 +228,14 @@ pub async fn create_role(
 /// 更新自定义角色
 pub async fn update_role(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<UpdateRoleRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // Get current user for audit logging
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     // 不允许修改系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
         return Ok(Json(serde_json::json!({
@@ -277,6 +297,10 @@ pub async fn update_role(
         }
     }
 
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "ROLE_UPDATED", id.as_str(),
+              &format!("Updated custom role with ID {}", target_id));
+
     Ok(Json(serde_json::json!({
         "message": "角色更新成功"
     })))
@@ -285,8 +309,13 @@ pub async fn update_role(
 /// 删除自定义角色
 pub async fn delete_role(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // Get current user for audit logging
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     // 不允许删除系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
         return Ok(Json(serde_json::json!({
@@ -318,6 +347,10 @@ pub async fn delete_role(
     if let Err(e) = delete_custom_role(target_id).await {
         eprintln!("Error deleting custom role from database: {}", e);
     }
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "ROLE_DELETED", id.as_str(),
+              &format!("Deleted custom role with ID {}", target_id));
 
     Ok(Json(serde_json::json!({
         "message": "角色删除成功"
