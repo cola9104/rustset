@@ -270,6 +270,29 @@ pub async fn get_cloud_service_stats(
         *by_status.entry(status).or_insert(0) += 1;
     }
 
+    // Calculate expiring soon count (within 30 days)
+    let now = chrono::Utc::now();
+    let thirty_days_later = now + chrono::Duration::days(30);
+    let expiring_soon = delivered_resources.iter()
+        .filter(|r| {
+            if let Some(expiry) = &r.warranty_expiry {
+                // Try to parse the expiry date
+                if let Ok(expiry_date) = chrono::NaiveDateTime::parse_from_str(expiry, "%Y-%m-%d %H:%M:%S") {
+                    let expiry_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(expiry_date, chrono::Utc);
+                    return expiry_utc <= thirty_days_later && expiry_utc > now;
+                }
+                // Try date-only format
+                if let Ok(expiry_date) = chrono::NaiveDate::parse_from_str(expiry, "%Y-%m-%d") {
+                    if let Some(expiry_datetime) = expiry_date.and_hms_opt(23, 59, 59) {
+                        let expiry_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(expiry_datetime, chrono::Utc);
+                        return expiry_utc <= thirty_days_later && expiry_utc > now;
+                    }
+                }
+            }
+            false
+        })
+        .count() as u32;
+
     Json(CloudServiceAssetStats {
         total_count: total,
         physical_count: total,
@@ -278,7 +301,7 @@ pub async fn get_cloud_service_stats(
         stopped_count: stopped,
         total_cpu_cores: total_cpu,
         total_memory_gb: total_memory,
-        expiring_soon_count: 0, // TODO: calculate from warranty_expiry
+        expiring_soon_count: expiring_soon,
         by_provider: by_provider.into_iter().collect(),
         by_customer: by_customer.into_iter().collect(),
         by_status: by_status.into_iter().collect(),
