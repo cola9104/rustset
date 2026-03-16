@@ -15,7 +15,7 @@ use std::net::IpAddr;
 use ipnetwork::IpNetwork;
 
 use crate::state::AppState;
-use crate::utils::get_current_user;
+use crate::utils::{get_current_user, log_action};
 use crate::middleware::ApiError;
 use shared::{ZoneConfig, NetworkZone};
 
@@ -111,7 +111,7 @@ pub async fn create_ip_zone(
     headers: HeaderMap,
     Json(req): Json<CreateZoneRequest>,
 ) -> Result<Json<ZoneConfig>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     // 验证 CIDR 格式
@@ -120,8 +120,8 @@ pub async fn create_ip_zone(
 
     let new_zone = ZoneConfig {
         id: uuid::Uuid::new_v4().to_string(),
-        name: req.name,
-        cidr: req.cidr,
+        name: req.name.clone(),
+        cidr: req.cidr.clone(),
         priority: req.priority,
     };
 
@@ -136,6 +136,11 @@ pub async fn create_ip_zone(
     }
 
     zones.push(new_zone.clone());
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "IP_ZONE_CREATED", &req.name,
+              &format!("Created IP zone with CIDR {}", req.cidr));
+
     Ok(Json(new_zone))
 }
 
@@ -145,8 +150,15 @@ pub async fn delete_ip_zone(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    // Get zone name for audit log before deletion
+    let zone_name = {
+        let zones = state.zones.read()
+            .map_err(|e| ApiError::internal(format!("Failed to read zones: {}", e)))?;
+        zones.iter().find(|z| z.id == id).map(|z| z.name.clone())
+    };
 
     let mut zones = state.zones.write()
         .map_err(|e| ApiError::internal(format!("Failed to write zones: {}", e)))?;
@@ -158,5 +170,58 @@ pub async fn delete_ip_zone(
         return Err(ApiError::not_found("Zone not found"));
     }
 
+    // Audit log
+    let target = zone_name.unwrap_or_else(|| id.clone());
+    log_action(&state.audit_logs, &current_user, "IP_ZONE_DELETED", &target,
+              &format!("Deleted IP zone with ID {}", id));
+
     Ok(Json("Deleted".to_string()))
+}
+
+/// Zone 更新请求
+#[derive(Debug, Deserialize)]
+pub struct UpdateZoneRequest {
+    pub name: Option<String>,
+    pub cidr: Option<String>,
+    pub priority: Option<i32>,
+}
+
+/// 更新 Zone
+pub async fn update_ip_zone(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateZoneRequest>,
+) -> Result<Json<ZoneConfig>, ApiError> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    let mut zones = state.zones.write()
+        .map_err(|e| ApiError::internal(format!("Failed to write zones: {}", e)))?;
+
+    // Find the zone
+    let zone = zones.iter_mut().find(|z| z.id == id)
+        .ok_or_else(|| ApiError::not_found("Zone not found"))?;
+
+    // Update fields if provided
+    if let Some(name) = req.name {
+        zone.name = name.clone();
+    }
+    if let Some(cidr) = req.cidr {
+        // Validate CIDR format
+        let _network: IpNetwork = cidr.parse()
+            .map_err(|_| ApiError::bad_request("Invalid CIDR format"))?;
+        zone.cidr = cidr;
+    }
+    if let Some(priority) = req.priority {
+        zone.priority = priority;
+    }
+
+    let updated_zone = zone.clone();
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "IP_ZONE_UPDATED", &updated_zone.name,
+              &format!("Updated IP zone with ID {}", id));
+
+    Ok(Json(updated_zone))
 }

@@ -14,6 +14,8 @@ use chrono::Utc;
 
 use crate::state::AppState;
 use crate::middleware::ApiError;
+use crate::utils::{get_current_user, log_action};
+use shared::{ScannerConfig, CreateScannerRequest, UpdateScannerRequest};
 
 /// 扫描请求
 #[derive(Debug, Deserialize)]
@@ -216,4 +218,98 @@ fn get_service_name(port: u16) -> Option<String> {
         27017 => Some("MongoDB".to_string()),
         _ => None,
     }
+}
+
+// ============== Scanner Configuration Management ==============
+
+/// 获取所有扫描器配置
+pub async fn get_scanners(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+) -> Result<Json<Vec<ScannerConfig>>, ApiError> {
+    // For now, return empty list as scanner configs are not stored in state
+    // This should be implemented with proper storage
+    Ok(Json(vec![]))
+}
+
+/// 创建扫描器配置
+pub async fn create_scanner(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateScannerRequest>,
+) -> Result<Json<ScannerConfig>, ApiError> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    let now = Utc::now().to_rfc3339();
+
+    let new_scanner = ScannerConfig {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: req.name.clone(),
+        scanner_type: req.scanner_type.clone(),
+        enabled: req.enabled.unwrap_or(true),
+        config: req.config,
+        created_at: Some(now.clone()),
+        updated_at: Some(now),
+    };
+
+    // TODO: Store scanner configuration in database or state
+    // For now, just log the action
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "SCANNER_CREATED", &req.name,
+              &format!("Created scanner config with type {}", req.scanner_type));
+
+    Ok(Json(new_scanner))
+}
+
+/// 更新扫描器配置
+pub async fn update_scanner(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateScannerRequest>,
+) -> Result<Json<ScannerConfig>, ApiError> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    // TODO: Implement actual update logic with database/state storage
+    // For now, return a mock response with audit logging
+
+    let now = Utc::now().to_rfc3339();
+
+    let updated_scanner = ScannerConfig {
+        id: id.clone(),
+        name: req.name.unwrap_or_else(|| "Default Scanner".to_string()),
+        scanner_type: req.scanner_type.unwrap_or_else(|| "rustscan".to_string()),
+        enabled: req.enabled.unwrap_or(true),
+        config: req.config.unwrap_or_else(|| serde_json::json!({})),
+        created_at: None,
+        updated_at: Some(now),
+    };
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "SCANNER_UPDATED", id.as_str(),
+              "Updated scanner configuration");
+
+    Ok(Json(updated_scanner))
+}
+
+/// 删除扫描器配置
+pub async fn delete_scanner(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<String>, ApiError> {
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    // TODO: Implement actual delete logic with database/state storage
+    // For now, just log the action
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "SCANNER_DELETED", id.as_str(),
+              "Deleted scanner configuration");
+
+    Ok(Json("Deleted".to_string()))
 }

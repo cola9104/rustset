@@ -640,6 +640,36 @@ pub struct ZoneConfig {
     pub priority: i32,
 }
 
+/// 扫描器配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScannerConfig {
+    pub id: String,
+    pub name: String,
+    pub scanner_type: String,  // rustscan, nmap, basic_tcp
+    pub enabled: bool,
+    pub config: serde_json::Value,  // 扫描器特定配置
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+/// 创建扫描器配置请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateScannerRequest {
+    pub name: String,
+    pub scanner_type: String,
+    pub enabled: Option<bool>,
+    pub config: serde_json::Value,
+}
+
+/// 更新扫描器配置请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateScannerRequest {
+    pub name: Option<String>,
+    pub scanner_type: Option<String>,
+    pub enabled: Option<bool>,
+    pub config: Option<serde_json::Value>,
+}
+
 
 // --- Auth & Audit ---
 

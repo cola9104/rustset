@@ -4,7 +4,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, HeaderMap},
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
@@ -20,12 +20,18 @@ use crate::database::{
     delete_advanced_scan_task, insert_quick_scan_result_wrapper, get_quick_scan_results,
     db_advanced_scan_task_to_shared, db_quick_scan_result_to_shared,
 };
+use crate::utils::{get_current_user, log_action};
 
 /// Execute advanced scan
 pub async fn execute_advanced_scan(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<CreateAdvancedScanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    // Get current user for audit logging
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+
     // Validate request
     if req.targets.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
@@ -69,6 +75,10 @@ pub async fn execute_advanced_scan(
 
     // Store task in memory
     state.advanced_tasks.write().unwrap().push(task.clone());
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "SCAN_TASK_CREATED", &req.name,
+              &format!("Created advanced scan task with ID {}", task_id));
 
     // Spawn background scan task using spawn_blocking for scan operations
     let state_clone = state.clone();
@@ -171,8 +181,19 @@ pub async fn get_advanced_task(
 /// Delete advanced scan task
 pub async fn delete_advanced_scan(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    // Get current user for audit logging
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+
+    // Get task name for audit log before deletion
+    let task_name = {
+        let tasks = state.advanced_tasks.read().unwrap();
+        tasks.iter().find(|t| t.id == id).map(|t| t.name.clone())
+    };
+
     // Remove from in-memory storage
     {
         let mut tasks = state.advanced_tasks.write().unwrap();
@@ -184,14 +205,24 @@ pub async fn delete_advanced_scan(
     // Persist to database
     let _ = delete_advanced_scan_task(&id).await;
 
+    // Audit log
+    let target = task_name.unwrap_or_else(|| id.clone());
+    log_action(&state.audit_logs, &current_user, "SCAN_TASK_DELETED", &target,
+              &format!("Deleted advanced scan task with ID {}", id));
+
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Cancel running advanced scan
 pub async fn cancel_advanced_scan(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
+    // Get current user for audit logging
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+
     // Update task status
     let (found, task_to_update) = {
         let mut tasks = state.advanced_tasks.write().unwrap();
@@ -231,6 +262,10 @@ pub async fn cancel_advanced_scan(
 
     // Persist to database (after releasing lock)
     let _ = update_advanced_scan_task(&task_to_update).await;
+
+    // Audit log
+    log_action(&state.audit_logs, &current_user, "SCAN_TASK_UPDATED", &task_to_update.name,
+              "Cancelled advanced scan task");
 
     Ok(StatusCode::OK)
 }
