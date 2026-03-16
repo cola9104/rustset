@@ -160,3 +160,273 @@ pub async fn refresh_token(
         user: user.clone(),
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, RwLock};
+    use shared::{Role, Permissions, User, Asset, Task, Risk, ZoneConfig, AuditLog, AdvancedScanTask, CloudZone, CloudPlatform};
+    use crate::state::AppState;
+    use axum::http::HeaderMap;
+    use crate::password;
+    use crate::handlers::port_details::PortDetail;
+    use crate::handlers::scanners::ScanResult;
+
+    fn create_test_app_state() -> AppState {
+        AppState {
+            users: Arc::new(RwLock::new(vec![
+                User {
+                    id: "1".to_string(),
+                    username: "admin".to_string(),
+                    password: password::hash_password("admin123").unwrap(),
+                    role: Role::SysAdmin,
+                    permissions: Some(Permissions::sys_admin()),
+                    created_at: Utc::now(),
+                    password_changed_at: Some(Utc::now()),
+                    password_strength: Some("strong".to_string()),
+                    force_password_change: Some(false),
+                    last_login_at: None,
+                    email: None,
+                    phone: None,
+                    status: Some("active".to_string()),
+                    failed_login_attempts: Some(0),
+                    locked_until: None,
+                },
+                User {
+                    id: "2".to_string(),
+                    username: "disabled_user".to_string(),
+                    password: password::hash_password("password123").unwrap(),
+                    role: Role::Auditor,
+                    permissions: Some(Permissions::auditor()),
+                    created_at: Utc::now(),
+                    password_changed_at: Some(Utc::now()),
+                    password_strength: Some("medium".to_string()),
+                    force_password_change: Some(false),
+                    last_login_at: None,
+                    email: None,
+                    phone: None,
+                    status: Some("disabled".to_string()),
+                    failed_login_attempts: Some(0),
+                    locked_until: None,
+                },
+            ])),
+            assets: Arc::new(RwLock::new(Vec::new())),
+            tasks: Arc::new(RwLock::new(Vec::new())),
+            risks: Arc::new(RwLock::new(Vec::new())),
+            zones: Arc::new(RwLock::new(Vec::new())),
+            audit_logs: Arc::new(RwLock::new(Vec::new())),
+            advanced_tasks: Arc::new(RwLock::new(Vec::new())),
+            custom_roles: Arc::new(RwLock::new(Vec::new())),
+            scan_manager: Arc::new(tokio::sync::RwLock::new(None)),
+            password_policy: Arc::new(RwLock::new(shared::PasswordPolicy {
+                min_length: 8,
+                require_uppercase: true,
+                require_lowercase: true,
+                require_number: true,
+                require_special: true,
+                max_age_days: None,
+                prevent_reuse: 0,
+                min_strength: "medium".to_string(),
+                max_login_attempts: Some(3),
+                lockout_duration_minutes: 30,
+            })),
+            password_history: Arc::new(RwLock::new(Vec::new())),
+            cloud_zones: Arc::new(RwLock::new(Vec::new())),
+            cloud_platforms: Arc::new(RwLock::new(Vec::new())),
+            port_details: Arc::new(RwLock::new(Vec::new())),
+            scan_results: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_login_success() {
+        let state = create_test_app_state();
+        let req = LoginRequest {
+            username: "admin".to_string(),
+            password: "admin123".to_string(),
+        };
+
+        let result = login(State(state), Json(req)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.token, "admin");
+        assert_eq!(response.user.username, "admin");
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_username() {
+        let state = create_test_app_state();
+        let req = LoginRequest {
+            username: "nonexistent".to_string(),
+            password: "password123".to_string(),
+        };
+
+        let result = login(State(state), Json(req)).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Unauthorized(msg) => {
+                assert!(msg.contains("用户名或密码错误"));
+            }
+            _ => panic!("Expected Unauthorized error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_password() {
+        let state = create_test_app_state();
+        let req = LoginRequest {
+            username: "admin".to_string(),
+            password: "wrongpassword".to_string(),
+        };
+
+        let result = login(State(state), Json(req)).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Unauthorized(msg) => {
+                assert!(msg.contains("密码错误"));
+            }
+            _ => panic!("Expected Unauthorized error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_login_disabled_account() {
+        let state = create_test_app_state();
+        let req = LoginRequest {
+            username: "disabled_user".to_string(),
+            password: "password123".to_string(),
+        };
+
+        let result = login(State(state), Json(req)).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Forbidden(msg) => {
+                assert!(msg.contains("账户已被禁用"));
+            }
+            _ => panic!("Expected Forbidden error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_login_account_lockout_after_max_attempts() {
+        let state = create_test_app_state();
+
+        // Attempt 3 failed logins
+        for _ in 0..3 {
+            let req = LoginRequest {
+                username: "admin".to_string(),
+                password: "wrongpassword".to_string(),
+            };
+            let _ = login(State(state.clone()), Json(req)).await;
+        }
+
+        // 4th attempt should be locked
+        let req = LoginRequest {
+            username: "admin".to_string(),
+            password: "admin123".to_string(),
+        };
+
+        let result = login(State(state), Json(req)).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Forbidden(msg) => {
+                assert!(msg.contains("账户已锁定"));
+            }
+            _ => panic!("Expected Forbidden error for locked account"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_logout_success() {
+        let state = create_test_app_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "admin".parse().unwrap());
+
+        let result = logout(State(state), headers).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response["message"], "Logged out successfully");
+    }
+
+    #[tokio::test]
+    async fn test_logout_without_auth_header() {
+        let state = create_test_app_state();
+        let headers = HeaderMap::new();
+
+        let result = logout(State(state), headers).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response["message"], "Logged out successfully");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_success() {
+        let state = create_test_app_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "admin".parse().unwrap());
+
+        let result = refresh_token(State(state), headers).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.token, "admin");
+        assert_eq!(response.user.username, "admin");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_no_auth_header() {
+        let state = create_test_app_state();
+        let headers = HeaderMap::new();
+
+        let result = refresh_token(State(state), headers).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Unauthorized(msg) => {
+                assert!(msg.contains("No authorization token"));
+            }
+            _ => panic!("Expected Unauthorized error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_invalid_user() {
+        let state = create_test_app_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "nonexistent".parse().unwrap());
+
+        let result = refresh_token(State(state), headers).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Unauthorized(msg) => {
+                assert!(msg.contains("User not found"));
+            }
+            _ => panic!("Expected Unauthorized error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_disabled_account() {
+        let state = create_test_app_state();
+        let mut headers = HeaderMap::new();
+        headers.insert("Authorization", "disabled_user".parse().unwrap());
+
+        let result = refresh_token(State(state), headers).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Forbidden(msg) => {
+                assert!(msg.contains("账户已被禁用"));
+            }
+            _ => panic!("Expected Forbidden error"),
+        }
+    }
+}

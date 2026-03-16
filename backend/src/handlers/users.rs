@@ -391,3 +391,226 @@ pub async fn get_current_user_info(State(state): State<AppState>, headers: Heade
     let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     Ok(Json(user))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_password_strength_weak() {
+        // Short password with only lowercase
+        let (strength, score) = calculate_password_strength("abc");
+        assert_eq!(strength, "weak");
+        assert!(score <= 2);
+    }
+
+    #[test]
+    fn test_calculate_password_strength_medium() {
+        // Medium password
+        let (strength, score) = calculate_password_strength("Abc123");
+        assert_eq!(strength, "medium");
+        assert!(score >= 3 && score <= 4);
+    }
+
+    #[test]
+    fn test_calculate_password_strength_strong() {
+        // Strong password
+        let (strength, score) = calculate_password_strength("StrongP@ss123");
+        assert_eq!(strength, "strong");
+        assert!(score >= 5);
+    }
+
+    #[test]
+    fn test_calculate_password_strength_all_criteria() {
+        let (strength, score) = calculate_password_strength("VeryStr0ng!Pass");
+
+        assert_eq!(strength, "strong");
+
+        // Verify score includes all criteria
+        assert!(score >= 5); // Has at least 5 criteria met
+    }
+
+    #[test]
+    fn test_calculate_password_strength_empty() {
+        let (strength, score) = calculate_password_strength("");
+        assert_eq!(strength, "weak");
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_validate_password_policy_success() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "medium".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("StrongP@ss123", &policy);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_password_policy_too_short() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "medium".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("Short1!", &policy);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("密码长度至少为"));
+    }
+
+    #[test]
+    fn test_validate_password_policy_missing_uppercase() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "medium".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("lowercase123!", &policy);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("大写字母"));
+    }
+
+    #[test]
+    fn test_validate_password_policy_missing_lowercase() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "medium".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("UPPERCASE123!", &policy);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("小写字母"));
+    }
+
+    #[test]
+    fn test_validate_password_policy_missing_number() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "medium".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("NoNumbers!", &policy);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("数字"));
+    }
+
+    #[test]
+    fn test_validate_password_policy_missing_special() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "medium".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("NoSpecial123", &policy);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("特殊字符"));
+    }
+
+    #[test]
+    fn test_validate_password_policy_weak_strength() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: false,
+            require_lowercase: false,
+            require_number: false,
+            require_special: false,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "strong".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("weakpass", &policy);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("密码强度不足"));
+    }
+
+    #[test]
+    fn test_validate_password_policy_no_requirements() {
+        let policy = PasswordPolicy {
+            min_length: 1,
+            require_uppercase: false,
+            require_lowercase: false,
+            require_number: false,
+            require_special: false,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "weak".to_string(),
+            max_login_attempts: None,
+            lockout_duration_minutes: 0,
+        };
+
+        let result = validate_password_policy("a", &policy);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_password_policy_strong_strength() {
+        let policy = PasswordPolicy {
+            min_length: 8,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_number: true,
+            require_special: true,
+            max_age_days: None,
+            prevent_reuse: 0,
+            min_strength: "strong".to_string(),
+            max_login_attempts: Some(3),
+            lockout_duration_minutes: 30,
+        };
+
+        let result = validate_password_policy("VeryStr0ng!Pass", &policy);
+        assert!(result.is_ok());
+    }
+}
