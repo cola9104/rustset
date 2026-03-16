@@ -4,6 +4,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaFileLines, FaMagnifyingGlass, FaFilter, FaDownload,
     FaUser, FaShield
 };
+use crate::components::common::VirtualScroller;
 
 /// 审计日志数据模型
 #[derive(Clone, Debug, PartialEq)]
@@ -115,8 +116,6 @@ pub fn AuditLogs() -> Element {
         .cloned()
         .collect();
 
-    let is_empty = filtered_logs.is_empty();
-
     rsx! {
         div { class: "space-y-6",
             // 页面标题和操作栏
@@ -202,91 +201,61 @@ pub fn AuditLogs() -> Element {
                 }
             }
 
-            // 日志列表
-            div { class: "bg-white rounded-lg shadow overflow-hidden",
-                table { class: "min-w-full divide-y divide-gray-200",
-                    thead { class: "bg-gray-50",
-                        tr {
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "时间" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "用户" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "模块" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "目标" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "IP地址" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
+            // 日志列表 - 使用虚拟滚动（分页版本）
+            VirtualScroller {
+                items: filtered_logs.clone(),
+                page_size: 20,
+                render_item: move |log: AuditLog| rsx! {
+                    div { class: "flex items-center px-6 py-4",
+                        // 时间
+                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
+                            {log.timestamp.clone()}
                         }
-                    }
-                    tbody { class: "bg-white divide-y divide-gray-200",
-                        for log in filtered_logs.iter() {
-                            tr { class: "hover:bg-gray-50",
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                    {log.timestamp.clone()}
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    div { class: "flex items-center",
-                                        div { class: "flex-shrink-0 h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center",
-                                            Icon { icon: FaUser, width: 16, height: 16 }
-                                        }
-                                        div { class: "ml-2 text-sm font-medium text-gray-900",
-                                            {log.user.clone()}
-                                        }
-                                    }
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800",
-                                        {log.action.clone()}
-                                    }
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                    {log.module.clone()}
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                    {log.target.clone()}
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                    {log.ip_address.clone()}
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    span {
-                                        class: if log.status == "成功" {
-                                            "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800"
-                                        } else {
-                                            "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800"
-                                        },
-                                        {log.status.clone()}
-                                    }
-                                }
+                        // 用户
+                        div { class: "flex-1 flex items-center whitespace-nowrap",
+                            div { class: "flex-shrink-0 h-8 w-8 bg-gray-100 rounded-full flex items-center justify-center",
+                                Icon { icon: FaUser, width: 16, height: 16 }
+                            }
+                            div { class: "ml-2 text-sm font-medium text-gray-900",
+                                {log.user.clone()}
+                            }
+                        }
+                        // 操作
+                        div { class: "flex-1 whitespace-nowrap",
+                            span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800",
+                                {log.action.clone()}
+                            }
+                        }
+                        // 模块
+                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
+                            {log.module.clone()}
+                        }
+                        // 目标
+                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
+                            {log.target.clone()}
+                        }
+                        // IP地址
+                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
+                            {log.ip_address.clone()}
+                        }
+                        // 状态
+                        div { class: "flex-1 whitespace-nowrap",
+                            span {
+                                class: if log.status == "成功" {
+                                    "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800"
+                                } else {
+                                    "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800"
+                                },
+                                {log.status.clone()}
                             }
                         }
                     }
                 }
-
-                // 空状态
-                if is_empty {
-                    div { class: "text-center py-12 text-gray-500",
-                        "没有找到匹配的日志记录"
-                    }
-                }
             }
-
-            // 分页（简化版）
+            // 数据统计
             div { class: "bg-white rounded-lg shadow px-4 py-3 flex items-center justify-between",
                 div { class: "text-sm text-gray-500",
-                    "显示 {filtered_logs.len()} 条记录"
-                }
-                div { class: "flex space-x-2",
-                    button {
-                        class: "px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50",
-                        "上一页"
-                    }
-                    button {
-                        class: "px-3 py-1 bg-blue-600 text-white rounded-md text-sm",
-                        "1"
-                    }
-                    button {
-                        class: "px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50",
-                        "下一页"
-                    }
+                    "共 {filtered_logs.len()} 条日志记录"
                 }
             }
         }

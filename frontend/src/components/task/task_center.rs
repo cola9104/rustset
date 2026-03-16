@@ -4,6 +4,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaPlay, FaPause, FaRotate, FaTrash, FaList,
     FaCircleCheck, FaClock, FaSpinner
 };
+use crate::components::common::VirtualScroller;
 
 /// 任务状态
 #[derive(Clone, Debug, PartialEq)]
@@ -161,92 +162,77 @@ pub fn TaskCenter() -> Element {
                 }
             }
 
-            // 任务列表
-            div { class: "bg-white rounded-lg shadow overflow-hidden",
-                table { class: "min-w-full divide-y divide-gray-200",
-                    thead { class: "bg-gray-50",
-                        tr {
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "任务名称" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "类型" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "目标" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "进度" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "创建时间" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
+            // 任务列表 - 使用虚拟滚动（分页版本）
+            VirtualScroller {
+                items: tasks.read().to_vec(),
+                page_size: 20,
+                render_item: move |task: Task| rsx! {
+                    div { class: "flex items-center px-6 py-4",
+                        // 任务名称
+                        div { class: "flex-1 text-sm font-medium text-gray-900 whitespace-nowrap",
+                            {task.name.clone()}
                         }
-                    }
-                    tbody { class: "bg-white divide-y divide-gray-200",
-                        for task in tasks.read().iter() {
-                            tr { class: "hover:bg-gray-50",
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    div { class: "text-sm font-medium text-gray-900", {task.name.clone()} }
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800",
-                                        {task.task_type.clone()}
-                                    }
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                    {task.target.clone()}
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    span {
-                                        class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {task.status.color_class()}",
-                                        {task.status.as_str()}
-                                    }
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap",
-                                    div { class: "flex items-center",
-                                        div { class: "w-full bg-gray-200 rounded-full h-2",
-                                            div {
-                                                class: "bg-blue-600 h-2 rounded-full",
-                                                style: "width: {task.progress}%",
-                                            }
-                                        }
-                                        span { class: "ml-2 text-sm text-gray-500", "{task.progress}%" }
-                                    }
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                    {task.created_at.clone()}
-                                }
-                                td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
-                                    // 根据状态显示不同操作按钮
-                                    if task.status == TaskStatus::Pending {
-                                        button {
-                                            class: "text-green-600 hover:text-green-900 mr-2",
-                                            title: "启动",
-                                            Icon { icon: FaPlay, width: 16, height: 16 }
-                                        }
-                                    }
-                                    if task.status == TaskStatus::Running {
-                                        button {
-                                            class: "text-yellow-600 hover:text-yellow-900 mr-2",
-                                            title: "暂停",
-                                            Icon { icon: FaPause, width: 16, height: 16 }
-                                        }
-                                    }
-                                    if task.status == TaskStatus::Completed || task.status == TaskStatus::Failed {
-                                        button {
-                                            class: "text-blue-600 hover:text-blue-900 mr-2",
-                                            title: "重新运行",
-                                            Icon { icon: FaRotate, width: 16, height: 16 }
-                                        }
-                                    }
-                                    button {
-                                        class: "text-red-600 hover:text-red-900",
-                                        title: "删除",
-                                        Icon { icon: FaTrash, width: 16, height: 16 }
-                                    }
-                                }
+                        // 类型
+                        div { class: "flex-1 whitespace-nowrap",
+                            span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800",
+                                {task.task_type.clone()}
                             }
                         }
-                    }
-                }
-
-                // 空状态
-                if tasks.read().is_empty() {
-                    div { class: "text-center py-12 text-gray-500",
-                        "暂无任务"
+                        // 目标
+                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
+                            {task.target.clone()}
+                        }
+                        // 状态
+                        div { class: "flex-1 whitespace-nowrap",
+                            span {
+                                class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {task.status.color_class()}",
+                                {task.status.as_str()}
+                            }
+                        }
+                        // 进度
+                        div { class: "flex-1 flex items-center whitespace-nowrap",
+                            div { class: "w-full bg-gray-200 rounded-full h-2",
+                                div {
+                                    class: "bg-blue-600 h-2 rounded-full",
+                                    style: "width: {task.progress}%",
+                                }
+                            }
+                            span { class: "ml-2 text-sm text-gray-500", "{task.progress}%" }
+                        }
+                        // 创建时间
+                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
+                            {task.created_at.clone()}
+                        }
+                        // 操作
+                        div { class: "flex-1 text-sm font-medium whitespace-nowrap",
+                            // 根据状态显示不同操作按钮
+                            if task.status == TaskStatus::Pending {
+                                button {
+                                    class: "text-green-600 hover:text-green-900 mr-2",
+                                    title: "启动",
+                                    Icon { icon: FaPlay, width: 16, height: 16 }
+                                }
+                            }
+                            if task.status == TaskStatus::Running {
+                                button {
+                                    class: "text-yellow-600 hover:text-yellow-900 mr-2",
+                                    title: "暂停",
+                                    Icon { icon: FaPause, width: 16, height: 16 }
+                                }
+                            }
+                            if task.status == TaskStatus::Completed || task.status == TaskStatus::Failed {
+                                button {
+                                    class: "text-blue-600 hover:text-blue-900 mr-2",
+                                    title: "重新运行",
+                                    Icon { icon: FaRotate, width: 16, height: 16 }
+                                }
+                            }
+                            button {
+                                class: "text-red-600 hover:text-red-900",
+                                title: "删除",
+                                Icon { icon: FaTrash, width: 16, height: 16 }
+                            }
+                        }
                     }
                 }
             }
