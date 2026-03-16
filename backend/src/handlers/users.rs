@@ -89,6 +89,20 @@ pub fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Resu
     Ok(())
 }
 
+/// Get all users (SysAdmin only)
+#[utoipa::path(
+    get,
+    path = "/api/users",
+    responses(
+        (status = 200, description = "List of users", body = Vec<User>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - SysAdmin only")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
 pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<User>>, ApiError> {
     let user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
@@ -122,6 +136,22 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
     }
 }
 
+/// Create a new user (SysAdmin only)
+#[utoipa::path(
+    post,
+    path = "/api/users",
+    request_body = CreateUserRequest,
+    responses(
+        (status = 200, description = "User created", body = User),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 409, description = "Username already exists")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
 pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateUserRequest>) -> Result<Json<User>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
@@ -182,6 +212,24 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
     Ok(Json(new_user))
 }
 
+/// Delete a user (SysAdmin only)
+#[utoipa::path(
+    delete,
+    path = "/api/users/{id}",
+    params(
+        ("id" = String, Path, description = "User ID")
+    ),
+    responses(
+        (status = 200, description = "User deleted", body = String),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "User not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
 pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
@@ -209,6 +257,25 @@ pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path
     }
 }
 
+/// Update user permissions
+#[utoipa::path(
+    put,
+    path = "/api/users/{id}/permissions",
+    params(
+        ("id" = String, Path, description = "User ID")
+    ),
+    request_body = Permissions,
+    responses(
+        (status = 200, description = "Permissions updated", body = User),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "User not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
 pub async fn update_user_permissions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -278,6 +345,21 @@ pub async fn update_user_permissions(
     }
 }
 
+/// Change current user's password
+#[utoipa::path(
+    post,
+    path = "/api/users/change-password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "Password changed successfully", body = String),
+        (status = 400, description = "Invalid password"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
 pub async fn change_password(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -387,6 +469,19 @@ pub async fn update_password_policy(
 }
 
 // 获取当前用户信息
+/// Get current user information
+#[utoipa::path(
+    get,
+    path = "/api/users/me",
+    responses(
+        (status = 200, description = "Current user info", body = User),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
 pub async fn get_current_user_info(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<User>, (StatusCode, String)> {
     let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     Ok(Json(user))

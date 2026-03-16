@@ -290,7 +290,20 @@ pub async fn get_business_resources(
     Json(filtered).into_response()
 }
 
-/// 创建业务资源申请
+/// Create a business resource application
+#[utoipa::path(
+    post,
+    path = "/api/business-resources",
+    request_body = CreateBusinessResourceRequest,
+    responses(
+        (status = 200, description = "Business resource created", body = BusinessResource),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "business_resources"
+)]
 #[axum::debug_handler]
 pub async fn create_business_resource(
     State(state): State<AppState>,
@@ -452,7 +465,24 @@ pub async fn create_business_resource(
     })).into_response()
 }
 
-/// 更新业务资源
+/// Update a business resource
+#[utoipa::path(
+    put,
+    path = "/api/business-resources/{id}",
+    params(
+        ("id" = i32, Path, description = "Business resource ID")
+    ),
+    request_body = UpdateBusinessResourceRequest,
+    responses(
+        (status = 200, description = "Business resource updated", body = BusinessResource),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Resource not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "business_resources"
+)]
 #[axum::debug_handler]
 pub async fn update_business_resource(
     State(state): State<AppState>,
@@ -616,7 +646,23 @@ pub async fn update_business_resource(
     }
 }
 
-/// 删除业务资源
+/// Delete a business resource
+#[utoipa::path(
+    delete,
+    path = "/api/business-resources/{id}",
+    params(
+        ("id" = i32, Path, description = "Business resource ID")
+    ),
+    responses(
+        (status = 200, description = "Business resource deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Resource not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "business_resources"
+)]
 #[axum::debug_handler]
 pub async fn delete_business_resource(
     State(state): State<AppState>,

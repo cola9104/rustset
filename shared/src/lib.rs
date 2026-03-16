@@ -126,7 +126,7 @@ impl std::str::FromStr for ResourceType {
 }
 
 /// 物理机特有信息
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct PhysicalMachineInfo {
     pub id: Option<i32>,
     pub business_resource_id: Option<i32>,
@@ -139,7 +139,7 @@ pub struct PhysicalMachineInfo {
 }
 
 /// 云虚拟机特有信息
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct CloudVirtualMachineInfo {
     pub id: Option<i32>,
     pub business_resource_id: Option<i32>,
@@ -156,7 +156,7 @@ pub struct CloudVirtualMachineInfo {
 }
 
 /// 创建物理机详情请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreatePhysicalMachineInfo {
     pub serial_number: Option<String>,
     pub rack_location: Option<String>,
@@ -167,7 +167,7 @@ pub struct CreatePhysicalMachineInfo {
 }
 
 /// 创建云虚拟机详情请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateCloudVirtualMachineInfo {
     pub billing_mode: Option<String>,
     pub expire_time: Option<DateTime<Utc>>,
@@ -182,7 +182,7 @@ pub struct CreateCloudVirtualMachineInfo {
 }
 
 /// 更新物理机详情请求
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct UpdatePhysicalMachineInfo {
     pub serial_number: Option<String>,
     pub rack_location: Option<String>,
@@ -193,7 +193,7 @@ pub struct UpdatePhysicalMachineInfo {
 }
 
 /// 更新云虚拟机详情请求
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct UpdateCloudVirtualMachineInfo {
     pub billing_mode: Option<String>,
     pub expire_time: Option<DateTime<Utc>>,
@@ -208,7 +208,7 @@ pub struct UpdateCloudVirtualMachineInfo {
 }
 
 /// 业务受理单 - 云资源管理 & 物理机管理
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct BusinessResource {
     pub id: Option<i32>,
 
@@ -322,7 +322,7 @@ fn default_delivery_status() -> Option<String> {
 }
 
 /// 创建业务资源请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateBusinessResourceRequest {
     pub resource_type: String,         // 资源类型: cloud / physical
     pub ecs_name: String,
@@ -407,7 +407,7 @@ pub struct CreateBusinessResourceRequest {
 }
 
 /// 更新业务资源请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[derive(Default)]
 pub struct UpdateBusinessResourceRequest {
     pub resource_type: Option<String>,         // 资源类型
@@ -673,7 +673,7 @@ pub struct UpdateScannerRequest {
 
 // --- Auth & Audit ---
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub enum Role {
     SysAdmin, // Manage users and permissions
     SecAdmin, // Manage assets, tasks, risks
@@ -682,7 +682,7 @@ pub enum Role {
 }
 
 /// 自定义角色数据结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CustomRole {
     pub id: Option<i32>,
     pub name: String,              // 角色名称
@@ -693,7 +693,7 @@ pub struct CustomRole {
 }
 
 /// 创建自定义角色请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateRoleRequest {
     pub name: String,
     pub description: Option<String>,
@@ -701,7 +701,7 @@ pub struct CreateRoleRequest {
 }
 
 /// 更新自定义角色请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateRoleRequest {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -709,7 +709,7 @@ pub struct UpdateRoleRequest {
 }
 
 /// 细化权限位掩码
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct Permissions {
     // ========== 通用模块 ==========
     pub can_access_general: bool,           // 顶级：访问通用模块
@@ -906,7 +906,7 @@ impl Permissions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub struct User {
     pub id: String,
     pub username: String,
@@ -937,14 +937,14 @@ pub struct User {
     pub locked_until: Option<DateTime<Utc>>, // 锁定到期时间
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateUserRequest {
     pub username: String,
     pub password: String,
     pub role: Role,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PasswordPolicy {
     pub min_length: u32,           // 最小长度
     pub require_uppercase: bool,    // 需要大写字母
@@ -976,25 +976,25 @@ impl Default for PasswordPolicy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateUserRequest {
     pub password: Option<String>,
     pub role: Option<Role>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct LoginResponse {
     pub token: String,
     pub user: User,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct AuditLog {
     pub id: String,
     pub user_id: String,

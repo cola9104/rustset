@@ -9,6 +9,17 @@ use crate::password;
 use crate::middleware::ApiError;
 use chrono::Utc;
 
+/// User login endpoint
+#[utoipa::path(
+    post,
+    path = "/api/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 401, description = "Invalid credentials")
+    ),
+    tag = "auth"
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>
@@ -109,7 +120,19 @@ pub async fn login(
     }
 }
 
-/// 登出
+/// User logout endpoint
+#[utoipa::path(
+    post,
+    path = "/api/logout",
+    responses(
+        (status = 200, description = "Logout successful"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "auth"
+)]
 pub async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -128,7 +151,19 @@ pub async fn logout(
     })))
 }
 
-/// 刷新 Token
+/// Refresh authentication token
+#[utoipa::path(
+    post,
+    path = "/api/refresh-token",
+    responses(
+        (status = 200, description = "Token refreshed", body = LoginResponse),
+        (status = 401, description = "Invalid token")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "auth"
+)]
 pub async fn refresh_token(
     State(state): State<AppState>,
     headers: HeaderMap,

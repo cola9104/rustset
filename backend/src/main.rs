@@ -9,6 +9,7 @@ use tower_http::{
     cors::CorsLayer,
     trace::TraceLayer,
 };
+use utoipa_swagger_ui::SwaggerUi;
 use shared::{
     Asset, NetworkZone, PortInfo, ZoneConfig,
     User, Role, PasswordPolicy,
@@ -57,6 +58,7 @@ mod config;
 mod entities;
 mod migration;
 mod middleware;
+mod openapi;
 
 use state::AppState;
 use handlers::{
@@ -520,6 +522,10 @@ async fn main() {
         .route("/api/cloud-platform-configs", get(get_cloud_platform_configs).post(create_cloud_platform_config))
         .route("/api/cloud-platform-configs/{id}", get(get_cloud_platform_config).put(update_cloud_platform_config).delete(delete_cloud_platform_config))
         .with_state(state)
+        .merge(
+            SwaggerUi::new("/api-docs")
+                .url("/api-docs/openapi.json", openapi::ApiDoc::openapi())
+        )
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());
 

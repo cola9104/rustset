@@ -9,7 +9,19 @@ use crate::database::{get_custom_roles, insert_custom_role_wrapper, update_custo
 use crate::middleware::ApiError;
 use crate::utils::{get_current_user, log_action};
 
-/// 获取所有角色(包括系统预定义角色和自定义角色)
+/// Get all roles (including system predefined roles and custom roles)
+#[utoipa::path(
+    get,
+    path = "/api/roles",
+    responses(
+        (status = 200, description = "List of all roles", body = Vec<serde_json::Value>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "roles"
+)]
 pub async fn get_roles(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
@@ -72,7 +84,23 @@ pub async fn get_roles(
     Ok(Json(roles))
 }
 
-/// 获取单个角色
+/// Get a single role by ID
+#[utoipa::path(
+    get,
+    path = "/api/roles/{id}",
+    params(
+        ("id" = String, Path, description = "Role ID (sys_admin, sec_admin, auditor, or custom role ID)")
+    ),
+    responses(
+        (status = 200, description = "Role details", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Role not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "roles"
+)]
 pub async fn get_role(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -149,7 +177,21 @@ pub async fn get_role(
     Err(ApiError::not_found(format!("Role with ID '{}' not found", id)))
 }
 
-/// 创建自定义角色
+/// Create a custom role
+#[utoipa::path(
+    post,
+    path = "/api/roles",
+    request_body = CreateRoleRequest,
+    responses(
+        (status = 200, description = "Role created", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Role name already exists")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "roles"
+)]
 pub async fn create_role(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -225,7 +267,24 @@ pub async fn create_role(
     })))
 }
 
-/// 更新自定义角色
+/// Update a custom role
+#[utoipa::path(
+    put,
+    path = "/api/roles/{id}",
+    params(
+        ("id" = String, Path, description = "Role ID")
+    ),
+    request_body = UpdateRoleRequest,
+    responses(
+        (status = 200, description = "Role updated", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Role not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "roles"
+)]
 pub async fn update_role(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -306,7 +365,23 @@ pub async fn update_role(
     })))
 }
 
-/// 删除自定义角色
+/// Delete a custom role
+#[utoipa::path(
+    delete,
+    path = "/api/roles/{id}",
+    params(
+        ("id" = String, Path, description = "Role ID")
+    ),
+    responses(
+        (status = 200, description = "Role deleted", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Role not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "roles"
+)]
 pub async fn delete_role(
     State(state): State<AppState>,
     headers: HeaderMap,
