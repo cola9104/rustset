@@ -1,10 +1,16 @@
 //! Rate Limiting Middleware
-//! 
+//!
 //! Simple in-memory rate limiting for API endpoints
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use axum::{
+    extract::Request,
+    http::{HeaderMap, StatusCode},
+    middleware::Next,
+    response::Response,
+};
 
 /// Rate limiter configuration
 #[derive(Clone)]
@@ -112,6 +118,52 @@ pub fn check_rate_limit(client_id: &str) -> Result<(), String> {
         .get()
         .ok_or("Rate limiter not initialized")?
         .check(client_id)
+}
+
+/// Extract client IP from headers
+fn extract_client_ip(headers: &HeaderMap) -> String {
+    // Try to get real IP from common headers (for reverse proxy setups)
+    if let Some(forwarded_for) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        // X-Forwarded-For can contain multiple IPs, take the first one (original client)
+        return forwarded_for
+            .split(',')
+            .next()
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+    }
+
+    if let Some(real_ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        return real_ip.to_string();
+    }
+
+    if let Some(cf_connecting_ip) = headers.get("cf-connecting-ip").and_then(|v| v.to_str().ok()) {
+        return cf_connecting_ip.to_string();
+    }
+
+    // Fallback to unknown
+    "unknown".to_string()
+}
+
+/// Axum middleware for rate limiting
+pub async fn rate_limit_middleware(
+    req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let headers = req.headers();
+    let client_ip = extract_client_ip(headers);
+
+    // Check rate limit
+    match check_rate_limit(&client_ip) {
+        Ok(()) => {
+            // Rate limit check passed, proceed with request
+            Ok(next.run(req).await)
+        }
+        Err(error_msg) => {
+            tracing::warn!("Rate limit exceeded for client {}: {}", client_ip, error_msg);
+            // Return 429 Too Many Requests
+            Err(StatusCode::TOO_MANY_REQUESTS)
+        }
+    }
 }
 
 #[cfg(test)]

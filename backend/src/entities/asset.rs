@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
+    #[sea_orm(indexed)]
     pub name: String,
+    #[sea_orm(unique)]
     pub ip: String,
+    #[sea_orm(indexed)]
     pub zone: String,
     pub ports: String, // JSON string
     pub last_scanned: Option<String>,

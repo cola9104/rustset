@@ -2,6 +2,8 @@
 
 use dioxus::prelude::*;
 use serde::{Deserialize, Serialize};
+use crate::utils::storage::get_token;
+use crate::config::scan_ip_url;
 
 /// 扫描结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,8 +55,9 @@ pub fn ScannersPage() -> Element {
             }
             
             // API 调用
-            match gloo_net::http::Request::post("http://localhost:3003/api/scan-ip")
-                .header("Authorization", "admin")
+            let token = get_token().unwrap_or_default();
+            match gloo_net::http::Request::post(&scan_ip_url())
+                .header("Authorization", &token)
                 .header("Content-Type", "application/json")
                 .body(serde_json::to_string(&body).unwrap_or_default())
             {

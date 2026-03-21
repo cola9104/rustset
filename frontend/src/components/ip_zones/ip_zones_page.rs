@@ -2,6 +2,8 @@
 
 use dioxus::prelude::*;
 use shared::ZoneConfig;
+use crate::utils::storage::get_token;
+use crate::config::{ip_zones_url, ip_find_zone_url};
 
 /// IP Zones 页面
 #[component]
@@ -15,8 +17,9 @@ pub fn IpZonesPage() -> Element {
     let _load_zones = move |_: dioxus::events::MouseEvent| async move {
         loading.set(true);
         // API 调用
-        if let Ok(response) = gloo_net::http::Request::get("http://localhost:3003/api/ip-zones")
-            .header("Authorization", "admin")
+        let token = get_token().unwrap_or_default();
+        if let Ok(response) = gloo_net::http::Request::get(&ip_zones_url())
+            .header("Authorization", &token)
             .send()
             .await
         {
@@ -32,11 +35,12 @@ pub fn IpZonesPage() -> Element {
         let ip = search_ip();
         async move {
             if ip.is_empty() { return; }
-            
+
+            let token = get_token().unwrap_or_default();
             if let Ok(response) = gloo_net::http::Request::get(
-                &format!("http://localhost:3003/api/ip-zones/find?ip={}", ip)
+                &ip_find_zone_url(&ip)
             )
-            .header("Authorization", "admin")
+            .header("Authorization", &token)
             .send()
             .await
             {

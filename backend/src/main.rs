@@ -61,6 +61,9 @@ mod middleware;
 mod openapi;
 
 use state::AppState;
+use middleware::rate_limit::{init_rate_limiter, RateLimitConfig, rate_limit_middleware};
+use middleware::performance::performance_monitoring;
+use middleware::cors::create_cors_layer;
 use handlers::{
     auth::{login, logout, refresh_token},
     users::{get_users, create_user, delete_user, update_user_permissions, change_password, get_password_policy, update_password_policy, get_current_user_info},
@@ -325,6 +328,17 @@ async fn main() {
     // 初始化扫描管理器
     let scan_manager = scanners::engine::ScanManager::new().await.ok();
 
+    // 初始化 Rate Limiter
+    let rate_limit_config = RateLimitConfig {
+        requests_per_minute: 60,  // 每分钟60次请求
+        block_duration_seconds: 60,  // 超限后阻塞60秒
+    };
+    init_rate_limiter(rate_limit_config);
+    println!("Rate limiter initialized: {} requests/minute, {}s block duration",
+        rate_limit_config.requests_per_minute,
+        rate_limit_config.block_duration_seconds
+    );
+
     let state = AppState {
         assets: Arc::new(StdRwLock::new(initial_assets)),
         tasks: Arc::new(StdRwLock::new(vec![])),
@@ -526,8 +540,10 @@ async fn main() {
             SwaggerUi::new("/api-docs")
                 .url("/api-docs/openapi.json", openapi::ApiDoc::openapi())
         )
+        .layer(axum::middleware::from_fn(rate_limit_middleware))
+        .layer(axum::middleware::from_fn(performance_monitoring))
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive());
+        .layer(create_cors_layer());
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3003));
     println!("Backend listening on {}", addr);
