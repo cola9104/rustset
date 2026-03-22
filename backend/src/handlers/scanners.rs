@@ -17,6 +17,22 @@ use crate::middleware::ApiError;
 use crate::utils::{get_current_user, log_action};
 use shared::{ScannerConfig, CreateScannerRequest, UpdateScannerRequest};
 
+/// 有效的扫描器类型
+const VALID_SCANNER_TYPES: &[&str] = &["rustscan", "nmap", "basic_tcp"];
+
+/// 校验扫描器类型是否有效
+fn validate_scanner_type(scanner_type: &str) -> Result<(), ApiError> {
+    if VALID_SCANNER_TYPES.contains(&scanner_type) {
+        Ok(())
+    } else {
+        Err(ApiError::validation(format!(
+            "无效的扫描器类型: {}。支持的类型: {}",
+            scanner_type,
+            VALID_SCANNER_TYPES.join(", ")
+        )))
+    }
+}
+
 /// 扫描请求
 #[derive(Debug, Deserialize)]
 pub struct ScanRequest {
@@ -222,7 +238,19 @@ fn get_service_name(port: u16) -> Option<String> {
 
 // ============== Scanner Configuration Management ==============
 
-/// 获取所有扫描器配置
+/// Get all scanner configurations
+#[utoipa::path(
+    get,
+    path = "/api/scanners",
+    responses(
+        (status = 200, description = "List of scanner configurations", body = Vec<ScannerConfig>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "scanners"
+)]
 pub async fn get_scanners(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -236,6 +264,22 @@ pub async fn get_scanners(
     Ok(Json(scanners.clone()))
 }
 
+/// Create a new scanner configuration
+#[utoipa::path(
+    post,
+    path = "/api/scanners",
+    request_body = CreateScannerRequest,
+    responses(
+        (status = 200, description = "Scanner created successfully", body = ScannerConfig),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - only admins can create scanners"),
+        (status = 422, description = "Invalid scanner type or validation error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "scanners"
+)]
 /// 创建扫描器配置
 pub async fn create_scanner(
     State(state): State<AppState>,
@@ -249,6 +293,9 @@ pub async fn create_scanner(
     if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
         return Err(ApiError::forbidden("只有管理员可以创建扫描器配置"));
     }
+
+    // 校验扫描器类型
+    validate_scanner_type(&req.scanner_type)?;
 
     let now = Utc::now().to_rfc3339();
     let scanner_name = req.name.clone();
@@ -276,6 +323,26 @@ pub async fn create_scanner(
     Ok(Json(new_scanner))
 }
 
+/// Update scanner configuration
+#[utoipa::path(
+    put,
+    path = "/api/scanners/{id}",
+    params(
+        ("id" = String, Path, description = "Scanner ID")
+    ),
+    request_body = UpdateScannerRequest,
+    responses(
+        (status = 200, description = "Scanner updated successfully", body = ScannerConfig),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - only admins can update scanners"),
+        (status = 404, description = "Scanner not found"),
+        (status = 422, description = "Invalid scanner type or validation error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "scanners"
+)]
 /// 更新扫描器配置
 pub async fn update_scanner(
     State(state): State<AppState>,
@@ -289,6 +356,11 @@ pub async fn update_scanner(
     // 只有安全管理员和系统管理员可以修改扫描器配置
     if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
         return Err(ApiError::forbidden("只有管理员可以修改扫描器配置"));
+    }
+
+    // 校验扫描器类型（如果提供）
+    if let Some(ref scanner_type) = req.scanner_type {
+        validate_scanner_type(scanner_type)?;
     }
 
     let now = Utc::now().to_rfc3339();
@@ -324,6 +396,24 @@ pub async fn update_scanner(
     Ok(Json(updated_scanner))
 }
 
+/// Delete scanner configuration
+#[utoipa::path(
+    delete,
+    path = "/api/scanners/{id}",
+    params(
+        ("id" = String, Path, description = "Scanner ID")
+    ),
+    responses(
+        (status = 200, description = "Scanner deleted successfully", body = String),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - only admins can delete scanners"),
+        (status = 404, description = "Scanner not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "scanners"
+)]
 /// 删除扫描器配置
 pub async fn delete_scanner(
     State(state): State<AppState>,

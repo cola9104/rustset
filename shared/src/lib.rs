@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use chrono::{DateTime, Utc};
 use std::str::FromStr;
 
@@ -641,7 +642,7 @@ pub struct ZoneConfig {
 }
 
 /// 扫描器配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ScannerConfig {
     pub id: String,
     pub name: String,
@@ -653,7 +654,7 @@ pub struct ScannerConfig {
 }
 
 /// 创建扫描器配置请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateScannerRequest {
     pub name: String,
     pub scanner_type: String,
@@ -662,7 +663,7 @@ pub struct CreateScannerRequest {
 }
 
 /// 更新扫描器配置请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateScannerRequest {
     pub name: Option<String>,
     pub scanner_type: Option<String>,

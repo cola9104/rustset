@@ -34,6 +34,11 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
         crate::handlers::business_resources::create_business_resource,
         crate::handlers::business_resources::update_business_resource,
         crate::handlers::business_resources::delete_business_resource,
+        // Scanners
+        crate::handlers::scanners::get_scanners,
+        crate::handlers::scanners::create_scanner,
+        crate::handlers::scanners::update_scanner,
+        crate::handlers::scanners::delete_scanner,
     ),
     components(
         schemas(
@@ -51,6 +56,9 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
             shared::CreateBusinessResourceRequest,
             shared::UpdateBusinessResourceRequest,
             shared::AuditLog,
+            shared::ScannerConfig,
+            shared::CreateScannerRequest,
+            shared::UpdateScannerRequest,
         )
     ),
     tags(
@@ -58,6 +66,7 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
         (name = "users", description = "User management"),
         (name = "roles", description = "Role and permission management"),
         (name = "business_resources", description = "Business resource management"),
+        (name = "scanners", description = "Scanner configuration management"),
     ),
     modifiers(&SecurityAddon)
 )]

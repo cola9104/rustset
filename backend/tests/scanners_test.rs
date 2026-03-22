@@ -432,6 +432,57 @@ async fn test_delete_scanner_as_admin() {
 }
 
 #[tokio::test]
+async fn test_create_scanner_invalid_type() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/scanners")
+        .header("Authorization", "admin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"name":"invalid-scanner","scanner_type":"invalid_type","config":{}}"#))
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    // 应该返回 422 (ValidationError) 或 400
+    assert!(response.status() == StatusCode::UNPROCESSABLE_ENTITY || response.status() == StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_update_scanner_invalid_type() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    // Create a scanner first
+    let create_request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/scanners")
+        .header("Authorization", "admin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"name":"test","scanner_type":"rustscan","config":{}}"#))
+        .unwrap();
+
+    let create_response = app.clone().oneshot(create_request).await.unwrap();
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+    let create_result: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
+    let scanner_id = create_result["id"].as_str().unwrap();
+
+    // Try to update with invalid type
+    let update_request = Request::builder()
+        .method(Method::PUT)
+        .uri(&format!("/api/scanners/{}", scanner_id))
+        .header("Authorization", "admin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"scanner_type":"invalid_type"}"#))
+        .unwrap();
+
+    let update_response = app.oneshot(update_request).await.unwrap();
+    // 应该返回 422 (ValidationError) 或 400
+    assert!(update_response.status() == StatusCode::UNPROCESSABLE_ENTITY || update_response.status() == StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_delete_scanner_not_found() {
     let state = create_test_state().await;
     let app = create_test_app(state).await;
@@ -508,5 +559,101 @@ async fn test_delete_scanner_as_auditor_forbidden() {
 
     let delete_response = app.clone().oneshot(delete_request).await.unwrap();
     assert_eq!(delete_response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_get_scanners_unauthorized() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/api/scanners")
+        // No Authorization header
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_update_scanner_as_secadmin() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    // Create a scanner first as admin
+    let create_request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/scanners")
+        .header("Authorization", "admin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"name":"test","scanner_type":"rustscan","config":{}}"#))
+        .unwrap();
+
+    let create_response = app.clone().oneshot(create_request).await.unwrap();
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+    let create_result: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
+    let scanner_id = create_result["id"].as_str().unwrap();
+
+    // Update as secadmin
+    let update_request = Request::builder()
+        .method(Method::PUT)
+        .uri(&format!("/api/scanners/{}", scanner_id))
+        .header("Authorization", "secadmin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"name":"updated-by-secadmin","enabled":false}"#))
+        .unwrap();
+
+    let update_response = app.clone().oneshot(update_request).await.unwrap();
+    assert_eq!(update_response.status(), StatusCode::OK);
+
+    let update_body = axum::body::to_bytes(update_response.into_body(), usize::MAX).await.unwrap();
+    let update_result: serde_json::Value = serde_json::from_slice(&update_body).unwrap();
+    assert_eq!(update_result["name"], "updated-by-secadmin");
+}
+
+#[tokio::test]
+async fn test_delete_scanner_as_secadmin() {
+    let state = create_test_state().await;
+    let app = create_test_app(state).await;
+
+    // Create a scanner first as admin
+    let create_request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/scanners")
+        .header("Authorization", "admin")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"name":"test","scanner_type":"rustscan","config":{}}"#))
+        .unwrap();
+
+    let create_response = app.clone().oneshot(create_request).await.unwrap();
+    let create_body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+    let create_result: serde_json::Value = serde_json::from_slice(&create_body).unwrap();
+    let scanner_id = create_result["id"].as_str().unwrap();
+
+    // Delete as secadmin
+    let delete_request = Request::builder()
+        .method(Method::DELETE)
+        .uri(&format!("/api/scanners/{}", scanner_id))
+        .header("Authorization", "secadmin")
+        .body(Body::empty())
+        .unwrap();
+
+    let delete_response = app.clone().oneshot(delete_request).await.unwrap();
+    assert_eq!(delete_response.status(), StatusCode::OK);
+
+    // Verify it's deleted
+    let get_request = Request::builder()
+        .method(Method::GET)
+        .uri("/api/scanners")
+        .header("Authorization", "admin")
+        .body(Body::empty())
+        .unwrap();
+
+    let get_response = app.clone().oneshot(get_request).await.unwrap();
+    let get_body = axum::body::to_bytes(get_response.into_body(), usize::MAX).await.unwrap();
+    let get_result: serde_json::Value = serde_json::from_slice(&get_body).unwrap();
+    assert_eq!(get_result.as_array().unwrap().len(), 0);
 }
 
