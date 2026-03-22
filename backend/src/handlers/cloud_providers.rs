@@ -1,14 +1,16 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
+use crate::utils::log_action_auth;
 use shared::{
     CloudProviderConfig, CloudProviderConfigStatus,
     CreateCloudProviderConfigRequest, UpdateCloudProviderConfigRequest,
+    Role,
 };
 use crate::database::{
     insert_provider_config, update_provider_config, delete_provider_config,
@@ -18,10 +20,10 @@ use crate::database::{
 /// 获取云平台（技术底座）配置列表
 pub async fn get_cloud_provider_configs(
     State(_state): State<AppState>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse, ApiError> {
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,
-        None => return Json(Vec::<CloudProviderConfig>::new()).into_response(),
+        None => return Err(ApiError::internal("Database not available")),
     };
 
     match get_all_cloud_provider_configs(&db_conn).await {
@@ -76,24 +78,23 @@ pub async fn get_cloud_provider_configs(
                     }),
                 })
             }).collect();
-            Json(configs).into_response()
+            Ok(Json(configs).into_response())
         }
         Err(e) => {
             eprintln!("Error loading cloud provider configs from database: {}", e);
-            Json(Vec::<CloudProviderConfig>::new()).into_response()
+            Err(ApiError::internal("Database error"))
         }
     }
 }
 
 /// 获取单个云平台（技术底座）配置
 pub async fn get_cloud_provider_config(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+) -> Result<impl IntoResponse, ApiError> {
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,
-        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        None => return Err(ApiError::internal("Database not available")),
     };
 
     match get_cloud_provider_config_by_id(&db_conn, id).await {
@@ -101,7 +102,7 @@ pub async fn get_cloud_provider_config(
             // Parse provider from JSON string
             let provider = match serde_json::from_str(&db.provider) {
                 Ok(p) => p,
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                Err(_) => return Err(ApiError::internal("Failed to parse cloud provider config")),
             };
             // Parse available_zones from region (stored as comma-separated if exists)
             let available_zones = if !db.region_id.is_empty() {
@@ -149,12 +150,12 @@ pub async fn get_cloud_provider_config(
                         .ok()
                 }),
             };
-            Json(config).into_response()
+            Ok(Json(config).into_response())
         }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
         Err(e) => {
             eprintln!("Error loading cloud provider config from database: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Err(ApiError::internal("Database error"))
         }
     }
 }
@@ -163,17 +164,20 @@ pub async fn get_cloud_provider_config(
 #[axum::debug_handler]
 pub async fn create_cloud_provider_config(
     State(state): State<AppState>,
+    user: AuthUser,
     Json(req): Json<CreateCloudProviderConfigRequest>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let now = chrono::Utc::now();
     let provider_str = serde_json::to_string(&req.provider).unwrap_or_default();
 
     // 持久化到数据库
     match insert_provider_config(
-        req.zone_id.unwrap_or(0),
-        req.platform_id.unwrap_or(0),
+        req.zone_id.unwrap_or_default(),
+        req.platform_id.unwrap_or_default(),
         &provider_str,
         &req.region_id,
         &req.region_name,
@@ -203,17 +207,22 @@ pub async fn create_cloud_provider_config(
                 updated_at: Some(now),
             };
 
-            Json(json!({
+            log_action_auth(
+                &state.audit_logs,
+                &user,
+                "CREATE_CLOUD_PROVIDER_CONFIG",
+                &req.account_name,
+                &format!("Created cloud provider config: {}", req.account_name),
+            );
+
+            Ok(Json(json!({
                 "message": "配置创建成功",
                 "data": config
-            })).into_response()
+            })).into_response())
         }
         Err(e) => {
             eprintln!("Error creating cloud provider config: {}", e);
-            Json(json!({
-                "error": "Failed to create cloud provider config",
-                "details": e.to_string()
-            })).into_response()
+            Err(ApiError::internal("Failed to create cloud provider config"))
         }
     }
 }
@@ -222,21 +231,27 @@ pub async fn create_cloud_provider_config(
 #[axum::debug_handler]
 pub async fn update_cloud_provider_config(
     State(state): State<AppState>,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateCloudProviderConfigRequest>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     // Check if the config exists in database
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,
-        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        None => return Err(ApiError::internal("Database not available")),
     };
 
     let existing = match get_cloud_provider_config_by_id(&db_conn, id).await {
         Ok(Some(config)) => config,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(None) => return Err(ApiError::not_found("Cloud provider config not found")),
+        Err(e) => {
+            eprintln!("Error checking cloud provider config existence: {}", e);
+            return Err(ApiError::internal("Database error"));
+        }
     };
 
     // Build the update parameters from request or existing values
@@ -275,6 +290,14 @@ pub async fn update_cloud_provider_config(
         updated_at.as_deref(),
     ).await {
         Ok(_) => {
+            log_action_auth(
+                &state.audit_logs,
+                &user,
+                "UPDATE_CLOUD_PROVIDER_CONFIG",
+                &format!("{}", id),
+                &format!("Updated cloud provider config: {}", id),
+            );
+
             // Fetch the updated config
             match get_cloud_provider_config_by_id(&db_conn, id).await {
                 Ok(Some(db)) => {
@@ -307,17 +330,21 @@ pub async fn update_cloud_provider_config(
                         }),
                     };
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "配置更新成功",
                         "data": config
-                    })).into_response()
+                    })).into_response())
                 }
-                _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                Ok(None) => Err(ApiError::internal("Failed to load updated cloud provider config")),
+                Err(e) => {
+                    eprintln!("Error loading updated cloud provider config: {}", e);
+                    Err(ApiError::internal("Database error"))
+                }
             }
         }
         Err(e) => {
             eprintln!("Error updating cloud provider config: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            Err(ApiError::internal("Failed to update cloud provider config"))
         }
     }
 }
@@ -326,45 +353,62 @@ pub async fn update_cloud_provider_config(
 #[axum::debug_handler]
 pub async fn delete_cloud_provider_config(
     State(state): State<AppState>,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     // Check if exists in database
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,
-        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        None => return Err(ApiError::internal("Database not available")),
     };
 
     match get_cloud_provider_config_by_id(&db_conn, id).await {
-        Ok(Some(_)) => {
+        Ok(Some(config)) => {
             // Delete from database
             match delete_provider_config(id).await {
                 Ok(_) => {
-                    Json(json!({ "message": "配置删除成功" })).into_response()
+                    log_action_auth(
+                        &state.audit_logs,
+                        &user,
+                        "DELETE_CLOUD_PROVIDER_CONFIG",
+                        &config.account_name,
+                        &format!("Deleted cloud provider config: {}", id),
+                    );
+
+                    Ok(Json(json!({ "message": "配置删除成功" })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error deleting cloud provider config: {}", e);
-                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                    Err(ApiError::internal("Failed to delete cloud provider config"))
                 }
             }
         }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
+        Err(e) => {
+            eprintln!("Error checking cloud provider config existence: {}", e);
+            Err(ApiError::internal("Database error"))
+        }
     }
 }
 
 /// 测试云平台（技术底座）连接
 #[axum::debug_handler]
 pub async fn test_cloud_provider_connection(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,
-        None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        None => return Err(ApiError::internal("Database not available")),
     };
 
     match get_cloud_provider_config_by_id(&db_conn, id).await {
@@ -382,18 +426,20 @@ pub async fn test_cloud_provider_connection(
                 "tested_at": now
             });
 
-            Json(test_result).into_response()
+            Ok(Json(test_result).into_response())
         }
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
+        Err(e) => {
+            eprintln!("Error testing cloud provider connection: {}", e);
+            Err(ApiError::internal("Database error"))
+        }
     }
 }
 
 /// 获取云平台（技术底座）厂商选项列表
 pub async fn get_cloud_provider_options(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+    State(_state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
     let options = vec![
         json!({
             "value": "aliyun",
@@ -412,7 +458,7 @@ pub async fn get_cloud_provider_options(
             "label": "AWS",
         }),
     ];
-    Json(options).into_response()
+    Ok(Json(options).into_response())
 }
 
 /// 获取已启用的云平台（技术底座）配置（用于业务申请选择）
@@ -420,12 +466,11 @@ pub async fn get_cloud_provider_options(
 /// 返回完整的 CloudProviderConfig 对象，包括 zone_id 和 platform_id，
 /// 以便前端可以根据选中的云区和云平台进行过滤。
 pub async fn get_active_cloud_provider_configs(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let _ = &state; // Mark as intentionally unused
+    State(_state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
     let db_conn = match crate::database::get_db() {
         Some(conn) => conn,
-        None => return Json(Vec::<CloudProviderConfig>::new()).into_response(),
+        None => return Err(ApiError::internal("Database not available")),
     };
 
     match get_active_provider_configs_db(&db_conn).await {
@@ -472,11 +517,11 @@ pub async fn get_active_cloud_provider_configs(
                     }),
                 })
             }).collect();
-            Json(configs).into_response()
+            Ok(Json(configs).into_response())
         }
         Err(e) => {
             eprintln!("Error loading active cloud provider configs from database: {}", e);
-            Json(Vec::<CloudProviderConfig>::new()).into_response()
+            Err(ApiError::internal("Database error"))
         }
     }
 }

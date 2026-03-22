@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use chrono::Utc;
 
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
+use crate::middleware::{AuthUser, ApiError};
 use crate::database::{
     get_all_cloud_zones as db_get_all_cloud_zones,
     get_cloud_zone_by_id as db_get_cloud_zone_by_id,
@@ -22,13 +22,9 @@ use shared::{
 
 /// 获取云区列表 (直接从数据库读取)
 pub async fn get_cloud_zones(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
 
     match crate::database::get_db() {
         Some(conn) => {
@@ -43,30 +39,26 @@ pub async fn get_cloud_zones(
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
                     }).collect();
-                    Json(zones).into_response()
+                    Ok(Json(zones).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud zones from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 获取单个云区 (直接从数据库读取)
 pub async fn get_cloud_zone(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
+) -> Result<impl IntoResponse, ApiError> {
 
     match crate::database::get_db() {
         Some(conn) => {
@@ -81,19 +73,19 @@ pub async fn get_cloud_zone(
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
                     };
-                    Json(zone).into_response()
+                    Ok(Json(zone).into_response())
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Operator/Manufacturer not found".to_string()).into_response()
+                    Err(ApiError::not_found("Operator/Manufacturer not found"))
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud zone from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -102,17 +94,12 @@ pub async fn get_cloud_zone(
 #[axum::debug_handler]
 pub async fn create_cloud_zone(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateCloudZoneRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 检查权限
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -121,12 +108,12 @@ pub async fn create_cloud_zone(
             match db_get_all_cloud_zones(&conn).await {
                 Ok(existing_zones) => {
                     if existing_zones.iter().any(|z| z.zone_code == req.zone_code) {
-                        return (StatusCode::BAD_REQUEST, "Zone code already exists".to_string()).into_response();
+                        return Err(ApiError::bad_request("Zone code already exists"));
                     }
                 }
                 Err(e) => {
                     eprintln!("Error checking zone code: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                    return Err(ApiError::internal("Database error"));
                 }
             }
 
@@ -149,7 +136,7 @@ pub async fn create_cloud_zone(
                     };
 
                     // 记录日志
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "CREATE_CLOUD_ZONE",
@@ -157,19 +144,19 @@ pub async fn create_cloud_zone(
                         &format!("Created cloud zone: {}", req.zone_name),
                     );
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "运营商/厂家创建成功",
                         "data": zone
-                    })).into_response()
+                    })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud zone: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create operator/manufacturer".to_string()).into_response()
+                    Err(ApiError::internal("Failed to create operator/manufacturer"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -178,17 +165,12 @@ pub async fn create_cloud_zone(
 #[axum::debug_handler]
 pub async fn update_cloud_zone(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateCloudZoneRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -201,21 +183,22 @@ pub async fn update_cloud_zone(
                         match db_get_all_cloud_zones(&conn).await {
                             Ok(existing_zones) => {
                                 if existing_zones.iter().any(|z| z.id != id && z.zone_code == *new_code) {
-                                    return (StatusCode::BAD_REQUEST, "Zone code already exists".to_string()).into_response();
+                                    return Err(ApiError::bad_request("Zone code already exists"));
                                 }
                             }
                             Err(e) => {
                                 eprintln!("Error checking zone code: {}", e);
+                                return Err(ApiError::internal("Database error"));
                             }
                         }
                     }
                 }
                 Ok(None) => {
-                    return (StatusCode::NOT_FOUND, "Operator/Manufacturer not found".to_string()).into_response();
+                    return Err(ApiError::not_found("Operator/Manufacturer not found"));
                 }
                 Err(e) => {
                     eprintln!("Error checking zone existence: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                    return Err(ApiError::internal("Database error"));
                 }
             }
 
@@ -228,7 +211,7 @@ pub async fn update_cloud_zone(
             ).await {
                 Ok(_) => {
                     // 记录日志
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "UPDATE_CLOUD_ZONE",
@@ -248,24 +231,24 @@ pub async fn update_cloud_zone(
                                     .map(|dt| dt.with_timezone(&chrono::Utc))
                                     .unwrap_or_else(|_| Utc::now()),
                             };
-                            Json(json!({
+                            Ok(Json(json!({
                                 "message": "运营商/厂家更新成功",
                                 "data": zone
-                            })).into_response()
+                            })).into_response())
                         }
                         _ => {
-                            Json(json!({ "message": "运营商/厂家更新成功" })).into_response()
+                            Ok(Json(json!({ "message": "运营商/厂家更新成功" })).into_response())
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Error updating cloud zone: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update operator/manufacturer".to_string()).into_response()
+                    Err(ApiError::internal("Failed to update operator/manufacturer"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -274,16 +257,11 @@ pub async fn update_cloud_zone(
 #[axum::debug_handler]
 pub async fn delete_cloud_zone(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -295,7 +273,7 @@ pub async fn delete_cloud_zone(
                     match db_delete_cloud_zone(id).await {
                         Ok(_) => {
                             // 记录日志
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "DELETE_CLOUD_ZONE",
@@ -303,25 +281,25 @@ pub async fn delete_cloud_zone(
                                 &format!("Deleted cloud zone: {}", id),
                             );
 
-                            Json(json!({ "message": "运营商/厂家删除成功" })).into_response()
+                            Ok(Json(json!({ "message": "运营商/厂家删除成功" })).into_response())
                         }
                         Err(e) => {
                             eprintln!("Error deleting cloud zone: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete operator/manufacturer".to_string()).into_response()
+                            Err(ApiError::internal("Failed to delete operator/manufacturer"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Operator/Manufacturer not found".to_string()).into_response()
+                    Err(ApiError::not_found("Operator/Manufacturer not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking zone existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }

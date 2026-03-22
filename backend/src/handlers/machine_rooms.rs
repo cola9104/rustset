@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use shared::Role;
 
 /// 机房数据模型
@@ -69,56 +69,46 @@ pub struct UpdateMachineRoomRequest {
 
 /// 获取机房列表
 pub async fn get_machine_rooms(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_all_machine_rooms(&conn).await {
-                Ok(rooms) => Json(rooms).into_response(),
+                Ok(rooms) => Ok(Json(rooms).into_response()),
                 Err(e) => {
                     eprintln!("Error loading machine rooms from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 获取单个机房
 pub async fn get_machine_room(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_machine_room_by_id(&conn, id).await {
-                Ok(Some(room)) => Json(room).into_response(),
+                Ok(Some(room)) => Ok(Json(room).into_response()),
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Machine room not found".to_string()).into_response()
+                    Err(ApiError::not_found("Machine room not found"))
                 }
                 Err(e) => {
                     eprintln!("Error loading machine room from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -126,16 +116,11 @@ pub async fn get_machine_room(
 /// 创建机房
 pub async fn create_machine_room(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateMachineRoomRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -180,7 +165,7 @@ pub async fn create_machine_room(
                         updated_at: None,
                     };
 
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "CREATE_MACHINE_ROOM",
@@ -188,19 +173,19 @@ pub async fn create_machine_room(
                         &format!("Created machine room: {}", req.room_name),
                     );
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "机房创建成功",
                         "data": room
-                    })).into_response()
+                    })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting machine room: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create machine room".to_string()).into_response()
+                    Err(ApiError::internal("Failed to create machine room"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -208,17 +193,12 @@ pub async fn create_machine_room(
 /// 更新机房
 pub async fn update_machine_room(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateMachineRoomRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -245,7 +225,7 @@ pub async fn update_machine_room(
                         Some(&now),
                     ).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "UPDATE_MACHINE_ROOM",
@@ -255,33 +235,33 @@ pub async fn update_machine_room(
 
                             match crate::database::get_machine_room_by_id(&conn, id).await {
                                 Ok(Some(room)) => {
-                                    Json(json!({
+                                    Ok(Json(json!({
                                         "message": "机房更新成功",
                                         "data": room
-                                    })).into_response()
+                                    })).into_response())
                                 }
                                 _ => {
-                                    Json(json!({ "message": "机房更新成功" })).into_response()
+                                    Ok(Json(json!({ "message": "机房更新成功" })).into_response())
                                 }
                             }
                         }
                         Err(e) => {
                             eprintln!("Error updating machine room: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update machine room".to_string()).into_response()
+                            Err(ApiError::internal("Failed to update machine room"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Machine room not found".to_string()).into_response()
+                    Err(ApiError::not_found("Machine room not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking machine room existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -289,16 +269,11 @@ pub async fn update_machine_room(
 /// 删除机房
 pub async fn delete_machine_room(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -307,7 +282,7 @@ pub async fn delete_machine_room(
                 Ok(Some(_)) => {
                     match crate::database::delete_machine_room(&conn, id).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "DELETE_MACHINE_ROOM",
@@ -315,25 +290,25 @@ pub async fn delete_machine_room(
                                 &format!("Deleted machine room: {}", id),
                             );
 
-                            Json(json!({ "message": "机房删除成功" })).into_response()
+                            Ok(Json(json!({ "message": "机房删除成功" })).into_response())
                         }
                         Err(e) => {
                             eprintln!("Error deleting machine room: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete machine room".to_string()).into_response()
+                            Err(ApiError::internal("Failed to delete machine room"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Machine room not found".to_string()).into_response()
+                    Err(ApiError::not_found("Machine room not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking machine room existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }

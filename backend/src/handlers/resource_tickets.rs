@@ -1,19 +1,19 @@
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use std::sync::RwLock;
 use chrono::Utc;
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use shared::{
     ResourceTicket, ResourceType, TicketStatus,
     CreateResourceTicketRequest, UpdateResourceTicketRequest,
     ApproveTicketRequest, ProvisionTicketRequest, DeliverTicketRequest,
-    ResourceTicketQuery,
+    ResourceTicketQuery, Role,
 };
 
 // 内存缓存
@@ -21,15 +21,10 @@ pub static RESOURCE_TICKETS: RwLock<Vec<ResourceTicket>> = RwLock::new(Vec::new(
 
 /// 获取资源工单列表
 pub async fn get_resource_tickets(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Query(query): Query<ResourceTicketQuery>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     let tickets = RESOURCE_TICKETS.read().unwrap();
     let mut filtered: Vec<_> = tickets.iter()
         .filter(|t| {
@@ -80,42 +75,32 @@ pub async fn get_resource_tickets(
     // 按创建时间倒序排列
     filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
-    Json(filtered).into_response()
+    Ok(Json(filtered).into_response())
 }
 
 /// 获取单个资源工单
 pub async fn get_resource_ticket(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     let tickets = RESOURCE_TICKETS.read().unwrap();
     if let Some(ticket) = tickets.iter().find(|t| t.id == Some(id)) {
-        Json(ticket.clone()).into_response()
+        Ok(Json(ticket.clone()).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Ticket not found".to_string()).into_response()
+        Err(ApiError::not_found("Ticket not found"))
     }
 }
 
 /// 创建资源工单
 pub async fn create_resource_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateResourceTicketRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 检查权限
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let now = Utc::now();
@@ -198,7 +183,7 @@ pub async fn create_resource_ticket(
         tickets.push(ticket.clone());
     }
 
-    log_action(
+    log_action_auth(
         &state.audit_logs,
         &user,
         "CREATE_RESOURCE_TICKET",
@@ -206,26 +191,21 @@ pub async fn create_resource_ticket(
         &format!("创建资源工单: {} ({})", ticket.ecs_name, ticket.resource_type.as_str()),
     );
 
-    Json(json!({
+    Ok(Json(json!({
         "message": "工单创建成功",
         "data": ticket
-    })).into_response()
+    })).into_response())
 }
 
 /// 更新资源工单
 pub async fn update_resource_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateResourceTicketRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let now = Utc::now();
@@ -262,7 +242,7 @@ pub async fn update_resource_ticket(
 
         let updated = ticket.clone();
 
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "UPDATE_RESOURCE_TICKET",
@@ -270,35 +250,30 @@ pub async fn update_resource_ticket(
             &format!("更新资源工单: {}", id),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": "工单更新成功",
             "data": updated
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Ticket not found".to_string()).into_response()
+        Err(ApiError::not_found("Ticket not found"))
     }
 }
 
 /// 删除资源工单
 pub async fn delete_resource_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
-    if user.role != shared::Role::SysAdmin {
-        return (StatusCode::FORBIDDEN, "Only SysAdmin can delete tickets".to_string()).into_response();
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin {
+        return Err(ApiError::forbidden("Only SysAdmin can delete tickets"));
     }
 
     let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(pos) = tickets.iter().position(|t| t.id == Some(id)) {
         tickets.remove(pos);
 
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "DELETE_RESOURCE_TICKET",
@@ -306,29 +281,24 @@ pub async fn delete_resource_ticket(
             &format!("删除资源工单: {}", id),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": "工单删除成功"
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Ticket not found".to_string()).into_response()
+        Err(ApiError::not_found("Ticket not found"))
     }
 }
 
 /// 审批工单
 pub async fn approve_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<ApproveTicketRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 只有管理员和审批员可以审批
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let now = Utc::now();
@@ -337,7 +307,7 @@ pub async fn approve_ticket(
     let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         if ticket.ticket_status != TicketStatus::PendingApproval {
-            return (StatusCode::BAD_REQUEST, "只能审批待审批状态的工单".to_string()).into_response();
+            return Err(ApiError::bad_request("只能审批待审批状态的工单"));
         }
 
         ticket.approver = Some(user.username.clone());
@@ -354,7 +324,7 @@ pub async fn approve_ticket(
 
         let updated = ticket.clone();
 
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "APPROVE_RESOURCE_TICKET",
@@ -362,30 +332,25 @@ pub async fn approve_ticket(
             &format!("审批工单 {}: {}", id, if req.approved { "通过" } else { "拒绝" }),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": if req.approved { "工单审批通过" } else { "工单已拒绝" },
             "data": updated
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Ticket not found".to_string()).into_response()
+        Err(ApiError::not_found("Ticket not found"))
     }
 }
 
 /// 开始配置工单
 pub async fn provision_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<ProvisionTicketRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 只有运维人员可以配置
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let now = Utc::now();
@@ -394,7 +359,7 @@ pub async fn provision_ticket(
     let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         if ticket.ticket_status != TicketStatus::Approved {
-            return (StatusCode::BAD_REQUEST, "只能配置已批准的工单".to_string()).into_response();
+            return Err(ApiError::bad_request("只能配置已批准的工单"));
         }
 
         ticket.provisioner = Some(user.username.clone());
@@ -405,7 +370,7 @@ pub async fn provision_ticket(
 
         let updated = ticket.clone();
 
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "PROVISION_RESOURCE_TICKET",
@@ -413,30 +378,25 @@ pub async fn provision_ticket(
             &format!("配置工单: {}", id),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": "工单配置完成",
             "data": updated
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Ticket not found".to_string()).into_response()
+        Err(ApiError::not_found("Ticket not found"))
     }
 }
 
 /// 交付工单
 pub async fn deliver_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<DeliverTicketRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 只有运维和交付人员可以交付
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let now = Utc::now();
@@ -445,7 +405,7 @@ pub async fn deliver_ticket(
     let mut tickets = RESOURCE_TICKETS.write().unwrap();
     if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
         if ticket.ticket_status != TicketStatus::PendingDelivery {
-            return (StatusCode::BAD_REQUEST, "只能交付待交付状态的工单".to_string()).into_response();
+            return Err(ApiError::bad_request("只能交付待交付状态的工单"));
         }
 
         ticket.deliverer = Some(user.username.clone());
@@ -457,7 +417,7 @@ pub async fn deliver_ticket(
 
         let updated = ticket.clone();
 
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "DELIVER_RESOURCE_TICKET",
@@ -465,12 +425,12 @@ pub async fn deliver_ticket(
             &format!("交付工单: {}", id),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": "工单交付完成",
             "data": updated
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Ticket not found".to_string()).into_response()
+        Err(ApiError::not_found("Ticket not found"))
     }
 }
 

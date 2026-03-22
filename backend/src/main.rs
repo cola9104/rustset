@@ -63,6 +63,7 @@ use state::AppState;
 use middleware::rate_limit::{init_rate_limiter, RateLimitConfig, rate_limit_middleware};
 use middleware::performance::performance_monitoring;
 use middleware::cors::create_cors_layer;
+use middleware::auth_middleware::auth_middleware;
 use handlers::{
     auth::{login, logout, refresh_token},
     users::{get_users, create_user, delete_user, update_user_permissions, change_password, get_password_policy, update_password_policy, get_current_user_info},
@@ -195,7 +196,7 @@ async fn main() {
                 force_password_change: Some(true), // Force change on first login for security
                 last_login_at: None,
                 email: Some("admin@rustset.local".to_string()),
-                phone: None,
+                phone: Some("".to_string()),
                 status: Some("active".to_string()),
                 failed_login_attempts: Some(0),
                 locked_until: None,
@@ -222,7 +223,7 @@ async fn main() {
                 force_password_change: Some(true), // Force change on first login for security
                 last_login_at: None,
                 email: Some("sec@rustset.local".to_string()),
-                phone: None,
+                phone: Some("".to_string()),
                 status: Some("active".to_string()),
                 failed_login_attempts: Some(0),
                 locked_until: None,
@@ -249,7 +250,7 @@ async fn main() {
                 force_password_change: Some(true), // Force change on first login for security
                 last_login_at: None,
                 email: Some("audit@rustset.local".to_string()),
-                phone: None,
+                phone: Some("".to_string()),
                 status: Some("active".to_string()),
                 failed_login_attempts: Some(0),
                 locked_until: None,
@@ -545,6 +546,7 @@ async fn main() {
         //     SwaggerUi::new("/api-docs")
         //         .url("/api-docs/openapi.json", openapi::ApiDoc::openapi())
         // )
+        .layer(axum::middleware::from_fn(auth_middleware))
         .layer(axum::middleware::from_fn(rate_limit_middleware))
         .layer(axum::middleware::from_fn(performance_monitoring))
         .layer(TraceLayer::new_for_http())

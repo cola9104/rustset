@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use shared::Role;
 
 /// 安全产品数据模型
@@ -86,56 +86,46 @@ pub struct UpdateSecurityProductRequest {
 
 /// 获取安全产品列表
 pub async fn get_security_products(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_all_security_products(&conn).await {
-                Ok(products) => Json(products).into_response(),
+                Ok(products) => Ok(Json(products).into_response()),
                 Err(e) => {
                     eprintln!("Error loading security products from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 获取单个安全产品
 pub async fn get_security_product(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_security_product_by_id(&conn, id).await {
-                Ok(Some(product)) => Json(product).into_response(),
+                Ok(Some(product)) => Ok(Json(product).into_response()),
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Security product not found".to_string()).into_response()
+                    Err(ApiError::not_found("Security product not found"))
                 }
                 Err(e) => {
                     eprintln!("Error loading security product from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -143,16 +133,11 @@ pub async fn get_security_product(
 /// 创建安全产品
 pub async fn create_security_product(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateSecurityProductRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -210,7 +195,7 @@ pub async fn create_security_product(
                         created_at: now,
                     };
 
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "CREATE_SECURITY_PRODUCT",
@@ -218,19 +203,19 @@ pub async fn create_security_product(
                         &format!("Created security product: {}", req.name),
                     );
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "安全产品创建成功",
                         "data": product
-                    })).into_response()
+                    })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting security product: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create security product".to_string()).into_response()
+                    Err(ApiError::internal("Failed to create security product"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -238,17 +223,12 @@ pub async fn create_security_product(
 /// 更新安全产品
 pub async fn update_security_product(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateSecurityProductRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -282,7 +262,7 @@ pub async fn update_security_product(
                         req.remarks.as_deref(),
                     ).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "UPDATE_SECURITY_PRODUCT",
@@ -292,33 +272,33 @@ pub async fn update_security_product(
 
                             match crate::database::get_security_product_by_id(&conn, id).await {
                                 Ok(Some(product)) => {
-                                    Json(json!({
+                                    Ok(Json(json!({
                                         "message": "安全产品更新成功",
                                         "data": product
-                                    })).into_response()
+                                    })).into_response())
                                 }
                                 _ => {
-                                    Json(json!({ "message": "安全产品更新成功" })).into_response()
+                                    Ok(Json(json!({ "message": "安全产品更新成功" })).into_response())
                                 }
                             }
                         }
                         Err(e) => {
                             eprintln!("Error updating security product: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update security product".to_string()).into_response()
+                            Err(ApiError::internal("Failed to update security product"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Security product not found".to_string()).into_response()
+                    Err(ApiError::not_found("Security product not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking security product existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -326,16 +306,11 @@ pub async fn update_security_product(
 /// 删除安全产品
 pub async fn delete_security_product(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -344,7 +319,7 @@ pub async fn delete_security_product(
                 Ok(Some(_)) => {
                     match crate::database::delete_security_product(&conn, id).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "DELETE_SECURITY_PRODUCT",
@@ -352,25 +327,25 @@ pub async fn delete_security_product(
                                 &format!("Deleted security product: {}", id),
                             );
 
-                            Json(json!({ "message": "安全产品删除成功" })).into_response()
+                            Ok(Json(json!({ "message": "安全产品删除成功" })).into_response())
                         }
                         Err(e) => {
                             eprintln!("Error deleting security product: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete security product".to_string()).into_response()
+                            Err(ApiError::internal("Failed to delete security product"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Security product not found".to_string()).into_response()
+                    Err(ApiError::not_found("Security product not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking security product existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }

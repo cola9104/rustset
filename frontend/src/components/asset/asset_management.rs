@@ -1,9 +1,28 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPenToSquare, FaTrash, FaMagnifyingGlass, FaServer, FaDesktop, FaLaptop, FaCloud
+    FaPenToSquare, FaTrash, FaMagnifyingGlass, FaServer, FaDesktop, FaLaptop, FaCloud,
+    FaTriangleExclamation, FaCircleCheck, FaShieldHalved, FaLock,
 };
 use crate::app::PROVIDERS_STATE;
+use crate::app::NETWORK_POLICIES_STATE;
+use super::port_security::{FirewallPolicySummary, analyze_port_security, PortSecurityStatus, get_security_summary};
+
+/// 从全局网络策略状态获取防火墙策略
+fn get_firewall_policies() -> Vec<FirewallPolicySummary> {
+    use crate::components::resource_ticket::network_policy::network_policy_request::NetworkPolicyStatus;
+
+    NETWORK_POLICIES_STATE.read()
+        .iter()
+        .filter(|p| p.status == NetworkPolicyStatus::Active)
+        .map(|p| FirewallPolicySummary {
+            id: p.id,
+            title: p.title.clone(),
+            port_range: p.port_range.clone(),
+            status: "Active".to_string(),
+        })
+        .collect()
+}
 
 /// 标签页类型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,6 +76,43 @@ impl HardwareAsset {
             "bg-gray-100 text-gray-600"
         }
     }
+
+    /// 获取自动计算的开放端口（从已生效的网络策略工单派生）
+    pub fn computed_ports(&self) -> String {
+        use crate::components::resource_ticket::network_policy::network_policy_request::NetworkPolicyStatus;
+
+        let mut port_set = std::collections::HashSet::new();
+
+        // 获取已生效的网络策略
+        let policies = NETWORK_POLICIES_STATE.read();
+        for policy in policies.iter() {
+            if policy.status != NetworkPolicyStatus::Active {
+                continue;
+            }
+
+            // 匹配逻辑：资产所在机房与策略的源/目标区域匹配
+            let asset_location = &self.datacenter;
+            if policy.source_zone.contains(asset_location) ||
+               policy.destination_zone.contains(asset_location) ||
+               asset_location.is_empty() && (policy.source_zone == "全网" || policy.destination_zone == "全网") {
+                // 解析端口范围并添加到集合
+                for port_str in policy.port_range.split(',') {
+                    let port = port_str.trim();
+                    if !port.is_empty() {
+                        port_set.insert(port.to_string());
+                    }
+                }
+            }
+        }
+
+        if port_set.is_empty() {
+            "无开放端口".to_string()
+        } else {
+            let mut ports: Vec<String> = port_set.into_iter().collect();
+            ports.sort();
+            ports.join(", ")
+        }
+    }
 }
 
 /// 云服务资产数据模型
@@ -102,6 +158,48 @@ impl CloudAsset {
             }
         } else {
             "bg-gray-100 text-gray-600"
+        }
+    }
+
+    /// 获取自动计算的开放端口（从已生效的网络策略工单派生）
+    pub fn computed_ports(&self) -> String {
+        use crate::components::resource_ticket::network_policy::network_policy_request::NetworkPolicyStatus;
+
+        let mut port_set = std::collections::HashSet::new();
+
+        // 获取已生效的网络策略
+        let policies = NETWORK_POLICIES_STATE.read();
+        for policy in policies.iter() {
+            if policy.status != NetworkPolicyStatus::Active {
+                continue;
+            }
+
+            // 匹配逻辑：资产所在区域/机房与策略的源/目标区域匹配
+            let asset_location = &self.region;
+            let asset_machine_room = &self.machine_room;
+
+            if policy.source_zone.contains(asset_location) ||
+               policy.destination_zone.contains(asset_location) ||
+               policy.source_zone.contains(asset_machine_room) ||
+               policy.destination_zone.contains(asset_machine_room) ||
+               (asset_location.is_empty() || asset_machine_room.is_empty()) &&
+               (policy.source_zone == "全网" || policy.destination_zone == "全网") {
+                // 解析端口范围并添加到集合
+                for port_str in policy.port_range.split(',') {
+                    let port = port_str.trim();
+                    if !port.is_empty() {
+                        port_set.insert(port.to_string());
+                    }
+                }
+            }
+        }
+
+        if port_set.is_empty() {
+            "无开放端口".to_string()
+        } else {
+            let mut ports: Vec<String> = port_set.into_iter().collect();
+            ports.sort();
+            ports.join(", ")
         }
     }
 }
@@ -332,6 +430,50 @@ fn HardwareAssetsTab(
 
     let is_empty = filtered_assets.is_empty();
 
+    // 计算端口安全统计
+    let policies = get_firewall_policies();
+    let mut total_ports = 0;
+    let mut protected_ports = 0;
+    let mut unprotected_ports = 0;
+
+    for asset in assets.read().iter() {
+        let computed_ports = asset.computed_ports();
+        let port_security = analyze_port_security(&computed_ports, &policies);
+        for info in port_security.iter() {
+            // 计算端口数量（单个端口或端口范围）
+            let port_count = if info.port.contains('-') {
+                let parts: Vec<&str> = info.port.split('-').collect();
+                if parts.len() == 2 {
+                    parts[0].trim().parse::<u16>().ok();
+                    parts[1].trim().parse::<u16>().ok();
+                    // 简化计算，端口范围至少算1个端口
+                    1
+                } else {
+                    1
+                }
+            } else {
+                1
+            };
+
+            total_ports += port_count;
+
+            match info.status {
+                PortSecurityStatus::Protected => protected_ports += port_count,
+                PortSecurityStatus::Unprotected => unprotected_ports += port_count,
+                PortSecurityStatus::Partial => {
+                    protected_ports += 1;
+                    unprotected_ports += port_count - 1;
+                }
+            }
+        }
+    }
+
+    let coverage_rate = if total_ports > 0 {
+        (protected_ports as f32 / total_ports as f32 * 100.0) as i32
+    } else {
+        100
+    };
+
     rsx! {
         // 搜索栏
         div { class: "bg-white rounded-lg shadow p-4",
@@ -348,7 +490,7 @@ fn HardwareAssetsTab(
         }
 
         // 统计卡片
-        div { class: "grid grid-cols-1 md:grid-cols-4 gap-4",
+        div { class: "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4",
             div { class: "bg-white rounded-lg shadow p-4",
                 div { class: "flex items-center",
                     div { class: "p-2 rounded-full bg-blue-500",
@@ -373,23 +515,84 @@ fn HardwareAssetsTab(
             }
             div { class: "bg-white rounded-lg shadow p-4",
                 div { class: "flex items-center",
-                    div { class: "p-2 rounded-full bg-yellow-500",
-                        Icon { icon: FaLaptop, width: 20, height: 20 }
-                    }
-                    div { class: "ml-3",
-                        p { class: "text-sm text-gray-500", "工作站" }
-                        p { class: "text-xl font-bold text-gray-800", {workstation_count.to_string()} }
-                    }
-                }
-            }
-            div { class: "bg-white rounded-lg shadow p-4",
-                div { class: "flex items-center",
                     div { class: "p-2 rounded-full bg-green-600",
                         Icon { icon: FaServer, width: 20, height: 20 }
                     }
                     div { class: "ml-3",
                         p { class: "text-sm text-gray-500", "在线" }
                         p { class: "text-xl font-bold text-gray-800", {online_count.to_string()} }
+                    }
+                }
+            }
+            div { class: "bg-white rounded-lg shadow p-4",
+                div { class: "flex items-center",
+                    div { class: "p-2 rounded-full bg-purple-500",
+                        Icon { icon: FaShieldHalved, width: 20, height: 20 }
+                    }
+                    div { class: "ml-3",
+                        p { class: "text-sm text-gray-500", "总端口" }
+                        p { class: "text-xl font-bold text-gray-800", {total_ports.to_string()} }
+                    }
+                }
+            }
+            div { class: "bg-white rounded-lg shadow p-4",
+                div { class: "flex items-center",
+                    div { class: "p-2 rounded-full bg-green-500",
+                        Icon { icon: FaCircleCheck, width: 20, height: 20 }
+                    }
+                    div { class: "ml-3",
+                        p { class: "text-sm text-gray-500", "已保护" }
+                        p { class: "text-xl font-bold text-green-600", {protected_ports.to_string()} }
+                    }
+                }
+            }
+            div { class: "bg-white rounded-lg shadow p-4",
+                div { class: "flex items-center",
+                    div { class: "p-2 rounded-full bg-red-500",
+                        Icon { icon: FaTriangleExclamation, width: 20, height: 20 }
+                    }
+                    div { class: "ml-3",
+                        p { class: "text-sm text-gray-500", "未保护" }
+                        p { class: "text-xl font-bold text-red-600", {unprotected_ports.to_string()} }
+                    }
+                }
+            }
+        }
+
+        // 防火墙覆盖率指示器
+        div { class: "bg-white rounded-lg shadow p-4",
+            div { class: "flex items-center justify-between",
+                div { class: "flex items-center",
+                    Icon { icon: FaShieldHalved, width: 20, height: 20, class: "text-purple-600 mr-3" }
+                    div {
+                        p { class: "text-sm font-medium text-gray-700", "防火墙策略覆盖率" }
+                        p { class: "text-xs text-gray-500", "基于已生效的网络策略工单" }
+                    }
+                }
+                div { class: "text-right",
+                    p { class: "text-2xl font-bold text-gray-800", "{coverage_rate}%" }
+                    p { class: "text-xs text-gray-500",
+                        if coverage_rate >= 90 {
+                            "安全状态良好"
+                        } else if coverage_rate >= 70 {
+                            "存在安全风险"
+                        } else {
+                            "安全风险较高"
+                        }
+                    }
+                }
+            }
+            // 进度条
+            div { class: "mt-3",
+                div { class: "w-full bg-gray-200 rounded-full h-2",
+                    div {
+                        class: format!(
+                            "h-2 rounded-full {}",
+                            if coverage_rate >= 90 { "bg-green-500" }
+                            else if coverage_rate >= 70 { "bg-yellow-500" }
+                            else { "bg-red-500" }
+                        ),
+                        style: "width: {coverage_rate}%"
                     }
                 }
             }
@@ -439,7 +642,15 @@ fn HardwareAssetsTab(
                                 {asset.ip_address.clone()}
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                span { class: "text-xs font-mono bg-gray-100 px-2 py-1 rounded", {asset.ports.clone()} }
+                                div { class: "flex items-center gap-1",
+                                    Icon { icon: FaLock, width: 12, height: 12, class: "text-gray-400" }
+                                    span { class: "text-xs font-mono bg-gray-100 px-2 py-1 rounded",
+                                        {
+                                            let computed = asset.computed_ports();
+                                            computed
+                                        }
+                                    }
+                                }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap",
                                 span {
@@ -546,6 +757,36 @@ fn CloudAssetsTab(
     let provider_2_count = assets.read().iter().filter(|a| a.provider_id == Some(2)).count() as i32;  // 联通
     let running_count = assets.read().iter().filter(|a| a.status == "运行中").count() as i32;
 
+    // 计算云资产端口安全统计
+    let policies = get_firewall_policies();
+    let mut total_ports = 0;
+    let mut protected_ports = 0;
+    let mut unprotected_ports = 0;
+
+    for asset in assets.read().iter() {
+        let computed_ports = asset.computed_ports();
+        let port_security = analyze_port_security(&computed_ports, &policies);
+        for info in port_security.iter() {
+            let port_count = 1; // 简化计算
+            total_ports += port_count;
+
+            match info.status {
+                PortSecurityStatus::Protected => protected_ports += port_count,
+                PortSecurityStatus::Unprotected => unprotected_ports += port_count,
+                PortSecurityStatus::Partial => {
+                    protected_ports += 1;
+                    unprotected_ports += port_count - 1;
+                }
+            }
+        }
+    }
+
+    let coverage_rate = if total_ports > 0 {
+        (protected_ports as f32 / total_ports as f32 * 100.0) as i32
+    } else {
+        100
+    };
+
     // 过滤资产
     let filtered_assets: Vec<CloudAsset> = assets.read()
         .iter()
@@ -576,7 +817,7 @@ fn CloudAssetsTab(
         }
 
         // 统计卡片
-        div { class: "grid grid-cols-1 md:grid-cols-4 gap-4",
+        div { class: "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4",
             div { class: "bg-white rounded-lg shadow p-4",
                 div { class: "flex items-center",
                     div { class: "p-2 rounded-full bg-blue-500",
@@ -594,7 +835,7 @@ fn CloudAssetsTab(
                         Icon { icon: FaCloud, width: 20, height: 20 }
                     }
                     div { class: "ml-3",
-                        p { class: "text-sm text-gray-500", "电信" }
+                        p { class: "text-sm text-gray-500", "电信云" }
                         p { class: "text-xl font-bold text-gray-800", {provider_1_count.to_string()} }
                     }
                 }
@@ -605,7 +846,7 @@ fn CloudAssetsTab(
                         Icon { icon: FaCloud, width: 20, height: 20 }
                     }
                     div { class: "ml-3",
-                        p { class: "text-sm text-gray-500", "联通" }
+                        p { class: "text-sm text-gray-500", "联通云" }
                         p { class: "text-xl font-bold text-gray-800", {provider_2_count.to_string()} }
                     }
                 }
@@ -618,6 +859,67 @@ fn CloudAssetsTab(
                     div { class: "ml-3",
                         p { class: "text-sm text-gray-500", "运行中" }
                         p { class: "text-xl font-bold text-gray-800", {running_count.to_string()} }
+                    }
+                }
+            }
+            div { class: "bg-white rounded-lg shadow p-4",
+                div { class: "flex items-center",
+                    div { class: "p-2 rounded-full bg-purple-500",
+                        Icon { icon: FaShieldHalved, width: 20, height: 20 }
+                    }
+                    div { class: "ml-3",
+                        p { class: "text-sm text-gray-500", "总端口" }
+                        p { class: "text-xl font-bold text-gray-800", {total_ports.to_string()} }
+                    }
+                }
+            }
+            div { class: "bg-white rounded-lg shadow p-4",
+                div { class: "flex items-center",
+                    div { class: "p-2 rounded-full bg-red-500",
+                        Icon { icon: FaTriangleExclamation, width: 20, height: 20 }
+                    }
+                    div { class: "ml-3",
+                        p { class: "text-sm text-gray-500", "未保护" }
+                        p { class: "text-xl font-bold text-red-600", {unprotected_ports.to_string()} }
+                    }
+                }
+            }
+        }
+
+        // 防火墙覆盖率指示器
+        div { class: "bg-white rounded-lg shadow p-4",
+            div { class: "flex items-center justify-between",
+                div { class: "flex items-center",
+                    Icon { icon: FaShieldHalved, width: 20, height: 20, class: "text-purple-600 mr-3" }
+                    div {
+                        p { class: "text-sm font-medium text-gray-700", "云资产防火墙覆盖率" }
+                        p { class: "text-xs text-gray-500", "基于已生效的网络策略工单" }
+                    }
+                }
+                div { class: "text-right",
+                    p { class: "text-2xl font-bold text-gray-800", "{coverage_rate}%" }
+                    p { class: "text-xs text-gray-500",
+                        if coverage_rate >= 90 {
+                            "安全状态良好"
+                        } else if coverage_rate >= 70 {
+                            "存在安全风险"
+                        } else {
+                            "安全风险较高"
+                        }
+                    }
+                }
+            }
+            // 进度条
+            div { class: "mt-3",
+                div { class: "w-full bg-gray-200 rounded-full h-2",
+                    div {
+                        class: format!(
+                            "h-2 rounded-full {}",
+                            if coverage_rate >= 90 { "bg-green-500" }
+                            else if coverage_rate >= 70 { "bg-yellow-500" }
+                            else { "bg-red-500" }
+                        ),
+                        style: "width: {coverage_rate}%"
                     }
                 }
             }
@@ -635,6 +937,7 @@ fn CloudAssetsTab(
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "实例类型" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "IP地址" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "开放端口" }
+                        th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "防火墙状态" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "区域/机房" }
                         th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "操作" }
@@ -674,7 +977,15 @@ fn CloudAssetsTab(
                                 {asset.ip_address.clone()}
                             }
                             td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                span { class: "text-xs font-mono bg-gray-100 px-2 py-1 rounded", {asset.ports.clone()} }
+                                div { class: "flex items-center gap-1",
+                                    Icon { icon: FaLock, width: 12, height: 12, class: "text-gray-400" }
+                                    span { class: "text-xs font-mono bg-gray-100 px-2 py-1 rounded",
+                                        {
+                                            let computed = asset.computed_ports();
+                                            computed
+                                        }
+                                    }
+                                }
                             }
                             td { class: "px-6 py-4 whitespace-nowrap",
                                 span {
@@ -751,7 +1062,6 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
     let mut name = use_signal(|| asset.name.clone());
     let mut asset_type = use_signal(|| asset.asset_type.clone());
     let mut ip_address = use_signal(|| asset.ip_address.clone());
-    let mut ports = use_signal(|| asset.ports.clone());
     let mut status = use_signal(|| asset.status.clone());
     let mut datacenter = use_signal(|| asset.datacenter.clone());
     let mut cabinet = use_signal(|| asset.cabinet.clone());
@@ -805,15 +1115,72 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                     }
 
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "开放端口" }
+                        label { class: "block text-sm font-medium text-gray-700 mb-1",
+                            Icon { icon: FaLock, width: 14, height: 14, class: "mr-1 text-gray-400" }
+                            "开放端口（自动派生）"
+                        }
+                        div {
+                            class: "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 text-sm",
+                            style: "min-height: 40px;",
+                            {
+                                let computed = asset.computed_ports();
+                                computed
+                            }
+                        }
+                        p { class: "text-xs text-blue-500 mt-1",
+                            "由已生效的网络策略工单自动计算，不可手动编辑"
+                        }
+                    }
+
+                    div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "状态" }
                         input {
                             r#type: "text",
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            placeholder: "例如: 22, 80, 443",
-                            value: ports,
-                            oninput: move |e| ports.set(e.value()),
+                            value: name,
+                            oninput: move |e| name.set(e.value()),
                         }
-                        p { class: "text-xs text-gray-500 mt-1", "多个端口用逗号分隔" }
+                    }
+
+                    div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "类型" }
+                        select {
+                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                            value: asset_type,
+                            onchange: move |e| asset_type.set(e.value()),
+                            option { value: "服务器", "服务器" }
+                            option { value: "工作站", "工作站" }
+                            option { value: "网络设备", "网络设备" }
+                            option { value: "存储设备", "存储设备" }
+                        }
+                    }
+
+                    div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1", "IP地址" }
+                        input {
+                            r#type: "text",
+                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                            value: ip_address,
+                            oninput: move |e| ip_address.set(e.value()),
+                        }
+                    }
+
+                    div {
+                        label { class: "block text-sm font-medium text-gray-700 mb-1",
+                            Icon { icon: FaLock, width: 14, height: 14, class: "mr-1 text-gray-400" }
+                            "开放端口（自动派生）"
+                        }
+                        div {
+                            class: "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 text-sm",
+                            style: "min-height: 40px;",
+                            {
+                                let computed = asset.computed_ports();
+                                computed
+                            }
+                        }
+                        p { class: "text-xs text-blue-500 mt-1",
+                            "由已生效的网络策略工单自动计算，不可手动编辑"
+                        }
                     }
 
                     div {
@@ -886,13 +1253,14 @@ fn EditHardwareAssetModal(asset: HardwareAsset, on_close: EventHandler<()>, on_s
                             let asset_id = asset.id;
                             let created_at = asset.created_at.clone();
                             let provider_id = asset.provider_id;
+                            let original_ports = asset.ports.clone(); // Keep original ports (computed dynamically on display)
                             move |_| {
                                 let updated = HardwareAsset {
                                     id: asset_id,
                                     name: name.read().clone(),
                                     asset_type: asset_type.read().clone(),
                                     ip_address: ip_address.read().clone(),
-                                    ports: ports.read().clone(),
+                                    ports: original_ports.clone(),
                                     status: status.read().clone(),
                                     datacenter: datacenter.read().clone(),
                                     cabinet: cabinet.read().clone(),
@@ -921,7 +1289,6 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
     let mut foundation = use_signal(|| asset.foundation.clone());
     let mut instance_type = use_signal(|| asset.instance_type.clone());
     let mut ip_address = use_signal(|| asset.ip_address.clone());
-    let mut ports = use_signal(|| asset.ports.clone());
     let mut status = use_signal(|| asset.status.clone());
     let mut region = use_signal(|| asset.region.clone());
     let mut machine_room = use_signal(|| asset.machine_room.clone());
@@ -1019,15 +1386,21 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                     }
 
                     div {
-                        label { class: "block text-sm font-medium text-gray-700 mb-1", "开放端口" }
-                        input {
-                            r#type: "text",
-                            class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            placeholder: "例如: 22, 80, 443",
-                            value: ports,
-                            oninput: move |e| ports.set(e.value()),
+                        label { class: "block text-sm font-medium text-gray-700 mb-1",
+                            Icon { icon: FaLock, width: 14, height: 14, class: "mr-1 text-gray-400" }
+                            "开放端口（自动派生）"
                         }
-                        p { class: "text-xs text-gray-500 mt-1", "多个端口用逗号分隔" }
+                        div {
+                            class: "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-600 text-sm",
+                            style: "min-height: 40px;",
+                            {
+                                let computed = asset.computed_ports();
+                                computed
+                            }
+                        }
+                        p { class: "text-xs text-blue-500 mt-1",
+                            "由已生效的网络策略工单自动计算，不可手动编辑"
+                        }
                     }
 
                     div {
@@ -1077,6 +1450,7 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                         onclick: {
                             let asset_id = asset.id;
                             let created_at = asset.created_at.clone();
+                            let original_ports = asset.ports.clone(); // Keep original ports (computed dynamically on display)
                             move |_| {
                                 let updated = CloudAsset {
                                     id: asset_id,
@@ -1086,7 +1460,7 @@ fn EditCloudAssetModal(asset: CloudAsset, on_close: EventHandler<()>, on_save: E
                                     foundation: foundation.read().clone(),
                                     instance_type: instance_type.read().clone(),
                                     ip_address: ip_address.read().clone(),
-                                    ports: ports.read().clone(),
+                                    ports: original_ports.clone(),
                                     status: status.read().clone(),
                                     region: region.read().clone(),
                                     machine_room: machine_room.read().clone(),

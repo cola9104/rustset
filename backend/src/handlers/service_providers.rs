@@ -1,14 +1,14 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 use chrono::Utc;
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use shared::Role;
 
 /// 服务商数据模型
@@ -67,56 +67,46 @@ pub struct UpdateServiceProviderRequest {
 
 /// 获取服务商列表
 pub async fn get_service_providers(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_all_service_providers(&conn).await {
-                Ok(providers) => Json(providers).into_response(),
+                Ok(providers) => Ok(Json(providers).into_response()),
                 Err(e) => {
                     eprintln!("Error loading service providers from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 获取单个服务商
 pub async fn get_service_provider(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_service_provider_by_id(&conn, id).await {
-                Ok(Some(provider)) => Json(provider).into_response(),
+                Ok(Some(provider)) => Ok(Json(provider).into_response()),
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Service provider not found".to_string()).into_response()
+                    Err(ApiError::not_found("Service provider not found"))
                 }
                 Err(e) => {
                     eprintln!("Error loading service provider from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -124,16 +114,11 @@ pub async fn get_service_provider(
 /// 创建服务商
 pub async fn create_service_provider(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateServiceProviderRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -176,7 +161,7 @@ pub async fn create_service_provider(
                         updated_at: None,
                     };
 
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "CREATE_SERVICE_PROVIDER",
@@ -184,19 +169,19 @@ pub async fn create_service_provider(
                         &format!("Created service provider: {}", req.provider_name),
                     );
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "服务商创建成功",
                         "data": provider
-                    })).into_response()
+                    })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting service provider: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create service provider".to_string()).into_response()
+                    Err(ApiError::internal("Failed to create service provider"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -204,17 +189,12 @@ pub async fn create_service_provider(
 /// 更新服务商
 pub async fn update_service_provider(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateServiceProviderRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -241,7 +221,7 @@ pub async fn update_service_provider(
                         Some(&now),
                     ).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "UPDATE_SERVICE_PROVIDER",
@@ -252,33 +232,33 @@ pub async fn update_service_provider(
                             // 返回更新后的数据
                             match crate::database::get_service_provider_by_id(&conn, id).await {
                                 Ok(Some(provider)) => {
-                                    Json(json!({
+                                    Ok(Json(json!({
                                         "message": "服务商更新成功",
                                         "data": provider
-                                    })).into_response()
+                                    })).into_response())
                                 }
                                 _ => {
-                                    Json(json!({ "message": "服务商更新成功" })).into_response()
+                                    Ok(Json(json!({ "message": "服务商更新成功" })).into_response())
                                 }
                             }
                         }
                         Err(e) => {
                             eprintln!("Error updating service provider: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update service provider".to_string()).into_response()
+                            Err(ApiError::internal("Failed to update service provider"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Service provider not found".to_string()).into_response()
+                    Err(ApiError::not_found("Service provider not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking service provider existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -286,16 +266,11 @@ pub async fn update_service_provider(
 /// 删除服务商
 pub async fn delete_service_provider(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -304,7 +279,7 @@ pub async fn delete_service_provider(
                 Ok(Some(_)) => {
                     match crate::database::delete_service_provider(&conn, id).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "DELETE_SERVICE_PROVIDER",
@@ -312,25 +287,25 @@ pub async fn delete_service_provider(
                                 &format!("Deleted service provider: {}", id),
                             );
 
-                            Json(json!({ "message": "服务商删除成功" })).into_response()
+                            Ok(Json(json!({ "message": "服务商删除成功" })).into_response())
                         }
                         Err(e) => {
                             eprintln!("Error deleting service provider: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete service provider".to_string()).into_response()
+                            Err(ApiError::internal("Failed to delete service provider"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Service provider not found".to_string()).into_response()
+                    Err(ApiError::not_found("Service provider not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking service provider existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }

@@ -8,11 +8,13 @@ use axum::{
 };
 
 use crate::state::AppState;
+use crate::middleware::AuthUser;
 use crate::database::{get_business_resources, get_all_cloud_provider_configs};
 use shared::{CloudServiceAsset, CloudServiceAssetQuery, CloudServiceAssetStats};
 
 /// Get all cloud service assets (unified view of physical and virtual machines)
 pub async fn get_cloud_service_assets(
+    _user: AuthUser,
     State(_state): State<AppState>,
     Query(query): Query<CloudServiceAssetQuery>,
 ) -> impl IntoResponse {
@@ -175,6 +177,7 @@ pub async fn get_cloud_service_assets(
 
 /// Get cloud service asset statistics
 pub async fn get_cloud_service_stats(
+    _user: AuthUser,
     State(_state): State<AppState>,
 ) -> impl IntoResponse {
     // Load from database

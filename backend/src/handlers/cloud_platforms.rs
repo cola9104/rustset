@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use chrono::Utc;
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use crate::database::{
     get_all_cloud_platforms as db_get_all_cloud_platforms,
     get_cloud_platform_by_id as db_get_cloud_platform_by_id,
@@ -24,14 +24,9 @@ use shared::{
 
 /// 获取云平台列表 (直接从数据库读取)
 pub async fn get_cloud_platforms(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match db_get_all_cloud_platforms(&conn).await {
@@ -46,31 +41,26 @@ pub async fn get_cloud_platforms(
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
                     }).collect();
-                    Json(platforms).into_response()
+                    Ok(Json(platforms).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud platforms from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 获取单个云平台 (直接从数据库读取)
 pub async fn get_cloud_platform(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match db_get_cloud_platform_by_id(&conn, id).await {
@@ -85,34 +75,29 @@ pub async fn get_cloud_platform(
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
                     };
-                    Json(platform).into_response()
+                    Ok(Json(platform).into_response())
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud service not found".to_string()).into_response()
+                    Err(ApiError::not_found("Cloud service not found"))
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud platform from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 根据云区ID获取云平台列表 (直接从数据库读取)
 pub async fn get_platforms_by_zone(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(zone_id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match db_get_platforms_by_zone_id(&conn, zone_id).await {
@@ -127,16 +112,16 @@ pub async fn get_platforms_by_zone(
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
                     }).collect();
-                    Json(platforms).into_response()
+                    Ok(Json(platforms).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud platforms by zone from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -145,17 +130,12 @@ pub async fn get_platforms_by_zone(
 #[axum::debug_handler]
 pub async fn create_cloud_platform(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateCloudPlatformRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 检查权限
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -164,12 +144,12 @@ pub async fn create_cloud_platform(
             match db_get_all_cloud_zones(&conn).await {
                 Ok(zones) => {
                     if !zones.iter().any(|z| z.id == req.zone_id) {
-                        return (StatusCode::BAD_REQUEST, "Operator/Manufacturer not found".to_string()).into_response();
+                        return Err(ApiError::bad_request("Operator/Manufacturer not found"));
                     }
                 }
                 Err(e) => {
                     eprintln!("Error checking zone existence: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                    return Err(ApiError::internal("Database error"));
                 }
             }
 
@@ -177,12 +157,12 @@ pub async fn create_cloud_platform(
             match db_get_all_cloud_platforms(&conn).await {
                 Ok(existing_platforms) => {
                     if existing_platforms.iter().any(|p| p.zone_id == req.zone_id && p.service_code == req.platform_code) {
-                        return (StatusCode::BAD_REQUEST, "Cloud service code already exists in this operator/manufacturer".to_string()).into_response();
+                        return Err(ApiError::bad_request("Cloud service code already exists in this operator/manufacturer"));
                     }
                 }
                 Err(e) => {
                     eprintln!("Error checking platform code: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                    return Err(ApiError::internal("Database error"));
                 }
             }
 
@@ -207,7 +187,7 @@ pub async fn create_cloud_platform(
                     };
 
                     // 记录日志
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "CREATE_CLOUD_PLATFORM",
@@ -215,19 +195,19 @@ pub async fn create_cloud_platform(
                         &format!("Created cloud platform: {} in zone: {}", req.platform_name, req.zone_id),
                     );
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "云服务创建成功",
                         "data": platform
-                    })).into_response()
+                    })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud platform: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create cloud service".to_string()).into_response()
+                    Err(ApiError::internal("Failed to create cloud service"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -236,17 +216,12 @@ pub async fn create_cloud_platform(
 #[axum::debug_handler]
 pub async fn update_cloud_platform(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateCloudPlatformRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -255,11 +230,11 @@ pub async fn update_cloud_platform(
             let existing_platform = match db_get_cloud_platform_by_id(&conn, id).await {
                 Ok(Some(p)) => p,
                 Ok(None) => {
-                    return (StatusCode::NOT_FOUND, "Cloud service not found".to_string()).into_response();
+                    return Err(ApiError::not_found("Cloud service not found"));
                 }
                 Err(e) => {
                     eprintln!("Error checking platform existence: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response();
+                    return Err(ApiError::internal("Database error"));
                 }
             };
 
@@ -269,7 +244,7 @@ pub async fn update_cloud_platform(
                 match db_get_all_cloud_zones(&conn).await {
                     Ok(zones) => {
                         if !zones.iter().any(|z| z.id == target_zone_id) {
-                            return (StatusCode::BAD_REQUEST, "Operator/Manufacturer not found".to_string()).into_response();
+                            return Err(ApiError::bad_request("Operator/Manufacturer not found"));
                         }
                     }
                     Err(e) => {
@@ -283,7 +258,7 @@ pub async fn update_cloud_platform(
                 match db_get_all_cloud_platforms(&conn).await {
                     Ok(existing_platforms) => {
                         if existing_platforms.iter().any(|p| p.id != id && p.zone_id == zone_id_to_check && p.service_code == *code) {
-                            return (StatusCode::BAD_REQUEST, "Cloud service code already exists in this operator/manufacturer".to_string()).into_response();
+                            return Err(ApiError::bad_request("Cloud service code already exists in this operator/manufacturer"));
                         }
                     }
                     Err(e) => {
@@ -302,7 +277,7 @@ pub async fn update_cloud_platform(
             ).await {
                 Ok(_) => {
                     // 记录日志
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "UPDATE_CLOUD_PLATFORM",
@@ -323,24 +298,24 @@ pub async fn update_cloud_platform(
                                     .map(|dt| dt.with_timezone(&chrono::Utc))
                                     .unwrap_or_else(|_| Utc::now()),
                             };
-                            Json(json!({
+                            Ok(Json(json!({
                                 "message": "云服务更新成功",
                                 "data": platform
-                            })).into_response()
+                            })).into_response())
                         }
                         _ => {
-                            Json(json!({ "message": "云服务更新成功" })).into_response()
+                            Ok(Json(json!({ "message": "云服务更新成功" })).into_response())
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Error updating cloud platform: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update cloud service".to_string()).into_response()
+                    Err(ApiError::internal("Failed to update cloud service"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -349,16 +324,11 @@ pub async fn update_cloud_platform(
 #[axum::debug_handler]
 pub async fn delete_cloud_platform(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -370,7 +340,7 @@ pub async fn delete_cloud_platform(
                     match db_delete_cloud_platform(id).await {
                         Ok(_) => {
                             // 记录日志
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "DELETE_CLOUD_PLATFORM",
@@ -378,25 +348,25 @@ pub async fn delete_cloud_platform(
                                 &format!("Deleted cloud platform: {}", id),
                             );
 
-                            Json(json!({ "message": "云服务删除成功" })).into_response()
+                            Ok(Json(json!({ "message": "云服务删除成功" })).into_response())
                         }
                         Err(e) => {
                             eprintln!("Error deleting cloud platform: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete cloud service".to_string()).into_response()
+                            Err(ApiError::internal("Failed to delete cloud service"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud service not found".to_string()).into_response()
+                    Err(ApiError::not_found("Cloud service not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking platform existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }

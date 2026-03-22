@@ -181,12 +181,12 @@ pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
         password_changed_at: Set(user.password_changed_at.map(|d| d.to_rfc3339())),
         password_strength: Set(user.password_strength.clone()),
         force_password_change: Set(user.force_password_change.unwrap_or(false) as i32),
-        last_login_at: Set(user.last_login_at.map(|d| d.to_rfc3339())),
+        last_login_at: Set(Some(user.last_login_at.map(|d| d.to_rfc3339()).unwrap_or_else(|| "".to_string()))),
         email: Set(user.email.clone()),
-        phone: Set(user.phone.clone()),
+        phone: Set(Some(user.phone.clone().unwrap_or_else(|| "".to_string()))),
         status: Set(user.status.clone()),
         failed_login_attempts: Set(user.failed_login_attempts.map(|v| v as i32)),
-        locked_until: Set(user.locked_until.map(|d| d.to_rfc3339())),
+        locked_until: Set(Some(user.locked_until.map(|d| d.to_rfc3339()).unwrap_or_else(|| "".to_string()))),
     }
 }
 

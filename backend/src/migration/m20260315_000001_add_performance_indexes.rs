@@ -10,9 +10,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_user_username")
-                    .table(User::Table)
-                    .col(User::Username)
+                    .name("idx_users_username")
+                    .table(Users::Table)
+                    .col(Users::Username)
                     .to_owned(),
             )
             .await?;
@@ -21,9 +21,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_cloud_service_zone_id")
-                    .table(CloudService::Table)
-                    .col(CloudService::ZoneId)
+                    .name("idx_cloud_services_zone_id")
+                    .table(CloudServices::Table)
+                    .col(CloudServices::ZoneId)
                     .to_owned(),
             )
             .await?;
@@ -32,9 +32,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_cloud_provider_config_status")
-                    .table(CloudProviderConfig::Table)
-                    .col(CloudProviderConfig::Status)
+                    .name("idx_cloud_provider_configs_status")
+                    .table(CloudProviderConfigs::Table)
+                    .col(CloudProviderConfigs::Status)
                     .to_owned(),
             )
             .await?;
@@ -42,9 +42,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_cloud_provider_config_zone_id")
-                    .table(CloudProviderConfig::Table)
-                    .col(CloudProviderConfig::ZoneId)
+                    .name("idx_cloud_provider_configs_zone_id")
+                    .table(CloudProviderConfigs::Table)
+                    .col(CloudProviderConfigs::ZoneId)
                     .to_owned(),
             )
             .await?;
@@ -53,9 +53,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_business_resource_ecs_status")
-                    .table(BusinessResource::Table)
-                    .col(BusinessResource::EcsStatus)
+                    .name("idx_business_resources_ecs_status")
+                    .table(BusinessResources::Table)
+                    .col(BusinessResources::EcsStatus)
                     .to_owned(),
             )
             .await?;
@@ -63,9 +63,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_business_resource_customer_name")
-                    .table(BusinessResource::Table)
-                    .col(BusinessResource::CustomerName)
+                    .name("idx_business_resources_customer_name")
+                    .table(BusinessResources::Table)
+                    .col(BusinessResources::CustomerName)
                     .to_owned(),
             )
             .await?;
@@ -73,9 +73,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_business_resource_delivery_status")
-                    .table(BusinessResource::Table)
-                    .col(BusinessResource::DeliveryStatus)
+                    .name("idx_business_resources_delivery_status")
+                    .table(BusinessResources::Table)
+                    .col(BusinessResources::DeliveryStatus)
                     .to_owned(),
             )
             .await?;
@@ -84,9 +84,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_physical_machine_business_resource_id")
-                    .table(PhysicalMachine::Table)
-                    .col(PhysicalMachine::BusinessResourceId)
+                    .name("idx_physical_machines_business_resource_id")
+                    .table(PhysicalMachines::Table)
+                    .col(PhysicalMachines::BusinessResourceId)
                     .to_owned(),
             )
             .await?;
@@ -95,9 +95,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_cloud_virtual_machine_business_resource_id")
-                    .table(CloudVirtualMachine::Table)
-                    .col(CloudVirtualMachine::BusinessResourceId)
+                    .name("idx_cloud_virtual_machines_business_resource_id")
+                    .table(CloudVirtualMachines::Table)
+                    .col(CloudVirtualMachines::BusinessResourceId)
                     .to_owned(),
             )
             .await?;
@@ -106,9 +106,9 @@ impl MigrationTrait for Migration {
         manager
             .create_index(
                 Index::create()
-                    .name("idx_quick_scan_result_task_id")
-                    .table(QuickScanResult::Table)
-                    .col(QuickScanResult::TaskId)
+                    .name("idx_quick_scan_results_task_id")
+                    .table(QuickScanResults::Table)
+                    .col(QuickScanResults::TaskId)
                     .to_owned(),
             )
             .await?;
@@ -118,43 +118,43 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_index(Index::drop().name("idx_user_username").table(User::Table).to_owned())
+            .drop_index(Index::drop().name("idx_users_username").table(Users::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_service_zone_id").table(CloudService::Table).to_owned())
+            .drop_index(Index::drop().name("idx_cloud_services_zone_id").table(CloudServices::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_provider_config_status").table(CloudProviderConfig::Table).to_owned())
+            .drop_index(Index::drop().name("idx_cloud_provider_configs_status").table(CloudProviderConfigs::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_provider_config_zone_id").table(CloudProviderConfig::Table).to_owned())
+            .drop_index(Index::drop().name("idx_cloud_provider_configs_zone_id").table(CloudProviderConfigs::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_business_resource_ecs_status").table(BusinessResource::Table).to_owned())
+            .drop_index(Index::drop().name("idx_business_resources_ecs_status").table(BusinessResources::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_business_resource_customer_name").table(BusinessResource::Table).to_owned())
+            .drop_index(Index::drop().name("idx_business_resources_customer_name").table(BusinessResources::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_business_resource_delivery_status").table(BusinessResource::Table).to_owned())
+            .drop_index(Index::drop().name("idx_business_resources_delivery_status").table(BusinessResources::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_physical_machine_business_resource_id").table(PhysicalMachine::Table).to_owned())
+            .drop_index(Index::drop().name("idx_physical_machines_business_resource_id").table(PhysicalMachines::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_virtual_machine_business_resource_id").table(CloudVirtualMachine::Table).to_owned())
+            .drop_index(Index::drop().name("idx_cloud_virtual_machines_business_resource_id").table(CloudVirtualMachines::Table).to_owned())
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_quick_scan_result_task_id").table(QuickScanResult::Table).to_owned())
+            .drop_index(Index::drop().name("idx_quick_scan_results_task_id").table(QuickScanResults::Table).to_owned())
             .await?;
 
         Ok(())
@@ -162,26 +162,26 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum User {
+enum Users {
     Table,
     Username,
 }
 
 #[derive(DeriveIden)]
-enum CloudService {
+enum CloudServices {
     Table,
     ZoneId,
 }
 
 #[derive(DeriveIden)]
-enum CloudProviderConfig {
+enum CloudProviderConfigs {
     Table,
     Status,
     ZoneId,
 }
 
 #[derive(DeriveIden)]
-enum BusinessResource {
+enum BusinessResources {
     Table,
     EcsStatus,
     CustomerName,
@@ -189,19 +189,19 @@ enum BusinessResource {
 }
 
 #[derive(DeriveIden)]
-enum PhysicalMachine {
+enum PhysicalMachines {
     Table,
     BusinessResourceId,
 }
 
 #[derive(DeriveIden)]
-enum CloudVirtualMachine {
+enum CloudVirtualMachines {
     Table,
     BusinessResourceId,
 }
 
 #[derive(DeriveIden)]
-enum QuickScanResult {
+enum QuickScanResults {
     Table,
     TaskId,
 }

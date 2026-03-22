@@ -1,5 +1,5 @@
 //! IP Zones Handler - IP 区域管理
-//! 
+//!
 //! 功能：
 //! - 自动判断 IP 所属区域
 //! - CIDR 批量管理
@@ -7,7 +7,6 @@
 
 use axum::{
     extract::{State, Path, Query},
-    http::HeaderMap,
     response::Json,
 };
 use serde::{Deserialize, Serialize};
@@ -15,9 +14,9 @@ use std::net::IpAddr;
 use ipnetwork::IpNetwork;
 
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
-use crate::middleware::ApiError;
-use shared::{ZoneConfig, NetworkZone};
+use crate::utils::log_action_auth;
+use crate::middleware::{ApiError, AuthUser};
+use shared::{ZoneConfig, NetworkZone, Role};
 
 /// IP Zone 查询结果
 #[derive(Debug, Serialize)]
@@ -36,8 +35,8 @@ pub struct FindZoneQuery {
 
 /// 查找 IP 所属区域
 pub async fn find_zone_by_ip(
+    _user: AuthUser,
     State(state): State<AppState>,
-    _headers: HeaderMap,
     Query(query): Query<FindZoneQuery>,
 ) -> Result<Json<IpZoneResult>, ApiError> {
     // 解析 IP
@@ -89,8 +88,8 @@ pub async fn find_zone_by_ip(
 
 /// 获取所有 Zone 配置
 pub async fn get_ip_zones(
+    _user: AuthUser,
     State(state): State<AppState>,
-    _headers: HeaderMap,
 ) -> Result<Json<Vec<ZoneConfig>>, ApiError> {
     let zones = state.zones.read()
         .map_err(|e| ApiError::internal(format!("Failed to read zones: {}", e)))?;
@@ -107,12 +106,14 @@ pub struct CreateZoneRequest {
 
 /// 创建 Zone
 pub async fn create_ip_zone(
+    user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<CreateZoneRequest>,
 ) -> Result<Json<ZoneConfig>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    // 只有安全管理员和系统管理员可以创建 IP zone
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("只有管理员可以创建 IP zone"));
+    }
 
     // 验证 CIDR 格式
     let _network: IpNetwork = req.cidr.parse()
@@ -138,7 +139,7 @@ pub async fn create_ip_zone(
     zones.push(new_zone.clone());
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "IP_ZONE_CREATED", &req.name,
+    log_action_auth(&state.audit_logs, &user, "IP_ZONE_CREATED", &req.name,
               &format!("Created IP zone with CIDR {}", req.cidr));
 
     Ok(Json(new_zone))
@@ -146,12 +147,14 @@ pub async fn create_ip_zone(
 
 /// 删除 Zone
 pub async fn delete_ip_zone(
+    user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    // 只有安全管理员和系统管理员可以删除 IP zone
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("只有管理员可以删除 IP zone"));
+    }
 
     // Get zone name for audit log before deletion
     let zone_name = {
@@ -172,7 +175,7 @@ pub async fn delete_ip_zone(
 
     // Audit log
     let target = zone_name.unwrap_or_else(|| id.clone());
-    log_action(&state.audit_logs, &current_user, "IP_ZONE_DELETED", &target,
+    log_action_auth(&state.audit_logs, &user, "IP_ZONE_DELETED", &target,
               &format!("Deleted IP zone with ID {}", id));
 
     Ok(Json("Deleted".to_string()))
@@ -188,13 +191,15 @@ pub struct UpdateZoneRequest {
 
 /// 更新 Zone
 pub async fn update_ip_zone(
+    user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<UpdateZoneRequest>,
 ) -> Result<Json<ZoneConfig>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    // 只有安全管理员和系统管理员可以修改 IP zone
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("只有管理员可以修改 IP zone"));
+    }
 
     let mut zones = state.zones.write()
         .map_err(|e| ApiError::internal(format!("Failed to write zones: {}", e)))?;
@@ -220,7 +225,7 @@ pub async fn update_ip_zone(
     let updated_zone = zone.clone();
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "IP_ZONE_UPDATED", &updated_zone.name,
+    log_action_auth(&state.audit_logs, &user, "IP_ZONE_UPDATED", &updated_zone.name,
               &format!("Updated IP zone with ID {}", id));
 
     Ok(Json(updated_zone))

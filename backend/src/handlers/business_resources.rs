@@ -1,14 +1,14 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use std::sync::RwLock;
 use chrono::Utc;
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use crate::database::{
     get_business_resources as db_get_business_resources,
     insert_business_resource_wrapper as db_insert_business_resource,
@@ -19,6 +19,7 @@ use crate::database::{
     DbPhysicalMachine, DbCloudVirtualMachine,
 };
 use shared::{
+    Role,
     BusinessResource, CreateBusinessResourceRequest, UpdateBusinessResourceRequest,
     PhysicalMachineInfo, CloudVirtualMachineInfo,
 };
@@ -257,14 +258,9 @@ fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessR
     tag = "business_resources"
 )]
 pub async fn get_business_resources(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
     // 先尝试从数据库加载
     if let Some(conn) = crate::database::get_db() {
         match db_get_business_resources().await {
@@ -283,7 +279,7 @@ pub async fn get_business_resources(
                 // 更新内存缓存
                 *BUSINESS_RESOURCES.write().unwrap() = resources.clone();
 
-                return Json(resources).into_response();
+                return Ok(Json(resources).into_response());
             }
             Err(_) => {
                 // 数据库查询失败，回退到内存缓存
@@ -297,7 +293,7 @@ pub async fn get_business_resources(
         .filter(|r| r.delivery_status.as_ref().map(|s| s != "已交付").unwrap_or(true))
         .cloned()
         .collect();
-    Json(filtered).into_response()
+    Ok(Json(filtered).into_response())
 }
 
 /// Create a business resource application
@@ -317,17 +313,12 @@ pub async fn get_business_resources(
 #[axum::debug_handler]
 pub async fn create_business_resource(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateBusinessResourceRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     // 检查权限
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let now = Utc::now();
@@ -338,10 +329,7 @@ pub async fn create_business_resource(
         Ok(id) => id,
         Err(e) => {
             eprintln!("Error inserting business resource to database: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, json!({
-                "message": "数据库保存失败",
-                "error": e.to_string()
-            }).to_string()).into_response();
+            return Err(ApiError::internal("数据库保存失败"));
         }
     };
 
@@ -461,7 +449,7 @@ pub async fn create_business_resource(
     }
 
     // 记录日志
-    log_action(
+    log_action_auth(
         &state.audit_logs,
         &user,
         "CREATE_BUSINESS_RESOURCE",
@@ -469,10 +457,10 @@ pub async fn create_business_resource(
         &format!("Created business resource: {} (ID: {})", req.ecs_name, db_id),
     );
 
-    Json(json!({
+    Ok(Json(json!({
         "message": "业务资源创建成功",
         "data": new_resource
-    })).into_response()
+    })).into_response())
 }
 
 /// Update a business resource
@@ -496,17 +484,12 @@ pub async fn create_business_resource(
 #[axum::debug_handler]
 pub async fn update_business_resource(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateBusinessResourceRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     // 检查资源是否存在
@@ -516,7 +499,7 @@ pub async fn update_business_resource(
     };
 
     if !resource_exists {
-        return (StatusCode::NOT_FOUND, "Business resource not found".to_string()).into_response();
+        return Err(ApiError::not_found("Business resource not found"));
     }
 
     // Clone the request before moving values (needed for database persistence later)
@@ -639,7 +622,7 @@ pub async fn update_business_resource(
         }
 
         // 记录日志
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "UPDATE_BUSINESS_RESOURCE",
@@ -647,12 +630,12 @@ pub async fn update_business_resource(
             &format!("Updated business resource: {}", id),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": "业务资源更新成功",
             "data": resource
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Business resource not found".to_string()).into_response()
+        Err(ApiError::not_found("Business resource not found"))
     }
 }
 
@@ -676,16 +659,11 @@ pub async fn update_business_resource(
 #[axum::debug_handler]
 pub async fn delete_business_resource(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
-    if user.role != shared::Role::SysAdmin && user.role != shared::Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+) -> Result<impl IntoResponse, ApiError> {
+    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     // 检查资源是否存在
@@ -705,7 +683,7 @@ pub async fn delete_business_resource(
         let _ = db_delete_business_resource(id).await;
 
         // 记录日志
-        log_action(
+        log_action_auth(
             &state.audit_logs,
             &user,
             "DELETE_BUSINESS_RESOURCE",
@@ -713,10 +691,10 @@ pub async fn delete_business_resource(
             &format!("Deleted business resource: {}", id),
         );
 
-        Json(json!({
+        Ok(Json(json!({
             "message": "业务资源删除成功"
-        })).into_response()
+        })).into_response())
     } else {
-        (StatusCode::NOT_FOUND, "Business resource not found".to_string()).into_response()
+        Err(ApiError::not_found("Business resource not found"))
     }
 }

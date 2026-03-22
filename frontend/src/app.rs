@@ -8,11 +8,13 @@ use crate::state::{
     cloud_platform::CloudPlatformConfig,
     network_zone::NetworkZone,
     security_product::SecurityProduct,
+    network_policy::NetworkPolicyConfig,
     init_service_providers,
     init_machine_rooms,
     init_cloud_platforms,
     init_network_zones,
     init_security_products,
+    init_network_policies,
 };
 
 /// 全局安全产品数据状态
@@ -54,6 +56,9 @@ pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(
     let machine_rooms = init_machine_rooms();
     init_network_zones(&cloud_platforms, &machine_rooms)
 });
+
+/// 全局网络策略数据状态
+pub static NETWORK_POLICIES_STATE: GlobalSignal<Vec<NetworkPolicyConfig>> = Signal::global(init_network_policies);
 
 /// 检查是否已认证
 #[allow(dead_code)]

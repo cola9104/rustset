@@ -1,6 +1,7 @@
 use axum::http::{HeaderMap, header::AUTHORIZATION};
 use std::sync::{Arc, RwLock};
 use shared::{User, AuditLog, ZoneConfig, NetworkZone};
+use crate::middleware::AuthUser;
 use chrono::Utc;
 use uuid::Uuid;
 use std::net::IpAddr;
@@ -32,6 +33,37 @@ pub fn log_action(
     let log_entry = AuditLog {
         id: Uuid::new_v4().to_string(),
         user_id: user.id.clone(),
+        username: user.username.clone(),
+        action: action.to_string(),
+        target: target.to_string(),
+        details: details.to_string(),
+        timestamp: Utc::now(),
+    };
+
+    // Add to in-memory storage
+    {
+        let mut logs_guard = logs.write().unwrap();
+        logs_guard.push(log_entry.clone());
+    }
+
+    // Try to persist to database asynchronously (don't block if it fails)
+    let log_entry_for_db = log_entry;
+    tokio::spawn(async move {
+        let _ = crate::database::insert_audit_log_wrapper(&log_entry_for_db).await;
+    });
+}
+
+/// Log action with AuthUser (JWT authentication)
+pub fn log_action_auth(
+    logs: &Arc<RwLock<Vec<AuditLog>>>,
+    user: &AuthUser,
+    action: &str,
+    target: &str,
+    details: &str,
+) {
+    let log_entry = AuditLog {
+        id: Uuid::new_v4().to_string(),
+        user_id: user.user_id.clone(),
         username: user.username.clone(),
         action: action.to_string(),
         target: target.to_string(),

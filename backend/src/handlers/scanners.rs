@@ -9,11 +9,12 @@ use axum::{
     extract::{State, Path, Query, Json},
     http::HeaderMap,
 };
+
 use serde::{Deserialize, Serialize};
 use chrono::Utc;
 
 use crate::state::AppState;
-use crate::middleware::ApiError;
+use crate::middleware::{ApiError, AuthUser};
 use crate::utils::{get_current_user, log_action};
 use shared::{ScannerConfig, CreateScannerRequest, UpdateScannerRequest};
 
@@ -76,8 +77,8 @@ pub struct ScanResultsQuery {
 
 /// 执行单 IP 扫描
 pub async fn scan_ip(
+    _user: AuthUser,
     State(state): State<AppState>,
-    _headers: HeaderMap,
     Json(req): Json<ScanRequest>,
 ) -> Result<Json<ScanResult>, ApiError> {
     // 验证目标 IP
@@ -122,8 +123,8 @@ pub async fn scan_ip(
 
 /// 执行批量扫描
 pub async fn batch_scan_ips(
+    _user: AuthUser,
     State(state): State<AppState>,
-    _headers: HeaderMap,
     Json(req): Json<BatchScanRequest>,
 ) -> Result<Json<Vec<ScanResult>>, ApiError> {
     let ports = req.ports.unwrap_or_else(|| vec![
@@ -167,8 +168,8 @@ pub async fn batch_scan_ips(
 
 /// 获取扫描结果
 pub async fn get_scan_results(
+    _user: AuthUser,
     State(state): State<AppState>,
-    _headers: HeaderMap,
     Query(query): Query<ScanResultsQuery>,
 ) -> Result<Json<Vec<ScanResult>>, ApiError> {
     let results = state.scan_results.read()
@@ -196,8 +197,8 @@ pub async fn get_scan_results(
 
 /// 获取单个扫描结果
 pub async fn get_scan_result(
+    _user: AuthUser,
     State(state): State<AppState>,
-    _headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ScanResult>, ApiError> {
     let results = state.scan_results.read()

@@ -4,6 +4,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaPlus, FaMagnifyingGlass, FaShieldHalved, FaCheck, FaClock, FaXmark,
     FaCircleCheck, FaPen, FaEye, FaArrowRight, FaArrowLeft
 };
+use crate::app::NETWORK_POLICIES_STATE;
 
 /// 网络策略申请状态
 #[derive(Clone, Debug, PartialEq)]
@@ -12,7 +13,7 @@ pub enum NetworkPolicyStatus {
     Approved,   // 已批准
     Rejected,   // 已拒绝
     Configuring, // 配置中
-    Active,     // 已生效
+    Active,     // 已交付
     Expired,    // 已过期
 }
 
@@ -23,7 +24,7 @@ impl NetworkPolicyStatus {
             NetworkPolicyStatus::Approved => "已批准",
             NetworkPolicyStatus::Rejected => "已拒绝",
             NetworkPolicyStatus::Configuring => "配置中",
-            NetworkPolicyStatus::Active => "已生效",
+            NetworkPolicyStatus::Active => "已交付",
             NetworkPolicyStatus::Expired => "已过期",
         }
     }
@@ -116,16 +117,16 @@ pub fn init_network_policy_requests() -> Vec<NetworkPolicyRequest> {
         },
         NetworkPolicyRequest {
             id: 2,
-            title: "数据库远程访问策略".to_string(),
+            title: "机房A服务器SSH访问策略".to_string(),
             applicant: "李四".to_string(),
             department: "运维部".to_string(),
-            source_zone: "互联网DMZ".to_string(),
-            destination_zone: "数据中心".to_string(),
+            source_zone: "全网".to_string(),
+            destination_zone: "机房A".to_string(),
             direction: AccessDirection::Inbound,
             protocol: PolicyProtocol::Tcp,
-            port_range: "3306".to_string(),
-            description: "允许远程维护数据库".to_string(),
-            valid_until: "2024-06-01".to_string(),
+            port_range: "22, 80, 443, 3306".to_string(),
+            description: "机房A服务器远程管理和业务访问".to_string(),
+            valid_until: "2025-12-31".to_string(),
             status: NetworkPolicyStatus::Active,
             created_at: "2024-02-28 14:20".to_string(),
         },
@@ -146,18 +147,63 @@ pub fn init_network_policy_requests() -> Vec<NetworkPolicyRequest> {
         },
         NetworkPolicyRequest {
             id: 4,
-            title: "监控系统网络策略".to_string(),
+            title: "华东1-杭州云服务器访问策略".to_string(),
             applicant: "赵六".to_string(),
             department: "运维部".to_string(),
-            source_zone: "办公网".to_string(),
-            destination_zone: "数据中心".to_string(),
-            direction: AccessDirection::Outbound,
-            protocol: PolicyProtocol::Any,
-            port_range: "161".to_string(),
-            description: "SNMP监控协议访问".to_string(),
-            valid_until: "2024-12-31".to_string(),
+            source_zone: "全网".to_string(),
+            destination_zone: "华东1-杭州".to_string(),
+            direction: AccessDirection::Inbound,
+            protocol: PolicyProtocol::Tcp,
+            port_range: "22, 80, 443".to_string(),
+            description: "杭州区域云服务器业务访问".to_string(),
+            valid_until: "2025-12-31".to_string(),
             status: NetworkPolicyStatus::Active,
             created_at: "2024-02-25 16:45".to_string(),
+        },
+        NetworkPolicyRequest {
+            id: 5,
+            title: "工作站远程桌面策略".to_string(),
+            applicant: "钱七".to_string(),
+            department: "信息部".to_string(),
+            source_zone: "全网".to_string(),
+            destination_zone: "机房A".to_string(),
+            direction: AccessDirection::Inbound,
+            protocol: PolicyProtocol::Tcp,
+            port_range: "22, 3389".to_string(),
+            description: "工作站远程桌面和SSH访问".to_string(),
+            valid_until: "2025-06-30".to_string(),
+            status: NetworkPolicyStatus::Active,
+            created_at: "2024-03-05 11:00".to_string(),
+        },
+        NetworkPolicyRequest {
+            id: 6,
+            title: "市政务云机房A Redis访问策略".to_string(),
+            applicant: "孙八".to_string(),
+            department: "研发部".to_string(),
+            source_zone: "全网".to_string(),
+            destination_zone: "市政务云机房A".to_string(),
+            direction: AccessDirection::Inbound,
+            protocol: PolicyProtocol::Tcp,
+            port_range: "22, 6379".to_string(),
+            description: "Redis缓存服务器访问".to_string(),
+            valid_until: "2025-12-31".to_string(),
+            status: NetworkPolicyStatus::Active,
+            created_at: "2024-03-08 09:30".to_string(),
+        },
+        NetworkPolicyRequest {
+            id: 7,
+            title: "移动核心机房文件服务器策略".to_string(),
+            applicant: "周九".to_string(),
+            department: "运维部".to_string(),
+            source_zone: "全网".to_string(),
+            destination_zone: "移动核心机房".to_string(),
+            direction: AccessDirection::Inbound,
+            protocol: PolicyProtocol::Tcp,
+            port_range: "22, 80, 443, 2049".to_string(),
+            description: "文件服务器NFS和Web访问".to_string(),
+            valid_until: "2025-12-31".to_string(),
+            status: NetworkPolicyStatus::Active,
+            created_at: "2024-03-10 14:00".to_string(),
         },
     ]
 }
@@ -165,7 +211,8 @@ pub fn init_network_policy_requests() -> Vec<NetworkPolicyRequest> {
 /// 网络策略申请页面
 #[allow(non_snake_case)]
 pub fn NetworkPolicyRequest() -> Element {
-    let mut requests = use_signal(init_network_policy_requests);
+    // 使用全局网络策略状态的引用
+    let requests = &NETWORK_POLICIES_STATE;
     let mut search_query = use_signal(String::new);
     let mut status_filter = use_signal(|| "全部".to_string());
     let mut show_new_form = use_signal(|| false);
@@ -193,14 +240,14 @@ pub fn NetworkPolicyRequest() -> Element {
                     "已批准" => req.status == NetworkPolicyStatus::Approved,
                     "已拒绝" => req.status == NetworkPolicyStatus::Rejected,
                     "配置中" => req.status == NetworkPolicyStatus::Configuring,
-                    "已生效" => req.status == NetworkPolicyStatus::Active,
+                    "已交付" => req.status == NetworkPolicyStatus::Active,
                     "已过期" => req.status == NetworkPolicyStatus::Expired,
                     _ => true,
                 };
 
             matches_search && matches_status
         })
-        .cloned()
+        .map(|r| r.clone().into())
         .collect();
 
     rsx! {
@@ -265,7 +312,7 @@ pub fn NetworkPolicyRequest() -> Element {
                             Icon { icon: FaCircleCheck, width: 20, height: 20, class: "text-white" }
                         }
                         div { class: "ml-3",
-                            p { class: "text-sm text-gray-500", "已生效" }
+                            p { class: "text-sm text-gray-500", "已交付" }
                             p { class: "text-xl font-bold text-gray-800", {active_count.to_string()} }
                         }
                     }
@@ -297,7 +344,7 @@ pub fn NetworkPolicyRequest() -> Element {
                         option { value: "待审批", "待审批" }
                         option { value: "已批准", "已批准" }
                         option { value: "配置中", "配置中" }
-                        option { value: "已生效", "已生效" }
+                        option { value: "已交付", "已交付" }
                         option { value: "已过期", "已过期" }
                         option { value: "已拒绝", "已拒绝" }
                     }
@@ -416,7 +463,7 @@ pub fn NetworkPolicyRequest() -> Element {
                         let new_id = reqs.iter().map(|r| r.id).max().unwrap_or(0) + 1;
                         let mut new_request = new_request;
                         new_request.id = new_id;
-                        reqs.push(new_request);
+                        reqs.push(new_request.into());
                         show_new_form.set(false);
                     },
                     on_close: move |_| show_new_form.set(false),
@@ -432,11 +479,11 @@ pub fn NetworkPolicyRequest() -> Element {
                     editing_request.map(|req| rsx! {
                         super::policy_form::NetworkPolicyForm {
                             mode: crate::components::common::FormMode::Edit,
-                            request: Some(req),
+                            request: Some(req.into()),
                             on_save: move |updated_request: NetworkPolicyRequest| {
                                 let mut reqs = requests.write();
                                 if let Some(r) = reqs.iter_mut().find(|r| r.id == id) {
-                                    *r = updated_request;
+                                    *r = updated_request.into();
                                 }
                                 show_edit_form.set(None);
                             },

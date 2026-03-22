@@ -1,17 +1,14 @@
 use axum::{
     extract::{State, Json, Path},
-    http::HeaderMap,
 };
 use shared::{ZoneConfig, Role};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
+use crate::middleware::{ApiError, AuthUser};
 use crate::database::{get_zones as db_get_zones, insert_zone_wrapper as db_insert_zone, update_zone as db_update_zone, delete_zone as db_delete_zone, db_zone_to_shared};
-use crate::middleware::ApiError;
 use uuid::Uuid;
 
-pub async fn get_zones(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<ZoneConfig>>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+pub async fn get_zones(State(state): State<AppState>, _user: AuthUser) -> Result<Json<Vec<ZoneConfig>>, ApiError> {
 
     // Try to load from database first
     match db_get_zones().await {
@@ -32,10 +29,7 @@ pub async fn get_zones(State(state): State<AppState>, headers: HeaderMap) -> Res
     }
 }
 
-pub async fn create_zone(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<ZoneConfig>) -> Result<Json<ZoneConfig>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
+pub async fn create_zone(State(state): State<AppState>, user: AuthUser, Json(req): Json<ZoneConfig>) -> Result<Json<ZoneConfig>, ApiError> {
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
@@ -55,14 +49,11 @@ pub async fn create_zone(State(state): State<AppState>, headers: HeaderMap, Json
     // Persist to database
     let _ = db_insert_zone(&new_zone).await;
 
-    log_action(&state.audit_logs, &user, "CREATE_ZONE", &new_zone.name, "Created network zone");
+    log_action_auth(&state.audit_logs, &user, "CREATE_ZONE", &new_zone.name, "Created network zone");
     Ok(Json(new_zone))
 }
 
-pub async fn update_zone(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Json(req): Json<ZoneConfig>) -> Result<Json<Option<ZoneConfig>>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
+pub async fn update_zone(State(state): State<AppState>, user: AuthUser, Path(id): Path<String>, Json(req): Json<ZoneConfig>) -> Result<Json<Option<ZoneConfig>>, ApiError> {
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
@@ -85,17 +76,14 @@ pub async fn update_zone(State(state): State<AppState>, headers: HeaderMap, Path
         // Persist to database (after releasing lock)
         let _ = db_update_zone(&id, &updated_zone).await;
 
-        log_action(&state.audit_logs, &user, "UPDATE_ZONE", &updated_zone.name, "Updated zone config");
+        log_action_auth(&state.audit_logs, &user, "UPDATE_ZONE", &updated_zone.name, "Updated zone config");
         Ok(Json(Some(updated_zone)))
     } else {
         Ok(Json(None))
     }
 }
 
-pub async fn delete_zone(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
+pub async fn delete_zone(State(state): State<AppState>, user: AuthUser, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
@@ -120,6 +108,6 @@ pub async fn delete_zone(State(state): State<AppState>, headers: HeaderMap, Path
     // Persist to database (after releasing lock)
     let _ = db_delete_zone(&id).await;
 
-    log_action(&state.audit_logs, &user, "DELETE_ZONE", &zone_name, "Deleted zone");
+    log_action_auth(&state.audit_logs, &user, "DELETE_ZONE", &zone_name, "Deleted zone");
     Ok(Json("Deleted".to_string()))
 }

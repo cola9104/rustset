@@ -1,13 +1,13 @@
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 
+use crate::middleware::{AuthUser, ApiError};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::log_action_auth;
 use shared::Role;
 
 /// 云平台配置数据模型
@@ -64,56 +64,46 @@ pub struct UpdateCloudPlatformConfigRequest {
 
 /// 获取云平台配置列表
 pub async fn get_cloud_platform_configs(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+    State(_state): State<AppState>,
+    _user: AuthUser,
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_all_cloud_platform_configs(&conn).await {
-                Ok(configs) => Json(configs).into_response(),
+                Ok(configs) => Ok(Json(configs).into_response()),
                 Err(e) => {
                     eprintln!("Error loading cloud platform configs from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
 
 /// 获取单个云平台配置
 pub async fn get_cloud_platform_config(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
+    _user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let _user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
         Some(conn) => {
             match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
-                Ok(Some(config)) => Json(config).into_response(),
+                Ok(Some(config)) => Ok(Json(config).into_response()),
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud platform config not found".to_string()).into_response()
+                    Err(ApiError::not_found("Cloud platform config not found"))
                 }
                 Err(e) => {
                     eprintln!("Error loading cloud platform config from database: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -121,16 +111,11 @@ pub async fn get_cloud_platform_config(
 /// 创建云平台配置
 pub async fn create_cloud_platform_config(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Json(req): Json<CreateCloudPlatformConfigRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -171,7 +156,7 @@ pub async fn create_cloud_platform_config(
                         updated_at: None,
                     };
 
-                    log_action(
+                    log_action_auth(
                         &state.audit_logs,
                         &user,
                         "CREATE_CLOUD_PLATFORM_CONFIG",
@@ -179,19 +164,19 @@ pub async fn create_cloud_platform_config(
                         &format!("Created cloud platform config: {}", req.platform_name),
                     );
 
-                    Json(json!({
+                    Ok(Json(json!({
                         "message": "云平台配置创建成功",
                         "data": config
-                    })).into_response()
+                    })).into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud platform config: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create cloud platform config".to_string()).into_response()
+                    Err(ApiError::internal("Failed to create cloud platform config"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -199,17 +184,12 @@ pub async fn create_cloud_platform_config(
 /// 更新云平台配置
 pub async fn update_cloud_platform_config(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<UpdateCloudPlatformConfigRequest>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -235,7 +215,7 @@ pub async fn update_cloud_platform_config(
                         Some(&now),
                     ).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "UPDATE_CLOUD_PLATFORM_CONFIG",
@@ -245,33 +225,33 @@ pub async fn update_cloud_platform_config(
 
                             match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
                                 Ok(Some(config)) => {
-                                    Json(json!({
+                                    Ok(Json(json!({
                                         "message": "云平台配置更新成功",
                                         "data": config
-                                    })).into_response()
+                                    })).into_response())
                                 }
                                 _ => {
-                                    Json(json!({ "message": "云平台配置更新成功" })).into_response()
+                                    Ok(Json(json!({ "message": "云平台配置更新成功" })).into_response())
                                 }
                             }
                         }
                         Err(e) => {
                             eprintln!("Error updating cloud platform config: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update cloud platform config".to_string()).into_response()
+                            Err(ApiError::internal("Failed to update cloud platform config"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud platform config not found".to_string()).into_response()
+                    Err(ApiError::not_found("Cloud platform config not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking cloud platform config existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
@@ -279,16 +259,11 @@ pub async fn update_cloud_platform_config(
 /// 删除云平台配置
 pub async fn delete_cloud_platform_config(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    user: AuthUser,
     Path(id): Path<i32>,
-) -> impl IntoResponse {
-    let user = match get_current_user(&headers, &state.users) {
-        Some(u) => u,
-        None => return (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()).into_response(),
-    };
-
+) -> Result<impl IntoResponse, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return (StatusCode::FORBIDDEN, "Access denied".to_string()).into_response();
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     match crate::database::get_db() {
@@ -297,7 +272,7 @@ pub async fn delete_cloud_platform_config(
                 Ok(Some(_)) => {
                     match crate::database::delete_cloud_platform_config(&conn, id).await {
                         Ok(_) => {
-                            log_action(
+                            log_action_auth(
                                 &state.audit_logs,
                                 &user,
                                 "DELETE_CLOUD_PLATFORM_CONFIG",
@@ -305,25 +280,25 @@ pub async fn delete_cloud_platform_config(
                                 &format!("Deleted cloud platform config: {}", id),
                             );
 
-                            Json(json!({ "message": "云平台配置删除成功" })).into_response()
+                            Ok(Json(json!({ "message": "云平台配置删除成功" })).into_response())
                         }
                         Err(e) => {
                             eprintln!("Error deleting cloud platform config: {}", e);
-                            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete cloud platform config".to_string()).into_response()
+                            Err(ApiError::internal("Failed to delete cloud platform config"))
                         }
                     }
                 }
                 Ok(None) => {
-                    (StatusCode::NOT_FOUND, "Cloud platform config not found".to_string()).into_response()
+                    Err(ApiError::not_found("Cloud platform config not found"))
                 }
                 Err(e) => {
                     eprintln!("Error checking cloud platform config existence: {}", e);
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()).into_response()
+                    Err(ApiError::internal("Database error"))
                 }
             }
         }
         None => {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Database not available".to_string()).into_response()
+            Err(ApiError::internal("Database not available"))
         }
     }
 }
