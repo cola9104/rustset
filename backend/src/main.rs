@@ -93,7 +93,7 @@ use handlers::{
         get_cloud_service_stats,
     },
     ip_zones::{
-        find_zone_by_ip, get_ip_zones, create_ip_zone, delete_ip_zone,
+        find_zone_by_ip, get_ip_zones, create_ip_zone, update_ip_zone, delete_ip_zone,
     },
     port_details::{
         get_port_details, get_port_detail, create_port_detail, 
@@ -497,7 +497,7 @@ async fn main() {
         .route("/api/cloud-service-assets/stats", get(get_cloud_service_stats))
         // IP Zones (IP 区域管理)
         .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
-        .route("/api/ip-zones/{id}", delete(delete_ip_zone))
+        .route("/api/ip-zones/{id}", delete(delete_ip_zone).put(update_ip_zone))
         .route("/api/ip-zones/find", get(find_zone_by_ip))
         // Port Details (端口详细信息管理)
         .route("/api/port-details", get(get_port_details).post(create_port_detail))
