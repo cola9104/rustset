@@ -269,6 +269,7 @@ mod tests {
             cloud_zones: Arc::new(RwLock::new(Vec::new())),
             cloud_platforms: Arc::new(RwLock::new(Vec::new())),
             port_details: Arc::new(RwLock::new(Vec::new())),
+            scanners: Arc::new(RwLock::new(Vec::new())),
             scan_results: Arc::new(RwLock::new(Vec::new())),
         }
     }

@@ -42,6 +42,7 @@ async fn create_test_app() -> Router {
         cloud_zones: Arc::new(std::sync::RwLock::new(vec![])),
         cloud_platforms: Arc::new(std::sync::RwLock::new(vec![])),
         port_details: Arc::new(std::sync::RwLock::new(vec![])),
+        scanners: Arc::new(std::sync::RwLock::new(vec![])),
         scan_results: Arc::new(std::sync::RwLock::new(vec![])),
     };
 

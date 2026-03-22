@@ -225,40 +225,48 @@ fn get_service_name(port: u16) -> Option<String> {
 /// 获取所有扫描器配置
 pub async fn get_scanners(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
 ) -> Result<Json<Vec<ScannerConfig>>, ApiError> {
-    // For now, return empty list as scanner configs are not stored in state
-    // This should be implemented with proper storage
-    Ok(Json(vec![]))
+    let _current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    let scanners = state.scanners.read()
+        .map_err(|e| ApiError::internal(format!("Failed to read scanner configs: {}", e)))?;
+
+    Ok(Json(scanners.clone()))
 }
 
 /// 创建扫描器配置
 pub async fn create_scanner(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<CreateScannerRequest>,
+    Json(req): Json<CreateScannerRequest>
 ) -> Result<Json<ScannerConfig>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     let now = Utc::now().to_rfc3339();
+    let scanner_name = req.name.clone();
+    let scanner_type = req.scanner_type.clone();
 
     let new_scanner = ScannerConfig {
         id: uuid::Uuid::new_v4().to_string(),
-        name: req.name.clone(),
-        scanner_type: req.scanner_type.clone(),
+        name: scanner_name.clone(),
+        scanner_type: scanner_type.clone(),
         enabled: req.enabled.unwrap_or(true),
         config: req.config,
         created_at: Some(now.clone()),
         updated_at: Some(now),
     };
 
-    // TODO: Store scanner configuration in database or state
-    // For now, just log the action
+    let mut scanners = state.scanners.write()
+        .map_err(|e| ApiError::internal(format!("Failed to write scanner configs: {}", e)))?;
+    scanners.push(new_scanner.clone());
+    drop(scanners);
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCANNER_CREATED", &req.name,
-              &format!("Created scanner config with type {}", req.scanner_type));
+    log_action(&state.audit_logs, &current_user, "SCANNER_CREATED", &scanner_name,
+              &format!("Created scanner config with type {}", scanner_type));
 
     Ok(Json(new_scanner))
 }
@@ -273,24 +281,35 @@ pub async fn update_scanner(
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    // TODO: Implement actual update logic with database/state storage
-    // For now, return a mock response with audit logging
-
     let now = Utc::now().to_rfc3339();
 
-    let updated_scanner = ScannerConfig {
-        id: id.clone(),
-        name: req.name.unwrap_or_else(|| "Default Scanner".to_string()),
-        scanner_type: req.scanner_type.unwrap_or_else(|| "rustscan".to_string()),
-        enabled: req.enabled.unwrap_or(true),
-        config: req.config.unwrap_or_else(|| serde_json::json!({})),
-        created_at: None,
-        updated_at: Some(now),
+    let updated_scanner = {
+        let mut scanners = state.scanners.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write scanner configs: {}", e)))?;
+
+        let scanner = scanners.iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| ApiError::not_found("Scanner config not found"))?;
+
+        if let Some(name) = req.name {
+            scanner.name = name;
+        }
+        if let Some(scanner_type) = req.scanner_type {
+            scanner.scanner_type = scanner_type;
+        }
+        if let Some(enabled) = req.enabled {
+            scanner.enabled = enabled;
+        }
+        if let Some(config) = req.config {
+            scanner.config = config;
+        }
+        scanner.updated_at = Some(now);
+        scanner.clone()
     };
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCANNER_UPDATED", id.as_str(),
-              "Updated scanner configuration");
+    log_action(&state.audit_logs, &current_user, "SCANNER_UPDATED", &updated_scanner.name,
+              &format!("Updated scanner config with type {}", updated_scanner.scanner_type));
 
     Ok(Json(updated_scanner))
 }
@@ -304,12 +323,21 @@ pub async fn delete_scanner(
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    // TODO: Implement actual delete logic with database/state storage
-    // For now, just log the action
+    let removed_scanner = {
+        let mut scanners = state.scanners.write()
+            .map_err(|e| ApiError::internal(format!("Failed to write scanner configs: {}", e)))?;
+
+        scanners.iter()
+            .position(|s| s.id == id)
+            .map(|idx| scanners.remove(idx))
+    };
+
+    let removed_scanner = removed_scanner
+        .ok_or_else(|| ApiError::not_found("Scanner config not found"))?;
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCANNER_DELETED", id.as_str(),
-              "Deleted scanner configuration");
+    log_action(&state.audit_logs, &current_user, "SCANNER_DELETED", &removed_scanner.name,
+              &format!("Deleted scanner config with type {}", removed_scanner.scanner_type));
 
     Ok(Json("Deleted".to_string()))
 }

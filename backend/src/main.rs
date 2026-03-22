@@ -101,6 +101,7 @@ use handlers::{
     },
     scanners::{
         scan_ip, batch_scan_ips, get_scan_results, get_scan_result,
+        get_scanners, create_scanner, update_scanner, delete_scanner,
     },
     health::{
         health_check, readiness_check, liveness_check, metrics,
@@ -355,6 +356,7 @@ async fn main() {
         cloud_zones: Arc::new(StdRwLock::new(loaded_cloud_zones)),
         cloud_platforms: Arc::new(StdRwLock::new(loaded_cloud_platforms)),
         port_details: Arc::new(StdRwLock::new(vec![])),
+        scanners: Arc::new(StdRwLock::new(vec![])),
         scan_results: Arc::new(StdRwLock::new(vec![])),
     };
 
@@ -503,6 +505,9 @@ async fn main() {
         .route("/api/port-details", get(get_port_details).post(create_port_detail))
         .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
         .route("/api/port-details/batch-bind", post(batch_bind_ports))
+        // Scanner Configuration (扫描器配置管理)
+        .route("/api/scanners", get(get_scanners).post(create_scanner))
+        .route("/api/scanners/{id}", put(update_scanner).delete(delete_scanner))
         // Scanners (扫描器接口)
         .route("/api/scan-ip", post(scan_ip))
         .route("/api/batch-scan-ips", post(batch_scan_ips))
