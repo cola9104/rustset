@@ -127,7 +127,7 @@ async fn test_rate_limit_with_different_ips() {
                 .oneshot(
                     Request::builder()
                         .uri("/health")
-                        .header("X-Forwarded-For", ip)
+                        .header("X-Forwarded-For", *ip)
                         .body(Body::empty())
                         .unwrap(),
                 )

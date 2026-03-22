@@ -5,11 +5,9 @@ use axum::{
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock as StdRwLock};
 use tokio::sync::RwLock as TokioRwLock;
-use tower_http::{
-    cors::CorsLayer,
-    trace::TraceLayer,
-};
-use utoipa_swagger_ui::SwaggerUi;
+use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+// use utoipa_swagger_ui::SwaggerUi;  // 暂时禁用
 use shared::{
     Asset, NetworkZone, PortInfo, ZoneConfig,
     User, Role, PasswordPolicy,
@@ -333,7 +331,7 @@ async fn main() {
         requests_per_minute: 60,  // 每分钟60次请求
         block_duration_seconds: 60,  // 超限后阻塞60秒
     };
-    init_rate_limiter(rate_limit_config);
+    init_rate_limiter(rate_limit_config.clone());
     println!("Rate limiter initialized: {} requests/minute, {}s block duration",
         rate_limit_config.requests_per_minute,
         rate_limit_config.block_duration_seconds
@@ -536,10 +534,11 @@ async fn main() {
         .route("/api/cloud-platform-configs", get(get_cloud_platform_configs).post(create_cloud_platform_config))
         .route("/api/cloud-platform-configs/{id}", get(get_cloud_platform_config).put(update_cloud_platform_config).delete(delete_cloud_platform_config))
         .with_state(state)
-        .merge(
-            SwaggerUi::new("/api-docs")
-                .url("/api-docs/openapi.json", openapi::ApiDoc::openapi())
-        )
+        // Swagger UI - 暂时禁用，网络问题导致下载失败
+        // .merge(
+        //     SwaggerUi::new("/api-docs")
+        //         .url("/api-docs/openapi.json", openapi::ApiDoc::openapi())
+        // )
         .layer(axum::middleware::from_fn(rate_limit_middleware))
         .layer(axum::middleware::from_fn(performance_monitoring))
         .layer(TraceLayer::new_for_http())

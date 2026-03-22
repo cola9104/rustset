@@ -132,6 +132,32 @@ struct LoginPermissions {
     can_access_audit: bool,
     #[serde(default)]
     can_view_audit_logs: bool,
+    #[serde(default)]
+    can_view_roles: bool,
+    #[serde(default)]
+    can_create_role: bool,
+    #[serde(default)]
+    can_update_role: bool,
+    #[serde(default)]
+    can_delete_role: bool,
+    #[serde(default)]
+    can_view_service_providers: bool,
+    #[serde(default)]
+    can_view_machine_rooms: bool,
+    #[serde(default)]
+    can_view_cloud_platforms: bool,
+    #[serde(default)]
+    can_view_security_products: bool,
+    #[serde(default)]
+    can_view_network_zones: bool,
+    #[serde(default)]
+    can_view_resource_tickets: bool,
+    #[serde(default)]
+    can_view_ip_zones: bool,
+    #[serde(default)]
+    can_view_scanners: bool,
+    #[serde(default)]
+    can_view_port_details: bool,
 }
 
 impl LoginUser {

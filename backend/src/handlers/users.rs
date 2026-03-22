@@ -11,7 +11,7 @@ use crate::middleware::ApiError;
 use uuid::Uuid;
 use chrono::Utc;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct ChangePasswordRequest {
     pub current_password: String,
     pub new_password: String,

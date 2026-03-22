@@ -40,4 +40,4 @@ password-hash = "0.5"
 thiserror = "1.0"
 # OpenAPI/Swagger
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "8", features = ["axum"] }
+# utoipa-swagger-ui = { version = "9", features = ["axum"] }  # 暂时禁用 - 网络问题

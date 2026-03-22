@@ -243,9 +243,19 @@ fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessR
     }
 }
 
-/// 获取业务资源列表
-/// 注意：只返回未完成交付的资源（delivery_status != "已交付"）
-/// 已交付的资源将在云服务资产中显示
+/// Get business resources list
+#[utoipa::path(
+    get,
+    path = "/api/business-resources",
+    responses(
+        (status = 200, description = "List of business resources", body = Vec<BusinessResource>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "business_resources"
+)]
 pub async fn get_business_resources(
     State(state): State<AppState>,
     headers: HeaderMap,
