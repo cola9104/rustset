@@ -3,8 +3,9 @@ use axum::{
     http::{HeaderMap, header::AUTHORIZATION},
 };
 use shared::{LoginRequest, LoginResponse};
+use crate::auth::{generate_token, verify_token};
 use crate::state::AppState;
-use crate::utils::log_action;
+use crate::utils::{get_current_user, log_action};
 use crate::password;
 use crate::middleware::ApiError;
 use chrono::Utc;
@@ -77,8 +78,10 @@ pub async fn login(
         // 记录审计日志
         log_action(&state.audit_logs, user, "LOGIN", &user.username, "User logged in successfully");
 
+        let token = generate_token(user)?;
+
         Ok(Json(LoginResponse {
-            token: user.username.clone(),
+            token,
             user: user.clone(),
         }))
     } else {
@@ -137,13 +140,10 @@ pub async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let username = headers.get(AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown");
-
     // 记录审计日志
-    if let Some(user) = state.users.read().ok().and_then(|u| u.iter().find(|u| u.username == username).cloned()) {
-        log_action(&state.audit_logs, &user, "LOGOUT", username, "User logged out");
+    if let Some(user) = get_current_user(&headers, &state.users) {
+        let username = user.username.clone();
+        log_action(&state.audit_logs, &user, "LOGOUT", &username, "User logged out");
     }
 
     Ok(Json(serde_json::json!({
@@ -168,15 +168,23 @@ pub async fn refresh_token(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<LoginResponse>, ApiError> {
-    let username = headers.get(AUTHORIZATION)
+    let auth_header = headers.get(AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| ApiError::unauthorized("No authorization token"))?;
+
+    let token = auth_header
+        .trim()
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_header.trim().strip_prefix("bearer "))
+        .ok_or_else(|| ApiError::unauthorized("Invalid authorization scheme"))?;
+
+    let claims = verify_token(token)?;
 
     let users = state.users.read()
         .map_err(|e| ApiError::internal(format!("Failed to read users: {}", e)))?;
 
     let user = users.iter()
-        .find(|u| u.username == username)
+        .find(|u| u.id == claims.user_id && u.username == claims.username)
         .ok_or_else(|| ApiError::unauthorized("User not found"))?;
 
     // 检查用户状态
@@ -190,8 +198,10 @@ pub async fn refresh_token(
         }
     }
 
+    let token = generate_token(user)?;
+
     Ok(Json(LoginResponse {
-        token: user.username.clone(),
+        token,
         user: user.clone(),
     }))
 }
@@ -201,11 +211,16 @@ mod tests {
     use super::*;
     use std::sync::{Arc, RwLock};
     use shared::{Role, Permissions, User, Asset, Task, Risk, ZoneConfig, AuditLog, AdvancedScanTask, CloudZone, CloudPlatform};
+    use crate::auth::{generate_token, verify_token};
     use crate::state::AppState;
     use axum::http::HeaderMap;
     use crate::password;
     use crate::handlers::port_details::PortDetail;
     use crate::handlers::scanners::ScanResult;
+
+    fn setup_jwt_secret() {
+        std::env::set_var("JWT_SECRET", "test-jwt-secret");
+    }
 
     fn create_test_app_state() -> AppState {
         AppState {
@@ -276,7 +291,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_success() {
+        setup_jwt_secret();
         let state = create_test_app_state();
+
         let req = LoginRequest {
             username: "admin".to_string(),
             password: "admin123".to_string(),
@@ -285,8 +302,13 @@ mod tests {
         let result = login(State(state), Json(req)).await;
 
         assert!(result.is_ok());
+
         let response = result.unwrap();
-        assert_eq!(response.token, "admin");
+        let claims = verify_token(&response.token).unwrap();
+
+        assert_eq!(claims.user_id, "1");
+        assert_eq!(claims.username, "admin");
+        assert_eq!(claims.role, Role::SysAdmin);
         assert_eq!(response.user.username, "admin");
     }
 
@@ -379,9 +401,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_logout_success() {
+        setup_jwt_secret();
         let state = create_test_app_state();
+        let admin_user = state.users.read().unwrap()[0].clone();
+        let token = generate_token(&admin_user).unwrap();
+
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "admin".parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
 
         let result = logout(State(state), headers).await;
 
@@ -404,15 +430,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_refresh_token_success() {
+        setup_jwt_secret();
         let state = create_test_app_state();
+        let admin_user = state.users.read().unwrap()[0].clone();
+        let token = generate_token(&admin_user).unwrap();
+
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "admin".parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
 
         let result = refresh_token(State(state), headers).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
-        assert_eq!(response.token, "admin");
+
+        let claims = verify_token(&response.token).unwrap();
+        assert_eq!(claims.user_id, "1");
+        assert_eq!(claims.username, "admin");
         assert_eq!(response.user.username, "admin");
     }
 
@@ -434,9 +467,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_refresh_token_invalid_user() {
+        setup_jwt_secret();
         let state = create_test_app_state();
+
+        let fake_user = User {
+            id: "999".to_string(),
+            username: "nonexistent".to_string(),
+            password: password::hash_password("password123").unwrap(),
+            role: Role::Auditor,
+            permissions: Some(Permissions::auditor()),
+            created_at: Utc::now(),
+            password_changed_at: Some(Utc::now()),
+            password_strength: Some("medium".to_string()),
+            force_password_change: Some(false),
+            last_login_at: None,
+            email: None,
+            phone: None,
+            status: Some("active".to_string()),
+            failed_login_attempts: Some(0),
+            locked_until: None,
+        };
+        let token = generate_token(&fake_user).unwrap();
+
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "nonexistent".parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
 
         let result = refresh_token(State(state), headers).await;
 
@@ -451,9 +505,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_refresh_token_disabled_account() {
+        setup_jwt_secret();
         let state = create_test_app_state();
+        let disabled_user = state.users.read().unwrap()[1].clone();
+        let token = generate_token(&disabled_user).unwrap();
+
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "disabled_user".parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
 
         let result = refresh_token(State(state), headers).await;
 

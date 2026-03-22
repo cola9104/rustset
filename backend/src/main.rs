@@ -48,6 +48,7 @@ fn load_env() {
 
 mod state;
 mod utils;
+mod auth;
 mod password;
 mod handlers;
 mod scanners;

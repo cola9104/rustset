@@ -1,4 +1,4 @@
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, header::AUTHORIZATION};
 use std::sync::{Arc, RwLock};
 use shared::{User, AuditLog, ZoneConfig, NetworkZone};
 use chrono::Utc;
@@ -7,15 +7,19 @@ use std::net::IpAddr;
 use ipnetwork::IpNetwork;
 
 pub fn get_current_user(headers: &HeaderMap, users: &Arc<RwLock<Vec<User>>>) -> Option<User> {
-    if let Some(auth_header) = headers.get("Authorization") {
-        if let Ok(token) = auth_header.to_str() {
-            // Simple Mock: Token is just the username (trimmed to handle whitespace)
-            let token = token.trim();
-            let users_guard = users.read().unwrap();
-            return users_guard.iter().find(|u| u.username == token).cloned();
-        }
-    }
-    None
+    let auth_header = headers.get(AUTHORIZATION)?;
+    let auth_value = auth_header.to_str().ok()?.trim();
+    let token = auth_value
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_value.strip_prefix("bearer "))?;
+
+    let claims = crate::auth::verify_token(token).ok()?;
+    let users_guard = users.read().ok()?;
+
+    users_guard
+        .iter()
+        .find(|u| u.id == claims.user_id && u.username == claims.username)
+        .cloned()
 }
 
 pub fn log_action(
@@ -81,6 +85,10 @@ mod tests {
     use shared::Role;
     use axum::http::HeaderMap;
 
+    fn setup_jwt_secret() {
+        std::env::set_var("JWT_SECRET", "test-jwt-secret");
+    }
+
     fn create_test_user() -> User {
         User {
             id: "test-id".to_string(),
@@ -103,9 +111,13 @@ mod tests {
 
     #[test]
     fn test_get_current_user_with_valid_token() {
-        let users = Arc::new(RwLock::new(vec![create_test_user()]));
+        setup_jwt_secret();
+        let user = create_test_user();
+        let users = Arc::new(RwLock::new(vec![user.clone()]));
+        let token = crate::auth::generate_token(&user).unwrap();
+
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "testuser".parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
 
         let result = get_current_user(&headers, &users);
         assert!(result.is_some());
@@ -114,9 +126,13 @@ mod tests {
 
     #[test]
     fn test_get_current_user_with_whitespace_token() {
-        let users = Arc::new(RwLock::new(vec![create_test_user()]));
+        setup_jwt_secret();
+        let user = create_test_user();
+        let users = Arc::new(RwLock::new(vec![user.clone()]));
+        let token = crate::auth::generate_token(&user).unwrap();
+
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "  testuser  ".parse().unwrap());
+        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
 
         let result = get_current_user(&headers, &users);
         assert!(result.is_some());
@@ -134,9 +150,10 @@ mod tests {
 
     #[test]
     fn test_get_current_user_with_invalid_token() {
+        setup_jwt_secret();
         let users = Arc::new(RwLock::new(vec![create_test_user()]));
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "invaliduser".parse().unwrap());
+        headers.insert("Authorization", "Bearer invalid.jwt.token".parse().unwrap());
 
         let result = get_current_user(&headers, &users);
         assert!(result.is_none());

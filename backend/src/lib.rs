@@ -4,6 +4,7 @@
 
 pub mod state;
 pub mod utils;
+pub mod auth;
 pub mod password;
 pub mod handlers;
 pub mod scanners;
