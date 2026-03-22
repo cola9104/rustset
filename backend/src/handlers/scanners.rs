@@ -245,6 +245,11 @@ pub async fn create_scanner(
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
+    // 只有安全管理员和系统管理员可以创建扫描器配置
+    if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
+        return Err(ApiError::forbidden("只有管理员可以创建扫描器配置"));
+    }
+
     let now = Utc::now().to_rfc3339();
     let scanner_name = req.name.clone();
     let scanner_type = req.scanner_type.clone();
@@ -280,6 +285,11 @@ pub async fn update_scanner(
 ) -> Result<Json<ScannerConfig>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    // 只有安全管理员和系统管理员可以修改扫描器配置
+    if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
+        return Err(ApiError::forbidden("只有管理员可以修改扫描器配置"));
+    }
 
     let now = Utc::now().to_rfc3339();
 
@@ -322,6 +332,11 @@ pub async fn delete_scanner(
 ) -> Result<Json<String>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    // 只有安全管理员和系统管理员可以删除扫描器配置
+    if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
+        return Err(ApiError::forbidden("只有管理员可以删除扫描器配置"));
+    }
 
     let removed_scanner = {
         let mut scanners = state.scanners.write()
