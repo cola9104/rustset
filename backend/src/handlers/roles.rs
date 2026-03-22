@@ -24,7 +24,11 @@ use crate::utils::{get_current_user, log_action};
 )]
 pub async fn get_roles(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+    let _current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     // Try to load custom roles from database first
     let custom_roles = match get_custom_roles().await {
         Ok(db_roles) => {
@@ -104,7 +108,11 @@ pub async fn get_roles(
 pub async fn get_role(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let _current_user = get_current_user(&headers, &state.users)
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
     // 检查系统角色
     match id.as_str() {
         "sys_admin" => {
@@ -200,6 +208,11 @@ pub async fn create_role(
     // Get current user for audit logging
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    if current_user.role != shared::Role::SysAdmin {
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    }
+
     // 检查角色名称是否已存在
     {
         let custom_roles = state.custom_roles.read()
@@ -294,6 +307,10 @@ pub async fn update_role(
     // Get current user for audit logging
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    if current_user.role != shared::Role::SysAdmin {
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    }
 
     // 不允许修改系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
@@ -390,6 +407,10 @@ pub async fn delete_role(
     // Get current user for audit logging
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    if current_user.role != shared::Role::SysAdmin {
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    }
 
     // 不允许删除系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
