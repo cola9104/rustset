@@ -7,6 +7,7 @@ use shared::{User, CreateUserRequest, Role, Permissions, PasswordPolicy};
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
 use crate::database::{get_users as db_get_users, insert_user as db_insert_user, delete_user as db_delete_user, update_user as db_update_user};
+use crate::password;
 use crate::middleware::ApiError;
 use uuid::Uuid;
 use chrono::Utc;
@@ -169,6 +170,10 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
         }
     }
 
+    let (password_strength, _) = calculate_password_strength(&req.password);
+    let password_hash = password::hash_password(&req.password)
+        .map_err(|e| ApiError::internal(format!("Failed to hash password: {}", e)))?;
+
     // Set default permissions based on role
     let permissions = match &req.role {
         Role::SysAdmin => Some(shared::Permissions::sys_admin()),
@@ -180,12 +185,12 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
     let new_user = User {
         id: Uuid::new_v4().to_string(),
         username: req.username.clone(),
-        password: req.password,
+        password: password_hash,
         role: req.role,
         permissions,
         created_at: Utc::now(),
         password_changed_at: Some(Utc::now()),
-        password_strength: Some("weak".to_string()),
+        password_strength: Some(password_strength),
         force_password_change: Some(false),
         last_login_at: None,
         email: None,
@@ -382,11 +387,20 @@ pub async fn change_password(
     // Find user and validate current password
     let (user_id, username) = {
         let users = state.users.read().unwrap();
+
         if let Some(user) = users.iter().find(|u| u.id == current_user.id) {
-            // 验证当前密码
-            if user.password != req.current_password {
+            let password_valid = password::verify_password(&req.current_password, &user.password)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Password verification failed: {}", e),
+                    )
+                })?;
+
+            if !password_valid {
                 return Err((StatusCode::BAD_REQUEST, "Current password is incorrect".to_string()));
             }
+
             (user.id.clone(), user.username.clone())
         } else {
             return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
@@ -394,13 +408,19 @@ pub async fn change_password(
     };
 
     // Update password (release lock before async operation)
-    let new_password = req.new_password.clone();
+    let new_password_hash = password::hash_password(&req.new_password)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to hash password: {}", e),
+            )
+        })?;
     let password_changed_at = Utc::now();
 
     {
         let mut users = state.users.write().unwrap();
         if let Some(user) = users.iter_mut().find(|u| u.id == user_id) {
-            user.password = new_password.clone();
+            user.password = new_password_hash.clone();
             user.password_changed_at = Some(password_changed_at);
             user.password_strength = Some(strength.clone());
         }
@@ -421,7 +441,7 @@ pub async fn change_password(
     // 记录密码历史
     {
         let mut history = state.password_history.write().unwrap();
-        history.push((user_id.clone(), new_password, Utc::now()));
+        history.push((user_id.clone(), new_password_hash, Utc::now()));
     }
 
     log_action(&state.audit_logs, &current_user, "CHANGE_PASSWORD", &username,
