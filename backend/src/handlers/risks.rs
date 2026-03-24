@@ -1,9 +1,10 @@
 use crate::database::{
-    db_risk_to_shared, get_risks as db_get_risks, update_risk as db_update_risk,
+    db_risk_to_shared, get_db, get_risk_by_id as db_get_risk_by_id, get_risks as db_get_risks,
+    update_risk as db_update_risk,
 };
 use crate::middleware::ApiError;
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::{get_current_user_from_headers, log_action};
 use axum::{
     extract::{Json, Path, State},
     http::HeaderMap,
@@ -11,35 +12,87 @@ use axum::{
 use chrono::Utc;
 use shared::{Risk, RiskStatus, Role};
 
+fn sync_risk_cache(state: &AppState, risk: &Risk) -> Result<(), ApiError> {
+    let mut risks = state
+        .risks
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write risks cache: {}", e)))?;
+
+    if let Some(existing) = risks.iter_mut().find(|existing| existing.id == risk.id) {
+        *existing = risk.clone();
+    } else {
+        risks.push(risk.clone());
+    }
+
+    Ok(())
+}
+
+async fn load_all_risks(state: &AppState) -> Result<Vec<Risk>, ApiError> {
+    if get_db().is_some() {
+        let risks: Vec<Risk> = db_get_risks()
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load risks from database: {}", e)))?
+            .into_iter()
+            .map(db_risk_to_shared)
+            .collect();
+
+        *state
+            .risks
+            .write()
+            .map_err(|e| ApiError::internal(format!("Failed to write risks cache: {}", e)))? =
+            risks.clone();
+
+        return Ok(risks);
+    }
+
+    state
+        .risks
+        .read()
+        .map(|risks| risks.clone())
+        .map_err(|e| ApiError::internal(format!("Failed to read risks cache: {}", e)))
+}
+
+async fn load_risk_by_id(state: &AppState, id: &str) -> Result<Option<Risk>, ApiError> {
+    if get_db().is_some() {
+        let risk = db_get_risk_by_id(id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load risk: {}", e)))?
+            .map(db_risk_to_shared);
+
+        if let Some(risk) = &risk {
+            sync_risk_cache(state, risk)?;
+        }
+
+        return Ok(risk);
+    }
+
+    state
+        .risks
+        .read()
+        .map(|risks| risks.iter().find(|risk| risk.id == id).cloned())
+        .map_err(|e| ApiError::internal(format!("Failed to read risks cache: {}", e)))
+}
+
+async fn persist_risk(state: &AppState, risk: &Risk) -> Result<(), ApiError> {
+    if get_db().is_some() {
+        db_update_risk(&risk.id, risk)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to persist risk: {}", e)))?;
+    }
+
+    sync_risk_cache(state, risk)?;
+    Ok(())
+}
+
 pub async fn get_risks(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Risk>>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
+    let _user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    // Try to load from database first
-    match db_get_risks().await {
-        Ok(db_risks) => {
-            let risks: Vec<Risk> = db_risks.into_iter().map(db_risk_to_shared).collect();
-            // Update in-memory cache
-            *state
-                .risks
-                .write()
-                .map_err(|e| ApiError::internal(format!("Failed to write risks cache: {}", e)))? =
-                risks.clone();
-            Ok(Json(risks))
-        }
-        Err(e) => {
-            eprintln!("Error loading risks from database: {}", e);
-            // Fallback to memory cache
-            let risks = state
-                .risks
-                .read()
-                .map_err(|e| ApiError::internal(format!("Failed to read risks cache: {}", e)))?;
-            Ok(Json(risks.clone()))
-        }
-    }
+    Ok(Json(load_all_risks(&state).await?))
 }
 
 pub async fn update_risk_status(
@@ -47,7 +100,8 @@ pub async fn update_risk_status(
     headers: HeaderMap,
     Path((id, status_str)): Path<(String, String)>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
@@ -64,46 +118,22 @@ pub async fn update_risk_status(
         _ => return Err(ApiError::bad_request("Invalid status. Valid values: verified, resolved, ignored, open, false_positive, pending_review")),
     };
 
-    let (found, updated_risk) = {
-        let mut risks = state
-            .risks
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write risks: {}", e)))?;
-        if let Some(risk) = risks.iter_mut().find(|r| r.id == id) {
-            risk.status = new_status;
-            risk.updated_at = Some(Utc::now());
-            (true, risk.clone())
-        } else {
-            (
-                false,
-                shared::Risk {
-                    id: id.clone(),
-                    asset_ip: String::new(),
-                    port: 0,
-                    severity: String::new(),
-                    description: String::new(),
-                    solution: None,
-                    status: new_status,
-                    created_at: None,
-                    updated_at: Some(Utc::now()),
-                    assigned_to: None,
-                },
-            )
-        }
-    };
+    let mut risk = load_risk_by_id(&state, &id)
+        .await?
+        .ok_or_else(|| ApiError::not_found(format!("Risk with ID '{}' not found", id)))?;
+    risk.status = new_status;
+    risk.updated_at = Some(Utc::now());
 
-    if found {
-        // Persist to database (after releasing lock)
-        let _ = db_update_risk(&id, &updated_risk).await;
+    persist_risk(&state, &risk).await?;
 
-        log_action(
-            &state.audit_logs,
-            &user,
-            "UPDATE_RISK_STATUS",
-            &id,
-            &format!("Updated risk status to {}", status_str),
-        );
-    }
+    log_action(
+        &state.audit_logs,
+        &user,
+        "UPDATE_RISK_STATUS",
+        &id,
+        &format!("Updated risk status to {}", status_str),
+    );
+
     Ok(Json("Updated".to_string()))
 }
 
@@ -112,52 +142,29 @@ pub async fn resolve_risk(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
-    let (found, updated_risk) = {
-        let mut risks = state
-            .risks
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write risks: {}", e)))?;
-        if let Some(risk) = risks.iter_mut().find(|r| r.id == id) {
-            risk.status = RiskStatus::Resolved;
-            risk.updated_at = Some(Utc::now());
-            (true, risk.clone())
-        } else {
-            (
-                false,
-                shared::Risk {
-                    id: id.clone(),
-                    asset_ip: String::new(),
-                    port: 0,
-                    severity: String::new(),
-                    description: String::new(),
-                    solution: None,
-                    status: RiskStatus::Resolved,
-                    created_at: None,
-                    updated_at: Some(Utc::now()),
-                    assigned_to: None,
-                },
-            )
-        }
-    };
+    let mut risk = load_risk_by_id(&state, &id)
+        .await?
+        .ok_or_else(|| ApiError::not_found(format!("Risk with ID '{}' not found", id)))?;
+    risk.status = RiskStatus::Resolved;
+    risk.updated_at = Some(Utc::now());
 
-    if found {
-        // Persist to database (after releasing lock)
-        let _ = db_update_risk(&id, &updated_risk).await;
+    persist_risk(&state, &risk).await?;
 
-        log_action(
-            &state.audit_logs,
-            &user,
-            "RESOLVE_RISK",
-            &id,
-            "Resolved risk",
-        );
-    }
+    log_action(
+        &state.audit_logs,
+        &user,
+        "RESOLVE_RISK",
+        &id,
+        "Resolved risk",
+    );
+
     Ok(Json("Resolved".to_string()))
 }

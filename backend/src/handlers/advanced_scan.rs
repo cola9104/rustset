@@ -19,7 +19,7 @@ use crate::database::{
     insert_quick_scan_result_wrapper, update_advanced_scan_task,
 };
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::{get_current_user_from_headers, log_action};
 use shared::{AdvancedScanConfig, AdvancedScanTask, CreateAdvancedScanRequest, TaskStatus};
 
 /// Execute advanced scan
@@ -29,7 +29,9 @@ pub async fn execute_advanced_scan(
     Json(req): Json<CreateAdvancedScanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users).ok_or(StatusCode::UNAUTHORIZED)?;
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Validate request
     if req.targets.is_empty() {
@@ -193,7 +195,9 @@ pub async fn delete_advanced_scan(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users).ok_or(StatusCode::UNAUTHORIZED)?;
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Get task name for audit log before deletion
     let task_name = {
@@ -234,7 +238,9 @@ pub async fn cancel_advanced_scan(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users).ok_or(StatusCode::UNAUTHORIZED)?;
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
+        .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Update task status
     let (found, task_to_update) = {

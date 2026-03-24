@@ -671,6 +671,13 @@ pub async fn get_risks_by_asset_ip(
         .await
 }
 
+pub async fn get_risk_by_id_with_conn(
+    conn: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<risk::Model>, DbErr> {
+    Risk::find_by_id(id.to_string()).one(conn).await
+}
+
 pub async fn update_risk_by_id(
     conn: &DatabaseConnection,
     id: &str,
@@ -1675,6 +1682,11 @@ pub async fn delete_resource_ticket(id: i32) -> Result<(), DbErr> {
 pub async fn get_risks() -> Result<Vec<risk::Model>, DbErr> {
     let conn = require_db()?;
     get_all_risks(&conn).await
+}
+
+pub async fn get_risk_by_id(id: &str) -> Result<Option<risk::Model>, DbErr> {
+    let conn = require_db()?;
+    get_risk_by_id_with_conn(&conn, id).await
 }
 
 pub async fn update_risk(id: &str, risk: &shared::Risk) -> Result<(), DbErr> {
