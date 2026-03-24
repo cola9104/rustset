@@ -521,6 +521,23 @@ pub async fn get_all_assets(conn: &DatabaseConnection) -> Result<Vec<asset::Mode
         .await
 }
 
+pub async fn get_asset_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<asset::Model>, DbErr> {
+    Asset::find_by_id(id).one(conn).await
+}
+
+pub async fn get_asset_by_ip(
+    conn: &DatabaseConnection,
+    ip: &str,
+) -> Result<Option<asset::Model>, DbErr> {
+    Asset::find()
+        .filter(asset::Column::Ip.eq(ip))
+        .one(conn)
+        .await
+}
+
 // ============== Task CRUD ==============
 
 pub async fn insert_task(conn: &DatabaseConnection, task: &shared::Task) -> Result<(), DbErr> {
@@ -574,6 +591,13 @@ pub async fn delete_task_by_id(conn: &DatabaseConnection, id: &str) -> Result<()
 
 pub async fn get_all_tasks(conn: &DatabaseConnection) -> Result<Vec<task::Model>, DbErr> {
     Task::find().order_by_desc(task::Column::Id).all(conn).await
+}
+
+pub async fn get_task_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<task::Model>, DbErr> {
+    Task::find_by_id(id.to_string()).one(conn).await
 }
 
 pub async fn get_all_resource_tickets(
@@ -910,6 +934,26 @@ pub async fn update_cloud_provider_config_by_id(
         remarks: Set(remarks.map(|s| s.to_string())),
         status: Set(status.to_string()),
         updated_at: Set(updated_at.map(|s| s.to_string())),
+        ..Default::default()
+    };
+    CloudProviderConfig::update(db_config).exec(conn).await?;
+    Ok(())
+}
+
+pub async fn update_cloud_provider_test_result(
+    conn: &DatabaseConnection,
+    id: i32,
+    status: &str,
+    last_test_time: &str,
+    last_test_result: &str,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    let db_config = cloud_provider_config::ActiveModel {
+        id: Set(id),
+        status: Set(status.to_string()),
+        last_test_time: Set(Some(last_test_time.to_string())),
+        last_test_result: Set(Some(last_test_result.to_string())),
+        updated_at: Set(updated_at.map(|value| value.to_string())),
         ..Default::default()
     };
     CloudProviderConfig::update(db_config).exec(conn).await?;

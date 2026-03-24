@@ -421,7 +421,7 @@ pub async fn test_cloud_provider_connection(
     State(_state): State<AppState>,
     user: AuthUser,
     Path(id): Path<i32>,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied"));
     }
@@ -433,20 +433,32 @@ pub async fn test_cloud_provider_connection(
 
     match get_cloud_provider_config_by_id(&db_conn, id).await {
         Ok(Some(_)) => {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis();
+            let now = chrono::Utc::now().to_rfc3339();
+            let message = "当前版本未集成真实云厂商 SDK，已拒绝返回伪造连接成功结果";
 
-            let test_result = json!({
-                "success": true,
-                "message": "连接测试成功",
-                "response_time_ms": 150u32,
-                "tested_at": now
-            });
+            if let Err(e) = crate::database::update_cloud_provider_test_result(
+                &db_conn,
+                id,
+                "error",
+                &now,
+                message,
+                Some(&now),
+            )
+            .await
+            {
+                eprintln!("Error updating cloud provider test result: {}", e);
+                return Err(ApiError::internal("Failed to persist test result"));
+            }
 
-            Ok(Json(test_result).into_response())
+            log_action_auth(
+                &_state.audit_logs,
+                &user,
+                "TEST_CLOUD_PROVIDER_CONNECTION",
+                &format!("{}", id),
+                message,
+            );
+
+            Err(ApiError::service_unavailable(message))
         }
         Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
         Err(e) => {

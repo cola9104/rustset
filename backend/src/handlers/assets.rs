@@ -1,10 +1,11 @@
 use crate::database::{
-    db_asset_to_shared, delete_asset as db_delete_asset, get_assets as db_get_assets,
+    db_asset_to_shared, delete_asset as db_delete_asset, get_asset_by_id as db_get_asset_by_id,
+    get_asset_by_ip as db_get_asset_by_ip, get_assets as db_get_assets, get_db,
     insert_asset_wrapper as db_insert_asset, update_asset as db_update_asset,
 };
 use crate::middleware::ApiError;
 use crate::state::AppState;
-use crate::utils::{determine_zone, get_current_user, log_action};
+use crate::utils::{determine_zone, get_current_user_from_headers, log_action};
 use axum::{
     extract::{Json, Path, State},
     http::{HeaderMap, StatusCode},
@@ -12,33 +13,101 @@ use axum::{
 use shared::{Asset, PortBindingRequest, PortInfo, Role};
 use std::net::IpAddr;
 
+fn sync_asset_cache(state: &AppState, asset: &Asset) -> Result<(), ApiError> {
+    let mut assets = state
+        .assets
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write assets cache: {}", e)))?;
+    if let Some(id) = asset.id {
+        if let Some(existing) = assets.iter_mut().find(|existing| existing.id == Some(id)) {
+            *existing = asset.clone();
+        } else {
+            assets.push(asset.clone());
+        }
+    } else {
+        assets.push(asset.clone());
+    }
+    Ok(())
+}
+
+fn remove_asset_from_cache(state: &AppState, id: i32) -> Result<(), ApiError> {
+    let mut assets = state
+        .assets
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write assets cache: {}", e)))?;
+    assets.retain(|asset| asset.id != Some(id));
+    Ok(())
+}
+
+async fn load_all_assets(state: &AppState) -> Result<Vec<Asset>, ApiError> {
+    if get_db().is_some() {
+        let assets: Vec<Asset> = db_get_assets()
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load assets from database: {}", e)))?
+            .into_iter()
+            .map(db_asset_to_shared)
+            .collect();
+        let mut cache = state
+            .assets
+            .write()
+            .map_err(|e| ApiError::internal(format!("Failed to write assets cache: {}", e)))?;
+        *cache = assets.clone();
+        return Ok(assets);
+    }
+
+    state
+        .assets
+        .read()
+        .map(|assets| assets.clone())
+        .map_err(|e| ApiError::internal(format!("Failed to read assets cache: {}", e)))
+}
+
+async fn load_asset_by_id(state: &AppState, id: i32) -> Result<Option<Asset>, ApiError> {
+    if let Some(conn) = get_db() {
+        let asset = db_get_asset_by_id(&conn, id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load asset: {}", e)))?
+            .map(db_asset_to_shared);
+        if let Some(asset) = &asset {
+            sync_asset_cache(state, asset)?;
+        }
+        return Ok(asset);
+    }
+
+    state
+        .assets
+        .read()
+        .map(|assets| assets.iter().find(|asset| asset.id == Some(id)).cloned())
+        .map_err(|e| ApiError::internal(format!("Failed to read assets cache: {}", e)))
+}
+
+async fn load_asset_by_ip(state: &AppState, ip: &str) -> Result<Option<Asset>, ApiError> {
+    if let Some(conn) = get_db() {
+        let asset = db_get_asset_by_ip(&conn, ip)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load asset: {}", e)))?
+            .map(db_asset_to_shared);
+        if let Some(asset) = &asset {
+            sync_asset_cache(state, asset)?;
+        }
+        return Ok(asset);
+    }
+
+    state
+        .assets
+        .read()
+        .map(|assets| assets.iter().find(|asset| asset.ip == ip).cloned())
+        .map_err(|e| ApiError::internal(format!("Failed to read assets cache: {}", e)))
+}
+
 pub async fn get_assets(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Asset>>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
+    let _user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    // Try to load from database first
-    match db_get_assets().await {
-        Ok(db_assets) => {
-            let assets: Vec<Asset> = db_assets.into_iter().map(db_asset_to_shared).collect();
-            // Update in-memory cache
-            *state.assets.write().map_err(|e| {
-                ApiError::internal(format!("Failed to write assets cache: {}", e))
-            })? = assets.clone();
-            Ok(Json(assets))
-        }
-        Err(e) => {
-            eprintln!("Error loading assets from database: {}", e);
-            // Fallback to memory cache
-            let assets = state
-                .assets
-                .read()
-                .map_err(|e| ApiError::internal(format!("Failed to read assets cache: {}", e)))?;
-            Ok(Json(assets.clone()))
-        }
-    }
+    Ok(Json(load_all_assets(&state).await?))
 }
 
 pub async fn add_asset(
@@ -46,7 +115,8 @@ pub async fn add_asset(
     headers: HeaderMap,
     Json(mut asset): Json<Asset>,
 ) -> Result<Json<Asset>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
@@ -65,32 +135,38 @@ pub async fn add_asset(
         asset.zone = determine_zone(&asset.ip, &zones);
     }
 
-    let new_asset = {
-        let mut assets = state
-            .assets
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write assets: {}", e)))?;
-        let new_id = assets.len() as i32 + 1;
-        asset.id = Some(new_id);
-        asset.created_by = Some(user.username.clone());
-        assets.push(asset.clone());
-        asset
-    };
+    asset.created_by = Some(user.username.clone());
+    asset.updated_by = None;
 
-    // Persist to database (after releasing lock)
-    if let Err(e) = db_insert_asset(&new_asset).await {
-        eprintln!("Failed to persist asset to database: {}", e);
+    if get_db().is_some() {
+        let new_id = db_insert_asset(&asset)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to persist asset: {}", e)))?;
+        asset.id = Some(new_id as i32);
+    } else {
+        let next_id = state
+            .assets
+            .read()
+            .map_err(|e| ApiError::internal(format!("Failed to read assets cache: {}", e)))?
+            .iter()
+            .filter_map(|existing| existing.id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        asset.id = Some(next_id);
     }
+
+    sync_asset_cache(&state, &asset)?;
 
     log_action(
         &state.audit_logs,
         &user,
         "CREATE_ASSET",
-        &new_asset.name,
-        &format!("IP: {}", new_asset.ip),
+        &asset.name,
+        &format!("IP: {}", asset.ip),
     );
 
-    Ok(Json(new_asset))
+    Ok(Json(asset))
 }
 
 pub async fn update_asset(
@@ -99,7 +175,8 @@ pub async fn update_asset(
     Path(id): Path<i32>,
     Json(req): Json<Asset>,
 ) -> Result<Json<Option<Asset>>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
@@ -110,7 +187,6 @@ pub async fn update_asset(
         return Err(ApiError::bad_request("Invalid IP address format"));
     }
 
-    // Clone zones data before acquiring assets lock
     let zones = {
         let zones_lock = state
             .zones
@@ -119,44 +195,40 @@ pub async fn update_asset(
         zones_lock.clone()
     };
 
-    // Find and update asset, then release lock before async operations
-    let (found, updated_asset) = {
-        let mut assets = state.assets.write().unwrap();
-        if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
-            asset.name = req.name.clone();
-            if asset.ip != req.ip {
-                asset.ip = req.ip.clone();
-                asset.zone = determine_zone(&asset.ip, &zones);
-            }
-            asset.contact_person = req.contact_person.clone();
-            asset.contact_phone = req.contact_phone.clone();
-            asset.owner = req.owner;
-            asset.weight = req.weight;
-            asset.labels = req.labels.clone();
-            asset.os = req.os.clone();
-            asset.device_type = req.device_type.clone();
-            asset.updated_by = Some(user.username.clone());
-            (true, asset.clone())
-        } else {
-            (false, req)
-        }
+    let mut updated_asset = match load_asset_by_id(&state, id).await? {
+        Some(asset) => asset,
+        None => return Ok(Json(None)),
     };
 
-    if found {
-        // Persist to database (after releasing lock)
-        let _ = db_update_asset(id, &updated_asset).await;
-
-        log_action(
-            &state.audit_logs,
-            &user,
-            "UPDATE_ASSET",
-            &updated_asset.name,
-            "Updated asset details",
-        );
-        Ok(Json(Some(updated_asset)))
-    } else {
-        Ok(Json(None))
+    updated_asset.name = req.name.clone();
+    if updated_asset.ip != req.ip {
+        updated_asset.ip = req.ip.clone();
+        updated_asset.zone = determine_zone(&updated_asset.ip, &zones);
     }
+    updated_asset.contact_person = req.contact_person.clone();
+    updated_asset.contact_phone = req.contact_phone.clone();
+    updated_asset.owner = req.owner;
+    updated_asset.weight = req.weight;
+    updated_asset.labels = req.labels.clone();
+    updated_asset.os = req.os.clone();
+    updated_asset.device_type = req.device_type.clone();
+    updated_asset.updated_by = Some(user.username.clone());
+
+    if get_db().is_some() {
+        db_update_asset(id, &updated_asset)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to update asset: {}", e)))?;
+    }
+    sync_asset_cache(&state, &updated_asset)?;
+
+    log_action(
+        &state.audit_logs,
+        &user,
+        "UPDATE_ASSET",
+        &updated_asset.name,
+        "Updated asset details",
+    );
+    Ok(Json(Some(updated_asset)))
 }
 
 pub async fn delete_asset(
@@ -164,24 +236,27 @@ pub async fn delete_asset(
     headers: HeaderMap,
     Path(id): Path<i32>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
-    // Remove from in-memory storage
-    {
-        let mut assets = state
-            .assets
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write assets: {}", e)))?;
-        assets.retain(|a| a.id != Some(id));
+    if load_asset_by_id(&state, id).await?.is_none() {
+        return Err(ApiError::not_found(format!(
+            "Asset with ID '{}' not found",
+            id
+        )));
     }
 
-    // Persist to database (after releasing lock)
-    let _ = db_delete_asset(id).await;
+    if get_db().is_some() {
+        db_delete_asset(id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to delete asset: {}", e)))?;
+    }
+    remove_asset_from_cache(&state, id)?;
 
     log_action(
         &state.audit_logs,
@@ -199,7 +274,8 @@ pub async fn add_asset_port(
     Path(id): Path<i32>,
     Json(mut port_info): Json<PortInfo>,
 ) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     if user.role != Role::SecAdmin {
         return Err((
@@ -208,23 +284,42 @@ pub async fn add_asset_port(
         ));
     }
 
-    let mut assets = state.assets.write().unwrap();
-    if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
-        if !asset.ports.iter().any(|p| p.port == port_info.port) {
-            port_info.created_by = Some(user.username.clone());
-            asset.ports.push(port_info.clone());
-            asset.ports.sort_by(|a, b| a.port.cmp(&b.port));
+    let mut asset = match load_asset_by_id(&state, id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        Some(asset) => asset,
+        None => return Ok(Json(None)),
+    };
 
-            log_action(
-                &state.audit_logs,
-                &user,
-                "ADD_PORT",
-                &format!("{}:{}", asset.ip, port_info.port),
-                "Added port",
-            );
-            return Ok(Json(Some(asset.clone())));
+    if !asset.ports.iter().any(|p| p.port == port_info.port) {
+        port_info.created_by = Some(user.username.clone());
+        port_info.updated_by = None;
+        asset.ports.push(port_info.clone());
+        asset.ports.sort_by(|a, b| a.port.cmp(&b.port));
+        asset.updated_by = Some(user.username.clone());
+
+        if get_db().is_some() {
+            db_update_asset(id, &asset).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to add port: {}", e),
+                )
+            })?;
         }
+        sync_asset_cache(&state, &asset)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        log_action(
+            &state.audit_logs,
+            &user,
+            "ADD_PORT",
+            &format!("{}:{}", asset.ip, port_info.port),
+            "Added port",
+        );
+        return Ok(Json(Some(asset)));
     }
+
     Ok(Json(None))
 }
 
@@ -234,7 +329,8 @@ pub async fn update_asset_port(
     Path((id, port)): Path<(i32, u16)>,
     Json(port_info): Json<PortInfo>,
 ) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     if user.role != Role::SecAdmin {
         return Err((
@@ -243,24 +339,40 @@ pub async fn update_asset_port(
         ));
     }
 
-    let mut assets = state.assets.write().unwrap();
-    if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
-        if let Some(p) = asset.ports.iter_mut().find(|p| p.port == port) {
-            *p = port_info;
-            p.port = port;
-            p.updated_by = Some(user.username.clone());
+    let mut asset = match load_asset_by_id(&state, id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        Some(asset) => asset,
+        None => return Ok(Json(None)),
+    };
 
-            log_action(
-                &state.audit_logs,
-                &user,
-                "UPDATE_PORT",
-                &format!("{}:{}", asset.ip, port),
-                "Updated port",
-            );
+    if let Some(p) = asset.ports.iter_mut().find(|p| p.port == port) {
+        *p = port_info;
+        p.port = port;
+        p.updated_by = Some(user.username.clone());
+        asset.updated_by = Some(user.username.clone());
+
+        if get_db().is_some() {
+            db_update_asset(id, &asset).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to update port: {}", e),
+                )
+            })?;
         }
-        return Ok(Json(Some(asset.clone())));
+        sync_asset_cache(&state, &asset)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        log_action(
+            &state.audit_logs,
+            &user,
+            "UPDATE_PORT",
+            &format!("{}:{}", asset.ip, port),
+            "Updated port",
+        );
     }
-    Ok(Json(None))
+    Ok(Json(Some(asset)))
 }
 
 pub async fn delete_asset_port(
@@ -268,7 +380,8 @@ pub async fn delete_asset_port(
     headers: HeaderMap,
     Path((id, port)): Path<(i32, u16)>,
 ) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     if user.role != Role::SecAdmin {
         return Err((
@@ -277,9 +390,28 @@ pub async fn delete_asset_port(
         ));
     }
 
-    let mut assets = state.assets.write().unwrap();
-    if let Some(asset) = assets.iter_mut().find(|a| a.id == Some(id)) {
-        asset.ports.retain(|p| p.port != port);
+    let mut asset = match load_asset_by_id(&state, id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        Some(asset) => asset,
+        None => return Ok(Json(None)),
+    };
+
+    let original_len = asset.ports.len();
+    asset.ports.retain(|p| p.port != port);
+    if asset.ports.len() != original_len {
+        asset.updated_by = Some(user.username.clone());
+        if get_db().is_some() {
+            db_update_asset(id, &asset).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to delete port: {}", e),
+                )
+            })?;
+        }
+        sync_asset_cache(&state, &asset)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         log_action(
             &state.audit_logs,
             &user,
@@ -287,9 +419,8 @@ pub async fn delete_asset_port(
             &format!("{}:{}", asset.ip, port),
             "Deleted port",
         );
-        return Ok(Json(Some(asset.clone())));
     }
-    Ok(Json(None))
+    Ok(Json(Some(asset)))
 }
 
 pub async fn bind_port(
@@ -298,7 +429,8 @@ pub async fn bind_port(
     Path((ip, port)): Path<(String, u16)>,
     Json(req): Json<PortBindingRequest>,
 ) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
     if user.role != Role::SecAdmin {
         return Err((
@@ -307,23 +439,41 @@ pub async fn bind_port(
         ));
     }
 
-    let mut assets = state.assets.write().unwrap();
-    if let Some(asset) = assets.iter_mut().find(|a| a.ip == ip) {
-        if let Some(p) = asset.ports.iter_mut().find(|p| p.port == port) {
-            p.is_bound = true;
-            p.system_name = Some(req.system_name.clone());
-            p.middleware = Some(req.middleware.clone());
-            p.updated_by = Some(user.username.clone());
+    let mut asset = match load_asset_by_ip(&state, &ip)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    {
+        Some(asset) => asset,
+        None => return Ok(Json(None)),
+    };
 
-            log_action(
-                &state.audit_logs,
-                &user,
-                "BIND_PORT",
-                &format!("{}:{}", ip, port),
-                &format!("Bound to {}", req.system_name),
-            );
+    if let Some(p) = asset.ports.iter_mut().find(|p| p.port == port) {
+        p.is_bound = true;
+        p.system_name = Some(req.system_name.clone());
+        p.middleware = Some(req.middleware.clone());
+        p.updated_by = Some(user.username.clone());
+        asset.updated_by = Some(user.username.clone());
+
+        if let Some(id) = asset.id {
+            if get_db().is_some() {
+                db_update_asset(id, &asset).await.map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to bind port: {}", e),
+                    )
+                })?;
+            }
         }
-        return Ok(Json(Some(asset.clone())));
+        sync_asset_cache(&state, &asset)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+        log_action(
+            &state.audit_logs,
+            &user,
+            "BIND_PORT",
+            &format!("{}:{}", ip, port),
+            &format!("Bound to {}", req.system_name),
+        );
     }
-    Ok(Json(None))
+    Ok(Json(Some(asset)))
 }

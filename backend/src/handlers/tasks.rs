@@ -1,10 +1,11 @@
 use crate::database::{
-    db_task_to_shared, delete_task as db_delete_task, get_tasks as db_get_tasks,
-    insert_task_wrapper as db_insert_task, update_task as db_update_task,
+    db_task_to_shared, delete_task as db_delete_task, get_db, get_task_by_id as db_get_task_by_id,
+    get_tasks as db_get_tasks, insert_task_wrapper as db_insert_task,
+    update_task as db_update_task,
 };
 use crate::middleware::ApiError;
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::{get_current_user_from_headers, log_action};
 use axum::{
     extract::{Json, Path, State},
     http::HeaderMap,
@@ -13,35 +14,78 @@ use chrono::Utc;
 use shared::{CreateTaskRequest, PortInfo, Role, ScanRequest, Task, TaskStatus};
 use uuid::Uuid;
 
+fn sync_task_cache(state: &AppState, task: &Task) -> Result<(), ApiError> {
+    let mut tasks = state
+        .tasks
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write tasks cache: {}", e)))?;
+    if let Some(existing) = tasks.iter_mut().find(|existing| existing.id == task.id) {
+        *existing = task.clone();
+    } else {
+        tasks.push(task.clone());
+    }
+    Ok(())
+}
+
+fn remove_task_from_cache(state: &AppState, task_id: &str) -> Result<(), ApiError> {
+    let mut tasks = state
+        .tasks
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write tasks cache: {}", e)))?;
+    tasks.retain(|task| task.id != task_id);
+    Ok(())
+}
+
+async fn load_all_tasks(state: &AppState) -> Result<Vec<Task>, ApiError> {
+    if get_db().is_some() {
+        let tasks: Vec<Task> = db_get_tasks()
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load tasks from database: {}", e)))?
+            .into_iter()
+            .map(db_task_to_shared)
+            .collect();
+        let mut cache = state
+            .tasks
+            .write()
+            .map_err(|e| ApiError::internal(format!("Failed to write tasks cache: {}", e)))?;
+        *cache = tasks.clone();
+        return Ok(tasks);
+    }
+
+    state
+        .tasks
+        .read()
+        .map(|tasks| tasks.clone())
+        .map_err(|e| ApiError::internal(format!("Failed to read tasks cache: {}", e)))
+}
+
+async fn load_task_by_id(state: &AppState, id: &str) -> Result<Option<Task>, ApiError> {
+    if let Some(conn) = get_db() {
+        let task = db_get_task_by_id(&conn, id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load task: {}", e)))?
+            .map(db_task_to_shared);
+        if let Some(task) = &task {
+            sync_task_cache(state, task)?;
+        }
+        return Ok(task);
+    }
+
+    state
+        .tasks
+        .read()
+        .map(|tasks| tasks.iter().find(|task| task.id == id).cloned())
+        .map_err(|e| ApiError::internal(format!("Failed to read tasks cache: {}", e)))
+}
+
 pub async fn get_tasks(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Task>>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
+    let _user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    // Try to load from database first
-    match db_get_tasks().await {
-        Ok(db_tasks) => {
-            let tasks: Vec<Task> = db_tasks.into_iter().map(db_task_to_shared).collect();
-            // Update in-memory cache
-            *state
-                .tasks
-                .write()
-                .map_err(|e| ApiError::internal(format!("Failed to write tasks cache: {}", e)))? =
-                tasks.clone();
-            Ok(Json(tasks))
-        }
-        Err(e) => {
-            eprintln!("Error loading tasks from database: {}", e);
-            // Fallback to memory cache
-            let tasks = state
-                .tasks
-                .read()
-                .map_err(|e| ApiError::internal(format!("Failed to read tasks cache: {}", e)))?;
-            Ok(Json(tasks.clone()))
-        }
-    }
+    Ok(Json(load_all_tasks(&state).await?))
 }
 
 pub async fn create_task(
@@ -49,7 +93,8 @@ pub async fn create_task(
     headers: HeaderMap,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<Task>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
@@ -73,17 +118,12 @@ pub async fn create_task(
         created_by: Some(user.username.clone()),
     };
 
-    // Add to in-memory storage
-    {
-        let mut tasks = state
-            .tasks
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write tasks: {}", e)))?;
-        tasks.push(new_task.clone());
+    if get_db().is_some() {
+        db_insert_task(&new_task)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to create task: {}", e)))?;
     }
-
-    // Persist to database
-    let _ = db_insert_task(&new_task).await;
+    sync_task_cache(&state, &new_task)?;
 
     log_action(
         &state.audit_logs,
@@ -102,65 +142,42 @@ pub async fn update_task(
     Path(id): Path<String>,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<Option<Task>>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
-    let (found, updated_task) = {
-        let mut tasks = state
-            .tasks
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write tasks: {}", e)))?;
-        if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
-            task.name = req.name.clone();
-            task.target = req.target;
-            task.port_policy = req.port_policy;
-            task.domain_brute = req.domain_brute;
-            task.service_detection = req.service_detection;
-            task.os_detection = req.os_detection;
-            task.site_identify = req.site_identify;
-            (true, task.clone())
-        } else {
-            (
-                false,
-                Task {
-                    id: id.clone(),
-                    name: req.name.clone(),
-                    target: req.target,
-                    status: TaskStatus::Pending,
-                    start_time: None,
-                    end_time: None,
-                    found_assets: 0,
-                    found_risks: 0,
-                    port_policy: req.port_policy,
-                    domain_brute: req.domain_brute,
-                    service_detection: req.service_detection,
-                    os_detection: req.os_detection,
-                    site_identify: req.site_identify,
-                    created_by: Some(user.username.clone()),
-                },
-            )
-        }
+    let mut updated_task = match load_task_by_id(&state, &id).await? {
+        Some(task) => task,
+        None => return Ok(Json(None)),
     };
 
-    if found {
-        // Persist to database (after releasing lock)
-        let _ = db_update_task(&id, &updated_task).await;
+    updated_task.name = req.name.clone();
+    updated_task.target = req.target;
+    updated_task.port_policy = req.port_policy;
+    updated_task.domain_brute = req.domain_brute;
+    updated_task.service_detection = req.service_detection;
+    updated_task.os_detection = req.os_detection;
+    updated_task.site_identify = req.site_identify;
 
-        log_action(
-            &state.audit_logs,
-            &user,
-            "UPDATE_TASK",
-            &updated_task.name,
-            "Updated task config",
-        );
-        Ok(Json(Some(updated_task)))
-    } else {
-        Ok(Json(None))
+    if get_db().is_some() {
+        db_update_task(&id, &updated_task)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to update task: {}", e)))?;
     }
+    sync_task_cache(&state, &updated_task)?;
+
+    log_action(
+        &state.audit_logs,
+        &user,
+        "UPDATE_TASK",
+        &updated_task.name,
+        "Updated task config",
+    );
+    Ok(Json(Some(updated_task)))
 }
 
 pub async fn delete_task(
@@ -168,24 +185,27 @@ pub async fn delete_task(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
-    // Remove from in-memory storage
-    {
-        let mut tasks = state
-            .tasks
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write tasks: {}", e)))?;
-        tasks.retain(|t| t.id != id);
+    if load_task_by_id(&state, &id).await?.is_none() {
+        return Err(ApiError::not_found(format!(
+            "Task with ID '{}' not found",
+            id
+        )));
     }
 
-    // Persist to database (after releasing lock)
-    let _ = db_delete_task(&id).await;
+    if get_db().is_some() {
+        db_delete_task(&id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to delete task: {}", e)))?;
+    }
+    remove_task_from_cache(&state, &id)?;
 
     log_action(&state.audit_logs, &user, "DELETE_TASK", &id, "Deleted task");
     Ok(Json("Deleted".to_string()))
@@ -199,7 +219,8 @@ pub async fn trigger_scan(
     headers: HeaderMap,
     Json(req): Json<ScanRequest>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SecAdmin {
