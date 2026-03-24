@@ -136,15 +136,18 @@ impl LoginUser {
     }
 }
 
-impl LoginRole {
-    fn to_string(&self) -> String {
-        match self {
-            LoginRole::SysAdmin => "SysAdmin".to_string(),
-            LoginRole::SecAdmin => "SecAdmin".to_string(),
-            LoginRole::Auditor => "Auditor".to_string(),
-            LoginRole::Operator => "Operator".to_string(),
-            LoginRole::Custom => "Custom".to_string(),
-        }
+impl LoginRole {}
+
+impl std::fmt::Display for LoginRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            LoginRole::SysAdmin => "SysAdmin",
+            LoginRole::SecAdmin => "SecAdmin",
+            LoginRole::Auditor => "Auditor",
+            LoginRole::Operator => "Operator",
+            LoginRole::Custom => "Custom",
+        };
+        f.write_str(value)
     }
 }
 

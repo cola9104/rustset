@@ -117,12 +117,12 @@ fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
     let protocol = ticket
         .fw_protocol
         .as_ref()
-        .and_then(|p| match p.to_lowercase().as_str() {
-            "tcp" => Some(PolicyProtocol::Tcp),
-            "udp" => Some(PolicyProtocol::Udp),
-            "icmp" => Some(PolicyProtocol::Icmp),
-            "any" => Some(PolicyProtocol::Any),
-            _ => Some(PolicyProtocol::Tcp),
+        .map(|p| match p.to_lowercase().as_str() {
+            "tcp" => PolicyProtocol::Tcp,
+            "udp" => PolicyProtocol::Udp,
+            "icmp" => PolicyProtocol::Icmp,
+            "any" => PolicyProtocol::Any,
+            _ => PolicyProtocol::Tcp,
         })
         .unwrap_or(PolicyProtocol::Tcp);
 
@@ -130,11 +130,11 @@ fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
     let direction = ticket
         .fw_direction
         .as_ref()
-        .and_then(|d| match d.as_str() {
-            "入站" => Some(AccessDirection::Inbound),
-            "出站" => Some(AccessDirection::Outbound),
-            "双向" => Some(AccessDirection::Bidirectional),
-            _ => Some(AccessDirection::Inbound),
+        .map(|d| match d.as_str() {
+            "入站" => AccessDirection::Inbound,
+            "出站" => AccessDirection::Outbound,
+            "双向" => AccessDirection::Bidirectional,
+            _ => AccessDirection::Inbound,
         })
         .unwrap_or(AccessDirection::Inbound);
 
@@ -143,19 +143,13 @@ fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
         title: ticket.ecs_name.clone(),
         applicant: ticket.created_by.clone(),
         department: "信息部".to_string(), // 后端暂无部门字段，使用默认值
-        source_zone: ticket
-            .fw_source_zone
-            .clone()
-            .unwrap_or_else(|| String::new()),
-        destination_zone: ticket.fw_dest_zone.clone().unwrap_or_else(|| String::new()),
+        source_zone: ticket.fw_source_zone.clone().unwrap_or_default(),
+        destination_zone: ticket.fw_dest_zone.clone().unwrap_or_default(),
         direction,
         protocol,
-        port_range: ticket.fw_port.clone().unwrap_or_else(|| String::new()),
+        port_range: ticket.fw_port.clone().unwrap_or_default(),
         description: ticket.remarks.clone(),
-        valid_until: ticket
-            .fw_valid_until
-            .clone()
-            .unwrap_or_else(|| String::new()),
+        valid_until: ticket.fw_valid_until.clone().unwrap_or_default(),
         status,
         created_at: ticket.created_at.clone(),
     }

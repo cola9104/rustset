@@ -359,10 +359,8 @@ pub fn ZoneForm(props: ZoneFormProps) -> Element {
                                             if !data.cidr_blocks.contains(&cidr) {
                                                 data.cidr_blocks.push(cidr);
                                             }
-                                        } else {
-                                            if !data.ip_ranges.contains(&cidr) {
-                                                data.ip_ranges.push(cidr);
-                                            }
+                                        } else if !data.ip_ranges.contains(&cidr) {
+                                            data.ip_ranges.push(cidr);
                                         }
                                     }
                                     new_cidr.set(String::new());
@@ -380,10 +378,8 @@ pub fn ZoneForm(props: ZoneFormProps) -> Element {
                                         if !data.cidr_blocks.contains(&cidr) {
                                             data.cidr_blocks.push(cidr);
                                         }
-                                    } else {
-                                        if !data.ip_ranges.contains(&cidr) {
-                                            data.ip_ranges.push(cidr);
-                                        }
+                                    } else if !data.ip_ranges.contains(&cidr) {
+                                        data.ip_ranges.push(cidr);
                                     }
                                     new_cidr.set(String::new());
                                 }

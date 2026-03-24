@@ -13,7 +13,7 @@ pub fn api_base() -> String {
     // 开发环境默认值
     #[cfg(debug_assertions)]
     {
-        return "http://localhost:3003/api".to_string();
+        "http://localhost:3003/api".to_string()
     }
 
     // 生产环境默认值（相对路径，使用代理）

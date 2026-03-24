@@ -2,6 +2,7 @@
 //!
 //! This module provides database connectivity and CRUD operations using SeaORM.
 #![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 
 use crate::entities::{
     advanced_scan_task, asset, audit_log, business_resource, cloud_provider_config, cloud_service,
@@ -206,16 +207,16 @@ pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
         last_login_at: Set(Some(
             user.last_login_at
                 .map(|d| d.to_rfc3339())
-                .unwrap_or_else(|| "".to_string()),
+                .unwrap_or_default(),
         )),
         email: Set(user.email.clone()),
-        phone: Set(Some(user.phone.clone().unwrap_or_else(|| "".to_string()))),
+        phone: Set(Some(user.phone.clone().unwrap_or_default())),
         status: Set(user.status.clone()),
         failed_login_attempts: Set(user.failed_login_attempts.map(|v| v as i32)),
         locked_until: Set(Some(
             user.locked_until
                 .map(|d| d.to_rfc3339())
-                .unwrap_or_else(|| "".to_string()),
+                .unwrap_or_default(),
         )),
     }
 }

@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 pub mod cloud_service;
 pub mod network_policy;
 pub mod physical_server;

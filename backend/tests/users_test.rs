@@ -179,7 +179,7 @@ async fn test_password_strength_calculation() {
     // 中等密码
     let (strength, score) = calculate_password_strength("WeakPass123");
     assert_eq!(strength, "medium");
-    assert!(score >= 3 && score <= 4);
+    assert!((3..=4).contains(&score));
 
     // 强密码
     let (strength, score) = calculate_password_strength("StrongP@ssw0rd123!");

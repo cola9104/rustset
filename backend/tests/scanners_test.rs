@@ -418,7 +418,7 @@ async fn test_update_scanner_as_admin() {
     // Update the scanner
     let update_request = Request::builder()
         .method(Method::PUT)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("admin"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(r#"{"name":"updated-name","enabled":false}"#))
@@ -479,7 +479,7 @@ async fn test_delete_scanner_as_admin() {
     // Delete the scanner
     let delete_request = Request::builder()
         .method(Method::DELETE)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("admin"))
         .body(Body::empty())
         .unwrap();
@@ -553,7 +553,7 @@ async fn test_update_scanner_invalid_type() {
     // Try to update with invalid type
     let update_request = Request::builder()
         .method(Method::PUT)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("admin"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(r#"{"scanner_type":"invalid_type"}"#))
@@ -609,7 +609,7 @@ async fn test_update_scanner_as_auditor_forbidden() {
     // Try to update as auditor
     let update_request = Request::builder()
         .method(Method::PUT)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("auditor"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(r#"{"name":"hacked"}"#))
@@ -645,7 +645,7 @@ async fn test_delete_scanner_as_auditor_forbidden() {
     // Try to delete as auditor
     let delete_request = Request::builder()
         .method(Method::DELETE)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("auditor"))
         .body(Body::empty())
         .unwrap();
@@ -696,7 +696,7 @@ async fn test_update_scanner_as_secadmin() {
     // Update as secadmin
     let update_request = Request::builder()
         .method(Method::PUT)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("secadmin"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(
@@ -740,7 +740,7 @@ async fn test_delete_scanner_as_secadmin() {
     // Delete as secadmin
     let delete_request = Request::builder()
         .method(Method::DELETE)
-        .uri(&format!("/api/scanners/{}", scanner_id))
+        .uri(format!("/api/scanners/{}", scanner_id))
         .header(header::AUTHORIZATION, auth_header_value("secadmin"))
         .body(Body::empty())
         .unwrap();

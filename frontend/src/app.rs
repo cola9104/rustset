@@ -11,8 +11,7 @@ use crate::state::{
 use crate::utils::storage::clear_token;
 
 /// 全局安全产品数据状态
-pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> =
-    Signal::global(|| Vec::new());
+pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> = Signal::global(Vec::new);
 
 /// 主应用组件
 #[allow(non_snake_case)]
@@ -37,23 +36,20 @@ pub struct AuthUser {
 pub static AUTH_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
 
 /// 全局服务商数据状态
-pub static PROVIDERS_STATE: GlobalSignal<Vec<ServiceProviderConfig>> =
-    Signal::global(|| Vec::new());
+pub static PROVIDERS_STATE: GlobalSignal<Vec<ServiceProviderConfig>> = Signal::global(Vec::new);
 
 /// 全局机房数据状态
-pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> =
-    Signal::global(|| Vec::new());
+pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> = Signal::global(Vec::new);
 
 /// 全局云平台数据状态
-pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> =
-    Signal::global(|| Vec::new());
+pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> = Signal::global(Vec::new);
 
 /// 全局网络区域数据状态
-pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(|| Vec::new());
+pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(Vec::new);
 
 /// 全局网络策略数据状态
 pub static NETWORK_POLICIES_STATE: GlobalSignal<Vec<NetworkPolicyConfig>> =
-    Signal::global(|| Vec::new());
+    Signal::global(Vec::new);
 
 /// 检查是否已认证
 #[allow(dead_code)]

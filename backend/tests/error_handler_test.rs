@@ -150,7 +150,7 @@ mod error_handler_tests {
 
     #[test]
     fn test_multiple_errors_different_types() {
-        let errors = vec![
+        let errors = [
             ApiError::unauthorized("No token"),
             ApiError::forbidden("Admin only"),
             ApiError::not_found("User not found"),

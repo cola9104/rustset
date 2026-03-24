@@ -36,7 +36,7 @@ pub fn VirtualScroller<T: Clone + PartialEq + 'static>(props: VirtualScrollerPro
     let total_pages = if total_items == 0 {
         0
     } else {
-        (total_items + props.page_size - 1) / props.page_size
+        total_items.div_ceil(props.page_size)
     };
 
     let start_index = *current_page.read() * props.page_size;
@@ -45,9 +45,9 @@ pub fn VirtualScroller<T: Clone + PartialEq + 'static>(props: VirtualScrollerPro
     let visible_items: Vec<T> = props
         .items
         .iter()
-        .cloned()
         .skip(start_index)
         .take(props.page_size)
+        .cloned()
         .collect();
 
     // 如果没有项目，显示空状态
@@ -159,7 +159,7 @@ pub fn VirtualList<T: Clone + PartialEq + 'static>(props: VirtualListProps<T>) -
     let total_pages = if total_items == 0 {
         0
     } else {
-        (total_items + props.page_size - 1) / props.page_size
+        total_items.div_ceil(props.page_size)
     };
 
     let start_index = *current_page.read() * props.page_size;
@@ -168,9 +168,9 @@ pub fn VirtualList<T: Clone + PartialEq + 'static>(props: VirtualListProps<T>) -
     let visible_items: Vec<T> = props
         .items
         .iter()
-        .cloned()
         .skip(start_index)
         .take(props.page_size)
+        .cloned()
         .collect();
 
     // 如果没有项目，显示空状态

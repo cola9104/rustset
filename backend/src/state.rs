@@ -9,6 +9,8 @@ use shared::{
 use std::sync::{Arc, RwLock as StdRwLock};
 use tokio::sync::RwLock as TokioRwLock;
 
+type PasswordHistoryEntry = (String, String, DateTime<Utc>);
+
 #[derive(Clone)]
 pub struct AppState {
     /// Use RwLock for better read performance (multiple concurrent readers)
@@ -22,7 +24,7 @@ pub struct AppState {
     pub custom_roles: Arc<StdRwLock<Vec<CustomRole>>>,
     pub scan_manager: Arc<TokioRwLock<Option<ScanManager>>>,
     pub password_policy: Arc<StdRwLock<PasswordPolicy>>,
-    pub password_history: Arc<StdRwLock<Vec<(String, String, DateTime<Utc>)>>>,
+    pub password_history: Arc<StdRwLock<Vec<PasswordHistoryEntry>>>,
     #[allow(dead_code)]
     pub cloud_zones: Arc<StdRwLock<Vec<CloudZone>>>,
     #[allow(dead_code)]

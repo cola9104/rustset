@@ -630,7 +630,7 @@ mod tests {
         // Medium password
         let (strength, score) = calculate_password_strength("Abc123");
         assert_eq!(strength, "medium");
-        assert!(score >= 3 && score <= 4);
+        assert!((3..=4).contains(&score));
     }
 
     #[test]
