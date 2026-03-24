@@ -191,6 +191,7 @@ mod tests {
         User {
             id: "test-id".to_string(),
             username: "testuser".to_string(),
+            real_name: None,
             password: "hashed_password".to_string(),
             role: Role::Auditor,
             permissions: None,
@@ -202,6 +203,8 @@ mod tests {
             email: None,
             phone: None,
             status: Some("active".to_string()),
+            organization_id: None,
+            department_id: None,
             failed_login_attempts: Some(0),
             locked_until: None,
         }
@@ -291,6 +294,10 @@ mod tests {
             name: "Intranet".to_string(),
             cidr: "10.0.0.0/8".to_string(),
             priority: 100,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         }];
 
         let result = determine_zone("8.8.8.8", &zones);
@@ -304,6 +311,10 @@ mod tests {
             name: "Intranet".to_string(),
             cidr: "10.0.0.0/8".to_string(),
             priority: 100,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         }];
 
         let result = determine_zone("10.0.1.5", &zones);
@@ -317,6 +328,10 @@ mod tests {
             name: "DMZ".to_string(),
             cidr: "192.168.1.0/24".to_string(),
             priority: 100,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         }];
 
         let result = determine_zone("192.168.1.10", &zones);
@@ -330,6 +345,10 @@ mod tests {
             name: "CustomZone".to_string(),
             cidr: "172.16.0.0/16".to_string(),
             priority: 100,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         }];
 
         let result = determine_zone("172.16.5.10", &zones);
@@ -346,6 +365,10 @@ mod tests {
             name: "Intranet".to_string(),
             cidr: "10.0.0.0/8".to_string(),
             priority: 100,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         }];
 
         let result = determine_zone("invalid-ip", &zones);
@@ -360,12 +383,20 @@ mod tests {
                 name: "LowPriority".to_string(),
                 cidr: "10.0.0.0/8".to_string(),
                 priority: 50,
+                cloud_platform_id: None,
+                cloud_platform_name: None,
+                machine_room_id: None,
+                machine_room_name: None,
             },
             ZoneConfig {
                 id: "2".to_string(),
                 name: "HighPriority".to_string(),
                 cidr: "10.0.0.0/8".to_string(),
                 priority: 100,
+                cloud_platform_id: None,
+                cloud_platform_name: None,
+                machine_room_id: None,
+                machine_room_name: None,
             },
         ];
 
@@ -383,6 +414,10 @@ mod tests {
             name: "InvalidZone".to_string(),
             cidr: "invalid-cidr".to_string(),
             priority: 100,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         }];
 
         // Invalid CIDR should be skipped, return Internet default

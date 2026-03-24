@@ -41,6 +41,7 @@ pub struct Model {
     pub system_disk_size_gb: i32,
     pub data_disk: Option<String>,
     pub has_security_product: i32,
+    pub security_products: Option<String>,
     pub ip_address: Option<String>,
     pub delivery_status: Option<String>,
     pub remarks: Option<String>,

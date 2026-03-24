@@ -1,7 +1,8 @@
 pub mod cloud_platform;
+pub mod department;
 pub mod machine_room;
 pub mod network_policy;
-pub mod network_zone;
+pub mod organization;
 pub mod resource_ticket;
 pub mod security_product;
 pub mod service_provider;

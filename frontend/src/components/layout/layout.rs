@@ -6,7 +6,7 @@ use gloo_net::http::Request;
 use web_sys::RequestCredentials;
 
 use super::Sidebar;
-use crate::app::{is_authenticated, logout};
+use crate::app::{is_authenticated, logout, AUTH_READY};
 use crate::config::logout_url;
 use crate::router::Route;
 use crate::state::user_role::{use_auth, AuthState as WorkflowAuthState};
@@ -18,12 +18,17 @@ pub fn Layout() -> Element {
     let mut show_user_menu = use_signal(|| false);
     let mut auth_state = use_auth();
     let nav = navigator();
+    let auth_ready = *AUTH_READY.read();
 
     use_effect(move || {
-        if !is_authenticated() {
+        if auth_ready && !is_authenticated() {
             nav.push(Route::Login {});
         }
     });
+
+    if !auth_ready {
+        return rsx! { div { class: "flex h-screen items-center justify-center bg-gray-100 text-sm text-gray-500", "正在恢复会话..." } };
+    }
 
     if !is_authenticated() {
         return rsx! { div {} };

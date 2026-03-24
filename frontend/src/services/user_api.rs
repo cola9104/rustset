@@ -9,21 +9,29 @@ use web_sys::RequestCredentials;
 struct BackendUser {
     id: String,
     username: String,
+    real_name: Option<String>,
     role: Value,
     created_at: String,
     last_login_at: Option<String>,
     email: Option<String>,
+    phone: Option<String>,
     status: Option<String>,
+    organization_id: Option<i32>,
+    department_id: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UserRecord {
     pub id: String,
     pub username: String,
+    pub real_name: String,
     pub role_label: String,
     pub role_value: String,
     pub email: String,
+    pub phone: String,
     pub status: String,
+    pub organization_id: Option<i32>,
+    pub department_id: Option<i32>,
     pub last_login: String,
     pub created_at: String,
 }
@@ -31,8 +39,26 @@ pub struct UserRecord {
 #[derive(Clone, Debug, Serialize)]
 pub struct CreateUserPayload {
     pub username: String,
+    pub real_name: Option<String>,
     pub password: String,
     pub role: String,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub status: Option<String>,
+    pub organization_id: Option<i32>,
+    pub department_id: Option<i32>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UpdateUserPayload {
+    pub real_name: Option<String>,
+    pub password: Option<String>,
+    pub role: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub status: Option<String>,
+    pub organization_id: Option<i32>,
+    pub department_id: Option<i32>,
 }
 
 fn with_auth(mut request: RequestBuilder) -> RequestBuilder {
@@ -68,6 +94,28 @@ fn parse_role(value: &Value) -> (String, String) {
     }
 }
 
+async fn read_error_message(response: gloo_net::http::Response) -> String {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|json| {
+            json.get("message")
+                .and_then(Value::as_str)
+                .or_else(|| json.get("error").and_then(Value::as_str))
+                .map(|msg| msg.to_string())
+        })
+        .filter(|msg| !msg.trim().is_empty())
+        .unwrap_or_else(|| {
+            if body.trim().is_empty() {
+                format!("服务器错误: {}", status)
+            } else {
+                body
+            }
+        })
+}
+
 impl From<BackendUser> for UserRecord {
     fn from(user: BackendUser) -> Self {
         let (role_label, role_value) = parse_role(&user.role);
@@ -75,10 +123,14 @@ impl From<BackendUser> for UserRecord {
         Self {
             id: user.id,
             username: user.username,
+            real_name: user.real_name.unwrap_or_else(|| "-".to_string()),
             role_label,
             role_value,
             email: user.email.unwrap_or_else(|| "-".to_string()),
+            phone: user.phone.unwrap_or_else(|| "-".to_string()),
             status: user.status.unwrap_or_else(|| "active".to_string()),
+            organization_id: user.organization_id,
+            department_id: user.department_id,
             last_login: user
                 .last_login_at
                 .as_deref()
@@ -96,7 +148,7 @@ pub async fn fetch_users() -> Result<Vec<UserRecord>, String> {
         .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let users = response
@@ -116,7 +168,7 @@ pub async fn create_user(payload: &CreateUserPayload) -> Result<UserRecord, Stri
         .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let user = response
@@ -137,8 +189,30 @@ pub async fn delete_user(id: &str) -> Result<(), String> {
     .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     Ok(())
+}
+
+pub async fn update_user(id: &str, payload: &UpdateUserPayload) -> Result<UserRecord, String> {
+    let response = with_auth(
+        Request::put(&format!("{}/{}", users_url(), id)).credentials(RequestCredentials::Include),
+    )
+    .json(payload)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(read_error_message(response).await);
+    }
+
+    let user = response
+        .json::<BackendUser>()
+        .await
+        .map_err(|e| format!("解析失败: {}", e))?;
+
+    Ok(UserRecord::from(user))
 }

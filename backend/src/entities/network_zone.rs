@@ -9,6 +9,10 @@ pub struct Model {
     pub name: String,
     pub cidr: String,
     pub priority: i32,
+    pub cloud_platform_id: Option<i32>,
+    pub cloud_platform_name: Option<String>,
+    pub machine_room_id: Option<i32>,
+    pub machine_room_name: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

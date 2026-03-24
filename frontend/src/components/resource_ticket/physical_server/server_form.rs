@@ -195,18 +195,14 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                     save_disabled: false,
                     on_save: move |_| {
                         // 验证表单
-                        let data = form_data.read().clone();
+                        let mut data = form_data.read().clone();
                         if let Err(e) = data.validate() {
                             error_msg.set(e);
                             return;
                         }
                         error_msg.set(String::new());
 
-                        // 更新安全产品数据
-                        let security_products = security_products_signal.read().clone();
-                        let mut final_data = form_data.write();
-                        final_data.security_products = security_products;
-                        drop(final_data);
+                        data.security_products = security_products_signal.read().clone();
 
                         // 根据模式构建请求对象
                         let request = match props.mode {

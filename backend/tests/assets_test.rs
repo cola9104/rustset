@@ -83,8 +83,7 @@ async fn test_add_asset_unauthorized() {
 
     let response = app.oneshot(request).await.unwrap();
 
-    // Note: Axum processes JSON deserialization before auth, so 422 is expected
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -107,8 +106,7 @@ async fn test_update_asset_unauthorized() {
 
     let response = app.oneshot(request).await.unwrap();
 
-    // Note: Axum processes JSON deserialization before auth, so 422 is expected
-    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
@@ -147,12 +145,20 @@ async fn test_asset_zone_determination() {
             name: "DMZ".to_string(),
             cidr: "192.168.1.0/24".to_string(),
             priority: 1,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         },
         ZoneConfig {
             id: "zone2".to_string(),
             name: "Intranet".to_string(),
             cidr: "10.0.0.0/8".to_string(),
             priority: 2,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
         },
     ];
 

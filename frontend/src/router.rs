@@ -7,9 +7,11 @@ use crate::components::auth::Login;
 use crate::components::business::BusinessApplication;
 use crate::components::cloud_platform::CloudPlatformManagement;
 use crate::components::dashboard::Dashboard;
+use crate::components::department::DepartmentManagement;
 use crate::components::layout::Layout;
 use crate::components::machine_room::MachineRoomManagement;
 use crate::components::network_zone::NetworkZoneManagement;
+use crate::components::organization::OrganizationManagement;
 use crate::components::password::PasswordPolicy;
 use crate::components::permission::PermissionManagement;
 use crate::components::resource_ticket::cloud_service::CloudServiceRequest;
@@ -92,6 +94,12 @@ pub enum Route {
     // 用户管理
     #[route("/users")]
     UserManagement {},
+
+    #[route("/organizations")]
+    OrganizationManagement {},
+
+    #[route("/departments")]
+    DepartmentManagement {},
 
     // 权限管理
     #[route("/permissions")]

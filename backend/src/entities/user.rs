@@ -8,6 +8,7 @@ pub struct Model {
     pub id: String,
     #[sea_orm(unique)]
     pub username: String,
+    pub real_name: Option<String>,
     pub password: String,
     pub role: String,
     pub permissions: Option<String>,
@@ -19,6 +20,8 @@ pub struct Model {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub status: Option<String>,
+    pub organization_id: Option<i32>,
+    pub department_id: Option<i32>,
     pub failed_login_attempts: Option<i32>,
     pub locked_until: Option<String>,
 }

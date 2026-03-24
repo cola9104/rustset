@@ -35,6 +35,7 @@ async fn create_test_state() -> AppState {
     let test_users = vec![User {
         id: "test_user_1".to_string(),
         username: "admin".to_string(),
+        real_name: None,
         password: password_hash,
         role: Role::SysAdmin,
         permissions: Some(shared::Permissions::sys_admin()),
@@ -46,6 +47,8 @@ async fn create_test_state() -> AppState {
         email: None,
         phone: None,
         status: Some("active".to_string()),
+        organization_id: None,
+        department_id: None,
         failed_login_attempts: Some(0),
         locked_until: None,
     }];

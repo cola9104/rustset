@@ -7,5 +7,11 @@ pub fn create_session_layer_sync() -> SessionManagerLayer<MemoryStore> {
     // 后续调用会复用同一个 store
     static STORE: std::sync::OnceLock<MemoryStore> = std::sync::OnceLock::new();
     let store = STORE.get_or_init(MemoryStore::default);
-    SessionManagerLayer::new(store.clone())
+    let session_layer = SessionManagerLayer::new(store.clone());
+
+    if cfg!(debug_assertions) {
+        session_layer.with_secure(false)
+    } else {
+        session_layer
+    }
 }

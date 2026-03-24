@@ -10,7 +10,7 @@ use tower_http::trace::TraceLayer;
 // use utoipa_swagger_ui::SwaggerUi;  // 暂时禁用
 use chrono::Utc;
 use sea_orm::ConnectionTrait;
-use shared::{PasswordPolicy, Role, User, ZoneConfig};
+use shared::{PasswordPolicy, Role, User};
 use uuid::Uuid;
 
 // 加载 .env 文件
@@ -92,12 +92,19 @@ use handlers::{
         create_cloud_zone, delete_cloud_zone, get_cloud_zone, get_cloud_zones, update_cloud_zone,
     },
     dashboard::get_dashboard_summary,
+    departments::{
+        create_department, delete_department_handler, get_departments, update_department_handler,
+    },
     health::{health_check, liveness_check, metrics, readiness_check},
     ip_zones::{create_ip_zone, delete_ip_zone, find_zone_by_ip, get_ip_zones, update_ip_zone},
     logs::get_audit_logs,
     machine_rooms::{
         create_machine_room, delete_machine_room, get_machine_room, get_machine_rooms,
         update_machine_room,
+    },
+    organizations::{
+        create_organization, delete_organization_handler, get_organizations,
+        update_organization_handler,
     },
     port_details::{
         batch_bind_ports, create_port_detail, delete_port_detail, get_port_detail,
@@ -123,7 +130,7 @@ use handlers::{
     tasks::{create_task, delete_task, get_tasks, trigger_scan, update_task},
     users::{
         change_password, create_user, delete_user, get_current_user_info, get_password_policy,
-        get_users, update_password_policy, update_user_permissions,
+        get_users, update_password_policy, update_user, update_user_permissions,
     },
     zones::{create_zone, delete_zone, get_zones, update_zone},
 };
@@ -167,6 +174,9 @@ async fn main() {
                 email: Some("admin@rustset.local".to_string()),
                 phone: Some("".to_string()),
                 status: Some("active".to_string()),
+                real_name: Some("系统管理员".to_string()),
+                organization_id: None,
+                department_id: None,
                 failed_login_attempts: Some(0),
                 locked_until: None,
             }
@@ -194,6 +204,9 @@ async fn main() {
                 email: Some("sec@rustset.local".to_string()),
                 phone: Some("".to_string()),
                 status: Some("active".to_string()),
+                real_name: Some("安全管理员".to_string()),
+                organization_id: None,
+                department_id: None,
                 failed_login_attempts: Some(0),
                 locked_until: None,
             }
@@ -221,6 +234,9 @@ async fn main() {
                 email: Some("audit@rustset.local".to_string()),
                 phone: Some("".to_string()),
                 status: Some("active".to_string()),
+                real_name: Some("审计员".to_string()),
+                organization_id: None,
+                department_id: None,
                 failed_login_attempts: Some(0),
                 locked_until: None,
             }
@@ -314,20 +330,7 @@ async fn main() {
         assets: Arc::new(StdRwLock::new(vec![])),
         tasks: Arc::new(StdRwLock::new(vec![])),
         risks: Arc::new(StdRwLock::new(vec![])),
-        zones: Arc::new(StdRwLock::new(vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "Intranet".to_string(),
-                cidr: "192.168.0.0/16".to_string(),
-                priority: 10,
-            },
-            ZoneConfig {
-                id: "2".to_string(),
-                name: "DMZ".to_string(),
-                cidr: "10.0.0.0/8".to_string(),
-                priority: 20,
-            },
-        ])),
+        zones: Arc::new(StdRwLock::new(vec![])),
         users: Arc::new(StdRwLock::new(initial_users)),
         audit_logs: Arc::new(StdRwLock::new(loaded_audit_logs)),
         advanced_tasks: Arc::new(StdRwLock::new(vec![])),
@@ -390,8 +393,24 @@ async fn main() {
         .route("/api/refresh-token", post(refresh_token))
         .route("/api/users/me", get(get_current_user_info)) // 必须在 {id} 之前
         .route("/api/users", get(get_users).post(create_user))
-        .route("/api/users/{id}", delete(delete_user))
+        .route("/api/users/{id}", put(update_user).delete(delete_user))
         .route("/api/users/{id}/permissions", put(update_user_permissions))
+        .route(
+            "/api/organizations",
+            get(get_organizations).post(create_organization),
+        )
+        .route(
+            "/api/organizations/{id}",
+            put(update_organization_handler).delete(delete_organization_handler),
+        )
+        .route(
+            "/api/departments",
+            get(get_departments).post(create_department),
+        )
+        .route(
+            "/api/departments/{id}",
+            put(update_department_handler).delete(delete_department_handler),
+        )
         .route("/api/users/change-password", post(change_password))
         .route("/api/dashboard-summary", get(get_dashboard_summary))
         .route(

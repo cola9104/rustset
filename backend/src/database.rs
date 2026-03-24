@@ -5,18 +5,20 @@
 
 use crate::entities::{
     advanced_scan_task, asset, audit_log, business_resource, cloud_provider_config, cloud_service,
-    cloud_virtual_machine, cloud_zone, custom_role, network_zone, physical_machine,
-    quick_scan_result, resource_ticket, risk, task, user, AdvancedScanTask, Asset, AuditLog,
-    BusinessResource, CloudProviderConfig, CloudService, CloudVirtualMachine, CloudZone,
-    CustomRole, NetworkZone, PhysicalMachine, Risk, Task, User,
+    cloud_virtual_machine, cloud_zone, custom_role, department, network_zone, organization,
+    physical_machine, quick_scan_result, resource_ticket, risk, task, user, AdvancedScanTask,
+    Asset, AuditLog, BusinessResource, CloudProviderConfig, CloudService, CloudVirtualMachine,
+    CloudZone, CustomRole, NetworkZone, PhysicalMachine, Risk, Task, User,
 };
 use chrono::Utc;
 use sea_orm::Database as SeaDatabase;
 pub use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, NotSet, QueryFilter,
-    QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, NotSet,
+    QueryFilter, QueryOrder, QuerySelect, Set,
 };
-use shared::User as SharedUser;
+use shared::{
+    Department as SharedDepartment, Organization as SharedOrganization, User as SharedUser,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -39,6 +41,8 @@ pub async fn init_db(connection_string: &str) -> Result<(), DbErr> {
     use crate::migration::{Migrator, MigratorTrait};
     use sea_orm_migration::prelude::*;
     Migrator::up(&conn, None).await?;
+    ensure_resource_ticket_schema(&conn).await?;
+    ensure_network_zone_schema(&conn).await?;
 
     DB.set(Arc::new(conn))
         .map_err(|_| DbErr::Custom("Database already initialized".to_string()))?;
@@ -52,6 +56,126 @@ pub fn get_db() -> Option<Arc<DatabaseConnection>> {
 
 fn require_db() -> Result<Arc<DatabaseConnection>, DbErr> {
     get_db().ok_or_else(|| DbErr::Custom("Database not initialized".to_string()))
+}
+
+async fn ensure_resource_ticket_schema(conn: &DatabaseConnection) -> Result<(), DbErr> {
+    conn.execute_unprepared(
+        r#"
+        CREATE TABLE IF NOT EXISTS resource_tickets (
+            id SERIAL PRIMARY KEY,
+            resource_type TEXT NOT NULL,
+            ecs_name TEXT NOT NULL,
+            ticket_status TEXT NOT NULL,
+            provider_id INTEGER NULL,
+            provider_name TEXT NULL,
+            cloud_platform_id INTEGER NULL,
+            cloud_platform_name TEXT NULL,
+            machine_room_id INTEGER NULL,
+            machine_room_name TEXT NULL,
+            cloud_region TEXT NULL,
+            cloud_category TEXT NULL,
+            zone_name TEXT NULL,
+            zone_cabinet TEXT NULL,
+            rack_units INTEGER DEFAULT 0,
+            customer_name TEXT NULL,
+            application_name TEXT NULL,
+            contract_name TEXT NULL,
+            ecs_type TEXT NULL,
+            ecs_os TEXT NULL,
+            cpu_cores INTEGER DEFAULT 0,
+            memory_gb INTEGER DEFAULT 0,
+            system_disk TEXT NULL,
+            system_disk_size_gb INTEGER DEFAULT 0,
+            data_disk TEXT NULL,
+            has_security_product INTEGER DEFAULT 0,
+            security_products TEXT NULL,
+            ip_address TEXT NULL,
+            delivery_status TEXT NULL,
+            remarks TEXT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NULL,
+            created_by TEXT NOT NULL,
+            approver TEXT NULL,
+            approve_time TEXT NULL,
+            approve_comment TEXT NULL,
+            provisioner TEXT NULL,
+            provision_time TEXT NULL,
+            provision_details TEXT NULL,
+            deliverer TEXT NULL,
+            deliver_time TEXT NULL,
+            deliver_comment TEXT NULL,
+            fw_source_zone TEXT NULL,
+            fw_source_address TEXT NULL,
+            fw_dest_zone TEXT NULL,
+            fw_dest_address TEXT NULL,
+            fw_protocol TEXT NULL,
+            fw_port TEXT NULL,
+            fw_direction TEXT NULL,
+            fw_valid_until TEXT NULL,
+            fw_firewall_name TEXT NULL
+        )
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS security_products TEXT NULL
+        "#,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_network_zone_schema(conn: &DatabaseConnection) -> Result<(), DbErr> {
+    conn.execute_unprepared(
+        r#"
+        CREATE TABLE IF NOT EXISTS network_zones (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            cidr TEXT NOT NULL,
+            priority INTEGER NOT NULL,
+            cloud_platform_id INTEGER NULL,
+            cloud_platform_name TEXT NULL,
+            machine_room_id INTEGER NULL,
+            machine_room_name TEXT NULL
+        )
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE network_zones
+        ADD COLUMN IF NOT EXISTS cloud_platform_id INTEGER NULL
+        "#,
+    )
+    .await?;
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE network_zones
+        ADD COLUMN IF NOT EXISTS cloud_platform_name TEXT NULL
+        "#,
+    )
+    .await?;
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE network_zones
+        ADD COLUMN IF NOT EXISTS machine_room_id INTEGER NULL
+        "#,
+    )
+    .await?;
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE network_zones
+        ADD COLUMN IF NOT EXISTS machine_room_name TEXT NULL
+        "#,
+    )
+    .await?;
+
+    Ok(())
 }
 
 // ============== Helper functions for converting between entities and shared types ==============
@@ -77,6 +201,7 @@ pub fn db_user_to_shared(db: user::Model) -> SharedUser {
     SharedUser {
         id: db.id,
         username: db.username,
+        real_name: db.real_name,
         password: db.password,
         role,
         permissions,
@@ -98,6 +223,8 @@ pub fn db_user_to_shared(db: user::Model) -> SharedUser {
         email: db.email,
         phone: db.phone,
         status: db.status,
+        organization_id: db.organization_id,
+        department_id: db.department_id,
         failed_login_attempts: db.failed_login_attempts.map(|v| v as u32),
         locked_until: db.locked_until.as_ref().and_then(|s| {
             chrono::DateTime::parse_from_rfc3339(s)
@@ -112,27 +239,42 @@ pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
     let permissions_json = user
         .permissions
         .as_ref()
-        .and_then(|p| serde_json::to_string(p).ok());
+        .and_then(|p| serde_json::to_string(p).ok())
+        .or_else(|| serde_json::to_string(&shared::Permissions::default()).ok())
+        .unwrap_or_else(|| "{}".to_string());
 
     user::ActiveModel {
         id: Set(user.id.clone()),
         username: Set(user.username.clone()),
+        real_name: Set(user.real_name.clone()),
         password: Set(user.password.clone()),
         role: Set(format!("{:?}", user.role)),
-        permissions: Set(permissions_json),
+        permissions: Set(Some(permissions_json)),
         created_at: Set(user.created_at.to_rfc3339()),
-        password_changed_at: Set(user.password_changed_at.map(|d| d.to_rfc3339())),
-        password_strength: Set(user.password_strength.clone()),
+        password_changed_at: Set(Some(
+            user.password_changed_at
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_default(),
+        )),
+        password_strength: Set(Some(
+            user.password_strength.clone().unwrap_or_default(),
+        )),
         force_password_change: Set(user.force_password_change.unwrap_or(false) as i32),
         last_login_at: Set(Some(
             user.last_login_at
                 .map(|d| d.to_rfc3339())
                 .unwrap_or_default(),
         )),
-        email: Set(user.email.clone()),
+        email: Set(Some(user.email.clone().unwrap_or_default())),
         phone: Set(Some(user.phone.clone().unwrap_or_default())),
-        status: Set(user.status.clone()),
-        failed_login_attempts: Set(user.failed_login_attempts.map(|v| v as i32)),
+        status: Set(Some(
+            user.status
+                .clone()
+                .unwrap_or_else(|| "active".to_string()),
+        )),
+        organization_id: Set(user.organization_id),
+        department_id: Set(user.department_id),
+        failed_login_attempts: Set(Some(user.failed_login_attempts.unwrap_or(0) as i32)),
         locked_until: Set(Some(
             user.locked_until
                 .map(|d| d.to_rfc3339())
@@ -190,6 +332,10 @@ pub fn db_zone_to_shared(db: network_zone::Model) -> shared::ZoneConfig {
         name: db.name,
         cidr: db.cidr,
         priority: db.priority,
+        cloud_platform_id: db.cloud_platform_id,
+        cloud_platform_name: db.cloud_platform_name,
+        machine_room_id: db.machine_room_id,
+        machine_room_name: db.machine_room_name,
     }
 }
 
@@ -294,7 +440,7 @@ pub fn db_resource_ticket_to_shared(db: resource_ticket::Model) -> shared::Resou
         system_disk_size_gb: db.system_disk_size_gb,
         data_disk: db.data_disk,
         has_security_product: db.has_security_product != 0,
-        security_products: None,
+        security_products: db.security_products,
         ip_address: db.ip_address,
         delivery_status: db.delivery_status,
         remarks: db.remarks,
@@ -353,6 +499,7 @@ pub fn shared_to_db_resource_ticket(
         system_disk_size_gb: Set(ticket.system_disk_size_gb),
         data_disk: Set(ticket.data_disk.clone()),
         has_security_product: Set(ticket.has_security_product as i32),
+        security_products: Set(ticket.security_products.clone()),
         ip_address: Set(ticket.ip_address.clone()),
         delivery_status: Set(ticket.delivery_status.clone()),
         remarks: Set(ticket.remarks.clone()),
@@ -715,6 +862,10 @@ pub async fn insert_zone(
         name: Set(zone.name.clone()),
         cidr: Set(zone.cidr.clone()),
         priority: Set(zone.priority),
+        cloud_platform_id: Set(zone.cloud_platform_id),
+        cloud_platform_name: Set(zone.cloud_platform_name.clone()),
+        machine_room_id: Set(zone.machine_room_id),
+        machine_room_name: Set(zone.machine_room_name.clone()),
     };
     db_zone.insert(conn).await?;
     Ok(())
@@ -730,6 +881,10 @@ pub async fn update_zone_by_id(
         name: Set(zone.name.clone()),
         cidr: Set(zone.cidr.clone()),
         priority: Set(zone.priority),
+        cloud_platform_id: Set(zone.cloud_platform_id),
+        cloud_platform_name: Set(zone.cloud_platform_name.clone()),
+        machine_room_id: Set(zone.machine_room_id),
+        machine_room_name: Set(zone.machine_room_name.clone()),
     };
     NetworkZone::update(db_zone).exec(conn).await?;
     Ok(())
@@ -2349,6 +2504,223 @@ pub async fn delete_service_provider(conn: &DatabaseConnection, id: i32) -> Resu
     service_provider::Entity::delete_by_id(id)
         .exec(conn)
         .await?;
+    Ok(())
+}
+
+// ==================== Organization CRUD ====================
+
+pub async fn get_all_organizations(
+    conn: &DatabaseConnection,
+) -> Result<Vec<SharedOrganization>, DbErr> {
+    let items = organization::Entity::find()
+        .order_by_asc(organization::Column::Id)
+        .all(conn)
+        .await?;
+
+    Ok(items
+        .into_iter()
+        .map(|item| SharedOrganization {
+            id: item.id,
+            name: item.name,
+            code: item.code,
+            status: item.status,
+            remarks: item.remarks,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+        })
+        .collect())
+}
+
+pub async fn get_organization_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<SharedOrganization>, DbErr> {
+    let item = organization::Entity::find_by_id(id).one(conn).await?;
+    Ok(item.map(|item| SharedOrganization {
+        id: item.id,
+        name: item.name,
+        code: item.code,
+        status: item.status,
+        remarks: item.remarks,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+    }))
+}
+
+pub async fn insert_organization(
+    conn: &DatabaseConnection,
+    name: &str,
+    code: &str,
+    status: &str,
+    remarks: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let item = organization::ActiveModel {
+        id: NotSet,
+        name: Set(name.to_string()),
+        code: Set(code.to_string()),
+        status: Set(status.to_string()),
+        remarks: Set(remarks.map(|value| value.to_string())),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    Ok(item.insert(conn).await?.id)
+}
+
+pub async fn update_organization(
+    conn: &DatabaseConnection,
+    id: i32,
+    name: Option<&str>,
+    code: Option<&str>,
+    status: Option<&str>,
+    remarks: Option<&str>,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    if let Some(item) = organization::Entity::find_by_id(id).one(conn).await? {
+        let mut active: organization::ActiveModel = item.into();
+        if let Some(value) = name {
+            active.name = Set(value.to_string());
+        }
+        if let Some(value) = code {
+            active.code = Set(value.to_string());
+        }
+        if let Some(value) = status {
+            active.status = Set(value.to_string());
+        }
+        if let Some(value) = remarks {
+            active.remarks = Set(Some(value.to_string()));
+        }
+        if let Some(value) = updated_at {
+            active.updated_at = Set(Some(value.to_string()));
+        }
+        active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_organization(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    organization::Entity::delete_by_id(id).exec(conn).await?;
+    Ok(())
+}
+
+// ==================== Department CRUD ====================
+
+pub async fn get_all_departments(
+    conn: &DatabaseConnection,
+) -> Result<Vec<SharedDepartment>, DbErr> {
+    let items = department::Entity::find()
+        .order_by_asc(department::Column::OrganizationId)
+        .order_by_asc(department::Column::Id)
+        .all(conn)
+        .await?;
+
+    Ok(items
+        .into_iter()
+        .map(|item| SharedDepartment {
+            id: item.id,
+            organization_id: item.organization_id,
+            name: item.name,
+            code: item.code,
+            parent_id: item.parent_id,
+            level: item.level as u32,
+            status: item.status,
+            remarks: item.remarks,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+        })
+        .collect())
+}
+
+pub async fn get_department_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<SharedDepartment>, DbErr> {
+    let item = department::Entity::find_by_id(id).one(conn).await?;
+    Ok(item.map(|item| SharedDepartment {
+        id: item.id,
+        organization_id: item.organization_id,
+        name: item.name,
+        code: item.code,
+        parent_id: item.parent_id,
+        level: item.level as u32,
+        status: item.status,
+        remarks: item.remarks,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+    }))
+}
+
+pub async fn insert_department(
+    conn: &DatabaseConnection,
+    organization_id: i32,
+    name: &str,
+    code: &str,
+    parent_id: Option<i32>,
+    level: u32,
+    status: &str,
+    remarks: Option<&str>,
+    created_at: &str,
+) -> Result<i32, DbErr> {
+    let item = department::ActiveModel {
+        id: NotSet,
+        organization_id: Set(organization_id),
+        name: Set(name.to_string()),
+        code: Set(code.to_string()),
+        parent_id: Set(parent_id),
+        level: Set(level as i32),
+        status: Set(status.to_string()),
+        remarks: Set(remarks.map(|value| value.to_string())),
+        created_at: Set(created_at.to_string()),
+        updated_at: Set(None),
+    };
+    Ok(item.insert(conn).await?.id)
+}
+
+pub async fn update_department(
+    conn: &DatabaseConnection,
+    id: i32,
+    organization_id: Option<i32>,
+    name: Option<&str>,
+    code: Option<&str>,
+    parent_id: Option<i32>,
+    level: Option<u32>,
+    status: Option<&str>,
+    remarks: Option<&str>,
+    updated_at: Option<&str>,
+) -> Result<(), DbErr> {
+    if let Some(item) = department::Entity::find_by_id(id).one(conn).await? {
+        let mut active: department::ActiveModel = item.into();
+        if let Some(value) = organization_id {
+            active.organization_id = Set(value);
+        }
+        if let Some(value) = name {
+            active.name = Set(value.to_string());
+        }
+        if let Some(value) = code {
+            active.code = Set(value.to_string());
+        }
+        if parent_id.is_some() {
+            active.parent_id = Set(parent_id);
+        }
+        if let Some(value) = level {
+            active.level = Set(value as i32);
+        }
+        if let Some(value) = status {
+            active.status = Set(value.to_string());
+        }
+        if let Some(value) = remarks {
+            active.remarks = Set(Some(value.to_string()));
+        }
+        if let Some(value) = updated_at {
+            active.updated_at = Set(Some(value.to_string()));
+        }
+        active.update(conn).await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_department(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    department::Entity::delete_by_id(id).exec(conn).await?;
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 use crate::database::{
-    delete_user as db_delete_user, get_user_by_id as db_get_user_by_id,
-    get_user_by_username as db_get_user_by_username, get_users as db_get_users,
-    insert_user as db_insert_user, update_user as db_update_user,
+    delete_user as db_delete_user, get_db, get_department_by_id, get_organization_by_id,
+    get_user_by_id as db_get_user_by_id, get_user_by_username as db_get_user_by_username,
+    get_users as db_get_users, insert_user as db_insert_user, update_user as db_update_user,
 };
 use crate::middleware::auth_middleware::AuthUser;
 use crate::middleware::ApiError;
@@ -17,7 +17,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use shared::{CreateUserRequest, PasswordPolicy, Permissions, Role, User};
+use shared::{CreateUserRequest, PasswordPolicy, Permissions, Role, UpdateUserRequest, User};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
@@ -184,6 +184,47 @@ async fn persist_user(state: &AppState, user: &User) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn is_builtin_system_account(username: &str) -> bool {
+    matches!(username, "admin" | "sec" | "audit")
+}
+
+async fn validate_user_binding(
+    username: &str,
+    real_name: Option<&str>,
+    organization_id: Option<i32>,
+    department_id: Option<i32>,
+) -> Result<(), ApiError> {
+    if is_builtin_system_account(username) {
+        return Ok(());
+    }
+
+    if real_name.is_none_or(|value| value.trim().is_empty()) {
+        return Err(ApiError::bad_request("普通账号必须填写姓名"));
+    }
+
+    let organization_id =
+        organization_id.ok_or_else(|| ApiError::bad_request("普通账号必须绑定组织/单位"))?;
+    let department_id =
+        department_id.ok_or_else(|| ApiError::bad_request("普通账号必须绑定部门"))?;
+
+    let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+    get_organization_by_id(&conn, organization_id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load organization: {}", e)))?
+        .ok_or_else(|| ApiError::bad_request("绑定的组织/单位不存在"))?;
+
+    let department = get_department_by_id(&conn, department_id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load department: {}", e)))?
+        .ok_or_else(|| ApiError::bad_request("绑定的部门不存在"))?;
+
+    if department.organization_id != organization_id {
+        return Err(ApiError::bad_request("绑定的部门不属于所选组织/单位"));
+    }
+
+    Ok(())
+}
+
 /// Get all users (SysAdmin only)
 #[utoipa::path(
     get,
@@ -246,6 +287,14 @@ pub async fn create_user(
         return Err(ApiError::conflict("Username already exists"));
     }
 
+    validate_user_binding(
+        &req.username,
+        req.real_name.as_deref(),
+        req.organization_id,
+        req.department_id,
+    )
+    .await?;
+
     let (password_strength, _) = calculate_password_strength(&req.password);
     let password_hash = password::hash_password(&req.password)
         .map_err(|e| ApiError::internal(format!("Failed to hash password: {}", e)))?;
@@ -261,6 +310,7 @@ pub async fn create_user(
     let new_user = User {
         id: Uuid::new_v4().to_string(),
         username: req.username.clone(),
+        real_name: req.real_name.clone(),
         password: password_hash,
         role: req.role,
         permissions,
@@ -269,9 +319,11 @@ pub async fn create_user(
         password_strength: Some(password_strength),
         force_password_change: Some(false),
         last_login_at: None,
-        email: None,
-        phone: None,
-        status: Some("active".to_string()),
+        email: req.email.clone(),
+        phone: req.phone.clone(),
+        status: Some(req.status.clone().unwrap_or_else(|| "active".to_string())),
+        organization_id: req.organization_id,
+        department_id: req.department_id,
         failed_login_attempts: Some(0),
         locked_until: None,
     };
@@ -293,6 +345,90 @@ pub async fn create_user(
     );
 
     Ok(Json(new_user))
+}
+
+pub async fn update_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateUserRequest>,
+) -> Result<Json<User>, ApiError> {
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    if current_user.role != Role::SysAdmin {
+        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    }
+
+    let mut target_user = load_user_by_id(&state, &id)
+        .await
+        .ok_or_else(|| ApiError::not_found("User not found"))?;
+
+    let next_real_name = req.real_name.clone().or(target_user.real_name.clone());
+    let next_org_id = req.organization_id.or(target_user.organization_id);
+    let next_department_id = req.department_id.or(target_user.department_id);
+    validate_user_binding(
+        &target_user.username,
+        next_real_name.as_deref(),
+        next_org_id,
+        next_department_id,
+    )
+    .await?;
+
+    if let Some(value) = req.real_name {
+        target_user.real_name = if value.trim().is_empty() {
+            None
+        } else {
+            Some(value)
+        };
+    }
+    if let Some(value) = req.role {
+        target_user.role = value;
+    }
+    if let Some(value) = req.email {
+        target_user.email = if value.trim().is_empty() {
+            None
+        } else {
+            Some(value)
+        };
+    }
+    if let Some(value) = req.phone {
+        target_user.phone = if value.trim().is_empty() {
+            None
+        } else {
+            Some(value)
+        };
+    }
+    if let Some(value) = req.status {
+        target_user.status = Some(value);
+    }
+    if req.organization_id.is_some() {
+        target_user.organization_id = req.organization_id;
+    }
+    if req.department_id.is_some() {
+        target_user.department_id = req.department_id;
+    }
+    if let Some(value) = req.password {
+        let password_hash = password::hash_password(&value)
+            .map_err(|e| ApiError::internal(format!("Failed to hash password: {}", e)))?;
+        let (password_strength, _) = calculate_password_strength(&value);
+        target_user.password = password_hash;
+        target_user.password_changed_at = Some(Utc::now());
+        target_user.password_strength = Some(password_strength);
+    }
+
+    persist_user(&state, &target_user).await?;
+
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "UPDATE_USER",
+        &target_user.username,
+        "Updated user profile",
+    );
+
+    Ok(Json(target_user))
 }
 
 /// Delete a user (SysAdmin only)

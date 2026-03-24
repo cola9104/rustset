@@ -139,6 +139,22 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         span { class: "ml-3", "用户管理" }
                     }
                 }
+                Link {
+                    to: Route::OrganizationManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaBuilding, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "组织管理" }
+                    }
+                }
+                Link {
+                    to: Route::DepartmentManagement {},
+                    class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
+                    Icon { icon: FaBriefcase, width: 20, height: 20 }
+                    if !is_collapsed {
+                        span { class: "ml-3", "部门管理" }
+                    }
+                }
                 // 权限管理
                 Link {
                     to: Route::PermissionManagement {},

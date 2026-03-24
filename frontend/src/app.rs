@@ -1,14 +1,17 @@
 use dioxus::prelude::*;
 use dioxus_router::Router;
+use gloo_net::http::Request;
+use web_sys::RequestCredentials;
 
+use crate::config::current_user_url;
 use crate::router::Route;
 use crate::state::user_role::AuthState as WorkflowAuthState;
 use crate::state::{
     cloud_platform::CloudPlatformConfig, machine_room::MachineRoomConfig,
-    network_policy::NetworkPolicyConfig, network_zone::NetworkZone,
-    security_product::SecurityProduct, service_provider::ServiceProviderConfig,
+    network_policy::NetworkPolicyConfig, security_product::SecurityProduct,
+    service_provider::ServiceProviderConfig,
 };
-use crate::utils::storage::clear_token;
+use crate::utils::storage::{authorization_header, clear_token};
 
 /// 全局安全产品数据状态
 pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> = Signal::global(Vec::new);
@@ -16,7 +19,43 @@ pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> = Signal:
 /// 主应用组件
 #[allow(non_snake_case)]
 pub fn App() -> Element {
-    use_context_provider(|| Signal::new(WorkflowAuthState::guest()));
+    let mut workflow_auth_state = use_context_provider(|| Signal::new(WorkflowAuthState::guest()));
+
+    use_effect(move || {
+        spawn(async move {
+            let mut request =
+                Request::get(&current_user_url()).credentials(RequestCredentials::Include);
+            if let Some(header) = authorization_header() {
+                request = request.header("Authorization", &header);
+            }
+
+            match request.send().await {
+                Ok(response) if response.ok() => match response.json::<CurrentUserResponse>().await
+                {
+                    Ok(current_user) => {
+                        let auth_user = current_user.to_auth_user();
+                        workflow_auth_state.set(WorkflowAuthState::from(&auth_user));
+                        *AUTH_STATE.write() = Some(auth_user);
+                    }
+                    Err(_) => {
+                        workflow_auth_state.set(WorkflowAuthState::guest());
+                        *AUTH_STATE.write() = None;
+                    }
+                },
+                Ok(response) if response.status() == 401 => {
+                    clear_token();
+                    workflow_auth_state.set(WorkflowAuthState::guest());
+                    *AUTH_STATE.write() = None;
+                }
+                _ => {
+                    workflow_auth_state.set(WorkflowAuthState::guest());
+                    *AUTH_STATE.write() = None;
+                }
+            }
+
+            *AUTH_READY.write() = true;
+        });
+    });
 
     rsx! {
         Router::<Route> {}
@@ -32,8 +71,45 @@ pub struct AuthUser {
     pub permissions: Vec<String>,
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+struct CurrentUserResponse {
+    id: String,
+    username: String,
+    role: String,
+    #[serde(default)]
+    permissions: serde_json::Value,
+}
+
+impl CurrentUserResponse {
+    fn to_auth_user(&self) -> AuthUser {
+        let permissions = self
+            .permissions
+            .as_object()
+            .map(|permissions| {
+                permissions
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        value
+                            .as_bool()
+                            .filter(|enabled| *enabled)
+                            .map(|_| key.clone())
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        AuthUser {
+            id: self.id.clone(),
+            username: self.username.clone(),
+            role: self.role.clone(),
+            permissions,
+        }
+    }
+}
+
 /// 全局认证状态
 pub static AUTH_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
+pub static AUTH_READY: GlobalSignal<bool> = Signal::global(|| false);
 
 /// 全局服务商数据状态
 pub static PROVIDERS_STATE: GlobalSignal<Vec<ServiceProviderConfig>> = Signal::global(Vec::new);
@@ -43,9 +119,6 @@ pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> = Signal::g
 
 /// 全局云平台数据状态
 pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> = Signal::global(Vec::new);
-
-/// 全局网络区域数据状态
-pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(Vec::new);
 
 /// 全局网络策略数据状态
 pub static NETWORK_POLICIES_STATE: GlobalSignal<Vec<NetworkPolicyConfig>> =
@@ -60,4 +133,5 @@ pub fn is_authenticated() -> bool {
 pub fn logout() {
     clear_token();
     *AUTH_STATE.write() = None;
+    *AUTH_READY.write() = true;
 }

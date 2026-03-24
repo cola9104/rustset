@@ -13,7 +13,18 @@ pub fn api_base() -> String {
     // 开发环境默认值
     #[cfg(debug_assertions)]
     {
-        "http://localhost:3003/api".to_string()
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Ok(host) = window.location().hostname() {
+                    if !host.is_empty() {
+                        return format!("http://{}:3003/api", host);
+                    }
+                }
+            }
+        }
+
+        "http://127.0.0.1:3003/api".to_string()
     }
 
     // 生产环境默认值（相对路径，使用代理）

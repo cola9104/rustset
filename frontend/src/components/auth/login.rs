@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use web_sys::RequestCredentials;
 
 use crate::app::AuthUser;
-use crate::app::AUTH_STATE;
+use crate::app::{AUTH_READY, AUTH_STATE};
 use crate::config::login_url;
 use crate::router::Route;
 use crate::state::user_role::{use_auth, AuthState as WorkflowAuthState};
@@ -38,12 +38,16 @@ struct LoginUser {
 
 /// 后端角色枚举 (对应后端 Role)
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
 enum LoginRole {
+    #[serde(rename = "SysAdmin", alias = "sysadmin")]
     SysAdmin,
+    #[serde(rename = "SecAdmin", alias = "secadmin")]
     SecAdmin,
+    #[serde(rename = "Auditor", alias = "auditor")]
     Auditor,
+    #[serde(rename = "Operator", alias = "operator")]
     Operator,
+    #[serde(rename = "Custom", alias = "custom")]
     Custom,
 }
 
@@ -308,6 +312,7 @@ pub fn Login() -> Element {
                                         let auth_user = login_response.user.to_auth_user();
                                         auth_state.set(WorkflowAuthState::from(&auth_user));
                                         *AUTH_STATE.write() = Some(auth_user);
+                                        *AUTH_READY.write() = true;
 
                                         // 跳转到仪表板
                                         nav.push(Route::Dashboard {});

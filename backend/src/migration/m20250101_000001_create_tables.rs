@@ -276,6 +276,10 @@ impl MigrationTrait for Migration {
                     .col(string(NetworkZones::Name).not_null())
                     .col(string(NetworkZones::Cidr).not_null())
                     .col(integer(NetworkZones::Priority).not_null())
+                    .col(integer(NetworkZones::CloudPlatformId))
+                    .col(string(NetworkZones::CloudPlatformName))
+                    .col(integer(NetworkZones::MachineRoomId))
+                    .col(string(NetworkZones::MachineRoomName))
                     .to_owned(),
             )
             .await?;
@@ -573,6 +577,10 @@ enum NetworkZones {
     Name,
     Cidr,
     Priority,
+    CloudPlatformId,
+    CloudPlatformName,
+    MachineRoomId,
+    MachineRoomName,
 }
 
 #[derive(DeriveIden)]

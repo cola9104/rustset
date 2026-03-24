@@ -73,6 +73,7 @@ mod tests {
         let user = User {
             id: "123".to_string(),
             username: "testuser".to_string(),
+            real_name: None,
             password: "hashed".to_string(),
             role: Role::SysAdmin,
             permissions: Some(Permissions::sys_admin()),
@@ -84,6 +85,8 @@ mod tests {
             email: None,
             phone: None,
             status: Some("active".to_string()),
+            organization_id: None,
+            department_id: None,
             failed_login_attempts: Some(0),
             locked_until: None,
         };
@@ -111,6 +114,7 @@ mod tests {
         let user = User {
             id: "123".to_string(),
             username: "testuser".to_string(),
+            real_name: None,
             password: "hashed".to_string(),
             role: Role::Auditor,
             permissions: Some(Permissions::auditor()),
@@ -122,6 +126,8 @@ mod tests {
             email: None,
             phone: None,
             status: Some("active".to_string()),
+            organization_id: None,
+            department_id: None,
             failed_login_attempts: Some(0),
             locked_until: None,
         };

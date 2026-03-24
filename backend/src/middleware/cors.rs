@@ -1,44 +1,32 @@
 //! CORS Middleware Configuration
 
 use axum::http::{header, HeaderValue, Method};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
+
+fn parse_origins(origins: &str) -> Option<Vec<HeaderValue>> {
+    let parsed: Vec<Result<HeaderValue, _>> = origins
+        .split(',')
+        .map(|origin| origin.trim().parse::<HeaderValue>())
+        .collect();
+
+    if parsed.iter().all(|origin| origin.is_ok()) {
+        Some(parsed.into_iter().filter_map(Result::ok).collect())
+    } else {
+        None
+    }
+}
 
 /// 创建 CORS 中间件
 /// 根据环境变量 FRONTEND_URL 配置允许的来源
 pub fn create_cors_layer() -> CorsLayer {
-    // 从环境变量读取前端 URL，默认为 permissive（开发环境）
-    let frontend_url = std::env::var("FRONTEND_URL").ok();
+    let valid_origins = std::env::var("FRONTEND_URL")
+        .ok()
+        .and_then(|url| parse_origins(&url))
+        .or_else(|| parse_origins("http://127.0.0.1:8080,http://localhost:8080"))
+        .unwrap_or_default();
 
-    if let Some(url) = frontend_url {
-        // 生产环境：限制特定来源
-        let origins: Vec<Result<HeaderValue, _>> = url
-            .split(',')
-            .map(|s| s.trim().parse::<HeaderValue>())
-            .collect();
-
-        // 如果所有 URL 都有效，使用它们
-        if origins.iter().all(|r| r.is_ok()) {
-            let valid_origins: Vec<HeaderValue> =
-                origins.into_iter().filter_map(|r| r.ok()).collect();
-
-            return CorsLayer::new()
-                .allow_origin(valid_origins)
-                .allow_methods([
-                    Method::GET,
-                    Method::POST,
-                    Method::PUT,
-                    Method::DELETE,
-                    Method::OPTIONS,
-                    Method::PATCH,
-                ])
-                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
-                .allow_credentials(true);
-        }
-    }
-
-    // 开发环境：允许所有来源
     CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(valid_origins)
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -48,5 +36,5 @@ pub fn create_cors_layer() -> CorsLayer {
             Method::PATCH,
         ])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
-        .allow_credentials(false)
+        .allow_credentials(true)
 }

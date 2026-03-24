@@ -60,13 +60,31 @@ pub enum BillingMode {
     Spot, // 抢占式实例
 }
 
-/// 部门信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Department {
-    pub id: String,
+/// 组织/单位信息
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, utoipa::ToSchema)]
+pub struct Organization {
+    pub id: i32,
     pub name: String,
-    pub parent_id: Option<String>,
+    pub code: String,
+    pub status: String,
+    pub remarks: Option<String>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+}
+
+/// 部门信息
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, utoipa::ToSchema)]
+pub struct Department {
+    pub id: i32,
+    pub organization_id: i32,
+    pub name: String,
+    pub code: String,
+    pub parent_id: Option<i32>,
     pub level: u32,
+    pub status: String,
+    pub remarks: Option<String>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
 }
 
 /// 项目信息
@@ -637,6 +655,10 @@ pub struct ZoneConfig {
     pub name: String,
     pub cidr: String,
     pub priority: i32,
+    pub cloud_platform_id: Option<i32>,
+    pub cloud_platform_name: Option<String>,
+    pub machine_room_id: Option<i32>,
+    pub machine_room_name: Option<String>,
 }
 
 /// 扫描器配置
@@ -908,6 +930,8 @@ impl Permissions {
 pub struct User {
     pub id: String,
     pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_name: Option<String>,
     #[serde(skip_serializing, default)]
     // Don't send password hash to frontend, allow missing on receive
     pub password: String, // Stored as a password hash on the backend.
@@ -929,6 +953,10 @@ pub struct User {
     pub phone: Option<String>, // 手机号
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>, // 账户状态：active/disabled/locked
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<i32>, // 所属组织/单位
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub department_id: Option<i32>, // 所属部门
     // 账户锁定相关
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failed_login_attempts: Option<u32>, // 失败登录次数
@@ -939,8 +967,14 @@ pub struct User {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateUserRequest {
     pub username: String,
+    pub real_name: Option<String>,
     pub password: String,
     pub role: Role,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub status: Option<String>,
+    pub organization_id: Option<i32>,
+    pub department_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -977,8 +1011,14 @@ impl Default for PasswordPolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct UpdateUserRequest {
+    pub real_name: Option<String>,
     pub password: Option<String>,
     pub role: Option<Role>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+    pub status: Option<String>,
+    pub organization_id: Option<i32>,
+    pub department_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
@@ -1514,6 +1554,7 @@ pub struct CreateCloudServiceAssetRequest {
 
 /// 工单状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TicketStatus {
     PendingApproval,  // 待审批
     Approved,         // 已批准
