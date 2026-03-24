@@ -2,6 +2,8 @@ use crate::app::AuthUser;
 use dioxus::prelude::*;
 
 /// 用户角色枚举
+/// 当前后端登录态尚未直接下发全部工单工作流角色，但前端流程仍保留这些语义。
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UserRole {
     /// 未登录

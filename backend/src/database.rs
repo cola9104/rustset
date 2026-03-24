@@ -1,7 +1,6 @@
 //! Database module using SeaORM
 //!
 //! This module provides database connectivity and CRUD operations using SeaORM.
-#![allow(dead_code)]
 #![allow(clippy::too_many_arguments)]
 
 use crate::entities::{
@@ -49,6 +48,10 @@ pub async fn init_db(connection_string: &str) -> Result<(), DbErr> {
 /// Get the global database connection
 pub fn get_db() -> Option<Arc<DatabaseConnection>> {
     DB.get().cloned()
+}
+
+fn require_db() -> Result<Arc<DatabaseConnection>, DbErr> {
+    get_db().ok_or_else(|| DbErr::Custom("Database not initialized".to_string()))
 }
 
 // ============== Helper functions for converting between entities and shared types ==============
@@ -1282,28 +1285,28 @@ pub async fn get_all_business_resources(
 
 // User wrappers (for handlers/users.rs)
 pub async fn get_users() -> Result<Vec<SharedUser>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_users_with_conn(&conn).await
 }
 
 pub async fn insert_user(user: &SharedUser) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_user_with_conn(&conn, user).await
 }
 
 pub async fn delete_user(id: &str) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_user_by_id(&conn, id).await
 }
 
 pub async fn update_user(_id: &str, user: &SharedUser) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_user_by_id(&conn, user).await
 }
 
 // Business resource wrappers
 pub async fn get_business_resources() -> Result<Vec<business_resource::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_business_resources(&conn).await
 }
 
@@ -1312,7 +1315,7 @@ pub async fn insert_business_resource_wrapper(
     created_at: &str,
     created_by: &str,
 ) -> Result<i32, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_business_resource(&conn, req, created_at, created_by).await
 }
 
@@ -1321,12 +1324,12 @@ pub async fn update_business_resource(
     req: &shared::UpdateBusinessResourceRequest,
     updated_by: &str,
 ) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_business_resource_by_id(&conn, id, req, updated_by).await
 }
 
 pub async fn delete_business_resource(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_business_resource_by_id(&conn, id).await
 }
 
@@ -1343,7 +1346,7 @@ pub async fn insert_provider_config(
     remarks: Option<&str>,
     created_at: &str,
 ) -> Result<i32, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_cloud_provider_config(
         &conn,
         zone_id,
@@ -1373,7 +1376,7 @@ pub async fn update_provider_config(
     status: &str,
     updated_at: Option<&str>,
 ) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_cloud_provider_config_by_id(
         &conn,
         id,
@@ -1392,7 +1395,7 @@ pub async fn update_provider_config(
 }
 
 pub async fn delete_provider_config(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_cloud_provider_config_by_id(&conn, id).await
 }
 
@@ -1403,12 +1406,12 @@ pub async fn update_cloud_zone(
     zone_code: Option<&str>,
     description: Option<&str>,
 ) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_cloud_zone_by_id(&conn, id, zone_name, zone_code, description).await
 }
 
 pub async fn delete_cloud_zone(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_cloud_zone_by_id(&conn, id).await
 }
 
@@ -1420,7 +1423,7 @@ pub async fn update_cloud_platform(
     platform_code: Option<&str>,
     description: Option<&str>,
 ) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_cloud_platform_by_id(
         &conn,
         id,
@@ -1433,7 +1436,7 @@ pub async fn update_cloud_platform(
 }
 
 pub async fn delete_cloud_platform(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_cloud_platform_by_id(&conn, id).await
 }
 
@@ -1444,7 +1447,7 @@ pub async fn insert_cloud_zone_wrapper(
     description: Option<&str>,
     created_at: &str,
 ) -> Result<i32, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_cloud_zone(&conn, zone_name, zone_code, description, created_at).await
 }
 
@@ -1455,7 +1458,7 @@ pub async fn insert_cloud_platform_wrapper(
     description: Option<&str>,
     created_at: &str,
 ) -> Result<i32, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_cloud_platform(
         &conn,
         zone_id,
@@ -1469,7 +1472,7 @@ pub async fn insert_cloud_platform_wrapper(
 
 // AuditLog wrapper
 pub async fn get_audit_logs(limit: Option<u64>) -> Result<Vec<audit_log::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_audit_logs_with_conn(&conn, limit).await
 }
 
@@ -1488,54 +1491,54 @@ pub async fn get_audit_logs_with_conn(
 }
 
 pub async fn insert_audit_log_wrapper(log: &shared::AuditLog) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_audit_log(&conn, log).await
 }
 
 // Asset wrappers
 pub async fn get_assets() -> Result<Vec<asset::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_assets(&conn).await
 }
 
 pub async fn insert_asset_wrapper(asset: &shared::Asset) -> Result<i64, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_asset(&conn, asset).await
 }
 
 pub async fn update_asset(id: i32, asset: &shared::Asset) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_asset_by_id(&conn, id, asset).await
 }
 
 pub async fn delete_asset(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_asset_by_id(&conn, id).await
 }
 
 // Task wrappers
 pub async fn get_tasks() -> Result<Vec<task::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_tasks(&conn).await
 }
 
 pub async fn insert_task_wrapper(task: &shared::Task) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_task(&conn, task).await
 }
 
 pub async fn update_task(id: &str, task: &shared::Task) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_task_by_id(&conn, id, task).await
 }
 
 pub async fn delete_task(id: &str) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_task_by_id(&conn, id).await
 }
 
 pub async fn get_resource_tickets() -> Result<Vec<shared::ResourceTicket>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     let tickets = get_all_resource_tickets(&conn).await?;
     Ok(tickets
         .into_iter()
@@ -1544,58 +1547,58 @@ pub async fn get_resource_tickets() -> Result<Vec<shared::ResourceTicket>, DbErr
 }
 
 pub async fn get_resource_ticket(id: i32) -> Result<Option<shared::ResourceTicket>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     Ok(get_resource_ticket_by_id(&conn, id)
         .await?
         .map(db_resource_ticket_to_shared))
 }
 
 pub async fn insert_resource_ticket_wrapper(ticket: &shared::ResourceTicket) -> Result<i32, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_resource_ticket(&conn, ticket).await
 }
 
 pub async fn update_resource_ticket(id: i32, ticket: &shared::ResourceTicket) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     let mut updated = ticket.clone();
     updated.id = Some(id);
     update_resource_ticket_by_id(&conn, &updated).await
 }
 
 pub async fn delete_resource_ticket(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_resource_ticket_by_id(&conn, id).await
 }
 
 // Risk wrappers
 pub async fn get_risks() -> Result<Vec<risk::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_risks(&conn).await
 }
 
 pub async fn update_risk(id: &str, risk: &shared::Risk) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_risk_by_id(&conn, id, risk).await
 }
 
 // NetworkZone wrappers (ZoneConfig)
 pub async fn get_zones() -> Result<Vec<network_zone::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_zones(&conn).await
 }
 
 pub async fn insert_zone_wrapper(zone: &shared::ZoneConfig) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_zone(&conn, zone).await
 }
 
 pub async fn update_zone(id: &str, zone: &shared::ZoneConfig) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_zone_by_id(&conn, id, zone).await
 }
 
 pub async fn delete_zone(id: &str) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_zone_by_id(&conn, id).await
 }
 
@@ -1674,22 +1677,22 @@ pub fn db_custom_role_to_shared(db: custom_role::Model) -> shared::CustomRole {
 
 // CustomRole wrappers for handlers
 pub async fn get_custom_roles() -> Result<Vec<custom_role::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_custom_roles(&conn).await
 }
 
 pub async fn insert_custom_role_wrapper(role: &shared::CustomRole) -> Result<i32, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_custom_role(&conn, role).await
 }
 
 pub async fn update_custom_role(id: i32, role: &shared::CustomRole) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_custom_role_by_id(&conn, id, role).await
 }
 
 pub async fn delete_custom_role(id: i32) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_custom_role_by_id(&conn, id).await
 }
 
@@ -1871,24 +1874,24 @@ pub fn db_quick_scan_result_to_shared(db: quick_scan_result::Model) -> shared::Q
 
 // Advanced scan wrappers for handlers
 pub async fn get_advanced_scan_tasks() -> Result<Vec<advanced_scan_task::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_all_advanced_scan_tasks(&conn).await
 }
 
 pub async fn insert_advanced_scan_task_wrapper(
     task: &shared::AdvancedScanTask,
 ) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_advanced_scan_task(&conn, task).await
 }
 
 pub async fn update_advanced_scan_task(task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     update_advanced_scan_task_by_id(&conn, task).await
 }
 
 pub async fn delete_advanced_scan_task(id: &str) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     delete_advanced_scan_task_by_id(&conn, id).await
 }
 
@@ -1896,12 +1899,12 @@ pub async fn insert_quick_scan_result_wrapper(
     result: &shared::QuickScanResult,
     task_id: &str,
 ) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     insert_quick_scan_result(&conn, result, task_id).await
 }
 
 pub async fn get_quick_scan_results(task_id: &str) -> Result<Vec<quick_scan_result::Model>, DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let conn = require_db()?;
     get_quick_scan_results_by_task(&conn, task_id).await
 }
 

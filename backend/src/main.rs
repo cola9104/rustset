@@ -10,7 +10,7 @@ use tower_http::trace::TraceLayer;
 // use utoipa_swagger_ui::SwaggerUi;  // 暂时禁用
 use chrono::Utc;
 use sea_orm::ConnectionTrait;
-use shared::{Asset, NetworkZone, PasswordPolicy, PortInfo, Role, User, ZoneConfig};
+use shared::{PasswordPolicy, Role, User, ZoneConfig};
 use uuid::Uuid;
 
 // 加载 .env 文件
@@ -141,37 +141,7 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
-    // Initial mock data
-    let initial_assets = vec![Asset {
-        id: Some(1),
-        name: "Gateway Server".to_string(),
-        ip: "192.168.1.1".to_string(),
-        zone: NetworkZone::Intranet,
-        ports: vec![PortInfo {
-            port: 80,
-            is_open: true,
-            service: Some("HTTP".to_string()),
-            version: Some("1.18.0".to_string()),
-            banner: Some("Server: nginx/1.18.0".to_string()),
-            is_bound: true,
-            system_name: Some("Gateway Portal".to_string()),
-            middleware: Some("Nginx".to_string()),
-            created_by: Some("system".to_string()),
-            updated_by: None,
-        }],
-        last_scanned: Some(Utc::now()),
-        contact_person: Some("Admin".to_string()),
-        contact_phone: Some("13800000000".to_string()),
-        created_by: Some("system".to_string()),
-        updated_by: None,
-        owner: Some("IT Dept".to_string()),
-        weight: 80,
-        labels: vec!["Core".to_string(), "Gateway".to_string()],
-        os: Some("Linux".to_string()),
-        device_type: Some("Server".to_string()),
-    }];
-
-    // Default Users (with password hashing)
+    // Bootstrap users (with password hashing)
     let initial_users = vec![
         {
             let admin_password = "admin";
@@ -341,7 +311,7 @@ async fn main() {
     );
 
     let state = AppState {
-        assets: Arc::new(StdRwLock::new(initial_assets)),
+        assets: Arc::new(StdRwLock::new(vec![])),
         tasks: Arc::new(StdRwLock::new(vec![])),
         risks: Arc::new(StdRwLock::new(vec![])),
         zones: Arc::new(StdRwLock::new(vec![

@@ -7,18 +7,9 @@ use crate::services::{
 use crate::state::cloud_platform::CloudPlatformConfig;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
-    FaCheck, FaCloud, FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaPowerOff, FaTrash, FaVial,
-    FaXmark,
+    FaCheck, FaCloud, FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaPowerOff, FaTrash,
 };
 use dioxus_free_icons::Icon;
-
-/// 测试连接结果
-#[derive(Clone, Debug, PartialEq)]
-pub enum TestConnectionResult {
-    Idle,
-    Success(String),
-    Failed(String),
-}
 
 /// 云平台管理页面
 #[allow(non_snake_case)]
@@ -30,7 +21,6 @@ pub fn CloudPlatformManagement() -> Element {
     let mut show_add_modal = use_signal(|| false);
     let mut editing_config = use_signal(|| None::<CloudPlatformConfig>);
     let mut viewing_config = use_signal(|| None::<CloudPlatformConfig>);
-    let mut test_result = use_signal(|| TestConnectionResult::Idle);
 
     // 数据和加载状态
     let platforms = use_signal(Vec::<CloudPlatformConfig>::new);
@@ -506,26 +496,7 @@ pub fn CloudPlatformManagement() -> Element {
         if let Some(config) = viewing_config_clone.clone() {
             ConfigDetailModal {
                 config: config.clone(),
-                test_result: test_result,
-                on_close: move |_| {
-                    viewing_config.set(None);
-                    test_result.set(TestConnectionResult::Idle);
-                },
-                on_test: move |_| {
-                    // 模拟测试连接
-                    let result = if config.access_key_id.is_empty() || config.access_key_secret.is_empty() {
-                        TestConnectionResult::Failed("AccessKey ID 或 Secret 为空".to_string())
-                    } else if config.status == "inactive" {
-                        TestConnectionResult::Failed("平台已停用，无法测试连接".to_string())
-                    } else {
-                        TestConnectionResult::Success(format!(
-                            "连接成功！平台: {}, 区域: {}",
-                            config.platform_name,
-                            config.region_id.clone()
-                        ))
-                    };
-                    test_result.set(result);
-                },
+                on_close: move |_| viewing_config.set(None),
                 on_toggle_status: {
                     // refresh_data
                     move |_| {
@@ -561,9 +532,7 @@ pub fn CloudPlatformManagement() -> Element {
 #[component]
 fn ConfigDetailModal(
     config: CloudPlatformConfig,
-    test_result: Signal<TestConnectionResult>,
     on_close: EventHandler<()>,
-    on_test: EventHandler<()>,
     on_toggle_status: EventHandler<()>,
 ) -> Element {
     // 获取服务商名称
@@ -676,42 +645,22 @@ fn ConfigDetailModal(
                                 p { class: "text-gray-900", "{updated}" }
                             }
                         }
-                    }
-
-                    // 测试连接结果
-                    if *test_result.read() != TestConnectionResult::Idle {
                         div {
-                            class: match *test_result.read() {
-                                TestConnectionResult::Success(_) => "p-4 rounded-lg bg-green-50 border border-green-200",
-                                TestConnectionResult::Failed(_) => "p-4 rounded-lg bg-red-50 border border-red-200",
-                                _ => ""
-                            },
-                            match &*test_result.read() {
-                                TestConnectionResult::Success(msg) => rsx! {
-                                    div { class: "flex items-center text-green-700",
-                                        Icon { icon: FaCheck, width: 16, height: 16, class: "mr-2" }
-                                        span { "{msg}" }
-                                    }
-                                },
-                                TestConnectionResult::Failed(msg) => rsx! {
-                                    div { class: "flex items-center text-red-700",
-                                        Icon { icon: FaXmark, width: 16, height: 16, class: "mr-2" }
-                                        span { "{msg}" }
-                                    }
-                                },
-                                _ => rsx! {}
+                            label { class: "block text-sm text-gray-500", "最近测试结果" }
+                            p { class: "text-gray-900",
+                                {config.last_test_result.clone().unwrap_or_else(|| "暂无后端测试记录".to_string())}
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm text-gray-500", "最近测试时间" }
+                            p { class: "text-gray-900",
+                                {config.last_test_time.clone().unwrap_or_else(|| "未测试".to_string())}
                             }
                         }
                     }
                 }
 
                 div { class: "flex justify-end space-x-3 p-4 border-t bg-gray-50",
-                    button {
-                        class: "px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50",
-                        onclick: move |_| on_test.call(()),
-                        Icon { icon: FaVial, width: 16, height: 16, class: "mr-2 inline" }
-                        "测试连接"
-                    }
                     button {
                         class: if config.status == "active" {
                             "px-4 py-2 text-red-600 border border-red-300 rounded-md hover:bg-red-50"

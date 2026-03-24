@@ -154,11 +154,7 @@ pub fn ResourceTicket() -> Element {
                         }
                     }
 
-                    // 角色切换器（开发测试用）
-                    div { class: "flex items-center gap-2",
-                        label { class: "text-sm text-gray-600", "切换角色:" }
-                        RoleSwitcher { current_role: auth }
-                    }
+                    span { class: "text-sm text-gray-500", "登录角色由后端会话决定" }
                 }
             }
 
@@ -656,76 +652,6 @@ pub fn ResourceTicket() -> Element {
                     })
                 } else {
                     None
-                }
-            }
-        }
-    }
-}
-
-/// 角色切换器（开发测试用）
-#[component]
-fn RoleSwitcher(current_role: Signal<crate::state::user_role::AuthState>) -> Element {
-    let mut is_open = use_signal(|| false);
-
-    rsx! {
-        div { class: "relative",
-            button {
-                class: "px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2",
-                onclick: move |_| {
-                    let current = *is_open.read();
-                    is_open.set(!current);
-                },
-                {current_role.read().role.display_name()}
-                i { class: "fa fa-chevron-down text-xs" }
-            }
-
-            if *is_open.read() {
-                div { class: "absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[120px]",
-                    button {
-                        class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
-                        onclick: move |_| {
-                            current_role.write().role = UserRole::Applicant;
-                            current_role.write().role_label = UserRole::Applicant.display_name().to_string();
-                            is_open.set(false);
-                        },
-                        "申请人员"
-                    }
-                    button {
-                        class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
-                        onclick: move |_| {
-                            current_role.write().role = UserRole::Approver;
-                            current_role.write().role_label = UserRole::Approver.display_name().to_string();
-                            is_open.set(false);
-                        },
-                        "审批人员"
-                    }
-                    button {
-                        class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
-                        onclick: move |_| {
-                            current_role.write().role = UserRole::Operator;
-                            current_role.write().role_label = UserRole::Operator.display_name().to_string();
-                            is_open.set(false);
-                        },
-                        "运维人员"
-                    }
-                    button {
-                        class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
-                        onclick: move |_| {
-                            current_role.write().role = UserRole::Deliverer;
-                            current_role.write().role_label = UserRole::Deliverer.display_name().to_string();
-                            is_open.set(false);
-                        },
-                        "交付人员"
-                    }
-                    button {
-                        class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
-                        onclick: move |_| {
-                            current_role.write().role = UserRole::Admin;
-                            current_role.write().role_label = UserRole::Admin.display_name().to_string();
-                            is_open.set(false);
-                        },
-                        "管理员"
-                    }
                 }
             }
         }
