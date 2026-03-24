@@ -1,25 +1,4 @@
-#![allow(dead_code)]
-
-use tokio::sync::OnceCell;
 use tower_sessions::{MemoryStore, SessionManagerLayer};
-
-/// 全局共享的 Session Store
-static SESSION_STORE: OnceCell<MemoryStore> = OnceCell::const_new();
-
-/// 初始化 Session Store
-async fn init_session_store() -> MemoryStore {
-    SESSION_STORE
-        .get_or_init(|| async { MemoryStore::default() })
-        .await
-        .clone()
-}
-
-/// 创建 Session Manager Layer
-/// 用于在 Axum 应用中管理 Session
-pub async fn create_session_layer() -> SessionManagerLayer<MemoryStore> {
-    let store = init_session_store().await;
-    SessionManagerLayer::new(store)
-}
 
 /// 同步版本的 Session Layer 创建
 /// 用于在非 async 上下文中使用

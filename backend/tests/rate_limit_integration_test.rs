@@ -38,8 +38,6 @@ async fn create_test_app() -> Router {
         scan_manager: Arc::new(tokio::sync::RwLock::new(None)),
         password_policy: Arc::new(std::sync::RwLock::new(shared::PasswordPolicy::default())),
         password_history: Arc::new(std::sync::RwLock::new(vec![])),
-        cloud_zones: Arc::new(std::sync::RwLock::new(vec![])),
-        cloud_platforms: Arc::new(std::sync::RwLock::new(vec![])),
         port_details: Arc::new(std::sync::RwLock::new(vec![])),
         scanners: Arc::new(std::sync::RwLock::new(vec![])),
         scan_results: Arc::new(std::sync::RwLock::new(vec![])),

@@ -370,8 +370,6 @@ mod tests {
                 lockout_duration_minutes: 30,
             })),
             password_history: Arc::new(RwLock::new(Vec::new())),
-            cloud_zones: Arc::new(RwLock::new(Vec::new())),
-            cloud_platforms: Arc::new(RwLock::new(Vec::new())),
             port_details: Arc::new(RwLock::new(Vec::new())),
             scanners: Arc::new(RwLock::new(Vec::new())),
             scan_results: Arc::new(RwLock::new(Vec::new())),

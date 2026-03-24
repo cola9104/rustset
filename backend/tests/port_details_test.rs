@@ -55,8 +55,6 @@ async fn create_test_state() -> AppState {
         scan_manager: Arc::new(tokio::sync::RwLock::new(None)),
         password_policy: Arc::new(RwLock::new(shared::PasswordPolicy::default())),
         password_history: Arc::new(RwLock::new(vec![])),
-        cloud_zones: Arc::new(RwLock::new(vec![])),
-        cloud_platforms: Arc::new(RwLock::new(vec![])),
         port_details: Arc::new(RwLock::new(vec![])),
         scanners: Arc::new(RwLock::new(vec![])),
         scan_results: Arc::new(RwLock::new(vec![])),

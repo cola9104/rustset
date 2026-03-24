@@ -1565,7 +1565,7 @@ fn NewTicketForm(
     let has_security = use_signal(|| true);
     // 初始化安全产品选择，只为堡垒机、VPN、SIEM设置默认值（这些分类只有一个产品）
     let selected_security_products = use_signal(|| {
-        let mut products = SelectedSecurityProducts::new();
+        let mut products = SelectedSecurityProducts::default();
         use crate::state::security_product::SecurityProductCategory;
         // 只预选指定的三个分类（堡垒机ID=8, VPN ID=7, SIEM ID=9）
         products.set(SecurityProductCategory::Bastion, 8); // 堡垒机
@@ -1907,7 +1907,7 @@ fn NewTicketForm(
                                         option {
                                             value: "{room.id}",
                                             selected: *selected_machine_room_id.read() == Some(room.id),
-                                            "{room.display_name()}"
+                                            "{room}"
                                         }
                                     }
                                 }

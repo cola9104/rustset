@@ -3,8 +3,8 @@ use crate::handlers::scanners::ScanResult;
 use crate::scanners::engine::ScanManager;
 use chrono::{DateTime, Utc};
 use shared::{
-    AdvancedScanTask, Asset, AuditLog, CloudPlatform, CloudZone, CustomRole, PasswordPolicy, Risk,
-    ScannerConfig, Task, User, ZoneConfig,
+    AdvancedScanTask, Asset, AuditLog, CustomRole, PasswordPolicy, Risk, ScannerConfig, Task, User,
+    ZoneConfig,
 };
 use std::sync::{Arc, RwLock as StdRwLock};
 use tokio::sync::RwLock as TokioRwLock;
@@ -25,10 +25,6 @@ pub struct AppState {
     pub scan_manager: Arc<TokioRwLock<Option<ScanManager>>>,
     pub password_policy: Arc<StdRwLock<PasswordPolicy>>,
     pub password_history: Arc<StdRwLock<Vec<PasswordHistoryEntry>>>,
-    #[allow(dead_code)]
-    pub cloud_zones: Arc<StdRwLock<Vec<CloudZone>>>,
-    #[allow(dead_code)]
-    pub cloud_platforms: Arc<StdRwLock<Vec<CloudPlatform>>>,
     pub port_details: Arc<StdRwLock<Vec<PortDetail>>>,
     /// Scanner configs are lightweight admin state, kept in memory like zones/port details.
     pub scanners: Arc<StdRwLock<Vec<ScannerConfig>>>,

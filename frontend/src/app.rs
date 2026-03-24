@@ -52,34 +52,12 @@ pub static NETWORK_POLICIES_STATE: GlobalSignal<Vec<NetworkPolicyConfig>> =
     Signal::global(Vec::new);
 
 /// 检查是否已认证
-#[allow(dead_code)]
 pub fn is_authenticated() -> bool {
     AUTH_STATE.read().is_some()
 }
 
 /// 登出
-#[allow(dead_code)]
 pub fn logout() {
     clear_token();
     *AUTH_STATE.write() = None;
-}
-
-/// 检查是否是管理员
-#[allow(dead_code)]
-pub fn is_admin() -> bool {
-    AUTH_STATE
-        .read()
-        .as_ref()
-        .map(|u| matches!(u.role.as_str(), "SysAdmin" | "SecAdmin"))
-        .unwrap_or(false)
-}
-
-/// 检查是否有权限
-#[allow(dead_code)]
-pub fn has_permission(permission: &str) -> bool {
-    AUTH_STATE
-        .read()
-        .as_ref()
-        .map(|u| u.permissions.contains(&permission.to_string()))
-        .unwrap_or(false)
 }

@@ -19,9 +19,8 @@ pub struct MachineRoomConfig {
     pub updated_at: Option<String>,
 }
 
-impl MachineRoomConfig {
-    #[allow(dead_code)]
-    pub fn display_name(&self) -> String {
-        format!("{} - {}", self.room_name, self.facility_type)
+impl std::fmt::Display for MachineRoomConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} - {}", self.room_name, self.facility_type)
     }
 }

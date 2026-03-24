@@ -326,19 +326,6 @@ async fn main() {
         loaded_audit_logs.len()
     );
 
-    // Load cloud zones and platforms from database
-    let loaded_cloud_zones = load_cloud_zones_from_db(&db_conn).await;
-    println!(
-        "Loaded {} cloud zones from database",
-        loaded_cloud_zones.len()
-    );
-
-    let loaded_cloud_platforms = load_cloud_platforms_from_db(&db_conn).await;
-    println!(
-        "Loaded {} cloud platforms from database",
-        loaded_cloud_platforms.len()
-    );
-
     // 初始化扫描管理器
     let scan_manager = scanners::engine::ScanManager::new().await.ok();
 
@@ -378,8 +365,6 @@ async fn main() {
         scan_manager: Arc::new(TokioRwLock::new(scan_manager)),
         password_policy: Arc::new(StdRwLock::new(PasswordPolicy::default())),
         password_history: Arc::new(StdRwLock::new(vec![])),
-        cloud_zones: Arc::new(StdRwLock::new(loaded_cloud_zones)),
-        cloud_platforms: Arc::new(StdRwLock::new(loaded_cloud_platforms)),
         port_details: Arc::new(StdRwLock::new(vec![])),
         scanners: Arc::new(StdRwLock::new(vec![])),
         scan_results: Arc::new(StdRwLock::new(vec![])),
@@ -415,57 +400,6 @@ async fn main() {
                 .collect(),
             Err(e) => {
                 eprintln!("Error loading audit logs from database: {}", e);
-                vec![]
-            }
-        }
-    }
-
-    async fn load_cloud_zones_from_db(
-        conn: &sea_orm::DatabaseConnection,
-    ) -> Vec<shared::CloudZone> {
-        use crate::database::get_all_cloud_zones;
-
-        match get_all_cloud_zones(conn).await {
-            Ok(zones) => zones
-                .into_iter()
-                .map(|db| shared::CloudZone {
-                    id: Some(db.id),
-                    zone_name: db.zone_name.clone(),
-                    zone_code: db.zone_code.clone(),
-                    description: db.description.clone(),
-                    created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|_| Utc::now()),
-                })
-                .collect(),
-            Err(e) => {
-                eprintln!("Error loading cloud zones from database: {}", e);
-                vec![]
-            }
-        }
-    }
-
-    async fn load_cloud_platforms_from_db(
-        conn: &sea_orm::DatabaseConnection,
-    ) -> Vec<shared::CloudPlatform> {
-        use crate::database::get_all_cloud_platforms;
-
-        match get_all_cloud_platforms(conn).await {
-            Ok(platforms) => platforms
-                .into_iter()
-                .map(|db| shared::CloudPlatform {
-                    id: Some(db.id),
-                    zone_id: db.zone_id,
-                    platform_name: db.service_name.clone(),
-                    platform_code: db.service_code.clone(),
-                    description: db.description.clone(),
-                    created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|_| Utc::now()),
-                })
-                .collect(),
-            Err(e) => {
-                eprintln!("Error loading cloud platforms from database: {}", e);
                 vec![]
             }
         }

@@ -15,13 +15,6 @@ pub struct SelectedSecurityProducts {
 }
 
 impl SelectedSecurityProducts {
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
-            products: HashMap::new(),
-        }
-    }
-
     pub fn set(&mut self, category: SecurityProductCategory, product_id: i32) {
         self.products.insert(category, product_id);
     }

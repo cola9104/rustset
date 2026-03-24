@@ -1,7 +1,6 @@
 //! Scan engine manager
 //!
 //! Manages scanning operations and provides a unified interface for different scan engines.
-#![allow(dead_code)]
 
 use chrono::Utc;
 use std::sync::Arc;
@@ -14,19 +13,10 @@ use shared::{
     ScanStrategy, ServiceFingerprint, TaskStatus,
 };
 
-/// Scan engine type
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ScanEngineType {
-    BasicTcp,
-    RustScan,
-    Nmap,
-}
-
 /// Active scan job
 #[derive(Clone)]
 pub struct ScanJob {
     pub id: String,
-    pub target: String,
     pub status: TaskStatus,
     pub start_time: chrono::DateTime<chrono::Utc>,
     pub progress: f32,
@@ -47,15 +37,6 @@ impl ScanManager {
             service_detector: ServiceDetector::new(),
             active_jobs: Arc::new(TokioMutex::new(Vec::new())),
         })
-    }
-
-    /// Create scan manager with custom RustScan configuration
-    pub fn with_config(rustscan: RustScan) -> Self {
-        Self {
-            rustscan,
-            service_detector: ServiceDetector::new(),
-            active_jobs: Arc::new(TokioMutex::new(Vec::new())),
-        }
     }
 
     /// Quick port scan for a single target
@@ -224,7 +205,6 @@ impl ScanManager {
         let job_start_time = Utc::now();
         let job = ScanJob {
             id: task_id.clone(),
-            target: targets.join(","),
             status: TaskStatus::Running,
             start_time: job_start_time,
             progress: 0.0,
@@ -291,23 +271,6 @@ impl ScanManager {
         })
     }
 
-    /// Get scan job by ID
-    pub async fn get_job(&self, job_id: &str) -> Option<ScanJob> {
-        let jobs = self.active_jobs.lock().await;
-        jobs.iter().find(|j| j.id == job_id).cloned()
-    }
-
-    /// Cancel a scan job
-    pub async fn cancel_job(&self, job_id: &str) -> bool {
-        let mut jobs = self.active_jobs.lock().await;
-        if let Some(job) = jobs.iter_mut().find(|j| j.id == job_id) {
-            job.status = TaskStatus::Failed;
-            true
-        } else {
-            false
-        }
-    }
-
     /// Update job progress
     async fn update_job_progress(&self, job_id: &str, progress: f32) {
         let mut jobs = self.active_jobs.lock().await;
@@ -328,10 +291,5 @@ impl ScanManager {
     /// Get all active jobs
     pub async fn get_active_jobs(&self) -> Vec<ScanJob> {
         self.active_jobs.lock().await.clone()
-    }
-
-    /// Check if scan manager is healthy
-    pub fn health_check(&self) -> bool {
-        true
     }
 }
