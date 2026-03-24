@@ -168,6 +168,16 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
     // 获取服务商和机房列表
     let providers = PROVIDERS_STATE.read().clone();
     let machine_rooms = MACHINE_ROOMS_STATE.read().clone();
+    let selected_provider_id = form_data.read().provider_id;
+    let filtered_machine_rooms = machine_rooms
+        .iter()
+        .filter(|room| {
+            selected_provider_id
+                .map(|provider_id| room.provider_id == provider_id)
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
 
     // 编辑时保存原始ID
     let editing_id = props.request.as_ref().map(|r| r.id);
@@ -314,6 +324,21 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                                     let val: i32 = e.value().parse().unwrap_or(-1);
                                     let mut data = form_data.write();
                                     data.provider_id = if val > 0 { Some(val) } else { None };
+                                    if let Some(machine_room_id) = data.machine_room_id {
+                                        let still_exists = MACHINE_ROOMS_STATE
+                                            .read()
+                                            .iter()
+                                            .any(|room| {
+                                                room.id == machine_room_id
+                                                    && data
+                                                        .provider_id
+                                                        .map(|provider_id| room.provider_id == provider_id)
+                                                        .unwrap_or(true)
+                                            });
+                                        if !still_exists {
+                                            data.machine_room_id = None;
+                                        }
+                                    }
                                 },
                                 option { value: "-1", "请选择服务商" }
                                 for provider in providers.iter() {
@@ -337,7 +362,7 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                                     data.machine_room_id = if val > 0 { Some(val) } else { None };
                                 },
                                 option { value: "-1", "请选择机房" }
-                                for room in machine_rooms.iter() {
+                                for room in filtered_machine_rooms.iter() {
                                     option {
                                         value: "{room.id}",
                                         selected: form_data.read().machine_room_id == Some(room.id),

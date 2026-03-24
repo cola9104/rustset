@@ -165,6 +165,16 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
     // 获取服务商和云平台列表
     let providers = PROVIDERS_STATE.read().clone();
     let cloud_platforms = CLOUD_PLATFORMS_STATE.read().clone();
+    let selected_provider_id = form_data.read().provider_id;
+    let filtered_cloud_platforms = cloud_platforms
+        .iter()
+        .filter(|platform| {
+            selected_provider_id
+                .map(|provider_id| platform.provider_id == provider_id)
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
 
     // 编辑时保存原始ID
     let editing_id = props.request.as_ref().map(|r| r.id);
@@ -290,6 +300,22 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                                     let val: i32 = e.value().parse().unwrap_or(-1);
                                     let mut data = form_data.write();
                                     data.provider_id = if val > 0 { Some(val) } else { None };
+                                    if !data.cloud_platform.is_empty() {
+                                        let selected_platform = data.cloud_platform.clone();
+                                        let still_exists = CLOUD_PLATFORMS_STATE
+                                            .read()
+                                            .iter()
+                                            .any(|platform| {
+                                                platform.platform_name == selected_platform
+                                                    && data
+                                                        .provider_id
+                                                        .map(|provider_id| platform.provider_id == provider_id)
+                                                        .unwrap_or(true)
+                                            });
+                                        if !still_exists {
+                                            data.cloud_platform.clear();
+                                        }
+                                    }
                                 },
                                 option { value: "-1", "请选择服务商" }
                                 for provider in providers.iter() {
@@ -322,7 +348,7 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                                     data.cloud_platform = e.value();
                                 },
                                 option { value: "", "请选择云平台" }
-                                for platform in cloud_platforms.iter() {
+                                for platform in filtered_cloud_platforms.iter() {
                                     option {
                                         value: "{platform.platform_name}",
                                         selected: form_data.read().cloud_platform == platform.platform_name,

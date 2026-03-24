@@ -3,6 +3,7 @@ pub mod audit_api;
 pub mod business_resource_api;
 pub mod cloud_platform_api;
 pub mod dashboard_api;
+pub mod ip_zone_api;
 pub mod machine_room_api;
 pub mod resource_ticket_api;
 pub mod risk_api;

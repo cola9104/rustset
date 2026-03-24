@@ -1,8 +1,8 @@
 use super::network_policy_request::{
     AccessDirection, NetworkPolicyRequest, NetworkPolicyStatus, PolicyProtocol,
 };
-use crate::app::NETWORK_ZONES_STATE;
 use crate::components::common::{ErrorMessage, FormMode, Modal, ModalFooter};
+use crate::services::ip_zone_api::fetch_ip_zones;
 use dioxus::prelude::*;
 
 /// 网络策略申请表单数据结构
@@ -132,9 +132,31 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
 
     let mut form_data = use_signal(|| initial_data);
     let mut error_msg = use_signal(String::new);
+    let network_zones = use_signal(Vec::<String>::new);
 
-    // 获取网络区域列表
-    let network_zones = NETWORK_ZONES_STATE.read().clone();
+    {
+        let mut network_zones = network_zones;
+        use_effect(move || {
+            spawn(async move {
+                match fetch_ip_zones().await {
+                    Ok(zones) => {
+                        let mut zone_names = zones
+                            .into_iter()
+                            .map(|zone| zone.name)
+                            .filter(|name| !name.trim().is_empty())
+                            .collect::<Vec<_>>();
+                        zone_names.sort();
+                        zone_names.dedup();
+                        network_zones.set(zone_names);
+                    }
+                    Err(e) => {
+                        tracing::error!("加载网络区域失败: {}", e);
+                        network_zones.set(Vec::new());
+                    }
+                }
+            });
+        });
+    }
 
     // 编辑时保存原始ID
     let editing_id = props.request.as_ref().map(|r| r.id);
@@ -278,11 +300,11 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                     data.source_zone = e.value();
                                 },
                                 option { value: "", "请选择源网络区域" }
-                                for zone in network_zones.iter() {
+                                for zone_name in network_zones.read().iter() {
                                     option {
-                                        value: "{zone.name}",
-                                        selected: form_data.read().source_zone == zone.name,
-                                        "{zone.name}"
+                                        value: "{zone_name}",
+                                        selected: form_data.read().source_zone == *zone_name,
+                                        "{zone_name}"
                                     }
                                 }
                             }
@@ -301,11 +323,11 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                     data.destination_zone = e.value();
                                 },
                                 option { value: "", "请选择目标网络区域" }
-                                for zone in network_zones.iter() {
+                                for zone_name in network_zones.read().iter() {
                                     option {
-                                        value: "{zone.name}",
-                                        selected: form_data.read().destination_zone == zone.name,
-                                        "{zone.name}"
+                                        value: "{zone_name}",
+                                        selected: form_data.read().destination_zone == *zone_name,
+                                        "{zone_name}"
                                     }
                                 }
                             }

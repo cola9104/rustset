@@ -15,14 +15,17 @@ use crate::components::security_product::security_product_selector::{
 };
 use crate::services::{
     cloud_platform_api::fetch_cloud_platform_configs,
+    ip_zone_api::fetch_ip_zones,
     machine_room_api::fetch_machine_rooms,
     resource_ticket_api::{
         approve_ticket, create_resource_ticket, deliver_ticket, fetch_resource_tickets,
         provision_ticket,
     },
+    security_product_api::fetch_security_products,
     service_provider_api::fetch_service_providers,
 };
 use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
+use crate::state::security_product::{SecurityProductCategory, SecurityProductStatus};
 use crate::state::user_role::{use_auth, ApplicationTab, UserRole};
 
 // 导入三个模块的表单组件和请求类型
@@ -404,11 +407,24 @@ pub fn ResourceTicket() -> Element {
                                 on_save: move |req: CloudServiceRequest| {
                                     // 获取服务商名称
                                     let provider_name = req.provider_id
-                                        .and_then(|pid| PROVIDERS_STATE.read()
-                                            .iter()
-                                            .find(|p| p.id == pid)
-                                            .map(|p| p.short_name.clone()))
+                                        .and_then(|pid| {
+                                            PROVIDERS_STATE
+                                                .read()
+                                                .iter()
+                                                .find(|p| p.id == pid)
+                                                .map(|p| p.short_name.clone())
+                                        })
                                         .unwrap_or_default();
+                                    let selected_platform = CLOUD_PLATFORMS_STATE
+                                        .read()
+                                        .iter()
+                                        .find(|platform| {
+                                            platform.platform_name == req.cloud_platform
+                                                && req.provider_id
+                                                    .map(|pid| platform.provider_id == pid)
+                                                    .unwrap_or(true)
+                                        })
+                                        .cloned();
 
                                     // 转换为 ResourceTicket 并添加
                                     let new_ticket = ResourceTicket {
@@ -418,8 +434,13 @@ pub fn ResourceTicket() -> Element {
                                         ticket_status: TicketStatus::PendingApproval,
                                         provider_id: req.provider_id,
                                         provider_name,
-                                        cloud_platform_id: None,
-                                        cloud_platform_name: req.cloud_platform.clone(),
+                                        cloud_platform_id: selected_platform
+                                            .as_ref()
+                                            .map(|platform| platform.id),
+                                        cloud_platform_name: selected_platform
+                                            .as_ref()
+                                            .map(|platform| platform.platform_name.clone())
+                                            .unwrap_or_else(|| req.cloud_platform.clone()),
                                         machine_room_id: None,
                                         machine_room_name: String::new(),
                                         cloud_region: String::new(),
@@ -1437,12 +1458,14 @@ fn NewTicketForm(
     on_cancel: Callback<()>,
     on_submit: Callback<()>,
 ) -> Element {
+    let auth = use_auth();
     let mut ecs_name = use_signal(String::new);
     let mut application_name = use_signal(String::new);
     let mut contract_name = use_signal(String::new);
     let mut customer_name = use_signal(String::new);
-    // 选中的服务商
-    let mut selected_provider_id = use_signal(|| 1i32);
+    let mut selected_provider_id = use_signal(|| Option::<i32>::None);
+    let mut available_zone_names = use_signal(Vec::<String>::new);
+    let security_defaults_initialized = use_signal(|| false);
 
     use_effect(move || {
         spawn(async move {
@@ -1463,15 +1486,72 @@ fn NewTicketForm(
                     *MACHINE_ROOMS_STATE.write() = data;
                 }
             }
+
+            if SECURITY_PRODUCTS_STATE.read().is_empty() {
+                if let Ok(data) = fetch_security_products().await {
+                    *SECURITY_PRODUCTS_STATE.write() = data;
+                }
+            }
+
+            if available_zone_names.read().is_empty() {
+                if let Ok(data) = fetch_ip_zones().await {
+                    let mut zone_names = data
+                        .into_iter()
+                        .map(|zone| zone.name)
+                        .filter(|name| !name.trim().is_empty())
+                        .collect::<Vec<_>>();
+                    zone_names.sort();
+                    zone_names.dedup();
+                    available_zone_names.set(zone_names);
+                }
+            }
         });
     });
 
     let service_providers = PROVIDERS_STATE.read().clone();
     let cloud_platforms_all = CLOUD_PLATFORMS_STATE.read().clone();
     let machine_rooms_all = MACHINE_ROOMS_STATE.read().clone();
+    let security_products_all = SECURITY_PRODUCTS_STATE.read().clone();
+    let network_zone_options = {
+        let zones = available_zone_names.read().clone();
+        if zones.is_empty() {
+            vec![
+                "互联网DMZ".to_string(),
+                "政务网DMZ".to_string(),
+                "办公网".to_string(),
+                "数据中心".to_string(),
+                "可信区".to_string(),
+            ]
+        } else {
+            zones
+        }
+    };
+    let selected_provider_value = selected_provider_id
+        .read()
+        .as_ref()
+        .map(|id| id.to_string())
+        .unwrap_or_default();
 
     // 为闭包克隆数据
     let service_providers_for_select = service_providers.clone();
+
+    {
+        let provider_ids = service_providers
+            .iter()
+            .map(|provider| provider.id)
+            .collect::<Vec<_>>();
+        let mut selected_provider_id = selected_provider_id;
+        use_effect(move || {
+            let current_provider_id = *selected_provider_id.read();
+            let provider_is_valid = current_provider_id
+                .map(|id| provider_ids.contains(&id))
+                .unwrap_or(false);
+
+            if !provider_is_valid {
+                selected_provider_id.set(provider_ids.first().copied());
+            }
+        });
+    }
 
     // 选中的云平台和机房
     let mut selected_cloud_platform_id = use_signal(|| Option::<i32>::None);
@@ -1489,18 +1569,45 @@ fn NewTicketForm(
     let mut system_disk = use_signal(|| "SSD".to_string());
     let mut system_disk_size = use_signal(|| 100);
     let has_security = use_signal(|| true);
-    // 初始化安全产品选择，只为堡垒机、VPN、SIEM设置默认值（这些分类只有一个产品）
-    let selected_security_products = use_signal(|| {
-        let mut products = SelectedSecurityProducts::default();
-        use crate::state::security_product::SecurityProductCategory;
-        // 只预选指定的三个分类（堡垒机ID=8, VPN ID=7, SIEM ID=9）
-        products.set(SecurityProductCategory::Bastion, 8); // 堡垒机
-        products.set(SecurityProductCategory::Vpn, 7); // VPN网关
-        products.set(SecurityProductCategory::Siem, 9); // SIEM
-        products
-    });
+    let selected_security_products = use_signal(SelectedSecurityProducts::default);
     let mut show_security_selector = use_signal(|| false);
     let mut remarks = use_signal(String::new);
+
+    {
+        let security_products = security_products_all.clone();
+        let mut selected_security_products = selected_security_products;
+        let mut security_defaults_initialized = security_defaults_initialized;
+        use_effect(move || {
+            if *security_defaults_initialized.read() || security_products.is_empty() {
+                return;
+            }
+
+            let mut defaults = SelectedSecurityProducts::default();
+            for category in [
+                SecurityProductCategory::Bastion,
+                SecurityProductCategory::Vpn,
+                SecurityProductCategory::Siem,
+            ] {
+                let matches = security_products
+                    .iter()
+                    .filter(|product| {
+                        product.category == category
+                            && product.status == SecurityProductStatus::Active
+                    })
+                    .collect::<Vec<_>>();
+
+                if matches.len() == 1 {
+                    defaults.set(category, matches[0].id);
+                }
+            }
+
+            if !defaults.is_empty() {
+                selected_security_products.set(defaults);
+            }
+
+            security_defaults_initialized.set(true);
+        });
+    }
 
     // 网络策略专用字段
     let mut fw_source_zone = use_signal(String::new);
@@ -1552,9 +1659,9 @@ fn NewTicketForm(
                     let id = (tickets.read().len() + 1) as i32;
 
                     // 获取选中的服务商信息
-                    let provider_id = Some(*selected_provider_id.read());
+                    let provider_id = *selected_provider_id.read();
                     let provider_name = service_providers.iter()
-                        .find(|p| p.id == *selected_provider_id.read())
+                        .find(|p| Some(p.id) == provider_id)
                         .map(|p| p.short_name.clone())
                         .unwrap_or_default();
 
@@ -1629,7 +1736,7 @@ fn NewTicketForm(
                         remarks: remarks.read().clone(),
                         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
                         updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-                        created_by: "当前用户".to_string(),
+                        created_by: auth.read().username.clone(),
                         approver: None,
                         approve_time: None,
                         approve_comment: None,
@@ -1765,19 +1872,20 @@ fn NewTicketForm(
                             select {
                                 class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
                                 required: true,
-                                value: "{selected_provider_id}",
+                                value: "{selected_provider_value}",
                                 onchange: move |e| {
                                     if let Ok(id) = e.value().parse::<i32>() {
-                                        selected_provider_id.set(id);
+                                        selected_provider_id.set(Some(id));
                                         // 服务商改变时重置已选择的云平台和机房
                                         selected_cloud_platform_id.set(None);
                                         selected_machine_room_id.set(None);
                                     }
                                 },
+                                option { value: "", disabled: true, "请选择服务商" }
                                 for provider in &service_providers_for_select {
                                     option {
                                         value: "{provider.id}",
-                                        selected: *selected_provider_id.read() == provider.id,
+                                        selected: *selected_provider_id.read() == Some(provider.id),
                                         "{provider.short_name}"
                                     }
                                 }
@@ -1796,7 +1904,7 @@ fn NewTicketForm(
                                     },
                                     option { value: "-1", "请先选择服务商" }
                                     // 根据服务商过滤云平台
-                                    for platform in cloud_platforms_all.iter().filter(|p| p.provider_id == *selected_provider_id.read()) {
+                                    for platform in cloud_platforms_all.iter().filter(|p| Some(p.provider_id) == *selected_provider_id.read()) {
                                         option {
                                             value: "{platform.id}",
                                             selected: *selected_cloud_platform_id.read() == Some(platform.id),
@@ -1829,7 +1937,7 @@ fn NewTicketForm(
                                     },
                                     option { value: "-1", "请先选择服务商" }
                                     // 根据服务商过滤机房
-                                    for room in machine_rooms_all.iter().filter(|r| r.provider_id == *selected_provider_id.read()) {
+                                    for room in machine_rooms_all.iter().filter(|r| Some(r.provider_id) == *selected_provider_id.read()) {
                                         option {
                                             value: "{room.id}",
                                             selected: *selected_machine_room_id.read() == Some(room.id),
@@ -1870,11 +1978,9 @@ fn NewTicketForm(
                                     value: "{fw_source_zone}",
                                     oninput: move |e| fw_source_zone.set(e.value()),
                                     option { value: "", "请选择" }
-                                    option { value: "互联网DMZ", "互联网DMZ" }
-                                    option { value: "政务网DMZ", "政务网DMZ" }
-                                    option { value: "办公网", "办公网" }
-                                    option { value: "数据中心", "数据中心" }
-                                    option { value: "可信区", "可信区" }
+                                    for zone_name in network_zone_options.iter() {
+                                        option { value: "{zone_name}", "{zone_name}" }
+                                    }
                                 }
                             }
                             div {
@@ -1895,11 +2001,9 @@ fn NewTicketForm(
                                     value: "{fw_dest_zone}",
                                     oninput: move |e| fw_dest_zone.set(e.value()),
                                     option { value: "", "请选择" }
-                                    option { value: "互联网DMZ", "互联网DMZ" }
-                                    option { value: "政务网DMZ", "政务网DMZ" }
-                                    option { value: "办公网", "办公网" }
-                                    option { value: "数据中心", "数据中心" }
-                                    option { value: "可信区", "可信区" }
+                                    for zone_name in network_zone_options.iter() {
+                                        option { value: "{zone_name}", "{zone_name}" }
+                                    }
                                 }
                             }
                             div {
