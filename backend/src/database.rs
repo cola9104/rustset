@@ -643,6 +643,34 @@ pub async fn delete_resource_ticket_by_id(conn: &DatabaseConnection, id: i32) ->
 
 // ============== Risk CRUD ==============
 
+pub async fn insert_risk(conn: &DatabaseConnection, risk: &shared::Risk) -> Result<(), DbErr> {
+    let db_risk = risk::ActiveModel {
+        id: Set(risk.id.clone()),
+        asset_ip: Set(risk.asset_ip.clone()),
+        port: Set(risk.port as i32),
+        severity: Set(risk.severity.clone()),
+        description: Set(risk.description.clone()),
+        solution: Set(risk.solution.clone()),
+        status: Set(format!("{:?}", risk.status)),
+        created_at: Set(risk.created_at.map(|value| value.to_rfc3339())),
+        updated_at: Set(risk.updated_at.map(|value| value.to_rfc3339())),
+        assigned_to: Set(risk.assigned_to.clone()),
+    };
+    db_risk.insert(conn).await?;
+    Ok(())
+}
+
+pub async fn get_risks_by_asset_ip(
+    conn: &DatabaseConnection,
+    asset_ip: &str,
+) -> Result<Vec<risk::Model>, DbErr> {
+    Risk::find()
+        .filter(risk::Column::AssetIp.eq(asset_ip))
+        .order_by_desc(risk::Column::CreatedAt)
+        .all(conn)
+        .await
+}
+
 pub async fn update_risk_by_id(
     conn: &DatabaseConnection,
     id: &str,
