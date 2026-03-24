@@ -1,12 +1,16 @@
 use crate::database::{
-    delete_user as db_delete_user, get_users as db_get_users, insert_user as db_insert_user,
-    update_user as db_update_user,
+    delete_user as db_delete_user, get_user_by_id as db_get_user_by_id,
+    get_user_by_username as db_get_user_by_username, get_users as db_get_users,
+    insert_user as db_insert_user, update_user as db_update_user,
 };
 use crate::middleware::auth_middleware::AuthUser;
 use crate::middleware::ApiError;
 use crate::password;
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::{
+    get_current_user_from_auth, get_current_user_from_headers, log_action, remove_cached_user,
+    sync_cached_user, sync_cached_users,
+};
 use axum::{
     extract::{Json, Path, State},
     http::{HeaderMap, StatusCode},
@@ -109,6 +113,77 @@ pub fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Resu
     Ok(())
 }
 
+async fn load_user_by_id(state: &AppState, user_id: &str) -> Option<User> {
+    if crate::database::get_db().is_some() {
+        return match db_get_user_by_id(user_id).await {
+            Ok(Some(user)) => {
+                sync_cached_user(&state.users, &user);
+                Some(user)
+            }
+            _ => None,
+        };
+    }
+
+    state
+        .users
+        .read()
+        .ok()?
+        .iter()
+        .find(|user| user.id == user_id)
+        .cloned()
+}
+
+async fn load_user_by_username(state: &AppState, username: &str) -> Option<User> {
+    if crate::database::get_db().is_some() {
+        return match db_get_user_by_username(username).await {
+            Ok(Some(user)) => {
+                sync_cached_user(&state.users, &user);
+                Some(user)
+            }
+            _ => None,
+        };
+    }
+
+    state
+        .users
+        .read()
+        .ok()?
+        .iter()
+        .find(|user| user.username == username)
+        .cloned()
+}
+
+async fn load_all_users(state: &AppState) -> Result<Vec<User>, ApiError> {
+    match db_get_users().await {
+        Ok(users) => {
+            sync_cached_users(&state.users, users.clone());
+            Ok(users)
+        }
+        Err(_e) if crate::database::get_db().is_none() => state
+            .users
+            .read()
+            .map(|users| users.clone())
+            .map_err(|lock_error| {
+                ApiError::internal(format!("Failed to read users cache: {}", lock_error))
+            }),
+        Err(e) => Err(ApiError::internal(format!(
+            "Failed to load users from database: {}",
+            e
+        ))),
+    }
+}
+
+async fn persist_user(state: &AppState, user: &User) -> Result<(), ApiError> {
+    if crate::database::get_db().is_some() {
+        db_update_user(&user.id, user)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to persist user: {}", e)))?;
+    }
+
+    sync_cached_user(&state.users, user);
+    Ok(())
+}
+
 /// Get all users (SysAdmin only)
 #[utoipa::path(
     get,
@@ -127,40 +202,15 @@ pub async fn get_users(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<User>>, ApiError> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if user.role != Role::SysAdmin {
         return Err(ApiError::forbidden("Access denied: SysAdmin only"));
     }
 
-    // 使用新的 database API
-    match db_get_users().await {
-        Ok(db_users) => {
-            // 只有数据库有数据时才更新内存缓存
-            if !db_users.is_empty() {
-                *state.users.write().map_err(|e| {
-                    ApiError::internal(format!("Failed to write users cache: {}", e))
-                })? = db_users.clone();
-                Ok(Json(db_users))
-            } else {
-                // 数据库为空，使用内存缓存（可能是初始用户）
-                let users = state.users.read().map_err(|e| {
-                    ApiError::internal(format!("Failed to read users cache: {}", e))
-                })?;
-                Ok(Json(users.clone()))
-            }
-        }
-        Err(e) => {
-            eprintln!("Error loading users from database: {}", e);
-            // Fallback to memory cache
-            let users = state
-                .users
-                .read()
-                .map_err(|e| ApiError::internal(format!("Failed to read users cache: {}", e)))?;
-            Ok(Json(users.clone()))
-        }
-    }
+    Ok(Json(load_all_users(&state).await?))
 }
 
 /// Create a new user (SysAdmin only)
@@ -184,22 +234,16 @@ pub async fn create_user(
     headers: HeaderMap,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<Json<User>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if current_user.role != Role::SysAdmin {
         return Err(ApiError::forbidden("Access denied: SysAdmin only"));
     }
 
-    // Check if username exists in memory
-    {
-        let users = state
-            .users
-            .read()
-            .map_err(|e| ApiError::internal(format!("Failed to read users: {}", e)))?;
-        if users.iter().any(|u| u.username == req.username) {
-            return Err(ApiError::conflict("Username already exists"));
-        }
+    if load_user_by_username(&state, &req.username).await.is_some() {
+        return Err(ApiError::conflict("Username already exists"));
     }
 
     let (password_strength, _) = calculate_password_strength(&req.password);
@@ -232,19 +276,13 @@ pub async fn create_user(
         locked_until: None,
     };
 
-    // Add to in-memory storage
-    {
-        let mut users = state
-            .users
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write users: {}", e)))?;
-        users.push(new_user.clone());
+    if crate::database::get_db().is_some() {
+        db_insert_user(&new_user)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to create user: {}", e)))?;
     }
 
-    // Persist to database
-    if let Err(e) = db_insert_user(&new_user).await {
-        eprintln!("Error inserting user to database: {}", e);
-    }
+    sync_cached_user(&state.users, &new_user);
 
     log_action(
         &state.audit_logs,
@@ -280,44 +318,34 @@ pub async fn delete_user(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
     if current_user.role != Role::SysAdmin {
         return Err(ApiError::forbidden("Access denied: SysAdmin only"));
     }
 
-    let removed = {
-        let mut users = state
-            .users
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to write users: {}", e)))?;
-        users
-            .iter()
-            .position(|u| u.id == id)
-            .map(|idx| users.remove(idx))
-    };
+    let removed_user = load_user_by_id(&state, &id)
+        .await
+        .ok_or_else(|| ApiError::not_found(format!("User with ID '{}' not found", id)))?;
 
-    if let Some(removed_user) = removed {
-        // Persist to database
-        if let Err(e) = db_delete_user(&id).await {
-            eprintln!("Error deleting user from database: {}", e);
-        }
-
-        log_action(
-            &state.audit_logs,
-            &current_user,
-            "DELETE_USER",
-            &removed_user.username,
-            "Deleted user",
-        );
-        Ok(Json("Deleted".to_string()))
-    } else {
-        Err(ApiError::not_found(format!(
-            "User with ID '{}' not found",
-            id
-        )))
+    if crate::database::get_db().is_some() {
+        db_delete_user(&id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to delete user: {}", e)))?;
     }
+
+    remove_cached_user(&state.users, &id);
+
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "DELETE_USER",
+        &removed_user.username,
+        "Deleted user",
+    );
+    Ok(Json("Deleted".to_string()))
 }
 
 /// Update user permissions
@@ -345,86 +373,38 @@ pub async fn update_user_permissions(
     Path(id): Path<String>,
     Json(permissions): Json<Permissions>,
 ) -> Result<Json<User>, (StatusCode, String)> {
-    println!("📝 收到权限更新请求 - 用户ID: {}", id);
-    println!(
-        "📝 通用模块: can_access_general={}",
-        permissions.can_access_general
-    );
-    println!("📝 任务中心: can_view_tasks={}, can_create_task={}, can_delete_task={}, can_update_task={}",
-        permissions.can_view_tasks, permissions.can_create_task, permissions.can_delete_task, permissions.can_update_task);
-    println!("📝 高级扫描: can_view_advanced_scan={}, can_create_scan={}, can_delete_scan={}, can_export_scan={}",
-        permissions.can_view_advanced_scan, permissions.can_create_scan, permissions.can_delete_scan, permissions.can_export_scan);
-    println!(
-        "📝 资产风险: can_access_assets_risks={}",
-        permissions.can_access_assets_risks
-    );
-    println!("📝 云资产: can_view_cloud_assets={}, can_create_cloud_asset={}, can_update_cloud_asset={}, can_delete_cloud_asset={}",
-        permissions.can_view_cloud_assets, permissions.can_create_cloud_asset, permissions.can_update_cloud_asset, permissions.can_delete_cloud_asset);
-
-    let current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-
-    println!("📝 当前用户: {}", current_user.username);
 
     // Check if current user has permission to manage permissions
     let current_perms = current_user
         .permissions
         .as_ref()
         .ok_or((StatusCode::FORBIDDEN, "No permissions set".to_string()))?;
-    println!(
-        "📝 当前用户权限 - can_manage_permissions: {}",
-        current_perms.can_manage_permissions
-    );
 
     if !current_perms.can_manage_permissions {
-        println!("❌ 权限不足: 用户没有管理权限的权限");
         return Err((StatusCode::FORBIDDEN, "Permission denied".to_string()));
     }
 
-    // Find the user and clone necessary data before async operations
-    let (user_id, username) = {
-        let mut users = state.users.write().unwrap();
-        if let Some(idx) = users.iter().position(|u| u.id == id) {
-            let user = &mut users[idx];
-            println!("✅ 找到用户: {}, 更新权限", user.username);
-            user.permissions = Some(permissions.clone());
-            (user.id.clone(), user.username.clone())
-        } else {
-            println!("❌ 用户未找到: {}", id);
-            return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
-        }
-    };
+    let mut target_user = load_user_by_id(&state, &id)
+        .await
+        .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+    target_user.permissions = Some(permissions.clone());
 
-    // Persist to database (after releasing the lock)
-    let user_for_db = {
-        let users = state.users.read().unwrap();
-        users.iter().find(|u| u.id == user_id).cloned()
-    };
+    persist_user(&state, &target_user)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    if let Some(user) = user_for_db {
-        if let Err(e) = db_update_user(&user.id, &user).await {
-            eprintln!("Error updating user permissions in database: {}", e);
-        }
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "UPDATE_PERMISSIONS",
+        &target_user.username,
+        "Updated user permissions",
+    );
 
-        log_action(
-            &state.audit_logs,
-            &current_user,
-            "UPDATE_PERMISSIONS",
-            &username,
-            "Updated user permissions",
-        );
-        println!("✅ 权限更新成功");
-
-        // Get updated user for response
-        let users = state.users.read().unwrap();
-        if let Some(user) = users.iter().find(|u| u.id == user_id) {
-            Ok(Json(user.clone()))
-        } else {
-            Err((StatusCode::NOT_FOUND, "User not found".to_string()))
-        }
-    } else {
-        Err((StatusCode::NOT_FOUND, "User not found".to_string()))
-    }
+    Ok(Json(target_user))
 }
 
 /// Change current user's password
@@ -447,7 +427,8 @@ pub async fn change_password(
     headers: HeaderMap,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Result<Json<String>, (StatusCode, String)> {
-    let current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
     // 获取密码策略
@@ -461,66 +442,44 @@ pub async fn change_password(
     // 计算密码强度
     let (strength, _) = calculate_password_strength(&req.new_password);
 
-    // Find user and validate current password
-    let (user_id, username) = {
-        let users = state.users.read().unwrap();
+    let mut target_user = load_user_by_id(&state, &current_user.id)
+        .await
+        .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+    let username = target_user.username.clone();
 
-        if let Some(user) = users.iter().find(|u| u.id == current_user.id) {
-            let password_valid = password::verify_password(&req.current_password, &user.password)
-                .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Password verification failed: {}", e),
-                )
-            })?;
+    let password_valid = password::verify_password(&req.current_password, &target_user.password)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Password verification failed: {}", e),
+            )
+        })?;
 
-            if !password_valid {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    "Current password is incorrect".to_string(),
-                ));
-            }
+    if !password_valid {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Current password is incorrect".to_string(),
+        ));
+    }
 
-            (user.id.clone(), user.username.clone())
-        } else {
-            return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
-        }
-    };
-
-    // Update password (release lock before async operation)
     let new_password_hash = password::hash_password(&req.new_password).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Failed to hash password: {}", e),
         )
     })?;
-    let password_changed_at = Utc::now();
+    target_user.password = new_password_hash.clone();
+    target_user.password_changed_at = Some(Utc::now());
+    target_user.password_strength = Some(strength.clone());
 
-    {
-        let mut users = state.users.write().unwrap();
-        if let Some(user) = users.iter_mut().find(|u| u.id == user_id) {
-            user.password = new_password_hash.clone();
-            user.password_changed_at = Some(password_changed_at);
-            user.password_strength = Some(strength.clone());
-        }
-    }
-
-    // Persist to database (after releasing the lock)
-    let user_for_db = {
-        let users = state.users.read().unwrap();
-        users.iter().find(|u| u.id == user_id).cloned()
-    };
-
-    if let Some(user) = user_for_db {
-        if let Err(e) = db_update_user(&user.id, &user).await {
-            eprintln!("Error updating user password in database: {}", e);
-        }
-    }
+    persist_user(&state, &target_user)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // 记录密码历史
     {
         let mut history = state.password_history.write().unwrap();
-        history.push((user_id.clone(), new_password_hash, Utc::now()));
+        history.push((target_user.id.clone(), new_password_hash, Utc::now()));
     }
 
     log_action(
@@ -539,7 +498,8 @@ pub async fn get_password_policy(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users)
+    let user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
     // 只有 admin 可以查看密码策略
@@ -557,7 +517,8 @@ pub async fn update_password_policy(
     headers: HeaderMap,
     Json(policy): Json<PasswordPolicy>,
 ) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
-    let current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user_from_headers(&headers, &state.users)
+        .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
     // 只有 admin 可以修改密码策略
@@ -600,17 +561,11 @@ pub async fn get_current_user_info(
     auth_user: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Json<User>, ApiError> {
-    let users = state
-        .users
-        .read()
-        .map_err(|e| ApiError::internal(format!("Failed to acquire read lock: {}", e)))?;
-
-    let user = users
-        .iter()
-        .find(|u| u.id == auth_user.user_id)
+    let user = get_current_user_from_auth(&auth_user, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("User not found"))?;
 
-    Ok(Json(user.clone()))
+    Ok(Json(user))
 }
 
 #[cfg(test)]

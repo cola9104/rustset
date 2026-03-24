@@ -2,7 +2,7 @@ use crate::auth::{generate_token, verify_token};
 use crate::middleware::{auth_middleware::Claims, ApiError};
 use crate::password;
 use crate::state::AppState;
-use crate::utils::log_action;
+use crate::utils::{get_current_user_from_auth, log_action, sync_cached_user};
 use axum::{
     extract::{Json, State},
     http::{header::AUTHORIZATION, HeaderMap},
@@ -10,6 +10,37 @@ use axum::{
 use chrono::Utc;
 use shared::{LoginRequest, LoginResponse};
 use tower_sessions::Session;
+
+async fn load_user_by_username(state: &AppState, username: &str) -> Option<shared::User> {
+    if crate::database::get_db().is_some() {
+        return match crate::database::get_user_by_username(username).await {
+            Ok(Some(user)) => {
+                sync_cached_user(&state.users, &user);
+                Some(user)
+            }
+            _ => None,
+        };
+    }
+
+    state
+        .users
+        .read()
+        .ok()?
+        .iter()
+        .find(|user| user.username == username)
+        .cloned()
+}
+
+async fn persist_user_state(state: &AppState, user: &shared::User) -> Result<(), ApiError> {
+    if crate::database::get_db().is_some() {
+        crate::database::update_user(&user.id, user)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to persist user state: {}", e)))?;
+    }
+
+    sync_cached_user(&state.users, user);
+    Ok(())
+}
 
 /// User login endpoint
 #[utoipa::path(
@@ -34,135 +65,116 @@ pub async fn login(
         .map_err(|e| ApiError::internal(format!("Failed to read password policy: {}", e)))?
         .clone();
 
-    // Check if user exists (read lock)
-    let user_idx = {
-        let users = state
-            .users
-            .read()
-            .map_err(|e| ApiError::internal(format!("Failed to acquire read lock: {}", e)))?;
-        users.iter().position(|u| u.username == req.username)
-    };
+    let mut user = load_user_by_username(&state, &req.username)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("用户名或密码错误"))?;
 
-    if user_idx.is_none() {
-        return Err(ApiError::unauthorized("用户名或密码错误"));
+    // 检查账户是否被禁用
+    if user.status.as_deref() == Some("disabled") {
+        return Err(ApiError::forbidden("账户已被禁用"));
     }
 
-    let user_idx = user_idx.unwrap();
-
-    // Acquire write lock to check and update user state
-    let (user_id, username, role, user_clone) = {
-        let mut users = state
-            .users
-            .write()
-            .map_err(|e| ApiError::internal(format!("Failed to acquire write lock: {}", e)))?;
-        let user = &mut users[user_idx];
-
-        // 检查账户是否被禁用
-        if user.status.as_deref() == Some("disabled") {
-            return Err(ApiError::forbidden("账户已被禁用"));
-        }
-
-        // 检查账户是否被锁定
-        if let Some(locked_until) = user.locked_until {
-            if Utc::now() < locked_until {
-                let remaining = (locked_until - Utc::now()).num_minutes() + 1;
-                return Err(ApiError::forbidden(format!(
-                    "账户已锁定，请在 {} 分钟后重试",
-                    remaining
-                )));
-            } else {
-                // 锁定期已过，清除锁定状态
-                user.locked_until = None;
-                user.failed_login_attempts = Some(0);
-                user.status = Some("active".to_string());
-            }
-        }
-
-        // 验证密码 (使用 Argon2 哈希验证)
-        let password_valid = password::verify_password(&req.password, &user.password)
-            .map_err(|e| ApiError::internal(format!("Password verification failed: {}", e)))?;
-
-        if password_valid {
-            // 登录成功，清除失败计数
-            user.failed_login_attempts = Some(0);
-            user.last_login_at = Some(Utc::now());
-
-            // 记录审计日志
-            log_action(
-                &state.audit_logs,
-                user,
-                "LOGIN",
-                &user.username,
-                "User logged in successfully",
-            );
-
-            // 提取所需数据，释放锁
-            (
-                user.id.clone(),
-                user.username.clone(),
-                user.role.clone(),
-                user.clone(),
-            )
+    // 检查账户是否被锁定
+    if let Some(locked_until) = user.locked_until {
+        if Utc::now() < locked_until {
+            let remaining = (locked_until - Utc::now()).num_minutes() + 1;
+            return Err(ApiError::forbidden(format!(
+                "账户已锁定，请在 {} 分钟后重试",
+                remaining
+            )));
         } else {
-            // 登录失败，增加失败计数
-            let current_attempts = user.failed_login_attempts.unwrap_or(0) + 1;
-            user.failed_login_attempts = Some(current_attempts);
-
-            // 检查是否达到最大失败次数
-            if let Some(max_attempts) = policy.max_login_attempts {
-                if current_attempts >= max_attempts {
-                    // 锁定账户
-                    let lock_until = Utc::now()
-                        + chrono::Duration::minutes(policy.lockout_duration_minutes as i64);
-                    user.locked_until = Some(lock_until);
-                    user.status = Some("locked".to_string());
-
-                    // 记录审计日志
-                    log_action(
-                        &state.audit_logs,
-                        user,
-                        "ACCOUNT_LOCKED",
-                        &user.username,
-                        &format!(
-                            "Account locked after {} failed login attempts",
-                            current_attempts
-                        ),
-                    );
-
-                    return Err(ApiError::forbidden(format!(
-                        "登录失败次数过多，账户已锁定 {} 分钟",
-                        policy.lockout_duration_minutes
-                    )));
-                }
-            }
-
-            // 记录失败的登录尝试
-            log_action(
-                &state.audit_logs,
-                user,
-                "LOGIN_FAILED",
-                &user.username,
-                &format!(
-                    "Failed login attempt {}/{}",
-                    current_attempts,
-                    policy
-                        .max_login_attempts
-                        .map(|n| n.to_string())
-                        .unwrap_or("∞".to_string())
-                ),
-            );
-
-            let remaining = policy.max_login_attempts.map(|max| max - current_attempts);
-            return match remaining {
-                Some(0) => Err(ApiError::forbidden("账户已被锁定")),
-                Some(n) => Err(ApiError::unauthorized(format!(
-                    "密码错误，还有 {} 次尝试机会",
-                    n
-                ))),
-                None => Err(ApiError::unauthorized("密码错误")),
-            };
+            // 锁定期已过，清除锁定状态
+            user.locked_until = None;
+            user.failed_login_attempts = Some(0);
+            user.status = Some("active".to_string());
         }
-    }; // 锁在这里释放
+    }
+
+    let password_valid = password::verify_password(&req.password, &user.password)
+        .map_err(|e| ApiError::internal(format!("Password verification failed: {}", e)))?;
+
+    if !password_valid {
+        let current_attempts = user.failed_login_attempts.unwrap_or(0) + 1;
+        user.failed_login_attempts = Some(current_attempts);
+
+        if let Some(max_attempts) = policy.max_login_attempts {
+            if current_attempts >= max_attempts {
+                let lock_until =
+                    Utc::now() + chrono::Duration::minutes(policy.lockout_duration_minutes as i64);
+                user.locked_until = Some(lock_until);
+                user.status = Some("locked".to_string());
+
+                persist_user_state(&state, &user).await?;
+
+                log_action(
+                    &state.audit_logs,
+                    &user,
+                    "ACCOUNT_LOCKED",
+                    &user.username,
+                    &format!(
+                        "Account locked after {} failed login attempts",
+                        current_attempts
+                    ),
+                );
+
+                return Err(ApiError::forbidden(format!(
+                    "登录失败次数过多，账户已锁定 {} 分钟",
+                    policy.lockout_duration_minutes
+                )));
+            }
+        }
+
+        persist_user_state(&state, &user).await?;
+
+        log_action(
+            &state.audit_logs,
+            &user,
+            "LOGIN_FAILED",
+            &user.username,
+            &format!(
+                "Failed login attempt {}/{}",
+                current_attempts,
+                policy
+                    .max_login_attempts
+                    .map(|n| n.to_string())
+                    .unwrap_or("∞".to_string())
+            ),
+        );
+
+        let remaining = policy.max_login_attempts.map(|max| max - current_attempts);
+        return match remaining {
+            Some(0) => Err(ApiError::forbidden("账户已被锁定")),
+            Some(n) => Err(ApiError::unauthorized(format!(
+                "密码错误，还有 {} 次尝试机会",
+                n
+            ))),
+            None => Err(ApiError::unauthorized("密码错误")),
+        };
+    }
+
+    user.failed_login_attempts = Some(0);
+    user.last_login_at = Some(Utc::now());
+    if user.status.as_deref() == Some("locked") {
+        user.status = Some("active".to_string());
+    }
+
+    persist_user_state(&state, &user).await?;
+
+    log_action(
+        &state.audit_logs,
+        &user,
+        "LOGIN",
+        &user.username,
+        "User logged in successfully",
+    );
+
+    let user_id = user.id.clone();
+    let username = user.username.clone();
+    let role = user.role.clone();
+
+    if user_id.is_empty() {
+        return Err(ApiError::unauthorized("用户名或密码错误"));
+    }
 
     // 保存用户信息到 Session (在锁释放后)
     let claims = Claims {
@@ -176,12 +188,9 @@ pub async fn login(
         .await
         .map_err(|e| ApiError::internal(format!("Failed to create session: {}", e)))?;
 
-    let token = generate_token(&user_clone)?;
+    let token = generate_token(&user)?;
 
-    Ok(Json(LoginResponse {
-        token,
-        user: user_clone,
-    }))
+    Ok(Json(LoginResponse { token, user }))
 }
 
 /// User logout endpoint
@@ -201,12 +210,12 @@ pub async fn logout(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // 获取用户信息用于记录日志
-    let username = if let Ok(Some(claims)) = session.get::<Claims>("user").await {
-        Some(claims.username)
-    } else {
-        None
-    };
+    let auth_user = session
+        .get::<Claims>("user")
+        .await
+        .ok()
+        .flatten()
+        .map(Into::into);
 
     // 清除 Session
     session
@@ -215,18 +224,13 @@ pub async fn logout(
         .map_err(|e| ApiError::internal(format!("Failed to flush session: {}", e)))?;
 
     // 记录审计日志
-    if let Some(ref username) = username {
-        // 查找用户进行日志记录
-        let users = state
-            .users
-            .read()
-            .map_err(|e| ApiError::internal(format!("Failed to acquire read lock: {}", e)))?;
-        if let Some(user) = users.iter().find(|u| &u.username == username) {
+    if let Some(auth_user) = auth_user {
+        if let Some(user) = get_current_user_from_auth(&auth_user, &state.users).await {
             log_action(
                 &state.audit_logs,
-                user,
+                &user,
                 "LOGOUT",
-                username,
+                &user.username,
                 "User logged out",
             );
         }
@@ -267,14 +271,15 @@ pub async fn refresh_token(
 
     let claims = verify_token(token)?;
 
-    let users = state
-        .users
-        .read()
-        .map_err(|e| ApiError::internal(format!("Failed to read users: {}", e)))?;
+    let auth_user = crate::middleware::AuthUser {
+        user_id: claims.user_id,
+        username: claims.username,
+        role: claims.role,
+        exp: claims.exp,
+    };
 
-    let user = users
-        .iter()
-        .find(|u| u.id == claims.user_id && u.username == claims.username)
+    let user = get_current_user_from_auth(&auth_user, &state.users)
+        .await
         .ok_or_else(|| ApiError::unauthorized("User not found"))?;
 
     // 检查用户状态
@@ -288,7 +293,7 @@ pub async fn refresh_token(
         }
     }
 
-    let token = generate_token(user)?;
+    let token = generate_token(&user)?;
 
     Ok(Json(LoginResponse {
         token,

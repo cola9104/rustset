@@ -387,6 +387,25 @@ pub async fn get_users_with_conn(conn: &DatabaseConnection) -> Result<Vec<Shared
     Ok(users.into_iter().map(db_user_to_shared).collect())
 }
 
+pub async fn get_user_by_id_with_conn(
+    conn: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<SharedUser>, DbErr> {
+    let user = User::find_by_id(id.to_string()).one(conn).await?;
+    Ok(user.map(db_user_to_shared))
+}
+
+pub async fn get_user_by_username_with_conn(
+    conn: &DatabaseConnection,
+    username: &str,
+) -> Result<Option<SharedUser>, DbErr> {
+    let user = User::find()
+        .filter(user::Column::Username.eq(username))
+        .one(conn)
+        .await?;
+    Ok(user.map(db_user_to_shared))
+}
+
 pub async fn insert_user_with_conn(
     conn: &DatabaseConnection,
     user: &SharedUser,
@@ -1287,6 +1306,16 @@ pub async fn get_all_business_resources(
 pub async fn get_users() -> Result<Vec<SharedUser>, DbErr> {
     let conn = require_db()?;
     get_users_with_conn(&conn).await
+}
+
+pub async fn get_user_by_id(id: &str) -> Result<Option<SharedUser>, DbErr> {
+    let conn = require_db()?;
+    get_user_by_id_with_conn(&conn, id).await
+}
+
+pub async fn get_user_by_username(username: &str) -> Result<Option<SharedUser>, DbErr> {
+    let conn = require_db()?;
+    get_user_by_username_with_conn(&conn, username).await
 }
 
 pub async fn insert_user(user: &SharedUser) -> Result<(), DbErr> {

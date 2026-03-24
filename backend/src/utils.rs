@@ -23,6 +23,71 @@ pub fn get_current_user(headers: &HeaderMap, users: &Arc<RwLock<Vec<User>>>) -> 
         .cloned()
 }
 
+pub async fn get_current_user_from_auth(
+    auth_user: &AuthUser,
+    users: &Arc<RwLock<Vec<User>>>,
+) -> Option<User> {
+    if crate::database::get_db().is_some() {
+        return match crate::database::get_user_by_id(&auth_user.user_id).await {
+            Ok(Some(user)) if user.username == auth_user.username => Some(user),
+            _ => None,
+        };
+    }
+
+    users
+        .read()
+        .ok()?
+        .iter()
+        .find(|u| u.id == auth_user.user_id && u.username == auth_user.username)
+        .cloned()
+}
+
+pub async fn get_current_user_from_headers(
+    headers: &HeaderMap,
+    users: &Arc<RwLock<Vec<User>>>,
+) -> Option<User> {
+    let auth_header = headers.get(AUTHORIZATION)?;
+    let auth_value = auth_header.to_str().ok()?.trim();
+    let token = auth_value
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_value.strip_prefix("bearer "))?;
+
+    let claims = crate::auth::verify_token(token).ok()?;
+    let auth_user = AuthUser {
+        user_id: claims.user_id,
+        username: claims.username,
+        role: claims.role,
+        exp: claims.exp,
+    };
+
+    get_current_user_from_auth(&auth_user, users).await
+}
+
+pub fn sync_cached_user(users: &Arc<RwLock<Vec<User>>>, user: &User) {
+    if let Ok(mut users_guard) = users.write() {
+        if let Some(existing) = users_guard
+            .iter_mut()
+            .find(|existing| existing.id == user.id)
+        {
+            *existing = user.clone();
+        } else {
+            users_guard.push(user.clone());
+        }
+    }
+}
+
+pub fn sync_cached_users(users: &Arc<RwLock<Vec<User>>>, next_users: Vec<User>) {
+    if let Ok(mut users_guard) = users.write() {
+        *users_guard = next_users;
+    }
+}
+
+pub fn remove_cached_user(users: &Arc<RwLock<Vec<User>>>, user_id: &str) {
+    if let Ok(mut users_guard) = users.write() {
+        users_guard.retain(|user| user.id != user_id);
+    }
+}
+
 pub fn log_action(
     logs: &Arc<RwLock<Vec<AuditLog>>>,
     user: &User,
