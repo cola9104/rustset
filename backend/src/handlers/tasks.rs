@@ -116,21 +116,7 @@ fn scan_target_ports(
                 }
 
                 let service = match port {
-                    21 => {
-                        discovered_risks.push(shared::Risk {
-                            id: Uuid::new_v4().to_string(),
-                            asset_ip: target_ip.clone(),
-                            port,
-                            severity: "High".to_string(),
-                            description: "FTP Anonymous Login Allowed".to_string(),
-                            solution: Some("Disable anonymous login in vsftpd.conf".to_string()),
-                            status: shared::RiskStatus::Open,
-                            created_at: Some(Utc::now()),
-                            updated_at: Some(Utc::now()),
-                            assigned_to: None,
-                        });
-                        Some("FTP".to_string())
-                    }
+                    21 => Some("FTP".to_string()),
                     22 => {
                         if let Some(b) = &banner {
                             if b.contains("SSH-2.0-OpenSSH_7") {
@@ -150,21 +136,7 @@ fn scan_target_ports(
                         }
                         Some("SSH".to_string())
                     }
-                    23 => {
-                        discovered_risks.push(shared::Risk {
-                            id: Uuid::new_v4().to_string(),
-                            asset_ip: target_ip.clone(),
-                            port,
-                            severity: "Critical".to_string(),
-                            description: "Telnet Service Detected".to_string(),
-                            solution: Some("Telnet is insecure. Replace with SSH.".to_string()),
-                            status: shared::RiskStatus::Open,
-                            created_at: Some(Utc::now()),
-                            updated_at: Some(Utc::now()),
-                            assigned_to: None,
-                        });
-                        Some("Telnet".to_string())
-                    }
+                    23 => Some("Telnet".to_string()),
                     25 => Some("SMTP".to_string()),
                     53 => Some("DNS".to_string()),
                     80 | 8080 | 8000 | 8888 => {
@@ -185,57 +157,13 @@ fn scan_target_ports(
                                 });
                             }
                         }
-                        if port == 8080 {
-                            discovered_risks.push(shared::Risk {
-                                id: Uuid::new_v4().to_string(),
-                                asset_ip: target_ip.clone(),
-                                port,
-                                severity: "High".to_string(),
-                                description: "Weak Admin Password (admin/admin)".to_string(),
-                                solution: Some(
-                                    "Change the default password immediately.".to_string(),
-                                ),
-                                status: shared::RiskStatus::Open,
-                                created_at: Some(Utc::now()),
-                                updated_at: Some(Utc::now()),
-                                assigned_to: None,
-                            });
-                        }
                         Some("HTTP".to_string())
                     }
                     443 => Some("HTTPS".to_string()),
-                    3306 => {
-                        discovered_risks.push(shared::Risk {
-                            id: Uuid::new_v4().to_string(),
-                            asset_ip: target_ip.clone(),
-                            port,
-                            severity: "Medium".to_string(),
-                            description: "MySQL Weak Password".to_string(),
-                            solution: Some("Enforce strong password policy".to_string()),
-                            status: shared::RiskStatus::Open,
-                            created_at: Some(Utc::now()),
-                            updated_at: Some(Utc::now()),
-                            assigned_to: None,
-                        });
-                        Some("MySQL".to_string())
-                    }
+                    3306 => Some("MySQL".to_string()),
                     3389 => Some("RDP".to_string()),
                     5432 => Some("PostgreSQL".to_string()),
-                    6379 => {
-                        discovered_risks.push(shared::Risk {
-                            id: Uuid::new_v4().to_string(),
-                            asset_ip: target_ip.clone(),
-                            port,
-                            severity: "High".to_string(),
-                            description: "Redis Unprotected".to_string(),
-                            solution: Some("Enable authentication in redis.conf".to_string()),
-                            status: shared::RiskStatus::Open,
-                            created_at: Some(Utc::now()),
-                            updated_at: Some(Utc::now()),
-                            assigned_to: None,
-                        });
-                        Some("Redis".to_string())
-                    }
+                    6379 => Some("Redis".to_string()),
                     27017 => Some("MongoDB".to_string()),
                     _ => Some("Unknown".to_string()),
                 };

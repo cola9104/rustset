@@ -1710,7 +1710,7 @@ fn NewTicketForm(
                         label { class: "block text-xs font-medium text-gray-600 mb-0.5", "申请名称*" }
                         input {
                             class: "w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500",
-                            placeholder: "业务系统A-Web服务器",
+                            placeholder: "请输入申请名称",
                             value: "{application_name}",
                             required: true,
                             oninput: move |e| application_name.set(e.value())

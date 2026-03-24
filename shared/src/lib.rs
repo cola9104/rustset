@@ -910,7 +910,7 @@ pub struct User {
     pub username: String,
     #[serde(skip_serializing, default)]
     // Don't send password hash to frontend, allow missing on receive
-    pub password: String, // In real app, this is a hash. For demo, we might store plain or simple hash.
+    pub password: String, // Stored as a password hash on the backend.
     pub role: Role,
     pub permissions: Option<Permissions>, // 细化权限（如果 role 是 Custom）
     pub created_at: DateTime<Utc>,
