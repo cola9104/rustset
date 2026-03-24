@@ -25,24 +25,9 @@ use std::sync::Arc;
 pub use crate::entities::prelude::*;
 
 // Legacy type aliases for compatibility with handlers
-#[allow(dead_code)]
-pub type DbUser = user::Model;
-#[allow(dead_code)]
-pub type DbAuditLog = audit_log::Model;
-#[allow(dead_code)]
 pub type DbBusinessResource = business_resource::Model;
-#[allow(dead_code)]
 pub type DbPhysicalMachine = physical_machine::Model;
-#[allow(dead_code)]
 pub type DbCloudVirtualMachine = cloud_virtual_machine::Model;
-#[allow(dead_code)]
-pub type DbAsset = asset::Model;
-#[allow(dead_code)]
-pub type DbTask = task::Model;
-#[allow(dead_code)]
-pub type DbRisk = risk::Model;
-#[allow(dead_code)]
-pub type DbZone = network_zone::Model;
 
 /// Global database connection (Arc-wrapped for sharing across threads)
 pub static DB: std::sync::OnceLock<Arc<DatabaseConnection>> = std::sync::OnceLock::new();
@@ -490,25 +475,6 @@ pub async fn delete_user_by_id(conn: &DatabaseConnection, id: &str) -> Result<()
     Ok(())
 }
 
-pub async fn get_user_by_id(
-    conn: &DatabaseConnection,
-    id: &str,
-) -> Result<Option<SharedUser>, DbErr> {
-    let user = User::find_by_id(id.to_string()).one(conn).await?;
-    Ok(user.map(db_user_to_shared))
-}
-
-pub async fn get_user_by_username(
-    conn: &DatabaseConnection,
-    username: &str,
-) -> Result<Option<SharedUser>, DbErr> {
-    let user = User::find()
-        .filter(user::Column::Username.eq(username))
-        .one(conn)
-        .await?;
-    Ok(user.map(db_user_to_shared))
-}
-
 // ============== AuditLog CRUD ==============
 
 pub async fn insert_audit_log(
@@ -599,13 +565,6 @@ pub async fn get_all_assets(conn: &DatabaseConnection) -> Result<Vec<asset::Mode
         .order_by_desc(asset::Column::Id)
         .all(conn)
         .await
-}
-
-pub async fn get_asset_by_id(
-    conn: &DatabaseConnection,
-    id: i32,
-) -> Result<Option<asset::Model>, DbErr> {
-    Asset::find_by_id(id).one(conn).await
 }
 
 // ============== Task CRUD ==============
@@ -706,23 +665,6 @@ pub async fn delete_resource_ticket_by_id(conn: &DatabaseConnection, id: i32) ->
 
 // ============== Risk CRUD ==============
 
-pub async fn insert_risk(conn: &DatabaseConnection, risk: &shared::Risk) -> Result<(), DbErr> {
-    let db_risk = risk::ActiveModel {
-        id: Set(risk.id.clone()),
-        asset_ip: Set(risk.asset_ip.clone()),
-        port: Set(risk.port as i32),
-        severity: Set(risk.severity.clone()),
-        description: Set(risk.description.clone()),
-        solution: Set(risk.solution.clone()),
-        status: Set(format!("{:?}", risk.status)),
-        created_at: Set(risk.created_at.map(|d| d.to_rfc3339())),
-        updated_at: Set(risk.updated_at.map(|d| d.to_rfc3339())),
-        assigned_to: Set(risk.assigned_to.clone()),
-    };
-    db_risk.insert(conn).await?;
-    Ok(())
-}
-
 pub async fn update_risk_by_id(
     conn: &DatabaseConnection,
     id: &str,
@@ -739,14 +681,6 @@ pub async fn update_risk_by_id(
         ..Default::default()
     };
     Risk::update(db_risk).exec(conn).await?;
-    Ok(())
-}
-
-pub async fn delete_risk_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
-    let risk = Risk::find_by_id(id.to_string()).one(conn).await?;
-    if let Some(risk) = risk {
-        risk.delete(conn).await?;
-    }
     Ok(())
 }
 
@@ -1411,13 +1345,6 @@ pub async fn get_all_business_resources(
         .await
 }
 
-pub async fn get_business_resource_by_id(
-    conn: &DatabaseConnection,
-    id: i32,
-) -> Result<Option<business_resource::Model>, DbErr> {
-    BusinessResource::find_by_id(id).one(conn).await
-}
-
 // ============== Legacy wrapper functions for handlers ==============
 // These provide compatibility with the old sqlx-based API by using the global DB connection
 
@@ -1714,19 +1641,9 @@ pub async fn get_risks() -> Result<Vec<risk::Model>, DbErr> {
     get_all_risks(&conn).await
 }
 
-pub async fn insert_risk_wrapper(risk: &shared::Risk) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
-    insert_risk(&conn, risk).await
-}
-
 pub async fn update_risk(id: &str, risk: &shared::Risk) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     update_risk_by_id(&conn, id, risk).await
-}
-
-pub async fn delete_risk(id: &str) -> Result<(), DbErr> {
-    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
-    delete_risk_by_id(&conn, id).await
 }
 
 // NetworkZone wrappers (ZoneConfig)
@@ -1759,13 +1676,6 @@ pub async fn get_all_custom_roles(
         .order_by_asc(custom_role::Column::Id)
         .all(conn)
         .await
-}
-
-pub async fn get_custom_role_by_id(
-    conn: &DatabaseConnection,
-    id: i32,
-) -> Result<Option<custom_role::Model>, DbErr> {
-    CustomRole::find_by_id(id).one(conn).await
 }
 
 pub async fn insert_custom_role(
@@ -1860,13 +1770,6 @@ pub async fn get_all_advanced_scan_tasks(
         .order_by_desc(advanced_scan_task::Column::CreatedAt)
         .all(conn)
         .await
-}
-
-pub async fn get_advanced_scan_task_by_id(
-    conn: &DatabaseConnection,
-    id: &str,
-) -> Result<Option<advanced_scan_task::Model>, DbErr> {
-    AdvancedScanTask::find_by_id(id).one(conn).await
 }
 
 pub async fn insert_advanced_scan_task(
@@ -2141,17 +2044,6 @@ pub async fn update_physical_machine(
     Ok(())
 }
 
-pub async fn delete_physical_machine(
-    conn: &DatabaseConnection,
-    business_resource_id: i32,
-) -> Result<(), DbErr> {
-    PhysicalMachine::delete_many()
-        .filter(physical_machine::Column::BusinessResourceId.eq(business_resource_id))
-        .exec(conn)
-        .await?;
-    Ok(())
-}
-
 // ============== CloudVirtualMachine CRUD ==============
 
 pub async fn insert_cloud_virtual_machine(
@@ -2241,17 +2133,6 @@ pub async fn update_cloud_virtual_machine(
 
         cvm_active.update(conn).await?;
     }
-    Ok(())
-}
-
-pub async fn delete_cloud_virtual_machine(
-    conn: &DatabaseConnection,
-    business_resource_id: i32,
-) -> Result<(), DbErr> {
-    CloudVirtualMachine::delete_many()
-        .filter(cloud_virtual_machine::Column::BusinessResourceId.eq(business_resource_id))
-        .exec(conn)
-        .await?;
     Ok(())
 }
 
