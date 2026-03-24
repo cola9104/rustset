@@ -1643,6 +1643,11 @@ pub struct ResourceTicket {
     pub created_at: String,
     pub updated_at: Option<String>,
     pub created_by: String,
+    pub applicant_name: Option<String>,
+    pub organization_id: Option<i32>,
+    pub organization_name: Option<String>,
+    pub department_id: Option<i32>,
+    pub department_name: Option<String>,
 
     // 审批信息
     pub approver: Option<String>,

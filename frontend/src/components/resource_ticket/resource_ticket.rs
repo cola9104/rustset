@@ -59,6 +59,34 @@ fn is_my_ticket(ticket: &ResourceTicket, current_username: &str) -> bool {
     !current_username.is_empty() && ticket.created_by.eq_ignore_ascii_case(current_username)
 }
 
+fn ticket_applicant_name(ticket: &ResourceTicket) -> String {
+    if ticket.applicant_name.is_empty() {
+        ticket.created_by.clone()
+    } else {
+        ticket.applicant_name.clone()
+    }
+}
+
+fn ticket_applicant_meta(ticket: &ResourceTicket) -> String {
+    let mut parts = Vec::new();
+
+    if !ticket.organization_name.trim().is_empty() {
+        parts.push(ticket.organization_name.clone());
+    }
+    if !ticket.department_name.trim().is_empty() {
+        parts.push(ticket.department_name.clone());
+    }
+
+    parts.join(" / ")
+}
+
+fn is_pending_provision_status(status: TicketStatus) -> bool {
+    matches!(
+        status,
+        TicketStatus::PendingProvision | TicketStatus::Approved
+    )
+}
+
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
 #[allow(non_snake_case)]
 pub fn ResourceTicket() -> Element {
@@ -150,7 +178,7 @@ pub fn ResourceTicket() -> Element {
         .count();
     let pending_provision_count = current_type_tickets
         .iter()
-        .filter(|t| t.ticket_status == TicketStatus::PendingProvision)
+        .filter(|t| is_pending_provision_status(t.ticket_status))
         .count();
     let pending_delivery_count = current_type_tickets
         .iter()
@@ -490,7 +518,12 @@ pub fn ResourceTicket() -> Element {
                                         remarks: req.purpose.clone(),
                                         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
                                         updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-                                        created_by: req.applicant.clone(),
+                                        created_by: auth.read().username.clone(),
+                                        applicant_name: req.applicant.clone(),
+                                        organization_id: None,
+                                        organization_name: req.organization.clone(),
+                                        department_id: None,
+                                        department_name: req.department.clone(),
                                         approver: None,
                                         approve_time: None,
                                         approve_comment: None,
@@ -587,7 +620,12 @@ pub fn ResourceTicket() -> Element {
                                         remarks: req.purpose.clone(),
                                         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
                                         updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-                                        created_by: req.applicant.clone(),
+                                        created_by: auth.read().username.clone(),
+                                        applicant_name: req.applicant.clone(),
+                                        organization_id: None,
+                                        organization_name: req.organization.clone(),
+                                        department_id: None,
+                                        department_name: req.department.clone(),
                                         approver: None,
                                         approve_time: None,
                                         approve_comment: None,
@@ -663,7 +701,12 @@ pub fn ResourceTicket() -> Element {
                                         remarks: String::new(),
                                         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
                                         updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-                                        created_by: req.applicant.clone(),
+                                        created_by: auth.read().username.clone(),
+                                        applicant_name: req.applicant.clone(),
+                                        organization_id: None,
+                                        organization_name: req.organization.clone(),
+                                        department_id: None,
+                                        department_name: req.department.clone(),
                                         approver: None,
                                         approve_time: None,
                                         approve_comment: None,
@@ -734,7 +777,7 @@ fn TicketListViewByTypeAndWorkflow(
                     ticket.ticket_status == TicketStatus::PendingApproval
                 }
                 ApplicationTab::PendingProvision => {
-                    ticket.ticket_status == TicketStatus::PendingProvision
+                    is_pending_provision_status(ticket.ticket_status)
                 }
                 ApplicationTab::PendingDelivery => {
                     ticket.ticket_status == TicketStatus::PendingDelivery
@@ -750,7 +793,11 @@ fn TicketListViewByTypeAndWorkflow(
             } else {
                 let query = search_query.to_lowercase();
                 ticket.application_name.to_lowercase().contains(&query)
-                    || ticket.created_by.to_lowercase().contains(&query)
+                    || ticket_applicant_name(ticket)
+                        .to_lowercase()
+                        .contains(&query)
+                    || ticket.department_name.to_lowercase().contains(&query)
+                    || ticket.organization_name.to_lowercase().contains(&query)
                     || ticket.contract_name.to_lowercase().contains(&query)
             }
         })
@@ -784,11 +831,10 @@ fn TicketListViewByTypeAndWorkflow(
                                     onclick: move |_| on_select.call(ticket.id),
                                     td { class: "px-6 py-4 text-sm text-gray-900", "{ticket.id}" }
                                     td { class: "px-6 py-4",
-                                        div { class: "text-sm font-medium text-gray-900", {ticket.application_name} }
-                                        div { class: "text-sm text-gray-500", {ticket.contract_name} }
+                                        div { class: "text-sm font-medium text-gray-900", {ticket.application_name.clone()} }
+                                        div { class: "text-sm text-gray-500", {ticket.contract_name.clone()} }
                                     }
                                     td { class: "px-6 py-4 text-sm text-gray-600",
-                                        // 根据资源类型显示不同的配置信息
                                         if resource_type == ResourceType::Network {
                                             div { class: "text-xs",
                                                 "{ticket.fw_source_zone.as_ref().unwrap_or(&String::new())} → {ticket.fw_dest_zone.as_ref().unwrap_or(&String::new())}"
@@ -803,7 +849,12 @@ fn TicketListViewByTypeAndWorkflow(
                                             }
                                         }
                                     }
-                                    td { class: "px-6 py-4 text-sm text-gray-600", {ticket.created_by} }
+                                    td { class: "px-6 py-4",
+                                        div { class: "text-sm text-gray-700", {ticket_applicant_name(&ticket)} }
+                                        if !ticket_applicant_meta(&ticket).is_empty() {
+                                            div { class: "text-xs text-gray-500", {ticket_applicant_meta(&ticket)} }
+                                        }
+                                    }
                                     td { class: "px-6 py-4",
                                         span {
                                             class: format!("px-2.5 py-1 text-xs font-medium rounded-full {}", ticket.ticket_status.color_class()),
@@ -885,7 +936,11 @@ fn TicketListView(
             } else {
                 let query = search_query.to_lowercase();
                 ticket.application_name.to_lowercase().contains(&query)
-                    || ticket.created_by.to_lowercase().contains(&query)
+                    || ticket_applicant_name(ticket)
+                        .to_lowercase()
+                        .contains(&query)
+                    || ticket.department_name.to_lowercase().contains(&query)
+                    || ticket.organization_name.to_lowercase().contains(&query)
                     || ticket.contract_name.to_lowercase().contains(&query)
             };
 
@@ -931,8 +986,8 @@ fn TicketListView(
                                     onclick: move |_| on_select.call(ticket.id),
                                     td { class: "px-6 py-4 text-sm text-gray-900", "{ticket.id}" }
                                     td { class: "px-6 py-4",
-                                        div { class: "text-sm font-medium text-gray-900", {ticket.application_name} }
-                                        div { class: "text-sm text-gray-500", {ticket.contract_name} }
+                                        div { class: "text-sm font-medium text-gray-900", {ticket.application_name.clone()} }
+                                        div { class: "text-sm text-gray-500", {ticket.contract_name.clone()} }
                                     }
                                     td { class: "px-6 py-4",
                                         div { class: "flex items-center gap-2",
@@ -964,7 +1019,12 @@ fn TicketListView(
                                     td { class: "px-6 py-4 text-sm text-gray-600",
                                         "{ticket.ecs_type} / {ticket.cpu_cores}核 / {ticket.memory_gb}GB"
                                     }
-                                    td { class: "px-6 py-4 text-sm text-gray-600", {ticket.created_by} }
+                                    td { class: "px-6 py-4",
+                                        div { class: "text-sm text-gray-700", {ticket_applicant_name(&ticket)} }
+                                        if !ticket_applicant_meta(&ticket).is_empty() {
+                                            div { class: "text-xs text-gray-500", {ticket_applicant_meta(&ticket)} }
+                                        }
+                                    }
                                     td { class: "px-6 py-4",
                                         span {
                                             class: format!("px-2.5 py-1 text-xs font-medium rounded-full {}", ticket.ticket_status.color_class()),
@@ -1001,14 +1061,23 @@ fn TicketDetailView(
     current_role: UserRole,
     on_back: Callback<()>,
 ) -> Element {
-    let show_approval_section = matches!(workflow_tab, ApplicationTab::PendingApproval)
-        && (ticket.approver.is_some() || current_role.can_approve());
-    let show_provision_section = matches!(workflow_tab, ApplicationTab::PendingProvision)
-        && (ticket.provisioner.is_some() || current_role.can_provision());
-    let show_delivery_section = matches!(
-        workflow_tab,
-        ApplicationTab::PendingDelivery | ApplicationTab::Delivered | ApplicationTab::Archived
-    ) && (ticket.deliverer.is_some() || current_role.can_deliver());
+    let _ = workflow_tab;
+    let approval_completed = ticket.approver.is_some()
+        || ticket.approve_time.is_some()
+        || ticket.approve_comment.is_some();
+    let provision_completed = ticket.provisioner.is_some()
+        || ticket.provision_time.is_some()
+        || ticket.provision_details.is_some();
+    let delivery_completed = ticket.deliverer.is_some()
+        || ticket.deliver_time.is_some()
+        || ticket.deliver_comment.is_some();
+
+    let show_approval_section = approval_completed
+        || (ticket.ticket_status == TicketStatus::PendingApproval && current_role.can_approve());
+    let show_provision_section = provision_completed
+        || (is_pending_provision_status(ticket.ticket_status) && current_role.can_provision());
+    let show_delivery_section = delivery_completed
+        || (ticket.ticket_status == TicketStatus::PendingDelivery && current_role.can_deliver());
 
     rsx! {
         div { class: "space-y-6",
@@ -1038,7 +1107,10 @@ fn TicketDetailView(
                             InfoRow { label: "资源类型", value: ticket.resource_type.display_name() }
                             InfoRow { label: "云平台", value: ticket.cloud_platform_name.clone() }
                             InfoRow { label: "云服务商", value: ticket.provider_name.clone() }
-                            InfoRow { label: "申请人", value: ticket.created_by.clone() }
+                            InfoRow { label: "申请人", value: ticket_applicant_name(&ticket) }
+                            InfoRow { label: "申请单位", value: ticket.organization_name.clone() }
+                            InfoRow { label: "申请部门", value: ticket.department_name.clone() }
+                            InfoRow { label: "申请账号", value: ticket.created_by.clone() }
                             InfoRowElement { label: "申请状态",
                                 value: rsx! {
                                     span {

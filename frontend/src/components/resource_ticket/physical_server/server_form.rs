@@ -1,5 +1,5 @@
 use super::physical_server_request::{PhysicalServerRequest, PhysicalServerStatus};
-use crate::app::{MACHINE_ROOMS_STATE, PROVIDERS_STATE, SECURITY_PRODUCTS_STATE};
+use crate::app::{AUTH_STATE, MACHINE_ROOMS_STATE, PROVIDERS_STATE, SECURITY_PRODUCTS_STATE};
 use crate::components::common::{ErrorMessage, FormMode, Modal, ModalFooter};
 use crate::components::security_product::security_product_selector::SecurityProductSelector;
 use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
@@ -15,6 +15,7 @@ use dioxus_free_icons::Icon;
 #[derive(Clone, Debug, Default)]
 pub struct PhysicalServerFormData {
     pub title: String,
+    pub organization: String,
     pub applicant: String,
     pub department: String,
     pub provider_id: Option<i32>,
@@ -32,6 +33,7 @@ impl From<&PhysicalServerRequest> for PhysicalServerFormData {
     fn from(req: &PhysicalServerRequest) -> Self {
         Self {
             title: req.title.clone(),
+            organization: req.organization.clone(),
             applicant: req.applicant.clone(),
             department: req.department.clone(),
             provider_id: req.provider_id,
@@ -58,6 +60,7 @@ impl PhysicalServerFormData {
         PhysicalServerRequest {
             id,
             title: self.title.clone(),
+            organization: self.organization.clone(),
             applicant: self.applicant.clone(),
             department: self.department.clone(),
             provider_id: self.provider_id,
@@ -112,12 +115,28 @@ pub struct PhysicalServerFormProps {
 /// 物理机申请表单组件
 #[component]
 pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
+    let current_user = AUTH_STATE.read().clone();
+
     // 初始化表单数据
     let initial_data = props
         .request
         .as_ref()
         .map(PhysicalServerFormData::from)
-        .unwrap_or_default();
+        .unwrap_or_else(|| PhysicalServerFormData {
+            organization: current_user
+                .as_ref()
+                .map(|user| user.organization_name.clone())
+                .unwrap_or_default(),
+            applicant: current_user
+                .as_ref()
+                .map(|user| user.display_name.clone())
+                .unwrap_or_default(),
+            department: current_user
+                .as_ref()
+                .map(|user| user.department_name.clone())
+                .unwrap_or_default(),
+            ..Default::default()
+        });
 
     let mut form_data = use_signal(|| initial_data);
     let mut error_msg = use_signal(String::new);
@@ -255,6 +274,16 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                                 },
                             }
                         }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "申请单位" }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().organization}",
+                                readonly: true,
+                                disabled: true,
+                            }
+                        }
                         // 申请人
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
@@ -263,13 +292,10 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                             }
                             input {
                                 r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
-                                placeholder: "申请人姓名",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
                                 value: "{form_data.read().applicant}",
-                                oninput: move |e| {
-                                    let mut data = form_data.write();
-                                    data.applicant = e.value();
-                                },
+                                readonly: true,
+                                disabled: true,
                             }
                         }
                         // 申请部门
@@ -280,13 +306,10 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                             }
                             input {
                                 r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
-                                placeholder: "如：信息部",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
                                 value: "{form_data.read().department}",
-                                oninput: move |e| {
-                                    let mut data = form_data.write();
-                                    data.department = e.value();
-                                },
+                                readonly: true,
+                                disabled: true,
                             }
                         }
                         // 服务器数量

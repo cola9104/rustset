@@ -134,8 +134,14 @@ impl LoginUser {
         AuthUser {
             id: self.id.clone(),
             username: self.username.clone(),
+            real_name: String::new(),
+            display_name: self.username.clone(),
             role: self.role.to_string(),
             permissions,
+            organization_id: None,
+            organization_name: String::new(),
+            department_id: None,
+            department_name: String::new(),
         }
     }
 }

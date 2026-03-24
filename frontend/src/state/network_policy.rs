@@ -7,6 +7,7 @@ use crate::components::resource_ticket::network_policy::network_policy_request::
 pub struct NetworkPolicyConfig {
     pub id: i32,
     pub title: String,
+    pub organization: String,
     pub applicant: String,
     pub department: String,
     pub source_zone: String,
@@ -25,6 +26,7 @@ impl From<NetworkPolicyRequest> for NetworkPolicyConfig {
         Self {
             id: req.id,
             title: req.title,
+            organization: req.organization,
             applicant: req.applicant,
             department: req.department,
             source_zone: req.source_zone,
@@ -45,6 +47,7 @@ impl From<NetworkPolicyConfig> for NetworkPolicyRequest {
         Self {
             id: config.id,
             title: config.title,
+            organization: config.organization,
             applicant: config.applicant,
             department: config.department,
             source_zone: config.source_zone,

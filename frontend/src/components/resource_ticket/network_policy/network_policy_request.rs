@@ -86,6 +86,7 @@ impl PolicyProtocol {
 pub struct NetworkPolicyRequest {
     pub id: i32,
     pub title: String,
+    pub organization: String,
     pub applicant: String,
     pub department: String,
     pub source_zone: String,
@@ -141,8 +142,13 @@ fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
     NetworkPolicyRequest {
         id: ticket.id,
         title: ticket.ecs_name.clone(),
-        applicant: ticket.created_by.clone(),
-        department: "信息部".to_string(), // 后端暂无部门字段，使用默认值
+        organization: ticket.organization_name.clone(),
+        applicant: if ticket.applicant_name.is_empty() {
+            ticket.created_by.clone()
+        } else {
+            ticket.applicant_name.clone()
+        },
+        department: ticket.department_name.clone(),
         source_zone: ticket.fw_source_zone.clone().unwrap_or_default(),
         destination_zone: ticket.fw_dest_zone.clone().unwrap_or_default(),
         direction,
@@ -376,7 +382,7 @@ pub fn NetworkPolicyRequest() -> Element {
                                     class: "hover:bg-gray-50",
                                     td { class: "px-6 py-4",
                                         div { class: "text-sm font-medium text-gray-900", {req.title.clone()} }
-                                        div { class: "text-sm text-gray-500", {req.department.clone()} }
+                                        div { class: "text-sm text-gray-500", {format!("{} / {}", req.organization, req.department)} }
                                     }
                                     td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-900",
                                         {req.applicant.clone()}

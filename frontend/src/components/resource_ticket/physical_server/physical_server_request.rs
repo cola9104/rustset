@@ -23,6 +23,7 @@ pub enum PhysicalServerStatus {
 pub struct PhysicalServerRequest {
     pub id: i32,
     pub title: String,
+    pub organization: String,
     pub applicant: String,
     pub department: String,
     pub provider_id: Option<i32>,
@@ -98,7 +99,10 @@ pub fn PhysicalServerRequest() -> Element {
                 || ticket.ecs_name.to_lowercase().contains(&query)
                 || ticket.customer_name.to_lowercase().contains(&query)
                 || ticket.machine_room_name.to_lowercase().contains(&query)
-                || ticket.created_by.to_lowercase().contains(&query);
+                || ticket.applicant_name.to_lowercase().contains(&query)
+                || ticket.created_by.to_lowercase().contains(&query)
+                || ticket.department_name.to_lowercase().contains(&query)
+                || ticket.organization_name.to_lowercase().contains(&query);
             let matches_status =
                 active_status.is_empty() || ticket.ticket_status.to_api_str() == active_status;
             matches_query && matches_status
@@ -221,7 +225,9 @@ pub fn PhysicalServerRequest() -> Element {
                                 p { class: "text-xs text-gray-500", "{rack_label(&ticket)}" }
                             }
                             div {
-                                p { class: "text-sm text-gray-700", "{ticket.created_by}" }
+                                p { class: "text-sm text-gray-700",
+                                    {if ticket.applicant_name.is_empty() { ticket.created_by.clone() } else { ticket.applicant_name.clone() }}
+                                }
                                 p { class: "text-xs text-gray-500", "{format_time(&ticket.created_at)}" }
                             }
                         }

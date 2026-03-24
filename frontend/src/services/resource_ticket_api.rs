@@ -98,6 +98,11 @@ struct BackendResourceTicket {
     created_at: String,
     updated_at: Option<String>,
     created_by: String,
+    applicant_name: Option<String>,
+    organization_id: Option<i32>,
+    organization_name: Option<String>,
+    department_id: Option<i32>,
+    department_name: Option<String>,
     approver: Option<String>,
     approve_time: Option<String>,
     approve_comment: Option<String>,
@@ -157,6 +162,14 @@ impl BackendResourceTicket {
             created_at: self.created_at.clone(),
             updated_at: self.updated_at.clone().unwrap_or_default(),
             created_by: self.created_by.clone(),
+            applicant_name: self
+                .applicant_name
+                .clone()
+                .unwrap_or_else(|| self.created_by.clone()),
+            organization_id: self.organization_id,
+            organization_name: self.organization_name.clone().unwrap_or_default(),
+            department_id: self.department_id,
+            department_name: self.department_name.clone().unwrap_or_default(),
             approver: self.approver.clone(),
             approve_time: self.approve_time.clone(),
             approve_comment: self.approve_comment.clone(),

@@ -95,6 +95,11 @@ async fn ensure_resource_ticket_schema(conn: &DatabaseConnection) -> Result<(), 
             created_at TEXT NOT NULL,
             updated_at TEXT NULL,
             created_by TEXT NOT NULL,
+            applicant_name TEXT NULL,
+            organization_id INTEGER NULL,
+            organization_name TEXT NULL,
+            department_id INTEGER NULL,
+            department_name TEXT NULL,
             approver TEXT NULL,
             approve_time TEXT NULL,
             approve_comment TEXT NULL,
@@ -122,6 +127,46 @@ async fn ensure_resource_ticket_schema(conn: &DatabaseConnection) -> Result<(), 
         r#"
         ALTER TABLE resource_tickets
         ADD COLUMN IF NOT EXISTS security_products TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS applicant_name TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS organization_id INTEGER NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS organization_name TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS department_id INTEGER NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS department_name TEXT NULL
         "#,
     )
     .await?;
@@ -256,9 +301,7 @@ pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
                 .map(|d| d.to_rfc3339())
                 .unwrap_or_default(),
         )),
-        password_strength: Set(Some(
-            user.password_strength.clone().unwrap_or_default(),
-        )),
+        password_strength: Set(Some(user.password_strength.clone().unwrap_or_default())),
         force_password_change: Set(user.force_password_change.unwrap_or(false) as i32),
         last_login_at: Set(Some(
             user.last_login_at
@@ -268,9 +311,7 @@ pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
         email: Set(Some(user.email.clone().unwrap_or_default())),
         phone: Set(Some(user.phone.clone().unwrap_or_default())),
         status: Set(Some(
-            user.status
-                .clone()
-                .unwrap_or_else(|| "active".to_string()),
+            user.status.clone().unwrap_or_else(|| "active".to_string()),
         )),
         organization_id: Set(user.organization_id),
         department_id: Set(user.department_id),
@@ -447,6 +488,11 @@ pub fn db_resource_ticket_to_shared(db: resource_ticket::Model) -> shared::Resou
         created_at: db.created_at,
         updated_at: db.updated_at,
         created_by: db.created_by,
+        applicant_name: db.applicant_name,
+        organization_id: db.organization_id,
+        organization_name: db.organization_name,
+        department_id: db.department_id,
+        department_name: db.department_name,
         approver: db.approver,
         approve_time: db.approve_time,
         approve_comment: db.approve_comment,
@@ -506,6 +552,11 @@ pub fn shared_to_db_resource_ticket(
         created_at: Set(ticket.created_at.clone()),
         updated_at: Set(ticket.updated_at.clone()),
         created_by: Set(ticket.created_by.clone()),
+        applicant_name: Set(ticket.applicant_name.clone()),
+        organization_id: Set(ticket.organization_id),
+        organization_name: Set(ticket.organization_name.clone()),
+        department_id: Set(ticket.department_id),
+        department_name: Set(ticket.department_name.clone()),
         approver: Set(ticket.approver.clone()),
         approve_time: Set(ticket.approve_time.clone()),
         approve_comment: Set(ticket.approve_comment.clone()),

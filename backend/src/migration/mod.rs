@@ -11,6 +11,7 @@ mod m20250307_000001_add_security_products;
 mod m20250308_000001_create_infrastructure_tables;
 mod m20260315_000001_add_performance_indexes;
 mod m20260324_000001_add_org_department_and_user_profile;
+mod m20260325_000001_add_resource_ticket_profile_fields;
 
 pub struct Migrator;
 
@@ -29,6 +30,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250308_000001_create_infrastructure_tables::Migration),
             Box::new(m20260315_000001_add_performance_indexes::Migration),
             Box::new(m20260324_000001_add_org_department_and_user_profile::Migration),
+            Box::new(m20260325_000001_add_resource_ticket_profile_fields::Migration),
         ]
     }
 }

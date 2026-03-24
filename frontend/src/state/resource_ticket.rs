@@ -164,6 +164,11 @@ pub struct ResourceTicket {
     pub created_at: String,
     pub updated_at: String,
     pub created_by: String,
+    pub applicant_name: String,
+    pub organization_id: Option<i32>,
+    pub organization_name: String,
+    pub department_id: Option<i32>,
+    pub department_name: String,
 
     // 审批信息
     pub approver: Option<String>,

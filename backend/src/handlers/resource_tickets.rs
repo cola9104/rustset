@@ -6,14 +6,15 @@ use chrono::Utc;
 use serde_json::json;
 
 use crate::database::{
-    delete_resource_ticket as db_delete_resource_ticket, get_cloud_platform_config_by_id,
-    get_machine_room_by_id, get_resource_ticket as db_get_resource_ticket,
-    get_resource_tickets as db_get_resource_tickets, get_service_provider_by_id,
-    insert_resource_ticket_wrapper, update_resource_ticket as db_update_resource_ticket,
+    delete_resource_ticket as db_delete_resource_ticket, get_cloud_platform_config_by_id, get_db,
+    get_department_by_id, get_machine_room_by_id, get_organization_by_id,
+    get_resource_ticket as db_get_resource_ticket, get_resource_tickets as db_get_resource_tickets,
+    get_service_provider_by_id, insert_resource_ticket_wrapper,
+    update_resource_ticket as db_update_resource_ticket,
 };
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::log_action_auth;
+use crate::utils::{get_current_user_from_auth, log_action_auth};
 use shared::{
     ApproveTicketRequest, CreateResourceTicketRequest, DeliverTicketRequest,
     ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, Role, TicketStatus,
@@ -91,6 +92,7 @@ pub async fn create_resource_ticket(
     let created_at = Utc::now().format("%Y-%m-%d %H:%M").to_string();
     let (provider_name, cloud_platform_name, machine_room_name) =
         resolve_related_names(req.provider_id, req.cloud_platform_id, req.machine_room_id).await?;
+    let applicant_profile = resolve_ticket_user_profile(&state, &user).await?;
 
     let mut ticket = ResourceTicket {
         id: None,
@@ -126,6 +128,11 @@ pub async fn create_resource_ticket(
         created_at: created_at.clone(),
         updated_at: Some(created_at.clone()),
         created_by: user.username.clone(),
+        applicant_name: applicant_profile.display_name,
+        organization_id: applicant_profile.organization_id,
+        organization_name: applicant_profile.organization_name,
+        department_id: applicant_profile.department_id,
+        department_name: applicant_profile.department_name,
         approver: None,
         approve_time: None,
         approve_comment: None,
@@ -334,11 +341,12 @@ pub async fn approve_ticket(
     }
 
     let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
-    ticket.approver = Some(user.username.clone());
+    let operator_display_name = resolve_operator_display_name(&state, &user).await?;
+    ticket.approver = Some(operator_display_name);
     ticket.approve_time = Some(now.clone());
     ticket.approve_comment = req.comment.clone();
     ticket.ticket_status = if req.approved {
-        TicketStatus::Approved
+        TicketStatus::PendingProvision
     } else {
         TicketStatus::Rejected
     };
@@ -381,12 +389,15 @@ pub async fn provision_ticket(
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
 
-    if ticket.ticket_status != TicketStatus::Approved {
-        return Err(ApiError::bad_request("只能配置已批准的工单"));
+    if ticket.ticket_status != TicketStatus::PendingProvision
+        && ticket.ticket_status != TicketStatus::Approved
+    {
+        return Err(ApiError::bad_request("只能配置待配置状态的工单"));
     }
 
     let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
-    ticket.provisioner = Some(user.username.clone());
+    let operator_display_name = resolve_operator_display_name(&state, &user).await?;
+    ticket.provisioner = Some(operator_display_name);
     ticket.provision_time = Some(now.clone());
     ticket.provision_details = req.details.clone();
     ticket.ticket_status = TicketStatus::PendingDelivery;
@@ -430,7 +441,8 @@ pub async fn deliver_ticket(
     }
 
     let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
-    ticket.deliverer = Some(user.username.clone());
+    let operator_display_name = resolve_operator_display_name(&state, &user).await?;
+    ticket.deliverer = Some(operator_display_name);
     ticket.deliver_time = Some(now.clone());
     ticket.deliver_comment = req.comment.clone();
     ticket.ticket_status = TicketStatus::Delivered;
@@ -461,6 +473,66 @@ fn ensure_operator(user: &AuthUser) -> Result<(), ApiError> {
         return Err(ApiError::forbidden("Access denied"));
     }
     Ok(())
+}
+
+struct TicketUserProfile {
+    display_name: Option<String>,
+    organization_id: Option<i32>,
+    organization_name: Option<String>,
+    department_id: Option<i32>,
+    department_name: Option<String>,
+}
+
+async fn resolve_ticket_user_profile(
+    state: &AppState,
+    user: &AuthUser,
+) -> Result<TicketUserProfile, ApiError> {
+    let current_user = get_current_user_from_auth(user, &state.users)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("User not found"))?;
+
+    let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+
+    let organization_name = match current_user.organization_id {
+        Some(id) => get_organization_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load organization: {}", e)))?
+            .map(|item| item.name),
+        None => None,
+    };
+
+    let department_name = match current_user.department_id {
+        Some(id) => get_department_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load department: {}", e)))?
+            .map(|item| item.name),
+        None => None,
+    };
+
+    Ok(TicketUserProfile {
+        display_name: Some(display_name_for_user(&current_user)),
+        organization_id: current_user.organization_id,
+        organization_name,
+        department_id: current_user.department_id,
+        department_name,
+    })
+}
+
+async fn resolve_operator_display_name(
+    state: &AppState,
+    user: &AuthUser,
+) -> Result<String, ApiError> {
+    let current_user = get_current_user_from_auth(user, &state.users)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("User not found"))?;
+    Ok(display_name_for_user(&current_user))
+}
+
+fn display_name_for_user(user: &shared::User) -> String {
+    user.real_name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| user.username.clone())
 }
 
 async fn resolve_related_names(

@@ -26,6 +26,20 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
+pub struct CurrentUserInfoResponse {
+    pub id: String,
+    pub username: String,
+    pub real_name: Option<String>,
+    pub display_name: String,
+    pub role: Role,
+    pub permissions: Option<Permissions>,
+    pub organization_id: Option<i32>,
+    pub organization_name: Option<String>,
+    pub department_id: Option<i32>,
+    pub department_name: Option<String>,
+}
+
 // 计算密码强度
 pub fn calculate_password_strength(password: &str) -> (String, u32) {
     let mut score = 0;
@@ -685,7 +699,7 @@ pub async fn update_password_policy(
     get,
     path = "/api/users/me",
     responses(
-        (status = 200, description = "Current user info", body = User),
+        (status = 200, description = "Current user info", body = CurrentUserInfoResponse),
         (status = 401, description = "Unauthorized")
     ),
     security(
@@ -696,12 +710,47 @@ pub async fn update_password_policy(
 pub async fn get_current_user_info(
     auth_user: AuthUser,
     State(state): State<AppState>,
-) -> Result<Json<User>, ApiError> {
+) -> Result<Json<CurrentUserInfoResponse>, ApiError> {
     let user = get_current_user_from_auth(&auth_user, &state.users)
         .await
         .ok_or_else(|| ApiError::unauthorized("User not found"))?;
 
-    Ok(Json(user))
+    let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+
+    let organization_name = match user.organization_id {
+        Some(id) => get_organization_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load organization: {}", e)))?
+            .map(|item| item.name),
+        None => None,
+    };
+
+    let department_name = match user.department_id {
+        Some(id) => get_department_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load department: {}", e)))?
+            .map(|item| item.name),
+        None => None,
+    };
+
+    let display_name = user
+        .real_name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| user.username.clone());
+
+    Ok(Json(CurrentUserInfoResponse {
+        id: user.id,
+        username: user.username,
+        real_name: user.real_name,
+        display_name,
+        role: user.role,
+        permissions: user.permissions,
+        organization_id: user.organization_id,
+        organization_name,
+        department_id: user.department_id,
+        department_name,
+    }))
 }
 
 #[cfg(test)]

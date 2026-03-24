@@ -67,17 +67,35 @@ pub fn App() -> Element {
 pub struct AuthUser {
     pub id: String,
     pub username: String,
+    pub real_name: String,
+    pub display_name: String,
     pub role: String,
     pub permissions: Vec<String>,
+    pub organization_id: Option<i32>,
+    pub organization_name: String,
+    pub department_id: Option<i32>,
+    pub department_name: String,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
 struct CurrentUserResponse {
     id: String,
     username: String,
+    #[serde(default)]
+    real_name: Option<String>,
+    #[serde(default)]
+    display_name: Option<String>,
     role: String,
     #[serde(default)]
     permissions: serde_json::Value,
+    #[serde(default)]
+    organization_id: Option<i32>,
+    #[serde(default)]
+    organization_name: Option<String>,
+    #[serde(default)]
+    department_id: Option<i32>,
+    #[serde(default)]
+    department_name: Option<String>,
 }
 
 impl CurrentUserResponse {
@@ -101,8 +119,19 @@ impl CurrentUserResponse {
         AuthUser {
             id: self.id.clone(),
             username: self.username.clone(),
+            real_name: self.real_name.clone().unwrap_or_default(),
+            display_name: self
+                .display_name
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| self.real_name.clone())
+                .unwrap_or_else(|| self.username.clone()),
             role: self.role.clone(),
             permissions,
+            organization_id: self.organization_id,
+            organization_name: self.organization_name.clone().unwrap_or_default(),
+            department_id: self.department_id,
+            department_name: self.department_name.clone().unwrap_or_default(),
         }
     }
 }
