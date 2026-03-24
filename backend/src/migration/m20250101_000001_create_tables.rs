@@ -1,7 +1,7 @@
 use sea_orm_migration::prelude::*;
 
 // Import schema helper functions
-use sea_orm_migration::schema::{pk_auto, string, integer, text, boolean, float};
+use sea_orm_migration::schema::{boolean, float, integer, pk_auto, string, text};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -41,7 +41,7 @@ impl MigrationTrait for Migration {
                             .name("fk_cloud_platforms_zone_id")
                             .from(CloudPlatforms::Table, CloudPlatforms::ZoneId)
                             .to(CloudZones::Table, CloudZones::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )
@@ -73,14 +73,17 @@ impl MigrationTrait for Migration {
                             .name("fk_provider_configs_zone_id")
                             .from(CloudProviderConfigs::Table, CloudProviderConfigs::ZoneId)
                             .to(CloudZones::Table, CloudZones::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_provider_configs_platform_id")
-                            .from(CloudProviderConfigs::Table, CloudProviderConfigs::PlatformId)
+                            .from(
+                                CloudProviderConfigs::Table,
+                                CloudProviderConfigs::PlatformId,
+                            )
                             .to(CloudPlatforms::Table, CloudPlatforms::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )
@@ -139,9 +142,12 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_business_resources_provider_config_id")
-                            .from(BusinessResources::Table, BusinessResources::CloudProviderConfigId)
+                            .from(
+                                BusinessResources::Table,
+                                BusinessResources::CloudProviderConfigId,
+                            )
                             .to(CloudProviderConfigs::Table, CloudProviderConfigs::Id)
-                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_delete(ForeignKeyAction::SetNull),
                     )
                     .to_owned(),
             )

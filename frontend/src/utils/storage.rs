@@ -12,6 +12,22 @@ pub fn get_token() -> Option<String> {
     local_storage().and_then(|s| s.get_item(TOKEN_KEY).ok().flatten())
 }
 
+/// 获取标准化后的 Authorization 请求头值
+pub fn authorization_header() -> Option<String> {
+    let token = get_token()?;
+    let token = token.trim();
+
+    if token.is_empty() {
+        return None;
+    }
+
+    if token.starts_with("Bearer ") || token.starts_with("bearer ") {
+        Some(token.to_string())
+    } else {
+        Some(format!("Bearer {}", token))
+    }
+}
+
 /// 存储认证 token
 pub fn set_token(token: &str) {
     if let Some(storage) = local_storage() {

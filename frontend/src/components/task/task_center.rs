@@ -1,122 +1,97 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaPlay, FaPause, FaRotate, FaTrash, FaList,
-    FaCircleCheck, FaClock, FaSpinner
-};
 use crate::components::common::VirtualScroller;
+use crate::services::task_api::{
+    create_task, delete_task, fetch_tasks, CreateTaskPayload, TaskRecord,
+};
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaArrowRotateRight, FaCircleCheck, FaClock, FaList, FaPlus, FaSpinner, FaTrash,
+};
+use dioxus_free_icons::Icon;
 
-/// 任务状态
-#[derive(Clone, Debug, PartialEq)]
-pub enum TaskStatus {
-    Pending,
-    Running,
-    Completed,
-    Failed,
-}
-
-impl TaskStatus {
-    fn as_str(&self) -> &'static str {
-        match self {
-            TaskStatus::Pending => "等待中",
-            TaskStatus::Running => "运行中",
-            TaskStatus::Completed => "已完成",
-            TaskStatus::Failed => "失败",
-        }
-    }
-
-    fn color_class(&self) -> &'static str {
-        match self {
-            TaskStatus::Pending => "bg-yellow-100 text-yellow-800",
-            TaskStatus::Running => "bg-blue-100 text-blue-800",
-            TaskStatus::Completed => "bg-green-100 text-green-800",
-            TaskStatus::Failed => "bg-red-100 text-red-800",
-        }
-    }
-}
-
-/// 任务数据模型
-#[derive(Clone, Debug, PartialEq)]
-pub struct Task {
-    pub id: i32,
-    pub name: String,
-    pub task_type: String,
-    pub status: TaskStatus,
-    pub progress: u8,
-    pub created_at: String,
-    pub target: String,
-}
-
-/// 任务中心页面
 #[allow(non_snake_case)]
 pub fn TaskCenter() -> Element {
-    let mut tasks = use_signal(|| vec![
-        Task {
-            id: 1,
-            name: "服务器端口扫描".to_string(),
-            task_type: "端口扫描".to_string(),
-            status: TaskStatus::Completed,
-            progress: 100,
-            created_at: "2024-01-15 10:30".to_string(),
-            target: "192.168.1.0/24".to_string(),
-        },
-        Task {
-            id: 2,
-            name: "漏洞扫描任务".to_string(),
-            task_type: "漏洞扫描".to_string(),
-            status: TaskStatus::Running,
-            progress: 65,
-            created_at: "2024-01-15 14:00".to_string(),
-            target: "192.168.1.10-20".to_string(),
-        },
-        Task {
-            id: 3,
-            name: "资产发现任务".to_string(),
-            task_type: "资产发现".to_string(),
-            status: TaskStatus::Pending,
-            progress: 0,
-            created_at: "2024-01-15 15:30".to_string(),
-            target: "10.0.0.0/16".to_string(),
-        },
-        Task {
-            id: 4,
-            name: "Web应用扫描".to_string(),
-            task_type: "Web扫描".to_string(),
-            status: TaskStatus::Failed,
-            progress: 30,
-            created_at: "2024-01-14 09:00".to_string(),
-            target: "https://example.com".to_string(),
-        },
-    ]);
-
+    let tasks = use_signal(Vec::<TaskRecord>::new);
     let mut show_add_modal = use_signal(|| false);
+    let loading = use_signal(|| true);
+    let error = use_signal(String::new);
 
-    // 统计数据
+    {
+        let mut tasks = tasks;
+        let mut loading = loading;
+        let mut error = error;
+        use_effect(move || {
+            spawn(async move {
+                match fetch_tasks().await {
+                    Ok(data) => {
+                        tasks.set(data);
+                        error.set(String::new());
+                    }
+                    Err(err) => error.set(err),
+                }
+                loading.set(false);
+            });
+        });
+    }
+
+    let refresh = move |_| {
+        let mut tasks = tasks;
+        let mut loading = loading;
+        let mut error = error;
+        spawn(async move {
+            loading.set(true);
+            match fetch_tasks().await {
+                Ok(data) => {
+                    tasks.set(data);
+                    error.set(String::new());
+                }
+                Err(err) => error.set(err),
+            }
+            loading.set(false);
+        });
+    };
+
     let total_count = tasks.read().len() as i32;
-    let running_count = tasks.read().iter().filter(|t| t.status == TaskStatus::Running).count() as i32;
-    let completed_count = tasks.read().iter().filter(|t| t.status == TaskStatus::Completed).count() as i32;
-    let pending_count = tasks.read().iter().filter(|t| t.status == TaskStatus::Pending).count() as i32;
+    let running_count = tasks
+        .read()
+        .iter()
+        .filter(|t| t.status == "Running")
+        .count() as i32;
+    let completed_count = tasks
+        .read()
+        .iter()
+        .filter(|t| t.status == "Completed")
+        .count() as i32;
+    let pending_count = tasks
+        .read()
+        .iter()
+        .filter(|t| t.status == "Pending")
+        .count() as i32;
 
     rsx! {
         div { class: "space-y-6",
-            // 页面标题和操作栏
             div { class: "flex justify-between items-center",
                 h1 { class: "text-2xl font-bold text-gray-800", "任务中心" }
-                button {
-                    class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
-                    onclick: move |_| show_add_modal.set(true),
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    span { class: "ml-2", "新建任务" }
+                div { class: "flex items-center gap-3",
+                    button {
+                        class: "flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors",
+                        onclick: refresh,
+                        Icon { icon: FaArrowRotateRight, width: 16, height: 16 }
+                        span { class: "ml-2", "刷新" }
+                    }
+                    button {
+                        class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
+                        onclick: move |_| show_add_modal.set(true),
+                        Icon { icon: FaPlus, width: 16, height: 16 }
+                        span { class: "ml-2", "新建任务" }
+                    }
                 }
             }
 
-            // 统计卡片
             div { class: "grid grid-cols-1 md:grid-cols-4 gap-4",
-                // 总任务
                 div { class: "bg-white rounded-lg shadow p-4",
                     div { class: "flex items-center",
                         div { class: "p-2 rounded-full bg-blue-500",
-                            Icon { icon: FaList, width: 20, height: 20 }
+                            Icon { icon: FaList, width: 20, height: 20, class: "text-white" }
                         }
                         div { class: "ml-3",
                             p { class: "text-sm text-gray-500", "总任务" }
@@ -124,11 +99,10 @@ pub fn TaskCenter() -> Element {
                         }
                     }
                 }
-                // 运行中
                 div { class: "bg-white rounded-lg shadow p-4",
                     div { class: "flex items-center",
-                        div { class: "p-2 rounded-full bg-blue-500 animate-pulse",
-                            Icon { icon: FaSpinner, width: 20, height: 20 }
+                        div { class: "p-2 rounded-full bg-indigo-500",
+                            Icon { icon: FaSpinner, width: 20, height: 20, class: "text-white" }
                         }
                         div { class: "ml-3",
                             p { class: "text-sm text-gray-500", "运行中" }
@@ -136,11 +110,10 @@ pub fn TaskCenter() -> Element {
                         }
                     }
                 }
-                // 已完成
                 div { class: "bg-white rounded-lg shadow p-4",
                     div { class: "flex items-center",
                         div { class: "p-2 rounded-full bg-green-500",
-                            Icon { icon: FaCircleCheck, width: 20, height: 20 }
+                            Icon { icon: FaCircleCheck, width: 20, height: 20, class: "text-white" }
                         }
                         div { class: "ml-3",
                             p { class: "text-sm text-gray-500", "已完成" }
@@ -148,11 +121,10 @@ pub fn TaskCenter() -> Element {
                         }
                     }
                 }
-                // 等待中
                 div { class: "bg-white rounded-lg shadow p-4",
                     div { class: "flex items-center",
                         div { class: "p-2 rounded-full bg-yellow-500",
-                            Icon { icon: FaClock, width: 20, height: 20 }
+                            Icon { icon: FaClock, width: 20, height: 20, class: "text-white" }
                         }
                         div { class: "ml-3",
                             p { class: "text-sm text-gray-500", "等待中" }
@@ -162,75 +134,51 @@ pub fn TaskCenter() -> Element {
                 }
             }
 
-            // 任务列表 - 使用虚拟滚动（分页版本）
-            VirtualScroller {
-                items: tasks.read().to_vec(),
-                page_size: 20,
-                render_item: move |task: Task| rsx! {
-                    div { class: "flex items-center px-6 py-4",
-                        // 任务名称
-                        div { class: "flex-1 text-sm font-medium text-gray-900 whitespace-nowrap",
-                            {task.name.clone()}
-                        }
-                        // 类型
-                        div { class: "flex-1 whitespace-nowrap",
-                            span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800",
-                                {task.task_type.clone()}
+            if *loading.read() {
+                div { class: "bg-white rounded-lg shadow p-6 text-gray-500", "正在加载任务数据..." }
+            } else if !error.read().is_empty() {
+                div { class: "bg-red-50 border border-red-200 text-red-700 rounded-lg p-4", "{error}" }
+            } else {
+                VirtualScroller {
+                    items: tasks.read().to_vec(),
+                    page_size: 20,
+                    render_item: move |task: TaskRecord| rsx! {
+                        div { class: "grid grid-cols-1 lg:grid-cols-7 gap-4 px-6 py-4 border-b border-gray-100 items-center",
+                            div {
+                                p { class: "text-sm font-medium text-gray-900", "{task.name}" }
+                                p { class: "text-xs text-gray-500", "创建人: {task.created_by.clone().unwrap_or_else(|| \"-\".to_string())}" }
                             }
-                        }
-                        // 目标
-                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
-                            {task.target.clone()}
-                        }
-                        // 状态
-                        div { class: "flex-1 whitespace-nowrap",
-                            span {
-                                class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {task.status.color_class()}",
-                                {task.status.as_str()}
-                            }
-                        }
-                        // 进度
-                        div { class: "flex-1 flex items-center whitespace-nowrap",
-                            div { class: "w-full bg-gray-200 rounded-full h-2",
-                                div {
-                                    class: "bg-blue-600 h-2 rounded-full",
-                                    style: "width: {task.progress}%",
+                            div { class: "text-sm text-gray-600", "{task.target}" }
+                            div { class: "text-sm text-gray-600", "{task.port_policy}" }
+                            div {
+                                span {
+                                    class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {status_color(&task.status)}",
+                                    "{status_label(&task.status)}"
                                 }
                             }
-                            span { class: "ml-2 text-sm text-gray-500", "{task.progress}%" }
-                        }
-                        // 创建时间
-                        div { class: "flex-1 text-sm text-gray-500 whitespace-nowrap",
-                            {task.created_at.clone()}
-                        }
-                        // 操作
-                        div { class: "flex-1 text-sm font-medium whitespace-nowrap",
-                            // 根据状态显示不同操作按钮
-                            if task.status == TaskStatus::Pending {
+                            div { class: "text-sm text-gray-600", "{task.found_assets} / {task.found_risks}" }
+                            div { class: "text-sm text-gray-500",
+                                "{task.start_time.clone().or(task.end_time.clone()).unwrap_or_else(|| \"尚未开始\".to_string())}"
+                            }
+                            div {
                                 button {
-                                    class: "text-green-600 hover:text-green-900 mr-2",
-                                    title: "启动",
-                                    Icon { icon: FaPlay, width: 16, height: 16 }
+                                    class: "text-red-600 hover:text-red-900",
+                                    onclick: {
+                                        let task_id = task.id.clone();
+                                        let mut tasks = tasks;
+                                        let mut error = error;
+                                        move |_| {
+                                            let task_id = task_id.clone();
+                                            spawn(async move {
+                                                match delete_task(&task_id).await {
+                                                    Ok(()) => tasks.write().retain(|item| item.id != task_id),
+                                                    Err(err) => error.set(err),
+                                                }
+                                            });
+                                        }
+                                    },
+                                    Icon { icon: FaTrash, width: 16, height: 16 }
                                 }
-                            }
-                            if task.status == TaskStatus::Running {
-                                button {
-                                    class: "text-yellow-600 hover:text-yellow-900 mr-2",
-                                    title: "暂停",
-                                    Icon { icon: FaPause, width: 16, height: 16 }
-                                }
-                            }
-                            if task.status == TaskStatus::Completed || task.status == TaskStatus::Failed {
-                                button {
-                                    class: "text-blue-600 hover:text-blue-900 mr-2",
-                                    title: "重新运行",
-                                    Icon { icon: FaRotate, width: 16, height: 16 }
-                                }
-                            }
-                            button {
-                                class: "text-red-600 hover:text-red-900",
-                                title: "删除",
-                                Icon { icon: FaTrash, width: 16, height: 16 }
                             }
                         }
                     }
@@ -238,36 +186,43 @@ pub fn TaskCenter() -> Element {
             }
         }
 
-        // 添加任务模态框
         if *show_add_modal.read() {
             AddTaskModal {
                 on_close: move |_| show_add_modal.set(false),
-                on_save: move |new_task: Task| {
-                    tasks.write().push(new_task);
-                    show_add_modal.set(false);
+                on_save: {
+                    let mut tasks = tasks;
+                    let mut error = error;
+                    let mut show_add_modal = show_add_modal;
+                    move |payload: CreateTaskPayload| {
+                        spawn(async move {
+                            match create_task(&payload).await {
+                                Ok(task) => {
+                                    tasks.write().insert(0, task);
+                                    show_add_modal.set(false);
+                                    error.set(String::new());
+                                }
+                                Err(err) => error.set(err),
+                            }
+                        });
+                    }
                 }
             }
         }
     }
 }
 
-/// 添加任务模态框
 #[component]
-fn AddTaskModal(on_close: EventHandler<()>, on_save: EventHandler<Task>) -> Element {
+fn AddTaskModal(on_close: EventHandler<()>, on_save: EventHandler<CreateTaskPayload>) -> Element {
     let mut name = use_signal(String::new);
-    let mut task_type = use_signal(|| "端口扫描".to_string());
     let mut target = use_signal(String::new);
+    let mut task_type = use_signal(|| "端口扫描".to_string());
 
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
             div { class: "bg-white rounded-lg shadow-xl w-full max-w-md mx-4",
                 div { class: "flex justify-between items-center p-4 border-b",
                     h3 { class: "text-lg font-semibold", "新建任务" }
-                    button {
-                        class: "text-gray-400 hover:text-gray-600",
-                        onclick: move |_| on_close.call(()),
-                        "×"
-                    }
+                    button { class: "text-gray-400 hover:text-gray-600", onclick: move |_| on_close.call(()), "×" }
                 }
 
                 div { class: "p-4 space-y-4",
@@ -276,12 +231,10 @@ fn AddTaskModal(on_close: EventHandler<()>, on_save: EventHandler<Task>) -> Elem
                         input {
                             r#type: "text",
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            placeholder: "输入任务名称",
                             value: name,
                             oninput: move |e| name.set(e.value()),
                         }
                     }
-
                     div {
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "任务类型" }
                         select {
@@ -294,13 +247,11 @@ fn AddTaskModal(on_close: EventHandler<()>, on_save: EventHandler<Task>) -> Elem
                             option { value: "Web扫描", "Web扫描" }
                         }
                     }
-
                     div {
                         label { class: "block text-sm font-medium text-gray-700 mb-1", "目标" }
                         input {
                             r#type: "text",
                             class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
-                            placeholder: "例如: 192.168.1.0/24 或 https://example.com",
                             value: target,
                             oninput: move |e| target.set(e.value()),
                         }
@@ -316,21 +267,50 @@ fn AddTaskModal(on_close: EventHandler<()>, on_save: EventHandler<Task>) -> Elem
                     button {
                         class: "px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700",
                         onclick: move |_| {
-                            let new_task = Task {
-                                id: chrono::Utc::now().timestamp() as i32,
+                            let (port_policy, domain_brute, service_detection, os_detection, site_identify) =
+                                task_template(task_type.read().as_str());
+
+                            on_save.call(CreateTaskPayload {
                                 name: name.read().clone(),
-                                task_type: task_type.read().clone(),
-                                status: TaskStatus::Pending,
-                                progress: 0,
-                                created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M").to_string(),
                                 target: target.read().clone(),
-                            };
-                            on_save.call(new_task);
+                                port_policy: port_policy.to_string(),
+                                domain_brute,
+                                service_detection,
+                                os_detection,
+                                site_identify,
+                            });
                         },
-                        "创建任务"
+                        "保存"
                     }
                 }
             }
         }
+    }
+}
+
+fn task_template(task_type: &str) -> (&'static str, bool, bool, bool, bool) {
+    match task_type {
+        "漏洞扫描" => ("TOP1000", false, true, true, true),
+        "资产发现" => ("TOP100", false, true, false, false),
+        "Web扫描" => ("TOP1000", false, true, false, true),
+        _ => ("TOP1000", false, true, false, false),
+    }
+}
+
+fn status_label(status: &str) -> &str {
+    match status {
+        "Running" => "运行中",
+        "Completed" => "已完成",
+        "Failed" => "失败",
+        _ => "等待中",
+    }
+}
+
+fn status_color(status: &str) -> &'static str {
+    match status {
+        "Running" => "bg-blue-100 text-blue-800",
+        "Completed" => "bg-green-100 text-green-800",
+        "Failed" => "bg-red-100 text-red-800",
+        _ => "bg-yellow-100 text-yellow-800",
     }
 }

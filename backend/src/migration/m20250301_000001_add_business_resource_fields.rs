@@ -20,7 +20,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::Department).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::Department)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -38,7 +42,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::ApprovalTime).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::ApprovalTime)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -47,7 +55,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::ApprovalRemarks).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::ApprovalRemarks)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -56,7 +68,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::RejectionReason).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::RejectionReason)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -66,7 +82,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::BandwidthMbps).integer().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::BandwidthMbps)
+                            .integer()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -75,7 +95,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::BandwidthType).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::BandwidthType)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -84,7 +108,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::PublicIpCount).integer().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::PublicIpCount)
+                            .integer()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -93,7 +121,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::NetworkType).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::NetworkType)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -103,7 +135,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::ProjectName).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::ProjectName)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -112,7 +148,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::ProjectCode).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::ProjectCode)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -121,7 +161,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::BusinessOwner).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::BusinessOwner)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -139,7 +183,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::ContactPhone).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::ContactPhone)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -149,7 +197,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::BillingMethod).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::BillingMethod)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -158,7 +210,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::PurchaseDuration).integer().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::PurchaseDuration)
+                            .integer()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -167,7 +223,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::CostCenter).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::CostCenter)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -177,7 +237,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::SecurityLevel).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::SecurityLevel)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -186,7 +250,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::DataSensitivity).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::DataSensitivity)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -205,7 +273,11 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(BusinessResources::Table)
-                    .add_column(ColumnDef::new(BusinessResources::ExpectedDeliveryTime).string().null())
+                    .add_column(
+                        ColumnDef::new(BusinessResources::ExpectedDeliveryTime)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await?;

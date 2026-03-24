@@ -1,13 +1,8 @@
+use crate::config::api_base;
+use crate::state::service_provider::ServiceProviderConfig;
 use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
-use crate::state::service_provider::ServiceProviderConfig;
-use crate::utils::storage::get_token;
-
-const API_BASE: &str = "http://localhost:3003/api";
-
-fn auth_header() -> Result<String, String> {
-    get_token().ok_or_else(|| "未登录，请先登录".to_string())
-}
+use web_sys::RequestCredentials;
 
 /// 后端返回的服务商结构
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,9 +48,8 @@ impl BackendServiceProvider {
 
 /// 获取服务商列表
 pub async fn fetch_service_providers() -> Result<Vec<ServiceProviderConfig>, String> {
-    let token = auth_header()?;
-    let response = Request::get(&format!("{}/service-providers", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::get(&format!("{}/service-providers", api_base()))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
@@ -109,12 +103,13 @@ impl From<&ServiceProviderConfig> for CreateServiceProviderRequest {
 }
 
 /// 创建服务商
-pub async fn create_service_provider(config: &ServiceProviderConfig) -> Result<ServiceProviderConfig, String> {
-    let token = auth_header()?;
+pub async fn create_service_provider(
+    config: &ServiceProviderConfig,
+) -> Result<ServiceProviderConfig, String> {
     let request_body = CreateServiceProviderRequest::from(config);
 
-    let response = Request::post(&format!("{}/service-providers", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::post(&format!("{}/service-providers", api_base()))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -131,8 +126,8 @@ pub async fn create_service_provider(config: &ServiceProviderConfig) -> Result<S
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let created: BackendServiceProvider = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let created: BackendServiceProvider =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(created.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -140,12 +135,14 @@ pub async fn create_service_provider(config: &ServiceProviderConfig) -> Result<S
 }
 
 /// 更新服务商
-pub async fn update_service_provider(id: i32, config: &ServiceProviderConfig) -> Result<ServiceProviderConfig, String> {
-    let token = auth_header()?;
+pub async fn update_service_provider(
+    id: i32,
+    config: &ServiceProviderConfig,
+) -> Result<ServiceProviderConfig, String> {
     let request_body = CreateServiceProviderRequest::from(config);
 
-    let response = Request::put(&format!("{}/service-providers/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::put(&format!("{}/service-providers/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -162,8 +159,8 @@ pub async fn update_service_provider(id: i32, config: &ServiceProviderConfig) ->
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let updated: BackendServiceProvider = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let updated: BackendServiceProvider =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(updated.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -172,9 +169,8 @@ pub async fn update_service_provider(id: i32, config: &ServiceProviderConfig) ->
 
 /// 删除服务商
 pub async fn delete_service_provider(id: i32) -> Result<(), String> {
-    let token = auth_header()?;
-    let response = Request::delete(&format!("{}/service-providers/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::delete(&format!("{}/service-providers/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;

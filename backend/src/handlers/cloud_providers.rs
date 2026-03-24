@@ -4,17 +4,17 @@ use axum::{
 };
 use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
+use crate::database::{
+    delete_provider_config, get_active_cloud_provider_configs as get_active_provider_configs_db,
+    get_all_cloud_provider_configs, get_cloud_provider_config_by_id, insert_provider_config,
+    update_provider_config,
+};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
 use shared::{
-    CloudProviderConfig, CloudProviderConfigStatus,
-    CreateCloudProviderConfigRequest, UpdateCloudProviderConfigRequest,
-    Role,
-};
-use crate::database::{
-    insert_provider_config, update_provider_config, delete_provider_config,
-    get_all_cloud_provider_configs, get_cloud_provider_config_by_id, get_active_cloud_provider_configs as get_active_provider_configs_db,
+    CloudProviderConfig, CloudProviderConfigStatus, CreateCloudProviderConfigRequest, Role,
+    UpdateCloudProviderConfigRequest,
 };
 
 /// 获取云平台（技术底座）配置列表
@@ -28,56 +28,59 @@ pub async fn get_cloud_provider_configs(
 
     match get_all_cloud_provider_configs(&db_conn).await {
         Ok(db_configs) => {
-            let configs: Vec<CloudProviderConfig> = db_configs.into_iter().filter_map(|db| {
-                // Parse provider from JSON string
-                let provider = serde_json::from_str(&db.provider).ok()?;
-                // Parse available_zones from region (stored as comma-separated if exists)
-                let available_zones = if !db.region_id.is_empty() {
-                    db.region_id.split(',').map(|s| s.to_string()).collect()
-                } else {
-                    Vec::new()
-                };
-                // Parse status
-                let status = match db.status.as_str() {
-                    "active" => CloudProviderConfigStatus::Active,
-                    "inactive" => CloudProviderConfigStatus::Inactive,
-                    "testing" => CloudProviderConfigStatus::Testing,
-                    "error" => CloudProviderConfigStatus::Error,
-                    _ => CloudProviderConfigStatus::Inactive,
-                };
-                // Parse timestamps
-                let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|_| chrono::Utc::now());
-                let last_test_time = db.last_test_time.and_then(|t| {
-                    chrono::DateTime::parse_from_rfc3339(&t)
+            let configs: Vec<CloudProviderConfig> = db_configs
+                .into_iter()
+                .filter_map(|db| {
+                    // Parse provider from JSON string
+                    let provider = serde_json::from_str(&db.provider).ok()?;
+                    // Parse available_zones from region (stored as comma-separated if exists)
+                    let available_zones = if !db.region_id.is_empty() {
+                        db.region_id.split(',').map(|s| s.to_string()).collect()
+                    } else {
+                        Vec::new()
+                    };
+                    // Parse status
+                    let status = match db.status.as_str() {
+                        "active" => CloudProviderConfigStatus::Active,
+                        "inactive" => CloudProviderConfigStatus::Inactive,
+                        "testing" => CloudProviderConfigStatus::Testing,
+                        "error" => CloudProviderConfigStatus::Error,
+                        _ => CloudProviderConfigStatus::Inactive,
+                    };
+                    // Parse timestamps
+                    let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
                         .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .ok()
-                });
-
-                Some(CloudProviderConfig {
-                    id: Some(db.id),
-                    zone_id: Some(db.zone_id),
-                    platform_id: Some(db.platform_id),
-                    provider,
-                    region_id: db.region_id,
-                    region_name: db.region_name,
-                    available_zones,
-                    account_name: db.account_name,
-                    access_key_id: db.access_key_id,
-                    access_key_secret: db.access_key_secret,
-                    status,
-                    remarks: db.remarks,
-                    last_test_time,
-                    last_test_result: db.last_test_result,
-                    created_at,
-                    updated_at: db.updated_at.and_then(|t| {
+                        .unwrap_or_else(|_| chrono::Utc::now());
+                    let last_test_time = db.last_test_time.and_then(|t| {
                         chrono::DateTime::parse_from_rfc3339(&t)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .ok()
-                    }),
+                    });
+
+                    Some(CloudProviderConfig {
+                        id: Some(db.id),
+                        zone_id: Some(db.zone_id),
+                        platform_id: Some(db.platform_id),
+                        provider,
+                        region_id: db.region_id,
+                        region_name: db.region_name,
+                        available_zones,
+                        account_name: db.account_name,
+                        access_key_id: db.access_key_id,
+                        access_key_secret: db.access_key_secret,
+                        status,
+                        remarks: db.remarks,
+                        last_test_time,
+                        last_test_result: db.last_test_result,
+                        created_at,
+                        updated_at: db.updated_at.and_then(|t| {
+                            chrono::DateTime::parse_from_rfc3339(&t)
+                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                                .ok()
+                        }),
+                    })
                 })
-            }).collect();
+                .collect();
             Ok(Json(configs).into_response())
         }
         Err(e) => {
@@ -186,7 +189,9 @@ pub async fn create_cloud_provider_config(
         &req.access_key_secret,
         req.remarks.as_deref(),
         &now.to_rfc3339(),
-    ).await {
+    )
+    .await
+    {
         Ok(id) => {
             let config = CloudProviderConfig {
                 id: Some(id),
@@ -218,7 +223,8 @@ pub async fn create_cloud_provider_config(
             Ok(Json(json!({
                 "message": "配置创建成功",
                 "data": config
-            })).into_response())
+            }))
+            .into_response())
         }
         Err(e) => {
             eprintln!("Error creating cloud provider config: {}", e);
@@ -258,10 +264,18 @@ pub async fn update_cloud_provider_config(
     let zone_id = req.zone_id.unwrap_or(existing.zone_id);
     let platform_id = req.platform_id.unwrap_or(existing.platform_id);
     let region_id = existing.region_id.clone();
-    let region_name = req.region_name.unwrap_or_else(|| existing.region_name.clone());
-    let account_name = req.account_name.unwrap_or_else(|| existing.account_name.clone());
-    let access_key_id = req.access_key_id.unwrap_or_else(|| existing.access_key_id.clone());
-    let access_key_secret = req.access_key_secret.unwrap_or_else(|| existing.access_key_secret.clone());
+    let region_name = req
+        .region_name
+        .unwrap_or_else(|| existing.region_name.clone());
+    let account_name = req
+        .account_name
+        .unwrap_or_else(|| existing.account_name.clone());
+    let access_key_id = req
+        .access_key_id
+        .unwrap_or_else(|| existing.access_key_id.clone());
+    let access_key_secret = req
+        .access_key_secret
+        .unwrap_or_else(|| existing.access_key_secret.clone());
     let remarks = req.remarks;
     let status_str = if let Some(status) = req.status {
         match status {
@@ -288,7 +302,9 @@ pub async fn update_cloud_provider_config(
         remarks.as_deref(),
         status_str,
         updated_at.as_deref(),
-    ).await {
+    )
+    .await
+    {
         Ok(_) => {
             log_action_auth(
                 &state.audit_logs,
@@ -301,7 +317,8 @@ pub async fn update_cloud_provider_config(
             // Fetch the updated config
             match get_cloud_provider_config_by_id(&db_conn, id).await {
                 Ok(Some(db)) => {
-                    let provider = serde_json::from_str(&db.provider).unwrap_or(shared::CloudProvider::Aliyun);
+                    let provider =
+                        serde_json::from_str(&db.provider).unwrap_or(shared::CloudProvider::Aliyun);
                     let config = CloudProviderConfig {
                         id: Some(db.id),
                         zone_id: Some(db.zone_id),
@@ -333,9 +350,12 @@ pub async fn update_cloud_provider_config(
                     Ok(Json(json!({
                         "message": "配置更新成功",
                         "data": config
-                    })).into_response())
+                    }))
+                    .into_response())
                 }
-                Ok(None) => Err(ApiError::internal("Failed to load updated cloud provider config")),
+                Ok(None) => Err(ApiError::internal(
+                    "Failed to load updated cloud provider config",
+                )),
                 Err(e) => {
                     eprintln!("Error loading updated cloud provider config: {}", e);
                     Err(ApiError::internal("Database error"))
@@ -475,52 +495,58 @@ pub async fn get_active_cloud_provider_configs(
 
     match get_active_provider_configs_db(&db_conn).await {
         Ok(db_configs) => {
-            let configs: Vec<CloudProviderConfig> = db_configs.into_iter().filter_map(|db| {
-                // Parse provider from JSON string
-                let provider = serde_json::from_str(&db.provider).ok()?;
-                // Parse available_zones from region (stored as comma-separated if exists)
-                let available_zones = if !db.region_id.is_empty() {
-                    db.region_id.split(',').map(|s| s.to_string()).collect()
-                } else {
-                    Vec::new()
-                };
-                // Parse timestamps
-                let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                    .map(|dt| dt.with_timezone(&chrono::Utc))
-                    .unwrap_or_else(|_| chrono::Utc::now());
-                let last_test_time = db.last_test_time.and_then(|t| {
-                    chrono::DateTime::parse_from_rfc3339(&t)
+            let configs: Vec<CloudProviderConfig> = db_configs
+                .into_iter()
+                .filter_map(|db| {
+                    // Parse provider from JSON string
+                    let provider = serde_json::from_str(&db.provider).ok()?;
+                    // Parse available_zones from region (stored as comma-separated if exists)
+                    let available_zones = if !db.region_id.is_empty() {
+                        db.region_id.split(',').map(|s| s.to_string()).collect()
+                    } else {
+                        Vec::new()
+                    };
+                    // Parse timestamps
+                    let created_at = chrono::DateTime::parse_from_rfc3339(&db.created_at)
                         .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .ok()
-                });
-
-                Some(CloudProviderConfig {
-                    id: Some(db.id),
-                    zone_id: Some(db.zone_id),
-                    platform_id: Some(db.platform_id),
-                    provider,
-                    region_id: db.region_id,
-                    region_name: db.region_name,
-                    available_zones,
-                    account_name: db.account_name,
-                    access_key_id: db.access_key_id,
-                    access_key_secret: db.access_key_secret,
-                    status: CloudProviderConfigStatus::Active,
-                    remarks: db.remarks,
-                    last_test_time,
-                    last_test_result: db.last_test_result,
-                    created_at,
-                    updated_at: db.updated_at.and_then(|t| {
+                        .unwrap_or_else(|_| chrono::Utc::now());
+                    let last_test_time = db.last_test_time.and_then(|t| {
                         chrono::DateTime::parse_from_rfc3339(&t)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .ok()
-                    }),
+                    });
+
+                    Some(CloudProviderConfig {
+                        id: Some(db.id),
+                        zone_id: Some(db.zone_id),
+                        platform_id: Some(db.platform_id),
+                        provider,
+                        region_id: db.region_id,
+                        region_name: db.region_name,
+                        available_zones,
+                        account_name: db.account_name,
+                        access_key_id: db.access_key_id,
+                        access_key_secret: db.access_key_secret,
+                        status: CloudProviderConfigStatus::Active,
+                        remarks: db.remarks,
+                        last_test_time,
+                        last_test_result: db.last_test_result,
+                        created_at,
+                        updated_at: db.updated_at.and_then(|t| {
+                            chrono::DateTime::parse_from_rfc3339(&t)
+                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                                .ok()
+                        }),
+                    })
                 })
-            }).collect();
+                .collect();
             Ok(Json(configs).into_response())
         }
         Err(e) => {
-            eprintln!("Error loading active cloud provider configs from database: {}", e);
+            eprintln!(
+                "Error loading active cloud provider configs from database: {}",
+                e
+            );
             Err(ApiError::internal("Database error"))
         }
     }

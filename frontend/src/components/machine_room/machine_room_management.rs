@@ -1,13 +1,15 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{FaPlus, FaPenToSquare, FaEye, FaTrash, FaMagnifyingGlass, FaBuilding};
-use crate::state::machine_room::MachineRoomConfig;
+use super::room_form::{FormMode, RoomForm};
 use crate::app::PROVIDERS_STATE;
 use crate::services::{
-    fetch_machine_rooms, create_machine_room, update_machine_room, delete_machine_room,
-    fetch_service_providers,
+    create_machine_room, delete_machine_room, fetch_machine_rooms, fetch_service_providers,
+    update_machine_room,
 };
-use super::room_form::{RoomForm, FormMode};
+use crate::state::machine_room::MachineRoomConfig;
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaBuilding, FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaTrash,
+};
+use dioxus_free_icons::Icon;
 
 /// 机房管理页面
 #[component]
@@ -71,7 +73,8 @@ pub fn MachineRoomManagement() -> Element {
 
     // 获取服务商名称的辅助函数
     let get_provider_name = |provider_id: i32| -> String {
-        PROVIDERS_STATE.read()
+        PROVIDERS_STATE
+            .read()
             .iter()
             .find(|p| p.id == provider_id)
             .map(|p| p.short_name.clone())
@@ -79,27 +82,44 @@ pub fn MachineRoomManagement() -> Element {
     };
 
     // 过滤机房
-    let filtered_rooms = rooms.read().iter().filter(|room| {
-        let matches_search = search_query.read().is_empty()
-            || room.room_name.contains(search_query.read().as_str())
-            || room.facility_type.contains(search_query.read().as_str())
-            || room.room_code.contains(search_query.read().as_str());
+    let filtered_rooms = rooms
+        .read()
+        .iter()
+        .filter(|room| {
+            let matches_search = search_query.read().is_empty()
+                || room.room_name.contains(search_query.read().as_str())
+                || room.facility_type.contains(search_query.read().as_str())
+                || room.room_code.contains(search_query.read().as_str());
 
-        let matches_provider = provider_filter.read().as_str() == "all"
-            || provider_filter.read().parse::<i32>().ok() == Some(room.provider_id);
+            let matches_provider = provider_filter.read().as_str() == "all"
+                || provider_filter.read().parse::<i32>().ok() == Some(room.provider_id);
 
-        let matches_type = room_type_filter.read().as_str() == "all"
-            || room_type_filter.read().as_str() == room.room_type;
+            let matches_type = room_type_filter.read().as_str() == "all"
+                || room_type_filter.read().as_str() == room.room_type;
 
-        matches_search && matches_provider && matches_type
-    }).cloned().collect::<Vec<_>>();
+            matches_search && matches_provider && matches_type
+        })
+        .cloned()
+        .collect::<Vec<_>>();
 
     // 统计数据
     let total_count = rooms.read().len() as i32;
     let active_count = rooms.read().iter().filter(|r| r.status == "active").count() as i32;
-    let core_count = rooms.read().iter().filter(|r| r.room_type == "核心机房").count() as i32;
-    let dmz_public_count = rooms.read().iter().filter(|r| r.room_type == "DMZ机房（公有云）").count() as i32;
-    let dmz_gov_count = rooms.read().iter().filter(|r| r.room_type == "DMZ机房（政务云）").count() as i32;
+    let core_count = rooms
+        .read()
+        .iter()
+        .filter(|r| r.room_type == "核心机房")
+        .count() as i32;
+    let dmz_public_count = rooms
+        .read()
+        .iter()
+        .filter(|r| r.room_type == "DMZ机房（公有云）")
+        .count() as i32;
+    let dmz_gov_count = rooms
+        .read()
+        .iter()
+        .filter(|r| r.room_type == "DMZ机房（政务云）")
+        .count() as i32;
 
     // 按服务商统计
     let telecom_count = rooms.read().iter().filter(|r| r.provider_id == 1).count() as i32;
@@ -404,12 +424,10 @@ pub fn MachineRoomManagement() -> Element {
 
 /// 查看机房模态框
 #[component]
-fn ViewRoomModal(
-    room: MachineRoomConfig,
-    on_close: EventHandler
-) -> Element {
+fn ViewRoomModal(room: MachineRoomConfig, on_close: EventHandler) -> Element {
     // 获取服务商名称
-    let provider_name = PROVIDERS_STATE.read()
+    let provider_name = PROVIDERS_STATE
+        .read()
         .iter()
         .find(|p| p.id == room.provider_id)
         .map(|p| p.short_name.clone())

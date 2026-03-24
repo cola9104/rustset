@@ -1,9 +1,9 @@
-use dioxus::prelude::*;
+use crate::app::{CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE, PROVIDERS_STATE};
+use crate::components::common::{ErrorMessage, Modal, ModalFooter};
 use crate::state::security_product::{
     SecurityProduct, SecurityProductCategory, SecurityProductStatus,
 };
-use crate::app::{PROVIDERS_STATE, CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE};
-use crate::components::common::{Modal, ModalFooter, ErrorMessage};
+use dioxus::prelude::*;
 
 /// 表单模式
 #[derive(Clone, Copy, PartialEq)]
@@ -113,20 +113,40 @@ impl ProductFormData {
             vendor: self.vendor.clone(),
             model: self.model.clone(),
             version: self.version.clone(),
-            serial_number: if self.serial_number.is_empty() { None } else { Some(self.serial_number.clone()) },
+            serial_number: if self.serial_number.is_empty() {
+                None
+            } else {
+                Some(self.serial_number.clone())
+            },
             license_type: self.license_type.clone(),
-            license_expiry: if self.license_expiry.is_empty() { None } else { Some(self.license_expiry.clone()) },
-            management_ip: if self.management_ip.is_empty() { None } else { Some(self.management_ip.clone()) },
+            license_expiry: if self.license_expiry.is_empty() {
+                None
+            } else {
+                Some(self.license_expiry.clone())
+            },
+            management_ip: if self.management_ip.is_empty() {
+                None
+            } else {
+                Some(self.management_ip.clone())
+            },
             deployment_mode: self.deployment_mode.clone(),
             cloud_platform_id: self.cloud_platform_id,
             machine_room_id: self.machine_room_id,
             provider_id: self.provider_id,
             status: self.status,
             features: vec![],
-            throughput: if self.throughput.is_empty() { None } else { Some(self.throughput.clone()) },
+            throughput: if self.throughput.is_empty() {
+                None
+            } else {
+                Some(self.throughput.clone())
+            },
             contact_person: self.contact_person.clone(),
             contact_phone: self.contact_phone.clone(),
-            remarks: if self.remarks.is_empty() { None } else { Some(self.remarks.clone()) },
+            remarks: if self.remarks.is_empty() {
+                None
+            } else {
+                Some(self.remarks.clone())
+            },
             created_at,
         }
     }
@@ -164,7 +184,9 @@ pub struct ProductFormProps {
 #[component]
 pub fn ProductForm(props: ProductFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.product.as_ref()
+    let initial_data = props
+        .product
+        .as_ref()
         .map(ProductFormData::from)
         .unwrap_or_default();
 
@@ -181,9 +203,21 @@ pub fn ProductForm(props: ProductFormProps) -> Element {
     let status_display = form_data.read().status.display_name().to_string();
 
     // 部署位置选择
-    let provider_id_str = form_data.read().provider_id.map(|id| id.to_string()).unwrap_or_default();
-    let cloud_platform_id_str = form_data.read().cloud_platform_id.map(|id| id.to_string()).unwrap_or_default();
-    let machine_room_id_str = form_data.read().machine_room_id.map(|id| id.to_string()).unwrap_or_default();
+    let provider_id_str = form_data
+        .read()
+        .provider_id
+        .map(|id| id.to_string())
+        .unwrap_or_default();
+    let cloud_platform_id_str = form_data
+        .read()
+        .cloud_platform_id
+        .map(|id| id.to_string())
+        .unwrap_or_default();
+    let machine_room_id_str = form_data
+        .read()
+        .machine_room_id
+        .map(|id| id.to_string())
+        .unwrap_or_default();
 
     rsx! {
         Modal {

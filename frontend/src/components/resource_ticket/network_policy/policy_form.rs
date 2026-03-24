@@ -1,7 +1,9 @@
-use dioxus::prelude::*;
-use crate::components::common::{Modal, ModalFooter, ErrorMessage, FormMode};
+use super::network_policy_request::{
+    AccessDirection, NetworkPolicyRequest, NetworkPolicyStatus, PolicyProtocol,
+};
 use crate::app::NETWORK_ZONES_STATE;
-use super::network_policy_request::{NetworkPolicyRequest, NetworkPolicyStatus, AccessDirection, PolicyProtocol};
+use crate::components::common::{ErrorMessage, FormMode, Modal, ModalFooter};
+use dioxus::prelude::*;
 
 /// 网络策略申请表单数据结构
 #[derive(Clone, Debug)]
@@ -54,7 +56,12 @@ impl From<&NetworkPolicyRequest> for NetworkPolicyFormData {
 
 impl NetworkPolicyFormData {
     /// 转换为 NetworkPolicyRequest
-    pub fn to_request(&self, id: i32, status: NetworkPolicyStatus, created_at: String) -> NetworkPolicyRequest {
+    pub fn to_request(
+        &self,
+        id: i32,
+        status: NetworkPolicyStatus,
+        created_at: String,
+    ) -> NetworkPolicyRequest {
         NetworkPolicyRequest {
             id,
             title: self.title.clone(),
@@ -117,7 +124,9 @@ pub struct NetworkPolicyFormProps {
 #[component]
 pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.request.as_ref()
+    let initial_data = props
+        .request
+        .as_ref()
         .map(NetworkPolicyFormData::from)
         .unwrap_or_default();
 

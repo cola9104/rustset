@@ -28,8 +28,8 @@ pub fn hash_password(password: &str) -> Result<String, PasswordError> {
 
 /// Verify a plain-text password against a hashed password
 pub fn verify_password(password: &str, hashed_password: &str) -> Result<bool, PasswordError> {
-    let parsed_hash = PasswordHash::new(hashed_password)
-        .map_err(|e| PasswordError::HashError(e.to_string()))?;
+    let parsed_hash =
+        PasswordHash::new(hashed_password).map_err(|e| PasswordError::HashError(e.to_string()))?;
 
     let argon2 = Argon2::default();
 
@@ -61,9 +61,10 @@ pub fn check_password_strength(password: &str) -> usize {
     }
 
     // Only count digits if there are other character types (avoid "12345678" scoring)
-    if password.chars().any(|c| c.is_ascii_digit()) &&
-       (password.chars().any(|c| c.is_ascii_uppercase()) ||
-        password.chars().any(|c| !c.is_alphanumeric())) {
+    if password.chars().any(|c| c.is_ascii_digit())
+        && (password.chars().any(|c| c.is_ascii_uppercase())
+            || password.chars().any(|c| !c.is_alphanumeric()))
+    {
         score += 1;
     }
 

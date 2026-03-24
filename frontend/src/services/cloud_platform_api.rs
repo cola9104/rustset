@@ -1,13 +1,8 @@
+use crate::config::api_base;
+use crate::state::cloud_platform::CloudPlatformConfig;
 use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
-use crate::state::cloud_platform::CloudPlatformConfig;
-use crate::utils::storage::get_token;
-
-const API_BASE: &str = "http://localhost:3003/api";
-
-fn auth_header() -> Result<String, String> {
-    get_token().ok_or_else(|| "未登录，请先登录".to_string())
-}
+use web_sys::RequestCredentials;
 
 /// 后端返回的云平台配置结构
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -53,9 +48,8 @@ impl BackendCloudPlatformConfig {
 
 /// 获取云平台配置列表
 pub async fn fetch_cloud_platform_configs() -> Result<Vec<CloudPlatformConfig>, String> {
-    let token = auth_header()?;
-    let response = Request::get(&format!("{}/cloud-platform-configs", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::get(&format!("{}/cloud-platform-configs", api_base()))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
@@ -105,12 +99,13 @@ impl From<&CloudPlatformConfig> for CreateCloudPlatformConfigRequest {
 }
 
 /// 创建云平台配置
-pub async fn create_cloud_platform_config(config: &CloudPlatformConfig) -> Result<CloudPlatformConfig, String> {
-    let token = auth_header()?;
+pub async fn create_cloud_platform_config(
+    config: &CloudPlatformConfig,
+) -> Result<CloudPlatformConfig, String> {
     let request_body = CreateCloudPlatformConfigRequest::from(config);
 
-    let response = Request::post(&format!("{}/cloud-platform-configs", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::post(&format!("{}/cloud-platform-configs", api_base()))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -127,8 +122,8 @@ pub async fn create_cloud_platform_config(config: &CloudPlatformConfig) -> Resul
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let created: BackendCloudPlatformConfig = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let created: BackendCloudPlatformConfig =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(created.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -136,12 +131,14 @@ pub async fn create_cloud_platform_config(config: &CloudPlatformConfig) -> Resul
 }
 
 /// 更新云平台配置
-pub async fn update_cloud_platform_config(id: i32, config: &CloudPlatformConfig) -> Result<CloudPlatformConfig, String> {
-    let token = auth_header()?;
+pub async fn update_cloud_platform_config(
+    id: i32,
+    config: &CloudPlatformConfig,
+) -> Result<CloudPlatformConfig, String> {
     let request_body = CreateCloudPlatformConfigRequest::from(config);
 
-    let response = Request::put(&format!("{}/cloud-platform-configs/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::put(&format!("{}/cloud-platform-configs/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -158,8 +155,8 @@ pub async fn update_cloud_platform_config(id: i32, config: &CloudPlatformConfig)
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let updated: BackendCloudPlatformConfig = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let updated: BackendCloudPlatformConfig =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(updated.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -168,9 +165,8 @@ pub async fn update_cloud_platform_config(id: i32, config: &CloudPlatformConfig)
 
 /// 删除云平台配置
 pub async fn delete_cloud_platform_config(id: i32) -> Result<(), String> {
-    let token = auth_header()?;
-    let response = Request::delete(&format!("{}/cloud-platform-configs/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::delete(&format!("{}/cloud-platform-configs/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;

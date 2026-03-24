@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::FaTriangleExclamation;
+use dioxus_free_icons::Icon;
 
 /// 确认对话框类型
 #[derive(Clone, Copy, PartialEq)]

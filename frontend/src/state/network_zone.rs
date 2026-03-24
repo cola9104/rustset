@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::{CloudPlatformConfig, MachineRoomConfig};
+use serde::{Deserialize, Serialize};
 
 /// 网络区域 - 用于标记网络访问策略的来源/目标
 ///
@@ -76,8 +76,8 @@ pub fn create_cloud_zone(id: i32, platform: &CloudPlatformConfig) -> NetworkZone
         name: platform.foundation.clone(), // 阿里云、华为云
         cloud_platform_id: Some(platform.id),
         machine_room_id: None,
-        cidr_blocks: Vec::new(),          // 默认为空，需要手动配置
-        ip_ranges: Vec::new(),            // 默认为空，需要手动配置
+        cidr_blocks: Vec::new(), // 默认为空，需要手动配置
+        ip_ranges: Vec::new(),   // 默认为空，需要手动配置
         description: format!("{} ({})", platform.cloud_type, platform.platform_name),
         is_active: platform.status == "active",
     }
@@ -90,8 +90,8 @@ pub fn create_physical_zone(id: i32, room: &MachineRoomConfig) -> NetworkZone {
         name: format!("{}内网", room.room_name), // 市政务云机房A内网、核心机房内网
         cloud_platform_id: None,
         machine_room_id: Some(room.id),
-        cidr_blocks: Vec::new(),          // 默认为空，需要手动配置
-        ip_ranges: Vec::new(),            // 默认为空，需要手动配置
+        cidr_blocks: Vec::new(), // 默认为空，需要手动配置
+        ip_ranges: Vec::new(),   // 默认为空，需要手动配置
         description: format!("{} - {}", room.facility_type, room.room_type),
         is_active: room.status == "active",
     }

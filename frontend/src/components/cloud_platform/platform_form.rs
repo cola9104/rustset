@@ -1,7 +1,7 @@
-use dioxus::prelude::*;
-use crate::state::cloud_platform::CloudPlatformConfig;
 use crate::app::PROVIDERS_STATE;
-use crate::components::common::{Modal, ModalFooter, ErrorMessage};
+use crate::components::common::{ErrorMessage, Modal, ModalFooter};
+use crate::state::cloud_platform::CloudPlatformConfig;
+use dioxus::prelude::*;
 
 /// 表单模式
 #[derive(Clone, Copy, PartialEq)]
@@ -22,8 +22,8 @@ impl FormMode {
 
     pub fn save_text(&self) -> &'static str {
         match self {
-                FormMode::New => "添加",
-                FormMode::Edit => "保存",
+            FormMode::New => "添加",
+            FormMode::Edit => "保存",
         }
     }
 }
@@ -77,7 +77,9 @@ pub struct PlatformFormProps {
 #[component]
 pub fn PlatformForm(props: PlatformFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.config.as_ref()
+    let initial_data = props
+        .config
+        .as_ref()
         .map(PlatformFormData::from_config)
         .unwrap_or_default();
 

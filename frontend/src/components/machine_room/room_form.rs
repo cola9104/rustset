@@ -1,7 +1,7 @@
-use dioxus::prelude::*;
-use crate::state::machine_room::MachineRoomConfig;
 use crate::app::PROVIDERS_STATE;
-use crate::components::common::{Modal, ModalFooter, ErrorMessage};
+use crate::components::common::{ErrorMessage, Modal, ModalFooter};
+use crate::state::machine_room::MachineRoomConfig;
+use dioxus::prelude::*;
 
 /// 表单模式
 #[derive(Clone, Copy, PartialEq)]
@@ -78,7 +78,10 @@ impl From<&MachineRoomConfig> for RoomFormData {
             contact_person: room.contact_person.clone(),
             contact_phone: room.contact_phone.clone(),
             floor: room.floor.clone().unwrap_or_default(),
-            cabinet_count: room.cabinet_count.map(|v| v.to_string()).unwrap_or_default(),
+            cabinet_count: room
+                .cabinet_count
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
             area_size: room.area_size.clone().unwrap_or_default(),
             remarks: room.remarks.clone().unwrap_or_default(),
             status: room.status.clone(),
@@ -88,7 +91,12 @@ impl From<&MachineRoomConfig> for RoomFormData {
 
 impl RoomFormData {
     /// 转换为 MachineRoomConfig
-    pub fn to_config(&self, id: i32, created_at: String, updated_at: Option<String>) -> MachineRoomConfig {
+    pub fn to_config(
+        &self,
+        id: i32,
+        created_at: String,
+        updated_at: Option<String>,
+    ) -> MachineRoomConfig {
         MachineRoomConfig {
             id,
             room_name: self.room_name.clone(),
@@ -99,10 +107,22 @@ impl RoomFormData {
             room_type: self.room_type.clone(),
             contact_person: self.contact_person.clone(),
             contact_phone: self.contact_phone.clone(),
-            floor: if self.floor.is_empty() { None } else { Some(self.floor.clone()) },
+            floor: if self.floor.is_empty() {
+                None
+            } else {
+                Some(self.floor.clone())
+            },
             cabinet_count: self.cabinet_count.parse().ok(),
-            area_size: if self.area_size.is_empty() { None } else { Some(self.area_size.clone()) },
-            remarks: if self.remarks.is_empty() { None } else { Some(self.remarks.clone()) },
+            area_size: if self.area_size.is_empty() {
+                None
+            } else {
+                Some(self.area_size.clone())
+            },
+            remarks: if self.remarks.is_empty() {
+                None
+            } else {
+                Some(self.remarks.clone())
+            },
             status: self.status.clone(),
             created_at,
             updated_at,
@@ -145,7 +165,9 @@ pub struct RoomFormProps {
 #[component]
 pub fn RoomForm(props: RoomFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.room.as_ref()
+    let initial_data = props
+        .room
+        .as_ref()
         .map(RoomFormData::from)
         .unwrap_or_default();
 

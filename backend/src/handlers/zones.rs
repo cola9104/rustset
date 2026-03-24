@@ -1,35 +1,47 @@
-use axum::{
-    extract::{State, Json, Path},
+use crate::database::{
+    db_zone_to_shared, delete_zone as db_delete_zone, get_zones as db_get_zones,
+    insert_zone_wrapper as db_insert_zone, update_zone as db_update_zone,
 };
-use shared::{ZoneConfig, Role};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
-use crate::middleware::{ApiError, AuthUser};
-use crate::database::{get_zones as db_get_zones, insert_zone_wrapper as db_insert_zone, update_zone as db_update_zone, delete_zone as db_delete_zone, db_zone_to_shared};
+use axum::extract::{Json, Path, State};
+use shared::{Role, ZoneConfig};
 use uuid::Uuid;
 
-pub async fn get_zones(State(state): State<AppState>, _user: AuthUser) -> Result<Json<Vec<ZoneConfig>>, ApiError> {
-
+pub async fn get_zones(
+    State(state): State<AppState>,
+    _user: AuthUser,
+) -> Result<Json<Vec<ZoneConfig>>, ApiError> {
     // Try to load from database first
     match db_get_zones().await {
         Ok(db_zones) => {
             let zones: Vec<ZoneConfig> = db_zones.into_iter().map(db_zone_to_shared).collect();
             // Update in-memory cache
-            *state.zones.write()
-                .map_err(|e| ApiError::internal(format!("Failed to write zones cache: {}", e)))? = zones.clone();
+            *state
+                .zones
+                .write()
+                .map_err(|e| ApiError::internal(format!("Failed to write zones cache: {}", e)))? =
+                zones.clone();
             Ok(Json(zones))
         }
         Err(e) => {
             eprintln!("Error loading zones from database: {}", e);
             // Fallback to memory cache
-            let zones = state.zones.read()
+            let zones = state
+                .zones
+                .read()
                 .map_err(|e| ApiError::internal(format!("Failed to read zones cache: {}", e)))?;
             Ok(Json(zones.clone()))
         }
     }
 }
 
-pub async fn create_zone(State(state): State<AppState>, user: AuthUser, Json(req): Json<ZoneConfig>) -> Result<Json<ZoneConfig>, ApiError> {
+pub async fn create_zone(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(req): Json<ZoneConfig>,
+) -> Result<Json<ZoneConfig>, ApiError> {
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
@@ -41,7 +53,9 @@ pub async fn create_zone(State(state): State<AppState>, user: AuthUser, Json(req
 
     // Add to in-memory storage
     {
-        let mut zones = state.zones.write()
+        let mut zones = state
+            .zones
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write zones: {}", e)))?;
         zones.push(new_zone.clone());
     }
@@ -49,18 +63,31 @@ pub async fn create_zone(State(state): State<AppState>, user: AuthUser, Json(req
     // Persist to database
     let _ = db_insert_zone(&new_zone).await;
 
-    log_action_auth(&state.audit_logs, &user, "CREATE_ZONE", &new_zone.name, "Created network zone");
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "CREATE_ZONE",
+        &new_zone.name,
+        "Created network zone",
+    );
     Ok(Json(new_zone))
 }
 
-pub async fn update_zone(State(state): State<AppState>, user: AuthUser, Path(id): Path<String>, Json(req): Json<ZoneConfig>) -> Result<Json<Option<ZoneConfig>>, ApiError> {
+pub async fn update_zone(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<String>,
+    Json(req): Json<ZoneConfig>,
+) -> Result<Json<Option<ZoneConfig>>, ApiError> {
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
     // Find and update zone, then release lock before async operations
     let (found, updated_zone) = {
-        let mut zones = state.zones.write()
+        let mut zones = state
+            .zones
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write zones: {}", e)))?;
         if let Some(zone) = zones.iter_mut().find(|z| z.id == id) {
             zone.name = req.name.clone();
@@ -76,20 +103,32 @@ pub async fn update_zone(State(state): State<AppState>, user: AuthUser, Path(id)
         // Persist to database (after releasing lock)
         let _ = db_update_zone(&id, &updated_zone).await;
 
-        log_action_auth(&state.audit_logs, &user, "UPDATE_ZONE", &updated_zone.name, "Updated zone config");
+        log_action_auth(
+            &state.audit_logs,
+            &user,
+            "UPDATE_ZONE",
+            &updated_zone.name,
+            "Updated zone config",
+        );
         Ok(Json(Some(updated_zone)))
     } else {
         Ok(Json(None))
     }
 }
 
-pub async fn delete_zone(State(state): State<AppState>, user: AuthUser, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
+pub async fn delete_zone(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<String>, ApiError> {
     if user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied: SecAdmin only"));
     }
 
     let zone_name = {
-        let zones = state.zones.read()
+        let zones = state
+            .zones
+            .read()
             .map_err(|e| ApiError::internal(format!("Failed to read zones: {}", e)))?;
         if let Some(z) = zones.iter().find(|z| z.id == id) {
             z.name.clone()
@@ -100,7 +139,9 @@ pub async fn delete_zone(State(state): State<AppState>, user: AuthUser, Path(id)
 
     // Remove from in-memory storage
     {
-        let mut zones = state.zones.write()
+        let mut zones = state
+            .zones
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write zones: {}", e)))?;
         zones.retain(|z| z.id != id);
     }
@@ -108,6 +149,12 @@ pub async fn delete_zone(State(state): State<AppState>, user: AuthUser, Path(id)
     // Persist to database (after releasing lock)
     let _ = db_delete_zone(&id).await;
 
-    log_action_auth(&state.audit_logs, &user, "DELETE_ZONE", &zone_name, "Deleted zone");
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "DELETE_ZONE",
+        &zone_name,
+        "Deleted zone",
+    );
     Ok(Json("Deleted".to_string()))
 }

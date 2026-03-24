@@ -1,18 +1,17 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaShieldHalved,
-    FaEye,
+use super::product_form::{FormMode, ProductForm};
+use crate::app::{CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE, PROVIDERS_STATE};
+use crate::services::{
+    create_security_product, delete_security_product, fetch_cloud_platform_configs,
+    fetch_machine_rooms, fetch_security_products, fetch_service_providers, update_security_product,
 };
 use crate::state::security_product::{
     SecurityProduct, SecurityProductCategory, SecurityProductStatus,
 };
-use crate::app::{PROVIDERS_STATE, CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE};
-use crate::services::{
-    fetch_security_products, create_security_product, update_security_product, delete_security_product,
-    fetch_service_providers, fetch_machine_rooms, fetch_cloud_platform_configs,
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaShieldHalved, FaTrash,
 };
-use super::product_form::{ProductForm, FormMode};
+use dioxus_free_icons::Icon;
 
 /// 安全产品管理页面
 #[component]
@@ -95,19 +94,30 @@ pub fn SecurityProductManagement() -> Element {
 
     // 统计数据
     let total_count = products.read().len() as i32;
-    let active_count = products.read()
+    let active_count = products
+        .read()
         .iter()
         .filter(|p| p.status == SecurityProductStatus::Active)
         .count() as i32;
 
     // 过滤逻辑
-    let filtered_products: Vec<SecurityProduct> = products.read()
+    let filtered_products: Vec<SecurityProduct> = products
+        .read()
         .iter()
         .filter(|product| {
             let matches_search = search_query.read().is_empty()
-                || product.name.to_lowercase().contains(&search_query.read().to_lowercase())
-                || product.vendor.to_lowercase().contains(&search_query.read().to_lowercase())
-                || product.model.to_lowercase().contains(&search_query.read().to_lowercase());
+                || product
+                    .name
+                    .to_lowercase()
+                    .contains(&search_query.read().to_lowercase())
+                || product
+                    .vendor
+                    .to_lowercase()
+                    .contains(&search_query.read().to_lowercase())
+                || product
+                    .model
+                    .to_lowercase()
+                    .contains(&search_query.read().to_lowercase());
 
             let matches_category = *category_filter.read() == "all"
                 || product.category.display_name() == *category_filter.read();
@@ -398,13 +408,15 @@ pub fn SecurityProductManagement() -> Element {
 /// 获取部署位置
 fn get_deployment_location(product: &SecurityProduct) -> String {
     if product.is_cloud_deployment() {
-        CLOUD_PLATFORMS_STATE.read()
+        CLOUD_PLATFORMS_STATE
+            .read()
             .iter()
             .find(|p| p.id == product.cloud_platform_id.unwrap())
             .map(|p| p.platform_name.clone())
             .unwrap_or_else(|| "云平台".to_string())
     } else if product.is_physical_deployment() {
-        MACHINE_ROOMS_STATE.read()
+        MACHINE_ROOMS_STATE
+            .read()
             .iter()
             .find(|r| r.id == product.machine_room_id.unwrap())
             .map(|r| r.room_name.clone())
@@ -416,11 +428,7 @@ fn get_deployment_location(product: &SecurityProduct) -> String {
 
 /// 统计卡片组件
 #[component]
-fn StatCard(
-    title: String,
-    value: String,
-    color: String,
-) -> Element {
+fn StatCard(title: String, value: String, color: String) -> Element {
     let bg_color = match color.as_str() {
         "blue" => "bg-blue-500",
         "green" => "bg-green-500",
@@ -446,13 +454,11 @@ fn StatCard(
 
 /// 查看产品详情模态框
 #[component]
-fn ViewProductModal(
-    product: SecurityProduct,
-    on_close: EventHandler<()>,
-) -> Element {
+fn ViewProductModal(product: SecurityProduct, on_close: EventHandler<()>) -> Element {
     let deployment_location = get_deployment_location(&product);
     let provider_name = match product.provider_id {
-        Some(pid) => PROVIDERS_STATE.read()
+        Some(pid) => PROVIDERS_STATE
+            .read()
             .iter()
             .find(|p| p.id == pid)
             .map(|p| p.short_name.clone())

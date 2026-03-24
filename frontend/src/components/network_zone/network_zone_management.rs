@@ -1,12 +1,12 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaNetworkWired,
-    FaCheck, FaPowerOff, FaServer, FaCloud,
-};
-use crate::state::network_zone::NetworkZone;
+use super::zone_form::{FormMode, ZoneForm};
 use crate::app::NETWORK_ZONES_STATE;
-use super::zone_form::{ZoneForm, FormMode};
+use crate::state::network_zone::NetworkZone;
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaCheck, FaCloud, FaMagnifyingGlass, FaNetworkWired, FaPenToSquare, FaPlus, FaPowerOff,
+    FaServer, FaTrash,
+};
+use dioxus_free_icons::Icon;
 
 /// 网络区域管理页面
 #[allow(non_snake_case)]
@@ -16,11 +16,12 @@ pub fn NetworkZoneManagement() -> Element {
     let mut editing_zone = use_signal(|| None::<NetworkZone>);
 
     // 过滤区域
-    let filtered_zones: Vec<NetworkZone> = NETWORK_ZONES_STATE.read()
+    let filtered_zones: Vec<NetworkZone> = NETWORK_ZONES_STATE
+        .read()
         .iter()
         .filter(|zone| {
             let search_query = search_query.read().to_lowercase();
-            
+
             search_query.is_empty()
                 || zone.name.to_lowercase().contains(&search_query)
                 || zone.description.to_lowercase().contains(&search_query)
@@ -29,8 +30,16 @@ pub fn NetworkZoneManagement() -> Element {
         .collect();
 
     // 统计 - 使用 is_cloud_zone() 和 is_physical_zone() 方法
-    let cloud_count = NETWORK_ZONES_STATE.read().iter().filter(|z| z.is_cloud_zone()).count();
-    let physical_count = NETWORK_ZONES_STATE.read().iter().filter(|z| z.is_physical_zone()).count();
+    let cloud_count = NETWORK_ZONES_STATE
+        .read()
+        .iter()
+        .filter(|z| z.is_cloud_zone())
+        .count();
+    let physical_count = NETWORK_ZONES_STATE
+        .read()
+        .iter()
+        .filter(|z| z.is_physical_zone())
+        .count();
 
     // 删除区域
     let delete_zone = move |id: i32| {

@@ -5,47 +5,50 @@ use axum::{
     http::{header, Method, Request, StatusCode},
     Router,
 };
+use backend::handlers::auth::login;
+use backend::state::AppState;
 use serde_json::json;
 use tower::ServiceExt;
-use backend::state::AppState;
-use backend::handlers::auth::login;
-use shared::LoginRequest;
+use tower_cookies::CookieManagerLayer;
+use tower_sessions::{MemoryStore, SessionManagerLayer};
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
+    std::env::set_var("JWT_SECRET", "test-jwt-secret");
+
     Router::new()
         .route("/api/login", axum::routing::post(login))
         .with_state(state)
+        .layer(SessionManagerLayer::new(MemoryStore::default()))
+        .layer(CookieManagerLayer::new())
 }
 
 /// 创建测试用的 AppState
 async fn create_test_state() -> AppState {
-    use std::sync::{Arc, RwLock};
-    use shared::{User, Role};
-    use chrono::Utc;
     use backend::password;
+    use chrono::Utc;
+    use shared::{Role, User};
+    use std::sync::{Arc, RwLock};
 
     // 创建测试用户
     let password_hash = password::hash_password("admin123").unwrap();
-    let test_users = vec![
-        User {
-            id: "test_user_1".to_string(),
-            username: "admin".to_string(),
-            password: password_hash,
-            role: Role::SysAdmin,
-            permissions: Some(shared::Permissions::sys_admin()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("strong".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: None,
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
-        },
-    ];
+    let test_users = vec![User {
+        id: "test_user_1".to_string(),
+        username: "admin".to_string(),
+        password: password_hash,
+        role: Role::SysAdmin,
+        permissions: Some(shared::Permissions::sys_admin()),
+        created_at: Utc::now(),
+        password_changed_at: Some(Utc::now()),
+        password_strength: Some("strong".to_string()),
+        force_password_change: Some(false),
+        last_login_at: None,
+        email: None,
+        phone: None,
+        status: Some("active".to_string()),
+        failed_login_attempts: Some(0),
+        locked_until: None,
+    }];
 
     AppState {
         assets: Arc::new(RwLock::new(vec![])),
@@ -87,10 +90,13 @@ async fn test_login_success() {
         .method(Method::POST)
         .uri("/api/login")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin",
-            "password": "admin123"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "username": "admin",
+                "password": "admin123"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -107,10 +113,13 @@ async fn test_login_invalid_credentials() {
         .method(Method::POST)
         .uri("/api/login")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin",
-            "password": "wrongpassword"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "username": "admin",
+                "password": "wrongpassword"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -127,10 +136,13 @@ async fn test_login_user_not_found() {
         .method(Method::POST)
         .uri("/api/login")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "nonexistent",
-            "password": "password"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "username": "nonexistent",
+                "password": "password"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -147,9 +159,12 @@ async fn test_login_missing_fields() {
         .method(Method::POST)
         .uri("/api/login")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "admin"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "username": "admin"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();

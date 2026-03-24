@@ -7,9 +7,9 @@ use axum::{
     response::{IntoResponse, Json},
 };
 
-use crate::state::AppState;
+use crate::database::{get_all_cloud_provider_configs, get_business_resources};
 use crate::middleware::AuthUser;
-use crate::database::{get_business_resources, get_all_cloud_provider_configs};
+use crate::state::AppState;
 use shared::{CloudServiceAsset, CloudServiceAssetQuery, CloudServiceAssetStats};
 
 /// Get all cloud service assets (unified view of physical and virtual machines)
@@ -32,27 +32,30 @@ pub async fn get_cloud_service_assets(
         match get_all_cloud_provider_configs(&db_conn).await {
             Ok(configs) => {
                 // Convert to shared::CloudProviderConfig
-                configs.into_iter().filter_map(|db| {
-                    let provider = serde_json::from_str(&db.provider).ok()?;
-                    Some(shared::CloudProviderConfig {
-                        id: Some(db.id),
-                        zone_id: Some(db.zone_id),
-                        platform_id: Some(db.platform_id),
-                        provider,
-                        region_id: db.region_id,
-                        region_name: db.region_name,
-                        available_zones: vec![],
-                        account_name: db.account_name,
-                        access_key_id: db.access_key_id,
-                        access_key_secret: db.access_key_secret,
-                        status: shared::CloudProviderConfigStatus::Inactive,
-                        remarks: db.remarks,
-                        last_test_time: None,
-                        last_test_result: db.last_test_result,
-                        created_at: chrono::Utc::now(),
-                        updated_at: None,
+                configs
+                    .into_iter()
+                    .filter_map(|db| {
+                        let provider = serde_json::from_str(&db.provider).ok()?;
+                        Some(shared::CloudProviderConfig {
+                            id: Some(db.id),
+                            zone_id: Some(db.zone_id),
+                            platform_id: Some(db.platform_id),
+                            provider,
+                            region_id: db.region_id,
+                            region_name: db.region_name,
+                            available_zones: vec![],
+                            account_name: db.account_name,
+                            access_key_id: db.access_key_id,
+                            access_key_secret: db.access_key_secret,
+                            status: shared::CloudProviderConfigStatus::Inactive,
+                            remarks: db.remarks,
+                            last_test_time: None,
+                            last_test_result: db.last_test_result,
+                            created_at: chrono::Utc::now(),
+                            updated_at: None,
+                        })
                     })
-                }).collect::<Vec<_>>()
+                    .collect::<Vec<_>>()
             }
             Err(_) => vec![],
         }
@@ -60,87 +63,96 @@ pub async fn get_cloud_service_assets(
         vec![]
     };
 
-    let mut assets: Vec<CloudServiceAsset> = business_resources.into_iter()
+    let mut assets: Vec<CloudServiceAsset> = business_resources
+        .into_iter()
         .filter(|br| {
             // 只显示已交付的资源（包括物理机和云资源）
             // 这些资源是从云资源申请流转过来的
-            br.delivery_status.as_ref().map(|s| s == "已交付").unwrap_or(false)
+            br.delivery_status
+                .as_ref()
+                .map(|s| s == "已交付")
+                .unwrap_or(false)
         })
         .map(|br| {
-        CloudServiceAsset {
-            // 基础标识
-            id: format!("{}-{}", br.resource_type, br.id),
-            asset_type: if br.resource_type == "cloud" { "virtual".to_string() } else { br.resource_type.clone() },
-            source_type: "business_resource".to_string(),
+            CloudServiceAsset {
+                // 基础标识
+                id: format!("{}-{}", br.resource_type, br.id),
+                asset_type: if br.resource_type == "cloud" {
+                    "virtual".to_string()
+                } else {
+                    br.resource_type.clone()
+                },
+                source_type: "business_resource".to_string(),
 
-            // 基本信息
-            name: br.ecs_name,
-            instance_id: br.instance_id,
-            status: br.ecs_status,
-            region: br.county_city,
-            cloud_zone: br.zone_name.clone().unwrap_or_else(|| "-".to_string()),
-            cloud_service: br.platform_name.clone(),
-            cloud_platform: br.cloud_category,
+                // 基本信息
+                name: br.ecs_name,
+                instance_id: br.instance_id,
+                status: br.ecs_status,
+                region: br.county_city,
+                cloud_zone: br.zone_name.clone().unwrap_or_else(|| "-".to_string()),
+                cloud_service: br.platform_name.clone(),
+                cloud_platform: br.cloud_category,
 
-            // 实例配置
-            instance_type: br.ecs_type,
-            cpu_cores: br.cpu_cores as u32,
-            memory_gb: br.memory_gb as u32,
-            system_disk_type: br.system_disk,
-            system_disk_size_gb: br.system_disk_size_gb as u32,
-            data_disk_info: br.data_disk,
+                // 实例配置
+                instance_type: br.ecs_type,
+                cpu_cores: br.cpu_cores as u32,
+                memory_gb: br.memory_gb as u32,
+                system_disk_type: br.system_disk,
+                system_disk_size_gb: br.system_disk_size_gb as u32,
+                data_disk_info: br.data_disk,
 
-            // 操作系统
-            os_type: "Linux".to_string(), // Default, could be parsed from ecs_os
-            os_name: br.ecs_os,
+                // 操作系统
+                os_type: "Linux".to_string(), // Default, could be parsed from ecs_os
+                os_name: br.ecs_os,
 
-            // 网络信息
-            ip_address: br.ip_address,
-            public_ip: None,
-            ipv6_address: None,
+                // 网络信息
+                ip_address: br.ip_address,
+                public_ip: None,
+                ipv6_address: None,
 
-            // 业务信息
-            customer_name: br.customer_name,
-            department: None,
-            project: br.application_name.clone(),
-            application_name: br.application_name,
-            contract_name: br.contract_name,
-            owner_name: None, // Not directly available in business_resource
+                // 业务信息
+                customer_name: br.customer_name,
+                department: None,
+                project: br.application_name.clone(),
+                application_name: br.application_name,
+                contract_name: br.contract_name,
+                owner_name: None, // Not directly available in business_resource
 
-            // 访问信息
-            login_method: br.ecs_login_method,
-            login_username: br.ecs_login_username,
-            bastion_address: br.bastion_address,
-            bastion_account: br.bastion_admin_account,
-            bastion_initial_password: br.bastion_initial_password,
+                // 访问信息
+                login_method: br.ecs_login_method,
+                login_username: br.ecs_login_username,
+                bastion_address: br.bastion_address,
+                bastion_account: br.bastion_admin_account,
+                bastion_initial_password: br.bastion_initial_password,
 
-            // 物理机特有信息
-            serial_number: br.serial_number,
-            rack_location: br.rack_location,
-            hardware_model: br.hardware_model,
-            warranty_expiry: br.warranty_expiry,
-            agent_status: br.agent_status,
-            ipmi_address: br.ipmi_address,
+                // 物理机特有信息
+                serial_number: br.serial_number,
+                rack_location: br.rack_location,
+                hardware_model: br.hardware_model,
+                warranty_expiry: br.warranty_expiry,
+                agent_status: br.agent_status,
+                ipmi_address: br.ipmi_address,
 
-            // 云虚拟机特有信息
-            billing_mode: None,
-            expire_time: br.release_time,
-            charge_type: None,
+                // 云虚拟机特有信息
+                billing_mode: None,
+                expire_time: br.release_time,
+                charge_type: None,
 
-            // 时间信息
-            created_at: br.created_at,
-            updated_at: br.updated_at,
-            last_synced: None,
+                // 时间信息
+                created_at: br.created_at,
+                updated_at: br.updated_at,
+                last_synced: None,
 
-            // 其他
-            tags: None,
-            remarks: br.remarks,
+                // 其他
+                tags: None,
+                remarks: br.remarks,
 
-            // 关联ID
-            business_resource_id: Some(br.id),
-            cloud_asset_id: None,
-        }
-    }).collect();
+                // 关联ID
+                business_resource_id: Some(br.id),
+                cloud_asset_id: None,
+            }
+        })
+        .collect();
 
     // Apply filters
     if let Some(asset_type) = &query.asset_type {
@@ -159,7 +171,11 @@ pub async fn get_cloud_service_assets(
         assets.retain(|a| a.customer_name.contains(customer_name));
     }
     if let Some(department) = &query.department {
-        assets.retain(|a| a.department.as_ref().is_some_and(|d| d.contains(department)));
+        assets.retain(|a| {
+            a.department
+                .as_ref()
+                .is_some_and(|d| d.contains(department))
+        });
     }
     if let Some(project) = &query.project {
         assets.retain(|a| a.project.as_ref().is_some_and(|p| p.contains(project)));
@@ -206,27 +222,30 @@ pub async fn get_cloud_service_stats(
         match get_all_cloud_provider_configs(&db_conn).await {
             Ok(configs) => {
                 // Convert to shared::CloudProviderConfig
-                configs.into_iter().filter_map(|db| {
-                    let provider = serde_json::from_str(&db.provider).ok()?;
-                    Some(shared::CloudProviderConfig {
-                        id: Some(db.id),
-                        zone_id: Some(db.zone_id),
-                        platform_id: Some(db.platform_id),
-                        provider,
-                        region_id: db.region_id,
-                        region_name: db.region_name,
-                        available_zones: vec![],
-                        account_name: db.account_name,
-                        access_key_id: db.access_key_id,
-                        access_key_secret: db.access_key_secret,
-                        status: shared::CloudProviderConfigStatus::Inactive,
-                        remarks: db.remarks,
-                        last_test_time: None,
-                        last_test_result: db.last_test_result,
-                        created_at: chrono::Utc::now(),
-                        updated_at: None,
+                configs
+                    .into_iter()
+                    .filter_map(|db| {
+                        let provider = serde_json::from_str(&db.provider).ok()?;
+                        Some(shared::CloudProviderConfig {
+                            id: Some(db.id),
+                            zone_id: Some(db.zone_id),
+                            platform_id: Some(db.platform_id),
+                            provider,
+                            region_id: db.region_id,
+                            region_name: db.region_name,
+                            available_zones: vec![],
+                            account_name: db.account_name,
+                            access_key_id: db.access_key_id,
+                            access_key_secret: db.access_key_secret,
+                            status: shared::CloudProviderConfigStatus::Inactive,
+                            remarks: db.remarks,
+                            last_test_time: None,
+                            last_test_result: db.last_test_result,
+                            created_at: chrono::Utc::now(),
+                            updated_at: None,
+                        })
                     })
-                }).collect::<Vec<_>>()
+                    .collect::<Vec<_>>()
             }
             Err(_) => vec![],
         }
@@ -235,13 +254,25 @@ pub async fn get_cloud_service_stats(
     };
 
     // 只统计已交付的资源
-    let delivered_resources: Vec<_> = business_resources.iter()
-        .filter(|r| r.delivery_status.as_ref().map(|s| s == "已交付").unwrap_or(false))
+    let delivered_resources: Vec<_> = business_resources
+        .iter()
+        .filter(|r| {
+            r.delivery_status
+                .as_ref()
+                .map(|s| s == "已交付")
+                .unwrap_or(false)
+        })
         .collect();
 
     let total = delivered_resources.len() as u32;
-    let running = delivered_resources.iter().filter(|r| r.ecs_status == "运行中").count() as u32;
-    let stopped = delivered_resources.iter().filter(|r| r.ecs_status == "已释放").count() as u32;
+    let running = delivered_resources
+        .iter()
+        .filter(|r| r.ecs_status == "运行中")
+        .count() as u32;
+    let stopped = delivered_resources
+        .iter()
+        .filter(|r| r.ecs_status == "已释放")
+        .count() as u32;
     let total_cpu: u32 = delivered_resources.iter().map(|r| r.cpu_cores as u32).sum();
     let total_memory: u32 = delivered_resources.iter().map(|r| r.memory_gb as u32).sum();
 
@@ -249,7 +280,8 @@ pub async fn get_cloud_service_stats(
     let mut by_provider = std::collections::HashMap::new();
     for r in &business_resources {
         let provider = if let Some(config_id) = r.cloud_provider_config_id {
-            provider_configs.iter()
+            provider_configs
+                .iter()
                 .find(|c| c.id == Some(config_id))
                 .map(|c| c.provider.as_str().to_string())
                 .unwrap_or_else(|| "Unknown".to_string())
@@ -276,18 +308,27 @@ pub async fn get_cloud_service_stats(
     // Calculate expiring soon count (within 30 days)
     let now = chrono::Utc::now();
     let thirty_days_later = now + chrono::Duration::days(30);
-    let expiring_soon = delivered_resources.iter()
+    let expiring_soon = delivered_resources
+        .iter()
         .filter(|r| {
             if let Some(expiry) = &r.warranty_expiry {
                 // Try to parse the expiry date
-                if let Ok(expiry_date) = chrono::NaiveDateTime::parse_from_str(expiry, "%Y-%m-%d %H:%M:%S") {
-                    let expiry_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(expiry_date, chrono::Utc);
+                if let Ok(expiry_date) =
+                    chrono::NaiveDateTime::parse_from_str(expiry, "%Y-%m-%d %H:%M:%S")
+                {
+                    let expiry_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                        expiry_date,
+                        chrono::Utc,
+                    );
                     return expiry_utc <= thirty_days_later && expiry_utc > now;
                 }
                 // Try date-only format
                 if let Ok(expiry_date) = chrono::NaiveDate::parse_from_str(expiry, "%Y-%m-%d") {
                     if let Some(expiry_datetime) = expiry_date.and_hms_opt(23, 59, 59) {
-                        let expiry_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(expiry_datetime, chrono::Utc);
+                        let expiry_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                            expiry_datetime,
+                            chrono::Utc,
+                        );
                         return expiry_utc <= thirty_days_later && expiry_utc > now;
                     }
                 }

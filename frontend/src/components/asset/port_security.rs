@@ -3,9 +3,9 @@ use std::collections::HashSet;
 /// 端口安全状态
 #[derive(Clone, Debug, PartialEq)]
 pub enum PortSecurityStatus {
-    Protected,       // 已受防火墙策略保护
-    Unprotected,     // 未受保护（存在风险）
-    Partial,         // 部分端口受保护
+    Protected,   // 已受防火墙策略保护
+    Unprotected, // 未受保护（存在风险）
+    Partial,     // 部分端口受保护
 }
 
 impl PortSecurityStatus {
@@ -39,7 +39,7 @@ impl PortSecurityStatus {
 pub struct PortSecurityInfo {
     pub port: String,
     pub status: PortSecurityStatus,
-    pub policies: Vec<String>,  // 关联的策略名称
+    pub policies: Vec<String>, // 关联的策略名称
 }
 
 impl PortSecurityInfo {
@@ -58,7 +58,7 @@ pub struct FirewallPolicySummary {
     pub id: i32,
     pub title: String,
     pub port_range: String,
-    pub status: String,  // "Active" 表示已生效
+    pub status: String, // "Active" 表示已生效
 }
 
 impl FirewallPolicySummary {
@@ -76,7 +76,7 @@ impl FirewallPolicySummary {
                 if range_parts.len() == 2 {
                     if let (Ok(start), Ok(end)) = (
                         range_parts[0].trim().parse::<u16>(),
-                        range_parts[1].trim().parse::<u16>()
+                        range_parts[1].trim().parse::<u16>(),
                     ) {
                         for port in start..=end {
                             ports.insert(port);
@@ -107,7 +107,8 @@ pub fn analyze_port_security(
 
     // 收集所有已生效策略保护的端口
     let mut protected_ports: HashSet<u16> = HashSet::new();
-    let mut port_to_policies: std::collections::HashMap<u16, Vec<String>> = std::collections::HashMap::new();
+    let mut port_to_policies: std::collections::HashMap<u16, Vec<String>> =
+        std::collections::HashMap::new();
 
     for policy in firewall_policies {
         if policy.status != "Active" && policy.status != "已生效" {
@@ -149,7 +150,7 @@ pub fn analyze_port_security(
             if range_parts.len() == 2 {
                 if let (Ok(start), Ok(end)) = (
                     range_parts[0].trim().parse::<u16>(),
-                    range_parts[1].trim().parse::<u16>()
+                    range_parts[1].trim().parse::<u16>(),
                 ) {
                     let mut all_protected = true;
                     let mut any_protected = false;
@@ -199,7 +200,7 @@ pub fn parse_port_string(port_str: &str) -> HashSet<u16> {
             if range_parts.len() == 2 {
                 if let (Ok(start), Ok(end)) = (
                     range_parts[0].trim().parse::<u16>(),
-                    range_parts[1].trim().parse::<u16>()
+                    range_parts[1].trim().parse::<u16>(),
                 ) {
                     for port in start..=end {
                         ports.insert(port);
@@ -214,9 +215,18 @@ pub fn parse_port_string(port_str: &str) -> HashSet<u16> {
 
 /// 获取整体安全状态摘要
 pub fn get_security_summary(port_infos: &[PortSecurityInfo]) -> (usize, usize, usize) {
-    let protected = port_infos.iter().filter(|p| p.status == PortSecurityStatus::Protected).count();
-    let unprotected = port_infos.iter().filter(|p| p.status == PortSecurityStatus::Unprotected).count();
-    let partial = port_infos.iter().filter(|p| p.status == PortSecurityStatus::Partial).count();
+    let protected = port_infos
+        .iter()
+        .filter(|p| p.status == PortSecurityStatus::Protected)
+        .count();
+    let unprotected = port_infos
+        .iter()
+        .filter(|p| p.status == PortSecurityStatus::Unprotected)
+        .count();
+    let partial = port_infos
+        .iter()
+        .filter(|p| p.status == PortSecurityStatus::Partial)
+        .count();
 
     (protected, unprotected, partial)
 }

@@ -1,9 +1,10 @@
 //! IP Zones Management Page
 
+use crate::config::{ip_find_zone_url, ip_zones_url};
+use crate::utils::storage::authorization_header;
 use dioxus::prelude::*;
 use shared::ZoneConfig;
-use crate::utils::storage::get_token;
-use crate::config::{ip_zones_url, ip_find_zone_url};
+use web_sys::RequestCredentials;
 
 /// IP Zones 页面
 #[component]
@@ -17,12 +18,13 @@ pub fn IpZonesPage() -> Element {
     let _load_zones = move |_: dioxus::events::MouseEvent| async move {
         loading.set(true);
         // API 调用
-        let token = get_token().unwrap_or_default();
-        if let Ok(response) = gloo_net::http::Request::get(&ip_zones_url())
-            .header("Authorization", &token)
-            .send()
-            .await
-        {
+        let mut request =
+            gloo_net::http::Request::get(&ip_zones_url()).credentials(RequestCredentials::Include);
+        if let Some(header) = authorization_header() {
+            request = request.header("Authorization", &header);
+        }
+
+        if let Ok(response) = request.send().await {
             if let Ok(data) = response.json::<Vec<ZoneConfig>>().await {
                 zones.set(data);
             }
@@ -34,20 +36,21 @@ pub fn IpZonesPage() -> Element {
     let find_zone = move |_| {
         let ip = search_ip();
         async move {
-            if ip.is_empty() { return; }
+            if ip.is_empty() {
+                return;
+            }
 
-            let token = get_token().unwrap_or_default();
-            if let Ok(response) = gloo_net::http::Request::get(
-                &ip_find_zone_url(&ip)
-            )
-            .header("Authorization", &token)
-            .send()
-            .await
-            {
+            let mut request = gloo_net::http::Request::get(&ip_find_zone_url(&ip))
+                .credentials(RequestCredentials::Include);
+            if let Some(header) = authorization_header() {
+                request = request.header("Authorization", &header);
+            }
+
+            if let Ok(response) = request.send().await {
                 if let Ok(data) = response.json::<serde_json::Value>().await {
                     found_zone.set(Some((
                         data["zone"].as_str().unwrap_or("").to_string(),
-                        data["matched_cidr"].as_str().unwrap_or("N/A").to_string()
+                        data["matched_cidr"].as_str().unwrap_or("N/A").to_string(),
                     )));
                 }
             }
@@ -57,7 +60,7 @@ pub fn IpZonesPage() -> Element {
     rsx! {
         div { class: "ip-zones-page",
             h1 { "IP Zones Management" }
-            
+
             // IP 查找
             div { class: "search-section",
                 h3 { "Find Zone by IP" }
@@ -68,7 +71,7 @@ pub fn IpZonesPage() -> Element {
                     oninput: move |e| search_ip.set(e.value())
                 }
                 button { onclick: find_zone, "Find Zone" }
-                
+
                 if let Some((zone, cidr)) = found_zone() {
                     div { class: "result",
                         p { "Zone: {zone}" }
@@ -76,11 +79,11 @@ pub fn IpZonesPage() -> Element {
                     }
                 }
             }
-            
+
             // Zones 列表
             div { class: "zones-list",
                 h3 { "Configured Zones" }
-                
+
                 if *loading.read() {
                     p { "Loading..." }
                 } else {

@@ -233,11 +233,26 @@ mod tests {
 
     #[test]
     fn test_api_error_status_code() {
-        assert_eq!(ApiError::unauthorized("test").status_code(), StatusCode::UNAUTHORIZED);
-        assert_eq!(ApiError::forbidden("test").status_code(), StatusCode::FORBIDDEN);
-        assert_eq!(ApiError::not_found("test").status_code(), StatusCode::NOT_FOUND);
-        assert_eq!(ApiError::bad_request("test").status_code(), StatusCode::BAD_REQUEST);
-        assert_eq!(ApiError::internal("test").status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            ApiError::unauthorized("test").status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            ApiError::forbidden("test").status_code(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            ApiError::not_found("test").status_code(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ApiError::bad_request("test").status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ApiError::internal("test").status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]

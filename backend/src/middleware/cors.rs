@@ -1,7 +1,7 @@
 //! CORS Middleware Configuration
 
+use axum::http::{header, HeaderValue, Method};
 use tower_http::cors::{Any, CorsLayer};
-use axum::http::{Method, header, HeaderValue};
 
 /// 创建 CORS 中间件
 /// 根据环境变量 FRONTEND_URL 配置允许的来源
@@ -18,7 +18,8 @@ pub fn create_cors_layer() -> CorsLayer {
 
         // 如果所有 URL 都有效，使用它们
         if origins.iter().all(|r| r.is_ok()) {
-            let valid_origins: Vec<HeaderValue> = origins.into_iter().filter_map(|r| r.ok()).collect();
+            let valid_origins: Vec<HeaderValue> =
+                origins.into_iter().filter_map(|r| r.ok()).collect();
 
             return CorsLayer::new()
                 .allow_origin(valid_origins)
@@ -30,11 +31,7 @@ pub fn create_cors_layer() -> CorsLayer {
                     Method::OPTIONS,
                     Method::PATCH,
                 ])
-                .allow_headers([
-                    header::AUTHORIZATION,
-                    header::CONTENT_TYPE,
-                    header::ACCEPT,
-                ])
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
                 .allow_credentials(true);
         }
     }
@@ -50,10 +47,6 @@ pub fn create_cors_layer() -> CorsLayer {
             Method::OPTIONS,
             Method::PATCH,
         ])
-        .allow_headers([
-            header::AUTHORIZATION,
-            header::CONTENT_TYPE,
-            header::ACCEPT,
-        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
         .allow_credentials(false)
 }

@@ -3,11 +3,11 @@
 //! 提供 API 健康检查和指标端点
 
 use axum::{extract::State, Json};
-use serde::Serialize;
 use chrono::Utc;
+use serde::Serialize;
 
-use crate::state::AppState;
 use crate::database::get_db;
+use crate::state::AppState;
 
 /// 健康检查响应
 #[derive(Debug, Serialize)]
@@ -42,9 +42,7 @@ fn get_start_time() -> std::time::Instant {
 }
 
 /// 健康检查端点
-pub async fn health_check(
-    State(state): State<AppState>,
-) -> Json<HealthResponse> {
+pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
     // 检查数据库连接
     let db_connected = get_db().is_some();
 
@@ -54,11 +52,7 @@ pub async fn health_check(
     let tasks_count = state.tasks.read().map(|t| t.len()).unwrap_or(0);
     let audit_logs_count = state.audit_logs.read().map(|l| l.len()).unwrap_or(0);
 
-    let status = if db_connected {
-        "healthy"
-    } else {
-        "degraded"
-    };
+    let status = if db_connected { "healthy" } else { "degraded" };
 
     Json(HealthResponse {
         status: status.to_string(),
@@ -78,9 +72,7 @@ pub async fn health_check(
 }
 
 /// 就绪检查端点
-pub async fn readiness_check(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn readiness_check(State(state): State<AppState>) -> Json<serde_json::Value> {
     // 检查数据库连接
     let db_ready = get_db().is_some() && state.users.read().is_ok();
 
@@ -102,9 +94,7 @@ pub async fn liveness_check() -> Json<serde_json::Value> {
 }
 
 /// Prometheus 指标端点
-pub async fn metrics(
-    State(state): State<AppState>,
-) -> String {
+pub async fn metrics(State(state): State<AppState>) -> String {
     let users_count = state.users.read().map(|u| u.len()).unwrap_or(0);
     let assets_count = state.assets.read().map(|a| a.len()).unwrap_or(0);
     let tasks_count = state.tasks.read().map(|t| t.len()).unwrap_or(0);
@@ -138,11 +128,6 @@ rustset_audit_logs_total {}
 # TYPE rustset_uptime_seconds counter
 rustset_uptime_seconds {}
 "#,
-        users_count,
-        assets_count,
-        tasks_count,
-        risks_count,
-        audit_logs_count,
-        uptime
+        users_count, assets_count, tasks_count, risks_count, audit_logs_count, uptime
     )
 }

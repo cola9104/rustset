@@ -1,12 +1,11 @@
-use dioxus::prelude::*;
-use dioxus_router::Link;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaHouse, FaServer, FaList, FaTriangleExclamation, FaFileLines,
-    FaBriefcase, FaUsers, FaKey, FaLock, FaCloud, FaBuilding, FaNetworkWired,
-    FaEarthAmericas, FaShieldHalved,
-};
 use crate::router::Route;
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaBriefcase, FaBuilding, FaCloud, FaEarthAmericas, FaFileLines, FaHouse, FaKey, FaList, FaLock,
+    FaNetworkWired, FaServer, FaShieldHalved, FaTriangleExclamation, FaUsers,
+};
+use dioxus_free_icons::Icon;
+use dioxus_router::Link;
 
 /// 侧边栏组件
 #[component]

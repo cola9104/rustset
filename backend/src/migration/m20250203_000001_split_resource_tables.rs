@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use sea_orm_migration::schema::{pk_auto, string, integer};
+use sea_orm_migration::schema::{integer, pk_auto, string};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -15,7 +15,11 @@ impl MigrationTrait for Migration {
                     .table(PhysicalMachines::Table)
                     .if_not_exists()
                     .col(pk_auto(PhysicalMachines::Id))
-                    .col(integer(PhysicalMachines::BusinessResourceId).not_null().unique_key())
+                    .col(
+                        integer(PhysicalMachines::BusinessResourceId)
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(string(PhysicalMachines::SerialNumber)) // 设备序列号
                     .col(string(PhysicalMachines::RackLocation)) // 机架位置
                     .col(string(PhysicalMachines::HardwareModel)) // 硬件型号
@@ -27,9 +31,12 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_physical_machines_business_resource_id")
-                            .from(PhysicalMachines::Table, PhysicalMachines::BusinessResourceId)
+                            .from(
+                                PhysicalMachines::Table,
+                                PhysicalMachines::BusinessResourceId,
+                            )
                             .to(BusinessResources::Table, BusinessResources::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )
@@ -42,7 +49,11 @@ impl MigrationTrait for Migration {
                     .table(CloudVirtualMachines::Table)
                     .if_not_exists()
                     .col(pk_auto(CloudVirtualMachines::Id))
-                    .col(integer(CloudVirtualMachines::BusinessResourceId).not_null().unique_key())
+                    .col(
+                        integer(CloudVirtualMachines::BusinessResourceId)
+                            .not_null()
+                            .unique_key(),
+                    )
                     .col(string(CloudVirtualMachines::BillingMode)) // 计费模式
                     .col(string(CloudVirtualMachines::ExpireTime)) // 到期时间
                     .col(string(CloudVirtualMachines::ChargeType)) // 付费类型
@@ -58,9 +69,12 @@ impl MigrationTrait for Migration {
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_cloud_virtual_machines_business_resource_id")
-                            .from(CloudVirtualMachines::Table, CloudVirtualMachines::BusinessResourceId)
+                            .from(
+                                CloudVirtualMachines::Table,
+                                CloudVirtualMachines::BusinessResourceId,
+                            )
                             .to(BusinessResources::Table, BusinessResources::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

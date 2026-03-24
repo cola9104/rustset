@@ -6,15 +6,15 @@
 //! - 批量端口绑定
 
 use axum::{
-    extract::{State, Path, Json},
+    extract::{Json, Path, State},
     http::HeaderMap,
 };
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
+use crate::middleware::ApiError;
 use crate::state::AppState;
 use crate::utils::get_current_user;
-use crate::middleware::ApiError;
 
 /// 端口详细信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +95,7 @@ pub fn get_port_risk(port: u16, service: Option<&str>) -> String {
     let high_risk = [21, 23, 445, 135, 139, 3389];
     // 中风险端口
     let medium_risk = [22, 25, 80, 8080, 8443];
-    
+
     if high_risk.contains(&port) {
         "high".to_string()
     } else if medium_risk.contains(&port) {
@@ -117,7 +117,9 @@ pub async fn get_port_details(
     _headers: HeaderMap,
 ) -> Result<Json<Vec<PortDetail>>, ApiError> {
     // 从内存中获取（实际应从数据库）
-    let ports = state.port_details.read()
+    let ports = state
+        .port_details
+        .read()
         .map_err(|e| ApiError::internal(format!("Failed to read ports: {}", e)))?;
     Ok(Json(ports.clone()))
 }
@@ -128,10 +130,13 @@ pub async fn get_port_detail(
     _headers: HeaderMap,
     Path(id): Path<i32>,
 ) -> Result<Json<PortDetail>, ApiError> {
-    let ports = state.port_details.read()
+    let ports = state
+        .port_details
+        .read()
         .map_err(|e| ApiError::internal(format!("Failed to read ports: {}", e)))?;
-    
-    ports.iter()
+
+    ports
+        .iter()
         .find(|p| p.id == Some(id))
         .cloned()
         .map(Json)
@@ -144,7 +149,9 @@ pub async fn create_port_detail(
     _headers: HeaderMap,
     Json(req): Json<CreatePortDetailRequest>,
 ) -> Result<Json<PortDetail>, ApiError> {
-    let mut ports = state.port_details.write()
+    let mut ports = state
+        .port_details
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to write ports: {}", e)))?;
 
     // 自动识别服务
@@ -157,9 +164,10 @@ pub async fn create_port_detail(
     };
 
     // 自动评估风险
-    let risk_level = req.risk_level.clone().unwrap_or_else(|| {
-        get_port_risk(req.port, service.as_deref())
-    });
+    let risk_level = req
+        .risk_level
+        .clone()
+        .unwrap_or_else(|| get_port_risk(req.port, service.as_deref()));
 
     let new_port = PortDetail {
         id: Some(ports.len() as i32 + 1),
@@ -185,10 +193,13 @@ pub async fn update_port_detail(
     Path(id): Path<i32>,
     Json(req): Json<CreatePortDetailRequest>,
 ) -> Result<Json<PortDetail>, ApiError> {
-    let mut ports = state.port_details.write()
+    let mut ports = state
+        .port_details
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to write ports: {}", e)))?;
 
-    let port = ports.iter_mut()
+    let port = ports
+        .iter_mut()
         .find(|p| p.id == Some(id))
         .ok_or_else(|| ApiError::not_found("Port detail not found"))?;
 
@@ -210,7 +221,9 @@ pub async fn delete_port_detail(
     _headers: HeaderMap,
     Path(id): Path<i32>,
 ) -> Result<Json<String>, ApiError> {
-    let mut ports = state.port_details.write()
+    let mut ports = state
+        .port_details
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to write ports: {}", e)))?;
 
     let initial_len = ports.len();
@@ -232,19 +245,24 @@ pub async fn batch_bind_ports(
     let _user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    let mut assets = state.assets.write()
+    let mut assets = state
+        .assets
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to write assets: {}", e)))?;
 
-    let asset = assets.iter_mut()
+    let asset = assets
+        .iter_mut()
         .find(|a| a.id == Some(req.asset_id))
         .ok_or_else(|| ApiError::not_found("Asset not found"))?;
 
-    let port_infos: Vec<shared::PortInfo> = req.ports.into_iter()
+    let port_infos: Vec<shared::PortInfo> = req
+        .ports
+        .into_iter()
         .map(|p| {
             let service = identify_service(p.port, &p.protocol)
                 .map(|(s, _)| Some(s.clone()))
                 .unwrap_or(p.service.clone());
-            
+
             shared::PortInfo {
                 port: p.port,
                 is_open: true,

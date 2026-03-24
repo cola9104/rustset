@@ -18,55 +18,147 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(ResourceTicket::ResourceType).string().not_null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::ResourceType)
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::EcsName).string().not_null())
-                    .col(ColumnDef::new(ResourceTicket::TicketStatus).string().not_null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::TicketStatus)
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::ProviderId).integer().null())
                     .col(ColumnDef::new(ResourceTicket::ProviderName).string().null())
-                    .col(ColumnDef::new(ResourceTicket::CloudPlatformId).integer().null())
-                    .col(ColumnDef::new(ResourceTicket::CloudPlatformName).string().null())
-                    .col(ColumnDef::new(ResourceTicket::MachineRoomId).integer().null())
-                    .col(ColumnDef::new(ResourceTicket::MachineRoomName).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::CloudPlatformId)
+                            .integer()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::CloudPlatformName)
+                            .string()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::MachineRoomId)
+                            .integer()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::MachineRoomName)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::CloudRegion).string().null())
-                    .col(ColumnDef::new(ResourceTicket::CloudCategory).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::CloudCategory)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::ZoneName).string().null())
                     .col(ColumnDef::new(ResourceTicket::ZoneCabinet).string().null())
-                    .col(ColumnDef::new(ResourceTicket::RackUnits).integer().default(0))
+                    .col(
+                        ColumnDef::new(ResourceTicket::RackUnits)
+                            .integer()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(ResourceTicket::CustomerName).string().null())
-                    .col(ColumnDef::new(ResourceTicket::ApplicationName).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::ApplicationName)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::ContractName).string().null())
                     .col(ColumnDef::new(ResourceTicket::EcsType).string().null())
                     .col(ColumnDef::new(ResourceTicket::EcsOs).string().null())
-                    .col(ColumnDef::new(ResourceTicket::CpuCores).integer().default(0))
-                    .col(ColumnDef::new(ResourceTicket::MemoryGb).integer().default(0))
+                    .col(
+                        ColumnDef::new(ResourceTicket::CpuCores)
+                            .integer()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::MemoryGb)
+                            .integer()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(ResourceTicket::SystemDisk).string().null())
-                    .col(ColumnDef::new(ResourceTicket::SystemDiskSizeGb).integer().default(0))
+                    .col(
+                        ColumnDef::new(ResourceTicket::SystemDiskSizeGb)
+                            .integer()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(ResourceTicket::DataDisk).string().null())
-                    .col(ColumnDef::new(ResourceTicket::HasSecurityProduct).integer().default(0))
+                    .col(
+                        ColumnDef::new(ResourceTicket::HasSecurityProduct)
+                            .integer()
+                            .default(0),
+                    )
                     .col(ColumnDef::new(ResourceTicket::IpAddress).string().null())
-                    .col(ColumnDef::new(ResourceTicket::DeliveryStatus).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::DeliveryStatus)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::Remarks).string().null())
-                    .col(ColumnDef::new(ResourceTicket::CreatedAt).string().not_null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::CreatedAt)
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::UpdatedAt).string().null())
-                    .col(ColumnDef::new(ResourceTicket::CreatedBy).string().not_null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::CreatedBy)
+                            .string()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::Approver).string().null())
                     .col(ColumnDef::new(ResourceTicket::ApproveTime).string().null())
-                    .col(ColumnDef::new(ResourceTicket::ApproveComment).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::ApproveComment)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::Provisioner).string().null())
-                    .col(ColumnDef::new(ResourceTicket::ProvisionTime).string().null())
-                    .col(ColumnDef::new(ResourceTicket::ProvisionDetails).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::ProvisionTime)
+                            .string()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(ResourceTicket::ProvisionDetails)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::Deliverer).string().null())
                     .col(ColumnDef::new(ResourceTicket::DeliverTime).string().null())
-                    .col(ColumnDef::new(ResourceTicket::DeliverComment).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::DeliverComment)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::FwSourceZone).string().null())
-                    .col(ColumnDef::new(ResourceTicket::FwSourceAddress).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::FwSourceAddress)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::FwDestZone).string().null())
-                    .col(ColumnDef::new(ResourceTicket::FwDestAddress).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::FwDestAddress)
+                            .string()
+                            .null(),
+                    )
                     .col(ColumnDef::new(ResourceTicket::FwProtocol).string().null())
                     .col(ColumnDef::new(ResourceTicket::FwPort).string().null())
                     .col(ColumnDef::new(ResourceTicket::FwDirection).string().null())
                     .col(ColumnDef::new(ResourceTicket::FwValidUntil).string().null())
-                    .col(ColumnDef::new(ResourceTicket::FwFirewallName).string().null())
+                    .col(
+                        ColumnDef::new(ResourceTicket::FwFirewallName)
+                            .string()
+                            .null(),
+                    )
                     .to_owned(),
             )
             .await

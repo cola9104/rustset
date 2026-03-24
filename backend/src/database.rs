@@ -2,19 +2,22 @@
 //!
 //! This module provides database connectivity and CRUD operations using SeaORM.
 
-pub use sea_orm::{DatabaseConnection, DbErr, EntityTrait, ActiveModelTrait, Set, NotSet, ConnectionTrait, QuerySelect, QueryOrder, QueryFilter, ColumnTrait};
-use sea_orm::{Database as SeaDatabase, Statement};
 use crate::entities::{
-    cloud_zone, cloud_service, cloud_provider_config, business_resource,
-    physical_machine, cloud_virtual_machine,
-    user, audit_log, asset, task, risk, network_zone, custom_role, advanced_scan_task, quick_scan_result,
-    CloudZone, CloudService, CloudProviderConfig, BusinessResource,
-    PhysicalMachine, CloudVirtualMachine,
-    User, AuditLog, Asset, Task, Risk, NetworkZone, CustomRole, AdvancedScanTask,
+    advanced_scan_task, asset, audit_log, business_resource, cloud_provider_config, cloud_service,
+    cloud_virtual_machine, cloud_zone, custom_role, network_zone, physical_machine,
+    quick_scan_result, resource_ticket, risk, task, user, AdvancedScanTask, Asset, AuditLog,
+    BusinessResource, CloudProviderConfig, CloudService, CloudVirtualMachine, CloudZone,
+    CustomRole, NetworkZone, PhysicalMachine, Risk, Task, User,
 };
-use shared::User as SharedUser;
-use std::sync::Arc;
 use chrono::Utc;
+pub use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, NotSet,
+    QueryFilter, QueryOrder, QuerySelect, Set,
+};
+use sea_orm::{Database as SeaDatabase, Statement};
+use shared::User as SharedUser;
+use std::str::FromStr;
+use std::sync::Arc;
 
 // Re-export entities for convenience
 pub use crate::entities::prelude::*;
@@ -47,8 +50,8 @@ pub async fn init_db(connection_string: &str) -> Result<(), DbErr> {
     let conn = SeaDatabase::connect(connection_string).await?;
 
     // Run migrations
-    use sea_orm_migration::prelude::*;
     use crate::migration::{Migrator, MigratorTrait};
+    use sea_orm_migration::prelude::*;
     Migrator::up(&conn, None).await?;
 
     DB.set(Arc::new(conn))
@@ -133,8 +136,8 @@ impl Database {
 
 /// Convert DbUser (entity) to shared User
 pub fn db_user_to_shared(db: user::Model) -> SharedUser {
-    use shared::Role;
     use chrono::Utc;
+    use shared::Role;
 
     let role = match db.role.as_str() {
         "SysAdmin" => Role::SysAdmin,
@@ -144,7 +147,10 @@ pub fn db_user_to_shared(db: user::Model) -> SharedUser {
         _ => Role::Custom(db.role),
     };
 
-    let permissions = db.permissions.as_ref().and_then(|p| serde_json::from_str(p).ok());
+    let permissions = db
+        .permissions
+        .as_ref()
+        .and_then(|p| serde_json::from_str(p).ok());
 
     SharedUser {
         id: db.id,
@@ -155,21 +161,36 @@ pub fn db_user_to_shared(db: user::Model) -> SharedUser {
         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|_| Utc::now()),
-        password_changed_at: db.password_changed_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        password_changed_at: db.password_changed_at.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
         password_strength: db.password_strength,
         force_password_change: Some(db.force_password_change != 0),
-        last_login_at: db.last_login_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        last_login_at: db.last_login_at.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
         email: db.email,
         phone: db.phone,
         status: db.status,
         failed_login_attempts: db.failed_login_attempts.map(|v| v as u32),
-        locked_until: db.locked_until.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        locked_until: db.locked_until.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
     }
 }
 
 /// Convert shared User to DbUser active model
 pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
-    let permissions_json = user.permissions.as_ref().and_then(|p| serde_json::to_string(p).ok());
+    let permissions_json = user
+        .permissions
+        .as_ref()
+        .and_then(|p| serde_json::to_string(p).ok());
 
     user::ActiveModel {
         id: Set(user.id.clone()),
@@ -181,19 +202,27 @@ pub fn shared_to_db_user(user: &SharedUser) -> user::ActiveModel {
         password_changed_at: Set(user.password_changed_at.map(|d| d.to_rfc3339())),
         password_strength: Set(user.password_strength.clone()),
         force_password_change: Set(user.force_password_change.unwrap_or(false) as i32),
-        last_login_at: Set(Some(user.last_login_at.map(|d| d.to_rfc3339()).unwrap_or_else(|| "".to_string()))),
+        last_login_at: Set(Some(
+            user.last_login_at
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_else(|| "".to_string()),
+        )),
         email: Set(user.email.clone()),
         phone: Set(Some(user.phone.clone().unwrap_or_else(|| "".to_string()))),
         status: Set(user.status.clone()),
         failed_login_attempts: Set(user.failed_login_attempts.map(|v| v as i32)),
-        locked_until: Set(Some(user.locked_until.map(|d| d.to_rfc3339()).unwrap_or_else(|| "".to_string()))),
+        locked_until: Set(Some(
+            user.locked_until
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_else(|| "".to_string()),
+        )),
     }
 }
 
 /// Convert DbAsset (entity) to shared Asset
 pub fn db_asset_to_shared(db: asset::Model) -> shared::Asset {
     use shared::{Asset, NetworkZone, PortInfo};
-    use std::string::String as String;
+    use std::string::String;
 
     let zone = match db.zone.as_str() {
         "Intranet" => NetworkZone::Intranet,
@@ -203,7 +232,11 @@ pub fn db_asset_to_shared(db: asset::Model) -> shared::Asset {
     };
 
     let ports: Vec<PortInfo> = serde_json::from_str(&db.ports).unwrap_or_default();
-    let labels: Vec<String> = db.labels.as_deref().map(|s| serde_json::from_str(s).unwrap_or_default()).unwrap_or_default();
+    let labels: Vec<String> = db
+        .labels
+        .as_deref()
+        .map(|s| serde_json::from_str(s).unwrap_or_default())
+        .unwrap_or_default();
 
     Asset {
         id: Some(db.id),
@@ -211,7 +244,11 @@ pub fn db_asset_to_shared(db: asset::Model) -> shared::Asset {
         ip: db.ip,
         zone,
         ports,
-        last_scanned: db.last_scanned.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        last_scanned: db.last_scanned.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
         contact_person: db.contact_person,
         contact_phone: db.contact_phone,
         created_by: db.created_by,
@@ -256,8 +293,16 @@ pub fn db_risk_to_shared(db: risk::Model) -> shared::Risk {
         description: db.description,
         solution: db.solution,
         status,
-        created_at: db.created_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
-        updated_at: db.updated_at.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        created_at: db.created_at.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
+        updated_at: db.updated_at.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
         assigned_to: db.assigned_to,
     }
 }
@@ -292,6 +337,127 @@ pub fn db_task_to_shared(db: task::Model) -> shared::Task {
     }
 }
 
+/// Convert DbResourceTicket (entity) to shared ResourceTicket
+pub fn db_resource_ticket_to_shared(db: resource_ticket::Model) -> shared::ResourceTicket {
+    use shared::{ResourceTicket, ResourceType, TicketStatus};
+
+    let resource_type = ResourceType::from_str(&db.resource_type).unwrap_or(ResourceType::Cloud);
+    let ticket_status =
+        TicketStatus::from_str(&db.ticket_status).unwrap_or(TicketStatus::PendingApproval);
+
+    ResourceTicket {
+        id: Some(db.id),
+        resource_type,
+        ecs_name: db.ecs_name,
+        ticket_status,
+        provider_id: db.provider_id,
+        provider_name: db.provider_name,
+        cloud_platform_id: db.cloud_platform_id,
+        cloud_platform_name: db.cloud_platform_name,
+        machine_room_id: db.machine_room_id,
+        machine_room_name: db.machine_room_name,
+        cloud_region: db.cloud_region,
+        cloud_category: db.cloud_category,
+        zone_name: db.zone_name,
+        zone_cabinet: db.zone_cabinet,
+        rack_units: db.rack_units,
+        customer_name: db.customer_name,
+        application_name: db.application_name,
+        contract_name: db.contract_name,
+        ecs_type: db.ecs_type,
+        ecs_os: db.ecs_os,
+        cpu_cores: db.cpu_cores,
+        memory_gb: db.memory_gb,
+        system_disk: db.system_disk,
+        system_disk_size_gb: db.system_disk_size_gb,
+        data_disk: db.data_disk,
+        has_security_product: db.has_security_product != 0,
+        security_products: None,
+        ip_address: db.ip_address,
+        delivery_status: db.delivery_status,
+        remarks: db.remarks,
+        created_at: db.created_at,
+        updated_at: db.updated_at,
+        created_by: db.created_by,
+        approver: db.approver,
+        approve_time: db.approve_time,
+        approve_comment: db.approve_comment,
+        provisioner: db.provisioner,
+        provision_time: db.provision_time,
+        provision_details: db.provision_details,
+        deliverer: db.deliverer,
+        deliver_time: db.deliver_time,
+        deliver_comment: db.deliver_comment,
+        fw_source_zone: db.fw_source_zone,
+        fw_source_address: db.fw_source_address,
+        fw_dest_zone: db.fw_dest_zone,
+        fw_dest_address: db.fw_dest_address,
+        fw_protocol: db.fw_protocol,
+        fw_port: db.fw_port,
+        fw_direction: db.fw_direction,
+        fw_valid_until: db.fw_valid_until,
+        fw_firewall_name: db.fw_firewall_name,
+    }
+}
+
+/// Convert shared ResourceTicket to DbResourceTicket active model
+pub fn shared_to_db_resource_ticket(
+    ticket: &shared::ResourceTicket,
+) -> resource_ticket::ActiveModel {
+    resource_ticket::ActiveModel {
+        id: ticket.id.map(Set).unwrap_or(NotSet),
+        resource_type: Set(ticket.resource_type.as_str().to_string()),
+        ecs_name: Set(ticket.ecs_name.clone()),
+        ticket_status: Set(ticket.ticket_status.as_str().to_string()),
+        provider_id: Set(ticket.provider_id),
+        provider_name: Set(ticket.provider_name.clone()),
+        cloud_platform_id: Set(ticket.cloud_platform_id),
+        cloud_platform_name: Set(ticket.cloud_platform_name.clone()),
+        machine_room_id: Set(ticket.machine_room_id),
+        machine_room_name: Set(ticket.machine_room_name.clone()),
+        cloud_region: Set(ticket.cloud_region.clone()),
+        cloud_category: Set(ticket.cloud_category.clone()),
+        zone_name: Set(ticket.zone_name.clone()),
+        zone_cabinet: Set(ticket.zone_cabinet.clone()),
+        rack_units: Set(ticket.rack_units),
+        customer_name: Set(ticket.customer_name.clone()),
+        application_name: Set(ticket.application_name.clone()),
+        contract_name: Set(ticket.contract_name.clone()),
+        ecs_type: Set(ticket.ecs_type.clone()),
+        ecs_os: Set(ticket.ecs_os.clone()),
+        cpu_cores: Set(ticket.cpu_cores),
+        memory_gb: Set(ticket.memory_gb),
+        system_disk: Set(ticket.system_disk.clone()),
+        system_disk_size_gb: Set(ticket.system_disk_size_gb),
+        data_disk: Set(ticket.data_disk.clone()),
+        has_security_product: Set(ticket.has_security_product as i32),
+        ip_address: Set(ticket.ip_address.clone()),
+        delivery_status: Set(ticket.delivery_status.clone()),
+        remarks: Set(ticket.remarks.clone()),
+        created_at: Set(ticket.created_at.clone()),
+        updated_at: Set(ticket.updated_at.clone()),
+        created_by: Set(ticket.created_by.clone()),
+        approver: Set(ticket.approver.clone()),
+        approve_time: Set(ticket.approve_time.clone()),
+        approve_comment: Set(ticket.approve_comment.clone()),
+        provisioner: Set(ticket.provisioner.clone()),
+        provision_time: Set(ticket.provision_time.clone()),
+        provision_details: Set(ticket.provision_details.clone()),
+        deliverer: Set(ticket.deliverer.clone()),
+        deliver_time: Set(ticket.deliver_time.clone()),
+        deliver_comment: Set(ticket.deliver_comment.clone()),
+        fw_source_zone: Set(ticket.fw_source_zone.clone()),
+        fw_source_address: Set(ticket.fw_source_address.clone()),
+        fw_dest_zone: Set(ticket.fw_dest_zone.clone()),
+        fw_dest_address: Set(ticket.fw_dest_address.clone()),
+        fw_protocol: Set(ticket.fw_protocol.clone()),
+        fw_port: Set(ticket.fw_port.clone()),
+        fw_direction: Set(ticket.fw_direction.clone()),
+        fw_valid_until: Set(ticket.fw_valid_until.clone()),
+        fw_firewall_name: Set(ticket.fw_firewall_name.clone()),
+    }
+}
+
 // ============== User CRUD ==============
 
 pub async fn get_users_with_conn(conn: &DatabaseConnection) -> Result<Vec<SharedUser>, DbErr> {
@@ -299,7 +465,10 @@ pub async fn get_users_with_conn(conn: &DatabaseConnection) -> Result<Vec<Shared
     Ok(users.into_iter().map(db_user_to_shared).collect())
 }
 
-pub async fn insert_user_with_conn(conn: &DatabaseConnection, user: &SharedUser) -> Result<(), DbErr> {
+pub async fn insert_user_with_conn(
+    conn: &DatabaseConnection,
+    user: &SharedUser,
+) -> Result<(), DbErr> {
     let db_user = shared_to_db_user(user);
     db_user.insert(conn).await?;
     Ok(())
@@ -319,12 +488,18 @@ pub async fn delete_user_by_id(conn: &DatabaseConnection, id: &str) -> Result<()
     Ok(())
 }
 
-pub async fn get_user_by_id(conn: &DatabaseConnection, id: &str) -> Result<Option<SharedUser>, DbErr> {
+pub async fn get_user_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<SharedUser>, DbErr> {
     let user = User::find_by_id(id.to_string()).one(conn).await?;
     Ok(user.map(db_user_to_shared))
 }
 
-pub async fn get_user_by_username(conn: &DatabaseConnection, username: &str) -> Result<Option<SharedUser>, DbErr> {
+pub async fn get_user_by_username(
+    conn: &DatabaseConnection,
+    username: &str,
+) -> Result<Option<SharedUser>, DbErr> {
     let user = User::find()
         .filter(user::Column::Username.eq(username))
         .one(conn)
@@ -334,7 +509,10 @@ pub async fn get_user_by_username(conn: &DatabaseConnection, username: &str) -> 
 
 // ============== AuditLog CRUD ==============
 
-pub async fn insert_audit_log(conn: &DatabaseConnection, log: &shared::AuditLog) -> Result<(), DbErr> {
+pub async fn insert_audit_log(
+    conn: &DatabaseConnection,
+    log: &shared::AuditLog,
+) -> Result<(), DbErr> {
     let db_log = audit_log::ActiveModel {
         id: Set(log.id.clone()),
         user_id: Set(log.user_id.clone()),
@@ -376,7 +554,11 @@ pub async fn insert_asset(conn: &DatabaseConnection, asset: &shared::Asset) -> R
     Ok(result.id as i64)
 }
 
-pub async fn update_asset_by_id(conn: &DatabaseConnection, id: i32, asset: &shared::Asset) -> Result<(), DbErr> {
+pub async fn update_asset_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+    asset: &shared::Asset,
+) -> Result<(), DbErr> {
     let ports_json = serde_json::to_string(&asset.ports).unwrap_or_default();
     let labels_json = serde_json::to_string(&asset.labels).unwrap_or_default();
 
@@ -411,10 +593,16 @@ pub async fn delete_asset_by_id(conn: &DatabaseConnection, id: i32) -> Result<()
 }
 
 pub async fn get_all_assets(conn: &DatabaseConnection) -> Result<Vec<asset::Model>, DbErr> {
-    Asset::find().order_by_desc(asset::Column::Id).all(conn).await
+    Asset::find()
+        .order_by_desc(asset::Column::Id)
+        .all(conn)
+        .await
 }
 
-pub async fn get_asset_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<asset::Model>, DbErr> {
+pub async fn get_asset_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<asset::Model>, DbErr> {
     Asset::find_by_id(id).one(conn).await
 }
 
@@ -441,7 +629,11 @@ pub async fn insert_task(conn: &DatabaseConnection, task: &shared::Task) -> Resu
     Ok(())
 }
 
-pub async fn update_task_by_id(conn: &DatabaseConnection, id: &str, task: &shared::Task) -> Result<(), DbErr> {
+pub async fn update_task_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+    task: &shared::Task,
+) -> Result<(), DbErr> {
     let db_task = task::ActiveModel {
         id: Set(id.to_string()),
         name: Set(task.name.clone()),
@@ -469,6 +661,47 @@ pub async fn get_all_tasks(conn: &DatabaseConnection) -> Result<Vec<task::Model>
     Task::find().order_by_desc(task::Column::Id).all(conn).await
 }
 
+pub async fn get_all_resource_tickets(
+    conn: &DatabaseConnection,
+) -> Result<Vec<resource_ticket::Model>, DbErr> {
+    resource_ticket::Entity::find()
+        .order_by_desc(resource_ticket::Column::Id)
+        .all(conn)
+        .await
+}
+
+pub async fn get_resource_ticket_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<resource_ticket::Model>, DbErr> {
+    resource_ticket::Entity::find_by_id(id).one(conn).await
+}
+
+pub async fn insert_resource_ticket(
+    conn: &DatabaseConnection,
+    ticket: &shared::ResourceTicket,
+) -> Result<i32, DbErr> {
+    let inserted = shared_to_db_resource_ticket(ticket).insert(conn).await?;
+    Ok(inserted.id)
+}
+
+pub async fn update_resource_ticket_by_id(
+    conn: &DatabaseConnection,
+    ticket: &shared::ResourceTicket,
+) -> Result<(), DbErr> {
+    resource_ticket::Entity::update(shared_to_db_resource_ticket(ticket))
+        .exec(conn)
+        .await?;
+    Ok(())
+}
+
+pub async fn delete_resource_ticket_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+    if let Some(ticket) = resource_ticket::Entity::find_by_id(id).one(conn).await? {
+        ticket.delete(conn).await?;
+    }
+    Ok(())
+}
+
 // ============== Risk CRUD ==============
 
 pub async fn insert_risk(conn: &DatabaseConnection, risk: &shared::Risk) -> Result<(), DbErr> {
@@ -488,7 +721,11 @@ pub async fn insert_risk(conn: &DatabaseConnection, risk: &shared::Risk) -> Resu
     Ok(())
 }
 
-pub async fn update_risk_by_id(conn: &DatabaseConnection, id: &str, risk: &shared::Risk) -> Result<(), DbErr> {
+pub async fn update_risk_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+    risk: &shared::Risk,
+) -> Result<(), DbErr> {
     let db_risk = risk::ActiveModel {
         id: Set(id.to_string()),
         severity: Set(risk.severity.clone()),
@@ -512,12 +749,18 @@ pub async fn delete_risk_by_id(conn: &DatabaseConnection, id: &str) -> Result<()
 }
 
 pub async fn get_all_risks(conn: &DatabaseConnection) -> Result<Vec<risk::Model>, DbErr> {
-    Risk::find().order_by_desc(risk::Column::CreatedAt).all(conn).await
+    Risk::find()
+        .order_by_desc(risk::Column::CreatedAt)
+        .all(conn)
+        .await
 }
 
 // ============== NetworkZone CRUD ==============
 
-pub async fn insert_zone(conn: &DatabaseConnection, zone: &shared::ZoneConfig) -> Result<(), DbErr> {
+pub async fn insert_zone(
+    conn: &DatabaseConnection,
+    zone: &shared::ZoneConfig,
+) -> Result<(), DbErr> {
     let db_zone = network_zone::ActiveModel {
         id: Set(zone.id.clone()),
         name: Set(zone.name.clone()),
@@ -528,7 +771,11 @@ pub async fn insert_zone(conn: &DatabaseConnection, zone: &shared::ZoneConfig) -
     Ok(())
 }
 
-pub async fn update_zone_by_id(conn: &DatabaseConnection, id: &str, zone: &shared::ZoneConfig) -> Result<(), DbErr> {
+pub async fn update_zone_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+    zone: &shared::ZoneConfig,
+) -> Result<(), DbErr> {
     let db_zone = network_zone::ActiveModel {
         id: Set(id.to_string()),
         name: Set(zone.name.clone()),
@@ -548,7 +795,10 @@ pub async fn delete_zone_by_id(conn: &DatabaseConnection, id: &str) -> Result<()
 }
 
 pub async fn get_all_zones(conn: &DatabaseConnection) -> Result<Vec<network_zone::Model>, DbErr> {
-    NetworkZone::find().order_by_asc(network_zone::Column::Priority).all(conn).await
+    NetworkZone::find()
+        .order_by_asc(network_zone::Column::Priority)
+        .all(conn)
+        .await
 }
 
 // ============== CloudZone CRUD ==============
@@ -605,11 +855,19 @@ pub async fn delete_cloud_zone_by_id(conn: &DatabaseConnection, id: i32) -> Resu
     Ok(())
 }
 
-pub async fn get_all_cloud_zones(conn: &DatabaseConnection) -> Result<Vec<cloud_zone::Model>, DbErr> {
-    CloudZone::find().order_by_asc(cloud_zone::Column::Id).all(conn).await
+pub async fn get_all_cloud_zones(
+    conn: &DatabaseConnection,
+) -> Result<Vec<cloud_zone::Model>, DbErr> {
+    CloudZone::find()
+        .order_by_asc(cloud_zone::Column::Id)
+        .all(conn)
+        .await
 }
 
-pub async fn get_cloud_zone_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_zone::Model>, DbErr> {
+pub async fn get_cloud_zone_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<cloud_zone::Model>, DbErr> {
     CloudZone::find_by_id(id).one(conn).await
 }
 
@@ -673,15 +931,26 @@ pub async fn delete_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> 
     Ok(())
 }
 
-pub async fn get_all_cloud_platforms(conn: &DatabaseConnection) -> Result<Vec<cloud_service::Model>, DbErr> {
-    CloudService::find().order_by_asc(cloud_service::Column::Id).all(conn).await
+pub async fn get_all_cloud_platforms(
+    conn: &DatabaseConnection,
+) -> Result<Vec<cloud_service::Model>, DbErr> {
+    CloudService::find()
+        .order_by_asc(cloud_service::Column::Id)
+        .all(conn)
+        .await
 }
 
-pub async fn get_cloud_platform_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_service::Model>, DbErr> {
+pub async fn get_cloud_platform_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<cloud_service::Model>, DbErr> {
     CloudService::find_by_id(id).one(conn).await
 }
 
-pub async fn get_platforms_by_zone_id(conn: &DatabaseConnection, zone_id: i32) -> Result<Vec<cloud_service::Model>, DbErr> {
+pub async fn get_platforms_by_zone_id(
+    conn: &DatabaseConnection,
+    zone_id: i32,
+) -> Result<Vec<cloud_service::Model>, DbErr> {
     CloudService::find()
         .filter(cloud_service::Column::ZoneId.eq(zone_id))
         .order_by_asc(cloud_service::Column::Id)
@@ -757,7 +1026,10 @@ pub async fn update_cloud_provider_config_by_id(
     Ok(())
 }
 
-pub async fn delete_cloud_provider_config_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+pub async fn delete_cloud_provider_config_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<(), DbErr> {
     let config = CloudProviderConfig::find_by_id(id).one(conn).await?;
     if let Some(config) = config {
         config.delete(conn).await?;
@@ -765,15 +1037,25 @@ pub async fn delete_cloud_provider_config_by_id(conn: &DatabaseConnection, id: i
     Ok(())
 }
 
-pub async fn get_all_cloud_provider_configs(conn: &DatabaseConnection) -> Result<Vec<cloud_provider_config::Model>, DbErr> {
-    CloudProviderConfig::find().order_by_desc(cloud_provider_config::Column::Id).all(conn).await
+pub async fn get_all_cloud_provider_configs(
+    conn: &DatabaseConnection,
+) -> Result<Vec<cloud_provider_config::Model>, DbErr> {
+    CloudProviderConfig::find()
+        .order_by_desc(cloud_provider_config::Column::Id)
+        .all(conn)
+        .await
 }
 
-pub async fn get_cloud_provider_config_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<cloud_provider_config::Model>, DbErr> {
+pub async fn get_cloud_provider_config_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<cloud_provider_config::Model>, DbErr> {
     CloudProviderConfig::find_by_id(id).one(conn).await
 }
 
-pub async fn get_active_cloud_provider_configs(conn: &DatabaseConnection) -> Result<Vec<cloud_provider_config::Model>, DbErr> {
+pub async fn get_active_cloud_provider_configs(
+    conn: &DatabaseConnection,
+) -> Result<Vec<cloud_provider_config::Model>, DbErr> {
     CloudProviderConfig::find()
         .filter(cloud_provider_config::Column::Status.eq("active"))
         .order_by_desc(cloud_provider_config::Column::Id)
@@ -823,12 +1105,12 @@ pub async fn insert_business_resource(
         bastion_address: Set(req.bastion_address.clone()),
         bastion_admin_account: Set(req.bastion_admin_account.clone()),
         bastion_initial_password: Set(req.bastion_initial_password.clone()),
-        serial_number: Set(None),     // Legacy field - kept for compatibility but not used
-        rack_location: Set(None),     // Legacy field - kept for compatibility but not used
-        hardware_model: Set(None),    // Legacy field - kept for compatibility but not used
-        warranty_expiry: Set(None),   // Legacy field - kept for compatibility but not used
-        agent_status: Set(None),      // Legacy field - kept for compatibility but not used
-        ipmi_address: Set(None),      // Legacy field - kept for compatibility but not used
+        serial_number: Set(None), // Legacy field - kept for compatibility but not used
+        rack_location: Set(None), // Legacy field - kept for compatibility but not used
+        hardware_model: Set(None), // Legacy field - kept for compatibility but not used
+        warranty_expiry: Set(None), // Legacy field - kept for compatibility but not used
+        agent_status: Set(None),  // Legacy field - kept for compatibility but not used
+        ipmi_address: Set(None),  // Legacy field - kept for compatibility but not used
         remarks: Set(req.remarks.clone()),
         created_at: Set(created_at.to_string()),
         updated_at: Set(None),
@@ -903,85 +1185,214 @@ pub async fn update_business_resource_by_id(
     };
 
     // Update fields that are Some
-    if let Some(v) = &req.resource_type { db_resource.resource_type = Set(v.clone()); }
-    if let Some(v) = &req.ecs_name { db_resource.ecs_name = Set(v.clone()); }
-    if let Some(v) = &req.ecs_status { db_resource.ecs_status = Set(v.clone()); }
-    if let Some(v) = &req.cloud_region { db_resource.cloud_region = Set(v.clone()); }
-    if let Some(v) = &req.cloud_category { db_resource.cloud_category = Set(v.clone()); }
-    if let Some(v) = req.cloud_provider_config_id { db_resource.cloud_provider_config_id = Set(Some(v)); }
-    if let Some(v) = &req.zone_name { db_resource.zone_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.platform_name { db_resource.platform_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.county_city { db_resource.county_city = Set(Some(v.clone())); }
-    if let Some(v) = &req.vdc_name { db_resource.vdc_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.customer_name { db_resource.customer_name = Set(v.clone()); }
-    if let Some(v) = &req.application_name { db_resource.application_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.contract_name { db_resource.contract_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.ecs_type { db_resource.ecs_type = Set(v.clone()); }
-    if let Some(v) = &req.ecs_os { db_resource.ecs_os = Set(v.clone()); }
-    if let Some(v) = req.cpu_cores { db_resource.cpu_cores = Set(v as i32); }
-    if let Some(v) = req.memory_gb { db_resource.memory_gb = Set(v as i32); }
-    if let Some(v) = &req.system_disk { db_resource.system_disk = Set(v.clone()); }
-    if let Some(v) = req.system_disk_size_gb { db_resource.system_disk_size_gb = Set(v as i32); }
-    if let Some(v) = &req.data_disk { db_resource.data_disk = Set(Some(v.clone())); }
-    if let Some(v) = &req.completion_time { db_resource.completion_time = Set(Some(v.to_rfc3339())); }
-    if let Some(v) = &req.release_time { db_resource.release_time = Set(Some(v.to_rfc3339())); }
-    if let Some(v) = req.has_security_product { db_resource.has_security_product = Set(v as i32); }
-    if let Some(v) = &req.ip_address { db_resource.ip_address = Set(v.clone()); }
-    if let Some(v) = &req.ecs_login_method { db_resource.ecs_login_method = Set(Some(v.clone())); }
-    if let Some(v) = &req.ecs_login_username { db_resource.ecs_login_username = Set(Some(v.clone())); }
-    if let Some(v) = &req.ecs_initial_password { db_resource.ecs_initial_password = Set(Some(v.clone())); }
-    if let Some(v) = &req.bastion_address { db_resource.bastion_address = Set(Some(v.clone())); }
-    if let Some(v) = &req.bastion_admin_account { db_resource.bastion_admin_account = Set(Some(v.clone())); }
-    if let Some(v) = &req.bastion_initial_password { db_resource.bastion_initial_password = Set(Some(v.clone())); }
+    if let Some(v) = &req.resource_type {
+        db_resource.resource_type = Set(v.clone());
+    }
+    if let Some(v) = &req.ecs_name {
+        db_resource.ecs_name = Set(v.clone());
+    }
+    if let Some(v) = &req.ecs_status {
+        db_resource.ecs_status = Set(v.clone());
+    }
+    if let Some(v) = &req.cloud_region {
+        db_resource.cloud_region = Set(v.clone());
+    }
+    if let Some(v) = &req.cloud_category {
+        db_resource.cloud_category = Set(v.clone());
+    }
+    if let Some(v) = req.cloud_provider_config_id {
+        db_resource.cloud_provider_config_id = Set(Some(v));
+    }
+    if let Some(v) = &req.zone_name {
+        db_resource.zone_name = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.platform_name {
+        db_resource.platform_name = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.county_city {
+        db_resource.county_city = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.vdc_name {
+        db_resource.vdc_name = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.customer_name {
+        db_resource.customer_name = Set(v.clone());
+    }
+    if let Some(v) = &req.application_name {
+        db_resource.application_name = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.contract_name {
+        db_resource.contract_name = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.ecs_type {
+        db_resource.ecs_type = Set(v.clone());
+    }
+    if let Some(v) = &req.ecs_os {
+        db_resource.ecs_os = Set(v.clone());
+    }
+    if let Some(v) = req.cpu_cores {
+        db_resource.cpu_cores = Set(v as i32);
+    }
+    if let Some(v) = req.memory_gb {
+        db_resource.memory_gb = Set(v as i32);
+    }
+    if let Some(v) = &req.system_disk {
+        db_resource.system_disk = Set(v.clone());
+    }
+    if let Some(v) = req.system_disk_size_gb {
+        db_resource.system_disk_size_gb = Set(v as i32);
+    }
+    if let Some(v) = &req.data_disk {
+        db_resource.data_disk = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.completion_time {
+        db_resource.completion_time = Set(Some(v.to_rfc3339()));
+    }
+    if let Some(v) = &req.release_time {
+        db_resource.release_time = Set(Some(v.to_rfc3339()));
+    }
+    if let Some(v) = req.has_security_product {
+        db_resource.has_security_product = Set(v as i32);
+    }
+    if let Some(v) = &req.ip_address {
+        db_resource.ip_address = Set(v.clone());
+    }
+    if let Some(v) = &req.ecs_login_method {
+        db_resource.ecs_login_method = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.ecs_login_username {
+        db_resource.ecs_login_username = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.ecs_initial_password {
+        db_resource.ecs_initial_password = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.bastion_address {
+        db_resource.bastion_address = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.bastion_admin_account {
+        db_resource.bastion_admin_account = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.bastion_initial_password {
+        db_resource.bastion_initial_password = Set(Some(v.clone()));
+    }
     // Physical machine specific fields
     if let Some(ref pm_info) = req.physical_machine_info {
-        if let Some(v) = &pm_info.serial_number { db_resource.serial_number = Set(Some(v.clone())); }
-        if let Some(v) = &pm_info.rack_location { db_resource.rack_location = Set(Some(v.clone())); }
-        if let Some(v) = &pm_info.hardware_model { db_resource.hardware_model = Set(Some(v.clone())); }
-        if let Some(v) = &pm_info.warranty_expiry { db_resource.warranty_expiry = Set(Some(v.to_rfc3339())); }
-        if let Some(v) = &pm_info.agent_status { db_resource.agent_status = Set(Some(v.clone())); }
-        if let Some(v) = &pm_info.ipmi_address { db_resource.ipmi_address = Set(Some(v.clone())); }
+        if let Some(v) = &pm_info.serial_number {
+            db_resource.serial_number = Set(Some(v.clone()));
+        }
+        if let Some(v) = &pm_info.rack_location {
+            db_resource.rack_location = Set(Some(v.clone()));
+        }
+        if let Some(v) = &pm_info.hardware_model {
+            db_resource.hardware_model = Set(Some(v.clone()));
+        }
+        if let Some(v) = &pm_info.warranty_expiry {
+            db_resource.warranty_expiry = Set(Some(v.to_rfc3339()));
+        }
+        if let Some(v) = &pm_info.agent_status {
+            db_resource.agent_status = Set(Some(v.clone()));
+        }
+        if let Some(v) = &pm_info.ipmi_address {
+            db_resource.ipmi_address = Set(Some(v.clone()));
+        }
     }
-    if let Some(v) = &req.remarks { db_resource.remarks = Set(Some(v.clone())); }
+    if let Some(v) = &req.remarks {
+        db_resource.remarks = Set(Some(v.clone()));
+    }
     // 申请流程相关
-    if let Some(v) = &req.applicant { db_resource.applicant = Set(Some(v.clone())); }
-    if let Some(v) = &req.department { db_resource.department = Set(Some(v.clone())); }
-    if let Some(v) = &req.approver { db_resource.approver = Set(Some(v.clone())); }
-    if let Some(v) = &req.approval_time { db_resource.approval_time = Set(Some(v.to_rfc3339())); }
-    if let Some(v) = &req.approval_remarks { db_resource.approval_remarks = Set(Some(v.clone())); }
-    if let Some(v) = &req.rejection_reason { db_resource.rejection_reason = Set(Some(v.clone())); }
+    if let Some(v) = &req.applicant {
+        db_resource.applicant = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.department {
+        db_resource.department = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.approver {
+        db_resource.approver = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.approval_time {
+        db_resource.approval_time = Set(Some(v.to_rfc3339()));
+    }
+    if let Some(v) = &req.approval_remarks {
+        db_resource.approval_remarks = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.rejection_reason {
+        db_resource.rejection_reason = Set(Some(v.clone()));
+    }
     // 资源配置相关
-    if let Some(v) = req.bandwidth_mbps { db_resource.bandwidth_mbps = Set(Some(v as i32)); }
-    if let Some(v) = &req.bandwidth_type { db_resource.bandwidth_type = Set(Some(v.clone())); }
-    if let Some(v) = req.public_ip_count { db_resource.public_ip_count = Set(Some(v as i32)); }
-    if let Some(v) = &req.network_type { db_resource.network_type = Set(Some(v.clone())); }
+    if let Some(v) = req.bandwidth_mbps {
+        db_resource.bandwidth_mbps = Set(Some(v as i32));
+    }
+    if let Some(v) = &req.bandwidth_type {
+        db_resource.bandwidth_type = Set(Some(v.clone()));
+    }
+    if let Some(v) = req.public_ip_count {
+        db_resource.public_ip_count = Set(Some(v as i32));
+    }
+    if let Some(v) = &req.network_type {
+        db_resource.network_type = Set(Some(v.clone()));
+    }
     // 业务关联相关
-    if let Some(v) = &req.project_name { db_resource.project_name = Set(Some(v.clone())); }
-    if let Some(v) = &req.project_code { db_resource.project_code = Set(Some(v.clone())); }
-    if let Some(v) = &req.business_owner { db_resource.business_owner = Set(Some(v.clone())); }
-    if let Some(v) = &req.tech_owner { db_resource.tech_owner = Set(Some(v.clone())); }
-    if let Some(v) = &req.contact_phone { db_resource.contact_phone = Set(Some(v.clone())); }
+    if let Some(v) = &req.project_name {
+        db_resource.project_name = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.project_code {
+        db_resource.project_code = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.business_owner {
+        db_resource.business_owner = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.tech_owner {
+        db_resource.tech_owner = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.contact_phone {
+        db_resource.contact_phone = Set(Some(v.clone()));
+    }
     // 费用相关
-    if let Some(v) = &req.billing_method { db_resource.billing_method = Set(Some(v.clone())); }
-    if let Some(v) = req.purchase_duration { db_resource.purchase_duration = Set(Some(v as i32)); }
-    if let Some(v) = &req.cost_center { db_resource.cost_center = Set(Some(v.clone())); }
+    if let Some(v) = &req.billing_method {
+        db_resource.billing_method = Set(Some(v.clone()));
+    }
+    if let Some(v) = req.purchase_duration {
+        db_resource.purchase_duration = Set(Some(v as i32));
+    }
+    if let Some(v) = &req.cost_center {
+        db_resource.cost_center = Set(Some(v.clone()));
+    }
     // 合规相关
-    if let Some(v) = &req.security_level { db_resource.security_level = Set(Some(v.clone())); }
-    if let Some(v) = &req.data_sensitivity { db_resource.data_sensitivity = Set(Some(v.clone())); }
+    if let Some(v) = &req.security_level {
+        db_resource.security_level = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.data_sensitivity {
+        db_resource.data_sensitivity = Set(Some(v.clone()));
+    }
     // 其他
-    if let Some(v) = &req.purpose { db_resource.purpose = Set(Some(v.clone())); }
-    if let Some(v) = &req.expected_delivery_time { db_resource.expected_delivery_time = Set(Some(v.to_rfc3339())); }
+    if let Some(v) = &req.purpose {
+        db_resource.purpose = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.expected_delivery_time {
+        db_resource.expected_delivery_time = Set(Some(v.to_rfc3339()));
+    }
     // 状态管理
-    if let Some(v) = &req.application_status { db_resource.application_status = Set(Some(v.clone())); }
-    if let Some(v) = &req.delivery_status { db_resource.delivery_status = Set(Some(v.clone())); }
-    if let Some(v) = &req.delivery_confirmed_at { db_resource.delivery_confirmed_at = Set(Some(v.to_rfc3339())); }
-    if let Some(v) = &req.delivery_confirmed_by { db_resource.delivery_confirmed_by = Set(Some(v.clone())); }
+    if let Some(v) = &req.application_status {
+        db_resource.application_status = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.delivery_status {
+        db_resource.delivery_status = Set(Some(v.clone()));
+    }
+    if let Some(v) = &req.delivery_confirmed_at {
+        db_resource.delivery_confirmed_at = Set(Some(v.to_rfc3339()));
+    }
+    if let Some(v) = &req.delivery_confirmed_by {
+        db_resource.delivery_confirmed_by = Set(Some(v.clone()));
+    }
 
     BusinessResource::update(db_resource).exec(conn).await?;
     Ok(())
 }
 
-pub async fn delete_business_resource_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
+pub async fn delete_business_resource_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<(), DbErr> {
     let resource = BusinessResource::find_by_id(id).one(conn).await?;
     if let Some(resource) = resource {
         resource.delete(conn).await?;
@@ -989,11 +1400,19 @@ pub async fn delete_business_resource_by_id(conn: &DatabaseConnection, id: i32) 
     Ok(())
 }
 
-pub async fn get_all_business_resources(conn: &DatabaseConnection) -> Result<Vec<business_resource::Model>, DbErr> {
-    BusinessResource::find().order_by_desc(business_resource::Column::Id).all(conn).await
+pub async fn get_all_business_resources(
+    conn: &DatabaseConnection,
+) -> Result<Vec<business_resource::Model>, DbErr> {
+    BusinessResource::find()
+        .order_by_desc(business_resource::Column::Id)
+        .all(conn)
+        .await
 }
 
-pub async fn get_business_resource_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<business_resource::Model>, DbErr> {
+pub async fn get_business_resource_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<business_resource::Model>, DbErr> {
     BusinessResource::find_by_id(id).one(conn).await
 }
 
@@ -1027,12 +1446,20 @@ pub async fn get_business_resources() -> Result<Vec<business_resource::Model>, D
     get_all_business_resources(&conn).await
 }
 
-pub async fn insert_business_resource_wrapper(req: &shared::CreateBusinessResourceRequest, created_at: &str, created_by: &str) -> Result<i32, DbErr> {
+pub async fn insert_business_resource_wrapper(
+    req: &shared::CreateBusinessResourceRequest,
+    created_at: &str,
+    created_by: &str,
+) -> Result<i32, DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     insert_business_resource(&conn, req, created_at, created_by).await
 }
 
-pub async fn update_business_resource(id: i32, req: &shared::UpdateBusinessResourceRequest, updated_by: &str) -> Result<(), DbErr> {
+pub async fn update_business_resource(
+    id: i32,
+    req: &shared::UpdateBusinessResourceRequest,
+    updated_by: &str,
+) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     update_business_resource_by_id(&conn, id, req, updated_by).await
 }
@@ -1056,7 +1483,20 @@ pub async fn insert_provider_config(
     created_at: &str,
 ) -> Result<i32, DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
-    insert_cloud_provider_config(&conn, zone_id, platform_id, provider, region_id, region_name, account_name, access_key_id, access_key_secret, remarks, created_at).await
+    insert_cloud_provider_config(
+        &conn,
+        zone_id,
+        platform_id,
+        provider,
+        region_id,
+        region_name,
+        account_name,
+        access_key_id,
+        access_key_secret,
+        remarks,
+        created_at,
+    )
+    .await
 }
 
 pub async fn update_provider_config(
@@ -1073,7 +1513,21 @@ pub async fn update_provider_config(
     updated_at: Option<&str>,
 ) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
-    update_cloud_provider_config_by_id(&conn, id, zone_id, platform_id, region_id, region_name, account_name, access_key_id, access_key_secret, remarks, status, updated_at).await
+    update_cloud_provider_config_by_id(
+        &conn,
+        id,
+        zone_id,
+        platform_id,
+        region_id,
+        region_name,
+        account_name,
+        access_key_id,
+        access_key_secret,
+        remarks,
+        status,
+        updated_at,
+    )
+    .await
 }
 
 pub async fn delete_provider_config(id: i32) -> Result<(), DbErr> {
@@ -1106,7 +1560,15 @@ pub async fn update_cloud_platform(
     description: Option<&str>,
 ) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
-    update_cloud_platform_by_id(&conn, id, zone_id, platform_name, platform_code, description).await
+    update_cloud_platform_by_id(
+        &conn,
+        id,
+        zone_id,
+        platform_name,
+        platform_code,
+        description,
+    )
+    .await
 }
 
 pub async fn delete_cloud_platform(id: i32) -> Result<(), DbErr> {
@@ -1133,7 +1595,15 @@ pub async fn insert_cloud_platform_wrapper(
     created_at: &str,
 ) -> Result<i32, DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
-    insert_cloud_platform(&conn, zone_id, platform_name, platform_code, description, created_at).await
+    insert_cloud_platform(
+        &conn,
+        zone_id,
+        platform_name,
+        platform_code,
+        description,
+        created_at,
+    )
+    .await
 }
 
 // AuditLog wrapper
@@ -1142,12 +1612,18 @@ pub async fn get_audit_logs(limit: Option<u64>) -> Result<Vec<audit_log::Model>,
     get_audit_logs_with_conn(&conn, limit).await
 }
 
-pub async fn get_audit_logs_with_conn(conn: &DatabaseConnection, limit: Option<u64>) -> Result<Vec<audit_log::Model>, DbErr> {
+pub async fn get_audit_logs_with_conn(
+    conn: &DatabaseConnection,
+    limit: Option<u64>,
+) -> Result<Vec<audit_log::Model>, DbErr> {
     let mut query = AuditLog::find();
     if let Some(limit) = limit {
         query = query.limit(limit);
     }
-    query.order_by_desc(audit_log::Column::Timestamp).all(conn).await
+    query
+        .order_by_desc(audit_log::Column::Timestamp)
+        .all(conn)
+        .await
 }
 
 pub async fn insert_audit_log_wrapper(log: &shared::AuditLog) -> Result<(), DbErr> {
@@ -1197,6 +1673,39 @@ pub async fn delete_task(id: &str) -> Result<(), DbErr> {
     delete_task_by_id(&conn, id).await
 }
 
+pub async fn get_resource_tickets() -> Result<Vec<shared::ResourceTicket>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let tickets = get_all_resource_tickets(&conn).await?;
+    Ok(tickets
+        .into_iter()
+        .map(db_resource_ticket_to_shared)
+        .collect())
+}
+
+pub async fn get_resource_ticket(id: i32) -> Result<Option<shared::ResourceTicket>, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    Ok(get_resource_ticket_by_id(&conn, id)
+        .await?
+        .map(db_resource_ticket_to_shared))
+}
+
+pub async fn insert_resource_ticket_wrapper(ticket: &shared::ResourceTicket) -> Result<i32, DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    insert_resource_ticket(&conn, ticket).await
+}
+
+pub async fn update_resource_ticket(id: i32, ticket: &shared::ResourceTicket) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    let mut updated = ticket.clone();
+    updated.id = Some(id);
+    update_resource_ticket_by_id(&conn, &updated).await
+}
+
+pub async fn delete_resource_ticket(id: i32) -> Result<(), DbErr> {
+    let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
+    delete_resource_ticket_by_id(&conn, id).await
+}
+
 // Risk wrappers
 pub async fn get_risks() -> Result<Vec<risk::Model>, DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
@@ -1241,15 +1750,26 @@ pub async fn delete_zone(id: &str) -> Result<(), DbErr> {
 
 // ============== Custom Role CRUD ==============
 
-pub async fn get_all_custom_roles(conn: &DatabaseConnection) -> Result<Vec<custom_role::Model>, DbErr> {
-    CustomRole::find().order_by_asc(custom_role::Column::Id).all(conn).await
+pub async fn get_all_custom_roles(
+    conn: &DatabaseConnection,
+) -> Result<Vec<custom_role::Model>, DbErr> {
+    CustomRole::find()
+        .order_by_asc(custom_role::Column::Id)
+        .all(conn)
+        .await
 }
 
-pub async fn get_custom_role_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<custom_role::Model>, DbErr> {
+pub async fn get_custom_role_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<custom_role::Model>, DbErr> {
     CustomRole::find_by_id(id).one(conn).await
 }
 
-pub async fn insert_custom_role(conn: &DatabaseConnection, role: &shared::CustomRole) -> Result<i32, DbErr> {
+pub async fn insert_custom_role(
+    conn: &DatabaseConnection,
+    role: &shared::CustomRole,
+) -> Result<i32, DbErr> {
     let permissions_json = serde_json::to_string(&role.permissions).unwrap_or_default();
 
     let db_role = custom_role::ActiveModel {
@@ -1265,7 +1785,11 @@ pub async fn insert_custom_role(conn: &DatabaseConnection, role: &shared::Custom
     Ok(result.id)
 }
 
-pub async fn update_custom_role_by_id(conn: &DatabaseConnection, id: i32, role: &shared::CustomRole) -> Result<(), DbErr> {
+pub async fn update_custom_role_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+    role: &shared::CustomRole,
+) -> Result<(), DbErr> {
     let permissions_json = serde_json::to_string(&role.permissions).unwrap_or_default();
 
     let db_role = custom_role::ActiveModel {
@@ -1282,7 +1806,9 @@ pub async fn update_custom_role_by_id(conn: &DatabaseConnection, id: i32, role: 
 }
 
 pub async fn delete_custom_role_by_id(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
-    let role = CustomRole::find_by_id(id).one(conn).await?
+    let role = CustomRole::find_by_id(id)
+        .one(conn)
+        .await?
         .ok_or_else(|| DbErr::Custom("Role not found".to_string()))?;
     role.delete(conn).await?;
     Ok(())
@@ -1325,15 +1851,26 @@ pub async fn delete_custom_role(id: i32) -> Result<(), DbErr> {
 
 // ============== Advanced Scan Task CRUD ==============
 
-pub async fn get_all_advanced_scan_tasks(conn: &DatabaseConnection) -> Result<Vec<advanced_scan_task::Model>, DbErr> {
-    AdvancedScanTask::find().order_by_desc(advanced_scan_task::Column::CreatedAt).all(conn).await
+pub async fn get_all_advanced_scan_tasks(
+    conn: &DatabaseConnection,
+) -> Result<Vec<advanced_scan_task::Model>, DbErr> {
+    AdvancedScanTask::find()
+        .order_by_desc(advanced_scan_task::Column::CreatedAt)
+        .all(conn)
+        .await
 }
 
-pub async fn get_advanced_scan_task_by_id(conn: &DatabaseConnection, id: &str) -> Result<Option<advanced_scan_task::Model>, DbErr> {
+pub async fn get_advanced_scan_task_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<advanced_scan_task::Model>, DbErr> {
     AdvancedScanTask::find_by_id(id).one(conn).await
 }
 
-pub async fn insert_advanced_scan_task(conn: &DatabaseConnection, task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+pub async fn insert_advanced_scan_task(
+    conn: &DatabaseConnection,
+    task: &shared::AdvancedScanTask,
+) -> Result<(), DbErr> {
     let targets_json = serde_json::to_string(&task.targets).unwrap_or_default();
     let config_json = serde_json::to_string(&task.config).unwrap_or_default();
     let now = Utc::now().to_rfc3339();
@@ -1360,7 +1897,10 @@ pub async fn insert_advanced_scan_task(conn: &DatabaseConnection, task: &shared:
     Ok(())
 }
 
-pub async fn update_advanced_scan_task_by_id(conn: &DatabaseConnection, task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+pub async fn update_advanced_scan_task_by_id(
+    conn: &DatabaseConnection,
+    task: &shared::AdvancedScanTask,
+) -> Result<(), DbErr> {
     let targets_json = serde_json::to_string(&task.targets).unwrap_or_default();
     let config_json = serde_json::to_string(&task.config).unwrap_or_default();
     let now = Utc::now().to_rfc3339();
@@ -1387,15 +1927,20 @@ pub async fn update_advanced_scan_task_by_id(conn: &DatabaseConnection, task: &s
     Ok(())
 }
 
-pub async fn delete_advanced_scan_task_by_id(conn: &DatabaseConnection, id: &str) -> Result<(), DbErr> {
-    let task = AdvancedScanTask::find_by_id(id).one(conn).await?
+pub async fn delete_advanced_scan_task_by_id(
+    conn: &DatabaseConnection,
+    id: &str,
+) -> Result<(), DbErr> {
+    let task = AdvancedScanTask::find_by_id(id)
+        .one(conn)
+        .await?
         .ok_or_else(|| DbErr::Custom("Scan task not found".to_string()))?;
     task.delete(conn).await?;
     Ok(())
 }
 
 pub fn db_advanced_scan_task_to_shared(db: advanced_scan_task::Model) -> shared::AdvancedScanTask {
-    use shared::{TaskStatus, AdvancedScanConfig};
+    use shared::{AdvancedScanConfig, TaskStatus};
 
     let targets: Vec<String> = serde_json::from_str(&db.targets).unwrap_or_default();
     let config: AdvancedScanConfig = serde_json::from_str(&db.config).ok().unwrap_or_default();
@@ -1418,8 +1963,16 @@ pub fn db_advanced_scan_task_to_shared(db: advanced_scan_task::Model) -> shared:
         current_target: db.current_target,
         scanned_count: db.scanned_count as u32,
         total_count: db.total_count as u32,
-        start_time: db.start_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
-        end_time: db.end_time.as_ref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))),
+        start_time: db.start_time.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
+        end_time: db.end_time.as_ref().and_then(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .ok()
+                .map(|dt| dt.with_timezone(&Utc))
+        }),
         results: vec![], // Loaded separately
         cloud_mappings: vec![],
         error_message: db.error_message,
@@ -1429,7 +1982,11 @@ pub fn db_advanced_scan_task_to_shared(db: advanced_scan_task::Model) -> shared:
 
 // ============== Quick Scan Result CRUD ==============
 
-pub async fn insert_quick_scan_result(conn: &DatabaseConnection, result: &shared::QuickScanResult, task_id: &str) -> Result<(), DbErr> {
+pub async fn insert_quick_scan_result(
+    conn: &DatabaseConnection,
+    result: &shared::QuickScanResult,
+    task_id: &str,
+) -> Result<(), DbErr> {
     let ports_json = serde_json::to_string(&result.open_ports).unwrap_or_default();
 
     let db_result = quick_scan_result::ActiveModel {
@@ -1446,7 +2003,10 @@ pub async fn insert_quick_scan_result(conn: &DatabaseConnection, result: &shared
     Ok(())
 }
 
-pub async fn get_quick_scan_results_by_task(conn: &DatabaseConnection, task_id: &str) -> Result<Vec<quick_scan_result::Model>, DbErr> {
+pub async fn get_quick_scan_results_by_task(
+    conn: &DatabaseConnection,
+    task_id: &str,
+) -> Result<Vec<quick_scan_result::Model>, DbErr> {
     quick_scan_result::Entity::find()
         .filter(quick_scan_result::Column::TaskId.eq(task_id))
         .order_by_asc(quick_scan_result::Column::ScannedAt)
@@ -1455,7 +2015,8 @@ pub async fn get_quick_scan_results_by_task(conn: &DatabaseConnection, task_id: 
 }
 
 pub fn db_quick_scan_result_to_shared(db: quick_scan_result::Model) -> shared::QuickScanResult {
-    let open_ports: Vec<shared::PortInfo> = serde_json::from_str(&db.open_ports).unwrap_or_default();
+    let open_ports: Vec<shared::PortInfo> =
+        serde_json::from_str(&db.open_ports).unwrap_or_default();
 
     let scanned_at: chrono::DateTime<Utc> = chrono::DateTime::parse_from_rfc3339(&db.scanned_at)
         .ok()
@@ -1477,7 +2038,9 @@ pub async fn get_advanced_scan_tasks() -> Result<Vec<advanced_scan_task::Model>,
     get_all_advanced_scan_tasks(&conn).await
 }
 
-pub async fn insert_advanced_scan_task_wrapper(task: &shared::AdvancedScanTask) -> Result<(), DbErr> {
+pub async fn insert_advanced_scan_task_wrapper(
+    task: &shared::AdvancedScanTask,
+) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     insert_advanced_scan_task(&conn, task).await
 }
@@ -1492,7 +2055,10 @@ pub async fn delete_advanced_scan_task(id: &str) -> Result<(), DbErr> {
     delete_advanced_scan_task_by_id(&conn, id).await
 }
 
-pub async fn insert_quick_scan_result_wrapper(result: &shared::QuickScanResult, task_id: &str) -> Result<(), DbErr> {
+pub async fn insert_quick_scan_result_wrapper(
+    result: &shared::QuickScanResult,
+    task_id: &str,
+) -> Result<(), DbErr> {
     let conn = get_db().ok_or(DbErr::Custom("Database not initialized".to_string()))?;
     insert_quick_scan_result(&conn, result, task_id).await
 }
@@ -1543,15 +2109,29 @@ pub async fn update_physical_machine(
     info: &shared::UpdatePhysicalMachineInfo,
     updated_at: &str,
 ) -> Result<(), DbErr> {
-    if let Some(pm) = get_physical_machine_by_business_resource_id(conn, business_resource_id).await? {
+    if let Some(pm) =
+        get_physical_machine_by_business_resource_id(conn, business_resource_id).await?
+    {
         let mut pm_active: physical_machine::ActiveModel = pm.into();
 
-        if let Some(v) = &info.serial_number { pm_active.serial_number = Set(Some(v.clone())); }
-        if let Some(v) = &info.rack_location { pm_active.rack_location = Set(Some(v.clone())); }
-        if let Some(v) = &info.hardware_model { pm_active.hardware_model = Set(Some(v.clone())); }
-        if let Some(v) = info.warranty_expiry { pm_active.warranty_expiry = Set(Some(v.to_rfc3339())); }
-        if let Some(v) = &info.agent_status { pm_active.agent_status = Set(Some(v.clone())); }
-        if let Some(v) = &info.ipmi_address { pm_active.ipmi_address = Set(Some(v.clone())); }
+        if let Some(v) = &info.serial_number {
+            pm_active.serial_number = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.rack_location {
+            pm_active.rack_location = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.hardware_model {
+            pm_active.hardware_model = Set(Some(v.clone()));
+        }
+        if let Some(v) = info.warranty_expiry {
+            pm_active.warranty_expiry = Set(Some(v.to_rfc3339()));
+        }
+        if let Some(v) = &info.agent_status {
+            pm_active.agent_status = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.ipmi_address {
+            pm_active.ipmi_address = Set(Some(v.clone()));
+        }
         pm_active.updated_at = Set(Some(updated_at.to_string()));
 
         pm_active.update(conn).await?;
@@ -1578,7 +2158,9 @@ pub async fn insert_cloud_virtual_machine(
     info: &shared::CreateCloudVirtualMachineInfo,
     created_at: &str,
 ) -> Result<i32, DbErr> {
-    let security_group_ids_json = info.security_group_ids.as_ref()
+    let security_group_ids_json = info
+        .security_group_ids
+        .as_ref()
         .map(|ids| serde_json::to_string(ids).unwrap_or_default());
 
     let db_cvm = cloud_virtual_machine::ActiveModel {
@@ -1618,18 +2200,38 @@ pub async fn update_cloud_virtual_machine(
     info: &shared::UpdateCloudVirtualMachineInfo,
     updated_at: &str,
 ) -> Result<(), DbErr> {
-    if let Some(cvm) = get_cloud_virtual_machine_by_business_resource_id(conn, business_resource_id).await? {
+    if let Some(cvm) =
+        get_cloud_virtual_machine_by_business_resource_id(conn, business_resource_id).await?
+    {
         let mut cvm_active: cloud_virtual_machine::ActiveModel = cvm.into();
 
-        if let Some(v) = &info.billing_mode { cvm_active.billing_mode = Set(Some(v.clone())); }
-        if let Some(v) = info.expire_time { cvm_active.expire_time = Set(Some(v.to_rfc3339())); }
-        if let Some(v) = &info.charge_type { cvm_active.charge_type = Set(Some(v.clone())); }
-        if let Some(v) = &info.instance_charge_type { cvm_active.instance_charge_type = Set(Some(v.clone())); }
-        if let Some(v) = &info.internet_charge_type { cvm_active.internet_charge_type = Set(Some(v.clone())); }
-        if let Some(v) = info.internet_max_bandwidth_out { cvm_active.internet_max_bandwidth_out = Set(Some(v)); }
-        if let Some(v) = &info.image_id { cvm_active.image_id = Set(Some(v.clone())); }
-        if let Some(v) = &info.v_switch_id { cvm_active.v_switch_id = Set(Some(v.clone())); }
-        if let Some(v) = &info.vpc_id { cvm_active.vpc_id = Set(Some(v.clone())); }
+        if let Some(v) = &info.billing_mode {
+            cvm_active.billing_mode = Set(Some(v.clone()));
+        }
+        if let Some(v) = info.expire_time {
+            cvm_active.expire_time = Set(Some(v.to_rfc3339()));
+        }
+        if let Some(v) = &info.charge_type {
+            cvm_active.charge_type = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.instance_charge_type {
+            cvm_active.instance_charge_type = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.internet_charge_type {
+            cvm_active.internet_charge_type = Set(Some(v.clone()));
+        }
+        if let Some(v) = info.internet_max_bandwidth_out {
+            cvm_active.internet_max_bandwidth_out = Set(Some(v));
+        }
+        if let Some(v) = &info.image_id {
+            cvm_active.image_id = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.v_switch_id {
+            cvm_active.v_switch_id = Set(Some(v.clone()));
+        }
+        if let Some(v) = &info.vpc_id {
+            cvm_active.vpc_id = Set(Some(v.clone()));
+        }
         if let Some(v) = &info.security_group_ids {
             cvm_active.security_group_ids = Set(Some(serde_json::to_string(v).unwrap_or_default()));
         }
@@ -1653,7 +2255,7 @@ pub async fn delete_cloud_virtual_machine(
 
 // ==================== Service Provider CRUD ====================
 
-use crate::entities::{service_provider, machine_room, cloud_platform_config, security_product};
+use crate::entities::{cloud_platform_config, machine_room, security_product, service_provider};
 
 /// 服务商数据返回结构
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -1697,17 +2299,18 @@ impl From<service_provider::Model> for DbServiceProvider {
     }
 }
 
-pub async fn get_all_service_providers(conn: &DatabaseConnection) -> Result<Vec<DbServiceProvider>, DbErr> {
-    let providers = service_provider::Entity::find()
-        .all(conn)
-        .await?;
+pub async fn get_all_service_providers(
+    conn: &DatabaseConnection,
+) -> Result<Vec<DbServiceProvider>, DbErr> {
+    let providers = service_provider::Entity::find().all(conn).await?;
     Ok(providers.into_iter().map(|p| p.into()).collect())
 }
 
-pub async fn get_service_provider_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbServiceProvider>, DbErr> {
-    let provider = service_provider::Entity::find_by_id(id)
-        .one(conn)
-        .await?;
+pub async fn get_service_provider_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<DbServiceProvider>, DbErr> {
+    let provider = service_provider::Entity::find_by_id(id).one(conn).await?;
     Ok(provider.map(|p| p.into()))
 }
 
@@ -1767,19 +2370,45 @@ pub async fn update_service_provider(
 ) -> Result<(), DbErr> {
     if let Some(provider) = service_provider::Entity::find_by_id(id).one(conn).await? {
         let mut provider_active: service_provider::ActiveModel = provider.into();
-        if let Some(v) = provider_name { provider_active.provider_name = Set(v.to_string()); }
-        if let Some(v) = provider_code { provider_active.provider_code = Set(v.to_string()); }
-        if let Some(v) = short_name { provider_active.short_name = Set(v.to_string()); }
-        if let Some(v) = logo_url { provider_active.logo_url = Set(Some(v.to_string())); }
-        if let Some(v) = contact_person { provider_active.contact_person = Set(v.to_string()); }
-        if let Some(v) = contact_phone { provider_active.contact_phone = Set(v.to_string()); }
-        if let Some(v) = contact_email { provider_active.contact_email = Set(v.to_string()); }
-        if let Some(v) = headquarters { provider_active.headquarters = Set(v.to_string()); }
-        if let Some(v) = service_area { provider_active.service_area = Set(v.to_string()); }
-        if let Some(v) = business_license { provider_active.business_license = Set(v.to_string()); }
-        if let Some(v) = remarks { provider_active.remarks = Set(Some(v.to_string())); }
-        if let Some(v) = status { provider_active.status = Set(v.to_string()); }
-        if let Some(v) = updated_at { provider_active.updated_at = Set(Some(v.to_string())); }
+        if let Some(v) = provider_name {
+            provider_active.provider_name = Set(v.to_string());
+        }
+        if let Some(v) = provider_code {
+            provider_active.provider_code = Set(v.to_string());
+        }
+        if let Some(v) = short_name {
+            provider_active.short_name = Set(v.to_string());
+        }
+        if let Some(v) = logo_url {
+            provider_active.logo_url = Set(Some(v.to_string()));
+        }
+        if let Some(v) = contact_person {
+            provider_active.contact_person = Set(v.to_string());
+        }
+        if let Some(v) = contact_phone {
+            provider_active.contact_phone = Set(v.to_string());
+        }
+        if let Some(v) = contact_email {
+            provider_active.contact_email = Set(v.to_string());
+        }
+        if let Some(v) = headquarters {
+            provider_active.headquarters = Set(v.to_string());
+        }
+        if let Some(v) = service_area {
+            provider_active.service_area = Set(v.to_string());
+        }
+        if let Some(v) = business_license {
+            provider_active.business_license = Set(v.to_string());
+        }
+        if let Some(v) = remarks {
+            provider_active.remarks = Set(Some(v.to_string()));
+        }
+        if let Some(v) = status {
+            provider_active.status = Set(v.to_string());
+        }
+        if let Some(v) = updated_at {
+            provider_active.updated_at = Set(Some(v.to_string()));
+        }
         provider_active.update(conn).await?;
     }
     Ok(())
@@ -1839,16 +2468,15 @@ impl From<machine_room::Model> for DbMachineRoom {
 }
 
 pub async fn get_all_machine_rooms(conn: &DatabaseConnection) -> Result<Vec<DbMachineRoom>, DbErr> {
-    let rooms = machine_room::Entity::find()
-        .all(conn)
-        .await?;
+    let rooms = machine_room::Entity::find().all(conn).await?;
     Ok(rooms.into_iter().map(|r| r.into()).collect())
 }
 
-pub async fn get_machine_room_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbMachineRoom>, DbErr> {
-    let room = machine_room::Entity::find_by_id(id)
-        .one(conn)
-        .await?;
+pub async fn get_machine_room_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<DbMachineRoom>, DbErr> {
+    let room = machine_room::Entity::find_by_id(id).one(conn).await?;
     Ok(room.map(|r| r.into()))
 }
 
@@ -1911,29 +2539,55 @@ pub async fn update_machine_room(
 ) -> Result<(), DbErr> {
     if let Some(room) = machine_room::Entity::find_by_id(id).one(conn).await? {
         let mut room_active: machine_room::ActiveModel = room.into();
-        if let Some(v) = room_name { room_active.room_name = Set(v.to_string()); }
-        if let Some(v) = room_code { room_active.room_code = Set(v.to_string()); }
-        if let Some(v) = facility_type { room_active.facility_type = Set(v.to_string()); }
-        if let Some(v) = address { room_active.address = Set(v.to_string()); }
-        if let Some(v) = provider_id { room_active.provider_id = Set(v); }
-        if let Some(v) = room_type { room_active.room_type = Set(v.to_string()); }
-        if let Some(v) = contact_person { room_active.contact_person = Set(v.to_string()); }
-        if let Some(v) = contact_phone { room_active.contact_phone = Set(v.to_string()); }
-        if let Some(v) = floor { room_active.floor = Set(Some(v.to_string())); }
-        if let Some(v) = cabinet_count { room_active.cabinet_count = Set(Some(v)); }
-        if let Some(v) = area_size { room_active.area_size = Set(Some(v.to_string())); }
-        if let Some(v) = remarks { room_active.remarks = Set(Some(v.to_string())); }
-        if let Some(v) = status { room_active.status = Set(v.to_string()); }
-        if let Some(v) = updated_at { room_active.updated_at = Set(Some(v.to_string())); }
+        if let Some(v) = room_name {
+            room_active.room_name = Set(v.to_string());
+        }
+        if let Some(v) = room_code {
+            room_active.room_code = Set(v.to_string());
+        }
+        if let Some(v) = facility_type {
+            room_active.facility_type = Set(v.to_string());
+        }
+        if let Some(v) = address {
+            room_active.address = Set(v.to_string());
+        }
+        if let Some(v) = provider_id {
+            room_active.provider_id = Set(v);
+        }
+        if let Some(v) = room_type {
+            room_active.room_type = Set(v.to_string());
+        }
+        if let Some(v) = contact_person {
+            room_active.contact_person = Set(v.to_string());
+        }
+        if let Some(v) = contact_phone {
+            room_active.contact_phone = Set(v.to_string());
+        }
+        if let Some(v) = floor {
+            room_active.floor = Set(Some(v.to_string()));
+        }
+        if let Some(v) = cabinet_count {
+            room_active.cabinet_count = Set(Some(v));
+        }
+        if let Some(v) = area_size {
+            room_active.area_size = Set(Some(v.to_string()));
+        }
+        if let Some(v) = remarks {
+            room_active.remarks = Set(Some(v.to_string()));
+        }
+        if let Some(v) = status {
+            room_active.status = Set(v.to_string());
+        }
+        if let Some(v) = updated_at {
+            room_active.updated_at = Set(Some(v.to_string()));
+        }
         room_active.update(conn).await?;
     }
     Ok(())
 }
 
 pub async fn delete_machine_room(conn: &DatabaseConnection, id: i32) -> Result<(), DbErr> {
-    machine_room::Entity::delete_by_id(id)
-        .exec(conn)
-        .await?;
+    machine_room::Entity::delete_by_id(id).exec(conn).await?;
     Ok(())
 }
 
@@ -1981,14 +2635,17 @@ impl From<cloud_platform_config::Model> for DbCloudPlatformConfig {
     }
 }
 
-pub async fn get_all_cloud_platform_configs(conn: &DatabaseConnection) -> Result<Vec<DbCloudPlatformConfig>, DbErr> {
-    let configs = cloud_platform_config::Entity::find()
-        .all(conn)
-        .await?;
+pub async fn get_all_cloud_platform_configs(
+    conn: &DatabaseConnection,
+) -> Result<Vec<DbCloudPlatformConfig>, DbErr> {
+    let configs = cloud_platform_config::Entity::find().all(conn).await?;
     Ok(configs.into_iter().map(|c| c.into()).collect())
 }
 
-pub async fn get_cloud_platform_config_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbCloudPlatformConfig>, DbErr> {
+pub async fn get_cloud_platform_config_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<DbCloudPlatformConfig>, DbErr> {
     let config = cloud_platform_config::Entity::find_by_id(id)
         .one(conn)
         .await?;
@@ -2047,21 +2704,50 @@ pub async fn update_cloud_platform_config(
     last_test_result: Option<&str>,
     updated_at: Option<&str>,
 ) -> Result<(), DbErr> {
-    if let Some(config) = cloud_platform_config::Entity::find_by_id(id).one(conn).await? {
+    if let Some(config) = cloud_platform_config::Entity::find_by_id(id)
+        .one(conn)
+        .await?
+    {
         let mut config_active: cloud_platform_config::ActiveModel = config.into();
-        if let Some(v) = platform_name { config_active.platform_name = Set(v.to_string()); }
-        if let Some(v) = provider_id { config_active.provider_id = Set(v); }
-        if let Some(v) = cloud_type { config_active.cloud_type = Set(v.to_string()); }
-        if let Some(v) = foundation { config_active.foundation = Set(v.to_string()); }
-        if let Some(v) = region_id { config_active.region_id = Set(v.to_string()); }
-        if let Some(v) = machine_room_id { config_active.machine_room_id = Set(v); }
-        if let Some(v) = access_key_id { config_active.access_key_id = Set(v.to_string()); }
-        if let Some(v) = access_key_secret { config_active.access_key_secret = Set(v.to_string()); }
-        if let Some(v) = remarks { config_active.remarks = Set(Some(v.to_string())); }
-        if let Some(v) = status { config_active.status = Set(v.to_string()); }
-        if let Some(v) = last_test_time { config_active.last_test_time = Set(Some(v.to_string())); }
-        if let Some(v) = last_test_result { config_active.last_test_result = Set(Some(v.to_string())); }
-        if let Some(v) = updated_at { config_active.updated_at = Set(Some(v.to_string())); }
+        if let Some(v) = platform_name {
+            config_active.platform_name = Set(v.to_string());
+        }
+        if let Some(v) = provider_id {
+            config_active.provider_id = Set(v);
+        }
+        if let Some(v) = cloud_type {
+            config_active.cloud_type = Set(v.to_string());
+        }
+        if let Some(v) = foundation {
+            config_active.foundation = Set(v.to_string());
+        }
+        if let Some(v) = region_id {
+            config_active.region_id = Set(v.to_string());
+        }
+        if let Some(v) = machine_room_id {
+            config_active.machine_room_id = Set(v);
+        }
+        if let Some(v) = access_key_id {
+            config_active.access_key_id = Set(v.to_string());
+        }
+        if let Some(v) = access_key_secret {
+            config_active.access_key_secret = Set(v.to_string());
+        }
+        if let Some(v) = remarks {
+            config_active.remarks = Set(Some(v.to_string()));
+        }
+        if let Some(v) = status {
+            config_active.status = Set(v.to_string());
+        }
+        if let Some(v) = last_test_time {
+            config_active.last_test_time = Set(Some(v.to_string()));
+        }
+        if let Some(v) = last_test_result {
+            config_active.last_test_result = Set(Some(v.to_string()));
+        }
+        if let Some(v) = updated_at {
+            config_active.updated_at = Set(Some(v.to_string()));
+        }
         config_active.update(conn).await?;
     }
     Ok(())
@@ -2130,17 +2816,18 @@ impl From<security_product::Model> for DbSecurityProduct {
     }
 }
 
-pub async fn get_all_security_products(conn: &DatabaseConnection) -> Result<Vec<DbSecurityProduct>, DbErr> {
-    let products = security_product::Entity::find()
-        .all(conn)
-        .await?;
+pub async fn get_all_security_products(
+    conn: &DatabaseConnection,
+) -> Result<Vec<DbSecurityProduct>, DbErr> {
+    let products = security_product::Entity::find().all(conn).await?;
     Ok(products.into_iter().map(|p| p.into()).collect())
 }
 
-pub async fn get_security_product_by_id(conn: &DatabaseConnection, id: i32) -> Result<Option<DbSecurityProduct>, DbErr> {
-    let product = security_product::Entity::find_by_id(id)
-        .one(conn)
-        .await?;
+pub async fn get_security_product_by_id(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<DbSecurityProduct>, DbErr> {
+    let product = security_product::Entity::find_by_id(id).one(conn).await?;
     Ok(product.map(|p| p.into()))
 }
 
@@ -2219,25 +2906,63 @@ pub async fn update_security_product(
 ) -> Result<(), DbErr> {
     if let Some(product) = security_product::Entity::find_by_id(id).one(conn).await? {
         let mut product_active: security_product::ActiveModel = product.into();
-        if let Some(v) = name { product_active.name = Set(v.to_string()); }
-        if let Some(v) = category { product_active.category = Set(v.to_string()); }
-        if let Some(v) = vendor { product_active.vendor = Set(v.to_string()); }
-        if let Some(v) = model { product_active.model = Set(v.to_string()); }
-        if let Some(v) = version { product_active.version = Set(v.to_string()); }
-        if let Some(v) = serial_number { product_active.serial_number = Set(Some(v.to_string())); }
-        if let Some(v) = license_type { product_active.license_type = Set(v.to_string()); }
-        if let Some(v) = license_expiry { product_active.license_expiry = Set(Some(v.to_string())); }
-        if let Some(v) = management_ip { product_active.management_ip = Set(Some(v.to_string())); }
-        if let Some(v) = deployment_mode { product_active.deployment_mode = Set(v.to_string()); }
-        if let Some(v) = cloud_platform_id { product_active.cloud_platform_id = Set(Some(v)); }
-        if let Some(v) = machine_room_id { product_active.machine_room_id = Set(Some(v)); }
-        if let Some(v) = provider_id { product_active.provider_id = Set(Some(v)); }
-        if let Some(v) = status { product_active.status = Set(v.to_string()); }
-        if let Some(v) = features { product_active.features = Set(Some(v.to_string())); }
-        if let Some(v) = throughput { product_active.throughput = Set(Some(v.to_string())); }
-        if let Some(v) = contact_person { product_active.contact_person = Set(v.to_string()); }
-        if let Some(v) = contact_phone { product_active.contact_phone = Set(v.to_string()); }
-        if let Some(v) = remarks { product_active.remarks = Set(Some(v.to_string())); }
+        if let Some(v) = name {
+            product_active.name = Set(v.to_string());
+        }
+        if let Some(v) = category {
+            product_active.category = Set(v.to_string());
+        }
+        if let Some(v) = vendor {
+            product_active.vendor = Set(v.to_string());
+        }
+        if let Some(v) = model {
+            product_active.model = Set(v.to_string());
+        }
+        if let Some(v) = version {
+            product_active.version = Set(v.to_string());
+        }
+        if let Some(v) = serial_number {
+            product_active.serial_number = Set(Some(v.to_string()));
+        }
+        if let Some(v) = license_type {
+            product_active.license_type = Set(v.to_string());
+        }
+        if let Some(v) = license_expiry {
+            product_active.license_expiry = Set(Some(v.to_string()));
+        }
+        if let Some(v) = management_ip {
+            product_active.management_ip = Set(Some(v.to_string()));
+        }
+        if let Some(v) = deployment_mode {
+            product_active.deployment_mode = Set(v.to_string());
+        }
+        if let Some(v) = cloud_platform_id {
+            product_active.cloud_platform_id = Set(Some(v));
+        }
+        if let Some(v) = machine_room_id {
+            product_active.machine_room_id = Set(Some(v));
+        }
+        if let Some(v) = provider_id {
+            product_active.provider_id = Set(Some(v));
+        }
+        if let Some(v) = status {
+            product_active.status = Set(v.to_string());
+        }
+        if let Some(v) = features {
+            product_active.features = Set(Some(v.to_string()));
+        }
+        if let Some(v) = throughput {
+            product_active.throughput = Set(Some(v.to_string()));
+        }
+        if let Some(v) = contact_person {
+            product_active.contact_person = Set(v.to_string());
+        }
+        if let Some(v) = contact_phone {
+            product_active.contact_phone = Set(v.to_string());
+        }
+        if let Some(v) = remarks {
+            product_active.remarks = Set(Some(v.to_string()));
+        }
         product_active.update(conn).await?;
     }
     Ok(())
@@ -2249,4 +2974,3 @@ pub async fn delete_security_product(conn: &DatabaseConnection, id: i32) -> Resu
         .await?;
     Ok(())
 }
-

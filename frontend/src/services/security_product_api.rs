@@ -1,13 +1,10 @@
+use crate::config::api_base;
+use crate::state::security_product::{
+    SecurityProduct, SecurityProductCategory, SecurityProductStatus,
+};
 use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
-use crate::state::security_product::{SecurityProduct, SecurityProductCategory, SecurityProductStatus};
-use crate::utils::storage::get_token;
-
-const API_BASE: &str = "http://localhost:3003/api";
-
-fn auth_header() -> Result<String, String> {
-    get_token().ok_or_else(|| "未登录，请先登录".to_string())
-}
+use web_sys::RequestCredentials;
 
 /// 后端返回的安全产品结构
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -37,7 +34,8 @@ struct BackendSecurityProduct {
 
 impl BackendSecurityProduct {
     fn to_frontend(&self) -> SecurityProduct {
-        let features: Vec<String> = self.features
+        let features: Vec<String> = self
+            .features
             .as_ref()
             .and_then(|f| serde_json::from_str(f).ok())
             .unwrap_or_default();
@@ -80,9 +78,8 @@ fn parse_status(s: &str) -> SecurityProductStatus {
 
 /// 获取安全产品列表
 pub async fn fetch_security_products() -> Result<Vec<SecurityProduct>, String> {
-    let token = auth_header()?;
-    let response = Request::get(&format!("{}/security-products", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::get(&format!("{}/security-products", api_base()))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
@@ -151,11 +148,10 @@ impl From<&SecurityProduct> for CreateSecurityProductRequest {
 
 /// 创建安全产品
 pub async fn create_security_product(product: &SecurityProduct) -> Result<SecurityProduct, String> {
-    let token = auth_header()?;
     let request_body = CreateSecurityProductRequest::from(product);
 
-    let response = Request::post(&format!("{}/security-products", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::post(&format!("{}/security-products", api_base()))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -172,8 +168,8 @@ pub async fn create_security_product(product: &SecurityProduct) -> Result<Securi
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let created: BackendSecurityProduct = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let created: BackendSecurityProduct =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(created.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -181,12 +177,14 @@ pub async fn create_security_product(product: &SecurityProduct) -> Result<Securi
 }
 
 /// 更新安全产品
-pub async fn update_security_product(id: i32, product: &SecurityProduct) -> Result<SecurityProduct, String> {
-    let token = auth_header()?;
+pub async fn update_security_product(
+    id: i32,
+    product: &SecurityProduct,
+) -> Result<SecurityProduct, String> {
     let request_body = CreateSecurityProductRequest::from(product);
 
-    let response = Request::put(&format!("{}/security-products/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::put(&format!("{}/security-products/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -203,8 +201,8 @@ pub async fn update_security_product(id: i32, product: &SecurityProduct) -> Resu
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let updated: BackendSecurityProduct = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let updated: BackendSecurityProduct =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(updated.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -213,9 +211,8 @@ pub async fn update_security_product(id: i32, product: &SecurityProduct) -> Resu
 
 /// 删除安全产品
 pub async fn delete_security_product(id: i32) -> Result<(), String> {
-    let token = auth_header()?;
-    let response = Request::delete(&format!("{}/security-products/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::delete(&format!("{}/security-products/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;

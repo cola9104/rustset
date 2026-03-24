@@ -67,9 +67,19 @@ pub fn users_url() -> String {
     format!("{}/users", api_base())
 }
 
+/// 任务列表 API URL
+pub fn tasks_url() -> String {
+    format!("{}/tasks", api_base())
+}
+
 /// 当前用户信息 API URL
 pub fn current_user_url() -> String {
     format!("{}/users/me", api_base())
+}
+
+/// 仪表板汇总 API URL
+pub fn dashboard_summary_url() -> String {
+    format!("{}/dashboard-summary", api_base())
 }
 
 /// 审计日志 API URL

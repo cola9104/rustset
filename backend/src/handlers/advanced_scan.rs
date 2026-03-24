@@ -4,23 +4,21 @@
 
 use axum::{
     extract::{Path, State},
-    http::{StatusCode, HeaderMap},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::Utc;
 
-use crate::state::AppState;
-use shared::{
-    AdvancedScanTask, AdvancedScanConfig, CreateAdvancedScanRequest, TaskStatus,
-};
 use crate::database::{
-    get_advanced_scan_tasks, insert_advanced_scan_task_wrapper, update_advanced_scan_task,
-    delete_advanced_scan_task, insert_quick_scan_result_wrapper, get_quick_scan_results,
-    db_advanced_scan_task_to_shared, db_quick_scan_result_to_shared,
+    db_advanced_scan_task_to_shared, db_quick_scan_result_to_shared, delete_advanced_scan_task,
+    get_advanced_scan_tasks, get_quick_scan_results, insert_advanced_scan_task_wrapper,
+    insert_quick_scan_result_wrapper, update_advanced_scan_task,
 };
+use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
+use shared::{AdvancedScanConfig, AdvancedScanTask, CreateAdvancedScanRequest, TaskStatus};
 
 /// Execute advanced scan
 pub async fn execute_advanced_scan(
@@ -29,8 +27,8 @@ pub async fn execute_advanced_scan(
     Json(req): Json<CreateAdvancedScanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+    let current_user =
+        get_current_user(&headers, &state.users).ok_or_else(|| StatusCode::UNAUTHORIZED)?;
 
     // Validate request
     if req.targets.is_empty() {
@@ -77,8 +75,13 @@ pub async fn execute_advanced_scan(
     state.advanced_tasks.write().unwrap().push(task.clone());
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCAN_TASK_CREATED", &req.name,
-              &format!("Created advanced scan task with ID {}", task_id));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "SCAN_TASK_CREATED",
+        &req.name,
+        &format!("Created advanced scan task with ID {}", task_id),
+    );
 
     // Spawn background scan task using spawn_blocking for scan operations
     let state_clone = state.clone();
@@ -90,11 +93,9 @@ pub async fn execute_advanced_scan(
         let result = rt.block_on(async {
             let scan_manager_guard = state_clone.scan_manager.write().await;
             if let Some(ref scan_manager) = *scan_manager_guard {
-                scan_manager.execute_advanced_scan(
-                    task_id_clone.clone(),
-                    req.targets,
-                    config,
-                ).await
+                scan_manager
+                    .execute_advanced_scan(task_id_clone.clone(), req.targets, config)
+                    .await
             } else {
                 Err("Scan manager not available".into())
             }
@@ -124,9 +125,7 @@ pub async fn execute_advanced_scan(
 }
 
 /// Get all advanced scan tasks
-pub async fn get_advanced_tasks(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn get_advanced_tasks(State(state): State<AppState>) -> impl IntoResponse {
     // Try to load from database first
     let tasks = match get_advanced_scan_tasks().await {
         Ok(db_tasks) => {
@@ -135,7 +134,10 @@ pub async fn get_advanced_tasks(
                 let mut task = db_advanced_scan_task_to_shared(db_task);
                 // Load results for each task
                 if let Ok(results) = get_quick_scan_results(&task.id).await {
-                    task.results = results.into_iter().map(db_quick_scan_result_to_shared).collect();
+                    task.results = results
+                        .into_iter()
+                        .map(db_quick_scan_result_to_shared)
+                        .collect();
                 }
                 tasks_with_results.push(task);
             }
@@ -164,7 +166,10 @@ pub async fn get_advanced_task(
             let mut task = db_advanced_scan_task_to_shared(db_task.clone());
             // Load results
             if let Ok(results) = get_quick_scan_results(&id).await {
-                task.results = results.into_iter().map(db_quick_scan_result_to_shared).collect();
+                task.results = results
+                    .into_iter()
+                    .map(db_quick_scan_result_to_shared)
+                    .collect();
             }
             return Ok(Json(task));
         }
@@ -172,7 +177,9 @@ pub async fn get_advanced_task(
 
     // Fallback to memory cache
     let tasks = state.advanced_tasks.read().unwrap();
-    let task = tasks.iter().find(|t| t.id == id)
+    let task = tasks
+        .iter()
+        .find(|t| t.id == id)
         .cloned()
         .ok_or(StatusCode::NOT_FOUND)?;
     Ok(Json(task))
@@ -185,8 +192,8 @@ pub async fn delete_advanced_scan(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+    let current_user =
+        get_current_user(&headers, &state.users).ok_or_else(|| StatusCode::UNAUTHORIZED)?;
 
     // Get task name for audit log before deletion
     let task_name = {
@@ -197,7 +204,9 @@ pub async fn delete_advanced_scan(
     // Remove from in-memory storage
     {
         let mut tasks = state.advanced_tasks.write().unwrap();
-        let idx = tasks.iter().position(|t| t.id == id)
+        let idx = tasks
+            .iter()
+            .position(|t| t.id == id)
             .ok_or(StatusCode::NOT_FOUND)?;
         tasks.remove(idx);
     }
@@ -207,8 +216,13 @@ pub async fn delete_advanced_scan(
 
     // Audit log
     let target = task_name.unwrap_or_else(|| id.clone());
-    log_action(&state.audit_logs, &current_user, "SCAN_TASK_DELETED", &target,
-              &format!("Deleted advanced scan task with ID {}", id));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "SCAN_TASK_DELETED",
+        &target,
+        &format!("Deleted advanced scan task with ID {}", id),
+    );
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -220,8 +234,8 @@ pub async fn cancel_advanced_scan(
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| StatusCode::UNAUTHORIZED)?;
+    let current_user =
+        get_current_user(&headers, &state.users).ok_or_else(|| StatusCode::UNAUTHORIZED)?;
 
     // Update task status
     let (found, task_to_update) = {
@@ -236,23 +250,26 @@ pub async fn cancel_advanced_scan(
                 (true, task.clone())
             }
         } else {
-            (false, shared::AdvancedScanTask {
-                id: String::new(),
-                name: String::new(),
-                targets: vec![],
-                config: shared::AdvancedScanConfig::default(),
-                status: TaskStatus::Failed,
-                progress: 0.0,
-                current_target: None,
-                scanned_count: 0,
-                total_count: 0,
-                start_time: None,
-                end_time: None,
-                results: vec![],
-                cloud_mappings: vec![],
-                error_message: None,
-                created_by: None,
-            })
+            (
+                false,
+                shared::AdvancedScanTask {
+                    id: String::new(),
+                    name: String::new(),
+                    targets: vec![],
+                    config: shared::AdvancedScanConfig::default(),
+                    status: TaskStatus::Failed,
+                    progress: 0.0,
+                    current_target: None,
+                    scanned_count: 0,
+                    total_count: 0,
+                    start_time: None,
+                    end_time: None,
+                    results: vec![],
+                    cloud_mappings: vec![],
+                    error_message: None,
+                    created_by: None,
+                },
+            )
         }
     };
 
@@ -264,8 +281,13 @@ pub async fn cancel_advanced_scan(
     let _ = update_advanced_scan_task(&task_to_update).await;
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCAN_TASK_UPDATED", &task_to_update.name,
-              "Cancelled advanced scan task");
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "SCAN_TASK_UPDATED",
+        &task_to_update.name,
+        "Cancelled advanced scan task",
+    );
 
     Ok(StatusCode::OK)
 }
@@ -277,13 +299,16 @@ pub async fn export_scan_results(
 ) -> Result<impl IntoResponse, StatusCode> {
     // Try to get results from database first
     let results = match get_quick_scan_results(&id).await {
-        Ok(db_results) => {
-            db_results.into_iter().map(db_quick_scan_result_to_shared).collect()
-        }
+        Ok(db_results) => db_results
+            .into_iter()
+            .map(db_quick_scan_result_to_shared)
+            .collect(),
         Err(_) => {
             // Fallback to memory cache
             let tasks = state.advanced_tasks.read().unwrap();
-            let task = tasks.iter().find(|t| t.id == id)
+            let task = tasks
+                .iter()
+                .find(|t| t.id == id)
                 .ok_or(StatusCode::NOT_FOUND)?;
             task.results.clone()
         }
@@ -293,7 +318,9 @@ pub async fn export_scan_results(
     let mut csv = String::from("IP,Is Alive,Open Ports,Scan Time\n");
 
     for result in &results {
-        let ports: Vec<String> = result.open_ports.iter()
+        let ports: Vec<String> = result
+            .open_ports
+            .iter()
             .filter(|p| p.is_open)
             .map(|p| p.port.to_string())
             .collect();
@@ -312,9 +339,7 @@ pub async fn export_scan_results(
 }
 
 /// Get scan engines status
-pub async fn get_scan_engines_status(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn get_scan_engines_status(State(state): State<AppState>) -> impl IntoResponse {
     let scan_manager_guard = state.scan_manager.read().await;
 
     let status = if let Some(ref scan_manager) = *scan_manager_guard {
@@ -392,12 +417,13 @@ pub async fn quick_scan(
 ) -> Result<impl IntoResponse, StatusCode> {
     let scan_manager_guard = state.scan_manager.read().await;
 
-    let scan_manager = scan_manager_guard.as_ref()
+    let scan_manager = scan_manager_guard
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    let ports = req.ports.unwrap_or_else(|| {
-        crate::scanners::rustscan::RustScan::get_common_ports("TOP1000")
-    });
+    let ports = req
+        .ports
+        .unwrap_or_else(|| crate::scanners::rustscan::RustScan::get_common_ports("TOP1000"));
 
     let result = if req.service_detection.unwrap_or(false) {
         let detailed = scan_manager.detailed_scan(&req.target, &ports).await;
@@ -435,12 +461,13 @@ pub async fn batch_scan(
 ) -> Result<impl IntoResponse, StatusCode> {
     let scan_manager_guard = state.scan_manager.read().await;
 
-    let scan_manager = scan_manager_guard.as_ref()
+    let scan_manager = scan_manager_guard
+        .as_ref()
         .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    let ports = req.ports.unwrap_or_else(|| {
-        crate::scanners::rustscan::RustScan::get_common_ports("TOP100")
-    });
+    let ports = req
+        .ports
+        .unwrap_or_else(|| crate::scanners::rustscan::RustScan::get_common_ports("TOP100"));
 
     let results = scan_manager.scan_multiple(&req.targets, &ports).await;
 

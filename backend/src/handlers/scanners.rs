@@ -6,17 +6,17 @@
 //! - 扫描结果查询
 
 use axum::{
-    extract::{State, Path, Query, Json},
+    extract::{Json, Path, Query, State},
     http::HeaderMap,
 };
 
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
-use crate::state::AppState;
 use crate::middleware::{ApiError, AuthUser};
+use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
-use shared::{ScannerConfig, CreateScannerRequest, UpdateScannerRequest};
+use shared::{CreateScannerRequest, ScannerConfig, UpdateScannerRequest};
 
 /// 有效的扫描器类型
 const VALID_SCANNER_TYPES: &[&str] = &["rustscan", "nmap", "basic_tcp"];
@@ -87,15 +87,18 @@ pub async fn scan_ip(
         // 可能是主机名，跳过验证
     }
 
-    let ports = req.ports.unwrap_or_else(|| vec![
-        22, 23, 80, 443, 445, 3389, 3306, 5432, 6379, 8080, 8443, 27017
-    ]);
+    let ports = req.ports.unwrap_or_else(|| {
+        vec![
+            22, 23, 80, 443, 445, 3389, 3306, 5432, 6379, 8080, 8443, 27017,
+        ]
+    });
 
     let scan_id = uuid::Uuid::new_v4().to_string();
     let start_time = Utc::now();
 
     // 模拟扫描（实际应调用 RustScan）
-    let port_results: Vec<PortScanResult> = ports.into_iter()
+    let port_results: Vec<PortScanResult> = ports
+        .into_iter()
         .map(|port| PortScanResult {
             port,
             is_open: false, // 默认关闭
@@ -114,7 +117,9 @@ pub async fn scan_ip(
     };
 
     // 保存结果
-    let mut results = state.scan_results.write()
+    let mut results = state
+        .scan_results
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to save results: {}", e)))?;
     results.push(result.clone());
 
@@ -127,9 +132,9 @@ pub async fn batch_scan_ips(
     State(state): State<AppState>,
     Json(req): Json<BatchScanRequest>,
 ) -> Result<Json<Vec<ScanResult>>, ApiError> {
-    let ports = req.ports.unwrap_or_else(|| vec![
-        22, 80, 443, 445, 3389, 3306
-    ]);
+    let ports = req
+        .ports
+        .unwrap_or_else(|| vec![22, 80, 443, 445, 3389, 3306]);
 
     let mut results = Vec::new();
 
@@ -137,7 +142,8 @@ pub async fn batch_scan_ips(
         let scan_id = uuid::Uuid::new_v4().to_string();
         let start_time = Utc::now();
 
-        let port_results: Vec<PortScanResult> = ports.iter()
+        let port_results: Vec<PortScanResult> = ports
+            .iter()
             .map(|&port| PortScanResult {
                 port,
                 is_open: false,
@@ -159,7 +165,9 @@ pub async fn batch_scan_ips(
     }
 
     // 保存结果
-    let mut scan_results = state.scan_results.write()
+    let mut scan_results = state
+        .scan_results
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to save results: {}", e)))?;
     scan_results.extend(results.clone());
 
@@ -172,10 +180,13 @@ pub async fn get_scan_results(
     State(state): State<AppState>,
     Query(query): Query<ScanResultsQuery>,
 ) -> Result<Json<Vec<ScanResult>>, ApiError> {
-    let results = state.scan_results.read()
+    let results = state
+        .scan_results
+        .read()
         .map_err(|e| ApiError::internal(format!("Failed to read results: {}", e)))?;
 
-    let filtered: Vec<ScanResult> = results.iter()
+    let filtered: Vec<ScanResult> = results
+        .iter()
         .filter(|r| {
             if let Some(ref target) = query.target {
                 if !r.target.contains(target) {
@@ -189,7 +200,8 @@ pub async fn get_scan_results(
             }
             true
         })
-        .take(query.limit.unwrap_or(100)).cloned()
+        .take(query.limit.unwrap_or(100))
+        .cloned()
         .collect();
 
     Ok(Json(filtered))
@@ -201,10 +213,13 @@ pub async fn get_scan_result(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ScanResult>, ApiError> {
-    let results = state.scan_results.read()
+    let results = state
+        .scan_results
+        .read()
         .map_err(|e| ApiError::internal(format!("Failed to read results: {}", e)))?;
 
-    results.iter()
+    results
+        .iter()
         .find(|r| r.id == id)
         .cloned()
         .map(Json)
@@ -259,7 +274,9 @@ pub async fn get_scanners(
     let _current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    let scanners = state.scanners.read()
+    let scanners = state
+        .scanners
+        .read()
         .map_err(|e| ApiError::internal(format!("Failed to read scanner configs: {}", e)))?;
 
     Ok(Json(scanners.clone()))
@@ -285,7 +302,7 @@ pub async fn get_scanners(
 pub async fn create_scanner(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<CreateScannerRequest>
+    Json(req): Json<CreateScannerRequest>,
 ) -> Result<Json<ScannerConfig>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
@@ -312,14 +329,21 @@ pub async fn create_scanner(
         updated_at: Some(now),
     };
 
-    let mut scanners = state.scanners.write()
+    let mut scanners = state
+        .scanners
+        .write()
         .map_err(|e| ApiError::internal(format!("Failed to write scanner configs: {}", e)))?;
     scanners.push(new_scanner.clone());
     drop(scanners);
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCANNER_CREATED", &scanner_name,
-              &format!("Created scanner config with type {}", scanner_type));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "SCANNER_CREATED",
+        &scanner_name,
+        &format!("Created scanner config with type {}", scanner_type),
+    );
 
     Ok(Json(new_scanner))
 }
@@ -367,10 +391,13 @@ pub async fn update_scanner(
     let now = Utc::now().to_rfc3339();
 
     let updated_scanner = {
-        let mut scanners = state.scanners.write()
+        let mut scanners = state
+            .scanners
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write scanner configs: {}", e)))?;
 
-        let scanner = scanners.iter_mut()
+        let scanner = scanners
+            .iter_mut()
             .find(|s| s.id == id)
             .ok_or_else(|| ApiError::not_found("Scanner config not found"))?;
 
@@ -391,8 +418,16 @@ pub async fn update_scanner(
     };
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCANNER_UPDATED", &updated_scanner.name,
-              &format!("Updated scanner config with type {}", updated_scanner.scanner_type));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "SCANNER_UPDATED",
+        &updated_scanner.name,
+        &format!(
+            "Updated scanner config with type {}",
+            updated_scanner.scanner_type
+        ),
+    );
 
     Ok(Json(updated_scanner))
 }
@@ -430,20 +465,31 @@ pub async fn delete_scanner(
     }
 
     let removed_scanner = {
-        let mut scanners = state.scanners.write()
+        let mut scanners = state
+            .scanners
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write scanner configs: {}", e)))?;
 
-        scanners.iter()
+        scanners
+            .iter()
             .position(|s| s.id == id)
             .map(|idx| scanners.remove(idx))
     };
 
-    let removed_scanner = removed_scanner
-        .ok_or_else(|| ApiError::not_found("Scanner config not found"))?;
+    let removed_scanner =
+        removed_scanner.ok_or_else(|| ApiError::not_found("Scanner config not found"))?;
 
     // Audit log
-    log_action(&state.audit_logs, &current_user, "SCANNER_DELETED", &removed_scanner.name,
-              &format!("Deleted scanner config with type {}", removed_scanner.scanner_type));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "SCANNER_DELETED",
+        &removed_scanner.name,
+        &format!(
+            "Deleted scanner config with type {}",
+            removed_scanner.scanner_type
+        ),
+    );
 
     Ok(Json("Deleted".to_string()))
 }

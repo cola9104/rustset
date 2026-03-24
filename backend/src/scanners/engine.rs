@@ -2,13 +2,16 @@
 //!
 //! Manages scanning operations and provides a unified interface for different scan engines.
 
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
-use chrono::Utc;
 use uuid::Uuid;
 
 use crate::scanners::{rustscan::RustScan, service_detector::ServiceDetector};
-use shared::{QuickScanResult, PortInfo, IPScanResult, PortDetail, ServiceFingerprint, TaskStatus, AdvancedScanTask, AdvancedScanConfig, ScanStrategy};
+use shared::{
+    AdvancedScanConfig, AdvancedScanTask, IPScanResult, PortDetail, PortInfo, QuickScanResult,
+    ScanStrategy, ServiceFingerprint, TaskStatus,
+};
 
 /// Scan engine type
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -91,7 +94,10 @@ impl ScanManager {
 
         // Detect services on open ports
         let open_ports: Vec<PortDetail> = if scan_result.is_alive {
-            let service_map = self.service_detector.detect_services(target, &scan_result.open_ports).await;
+            let service_map = self
+                .service_detector
+                .detect_services(target, &scan_result.open_ports)
+                .await;
 
             scan_result
                 .open_ports

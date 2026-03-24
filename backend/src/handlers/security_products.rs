@@ -2,10 +2,10 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Json},
 };
-use serde_json::json;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
 use shared::Role;
@@ -90,18 +90,14 @@ pub async fn get_security_products(
     _user: AuthUser,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_all_security_products(&conn).await {
-                Ok(products) => Ok(Json(products).into_response()),
-                Err(e) => {
-                    eprintln!("Error loading security products from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_all_security_products(&conn).await {
+            Ok(products) => Ok(Json(products).into_response()),
+            Err(e) => {
+                eprintln!("Error loading security products from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -112,21 +108,15 @@ pub async fn get_security_product(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_security_product_by_id(&conn, id).await {
-                Ok(Some(product)) => Ok(Json(product).into_response()),
-                Ok(None) => {
-                    Err(ApiError::not_found("Security product not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error loading security product from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_security_product_by_id(&conn, id).await {
+            Ok(Some(product)) => Ok(Json(product).into_response()),
+            Ok(None) => Err(ApiError::not_found("Security product not found")),
+            Err(e) => {
+                eprintln!("Error loading security product from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -144,7 +134,9 @@ pub async fn create_security_product(
         Some(conn) => {
             let now = chrono::Utc::now().to_rfc3339();
             let status = req.status.clone().unwrap_or_else(|| "active".to_string());
-            let features = req.features.as_ref()
+            let features = req
+                .features
+                .as_ref()
                 .map(|f| serde_json::to_string(f).unwrap_or_else(|_| "[]".to_string()));
 
             match crate::database::insert_security_product(
@@ -169,7 +161,9 @@ pub async fn create_security_product(
                 &req.contact_phone,
                 req.remarks.as_deref(),
                 &now,
-            ).await {
+            )
+            .await
+            {
                 Ok(id) => {
                     let product = SecurityProduct {
                         id,
@@ -206,7 +200,8 @@ pub async fn create_security_product(
                     Ok(Json(json!({
                         "message": "安全产品创建成功",
                         "data": product
-                    })).into_response())
+                    }))
+                    .into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting security product: {}", e);
@@ -214,9 +209,7 @@ pub async fn create_security_product(
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -232,74 +225,69 @@ pub async fn update_security_product(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_security_product_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    let features = req.features.as_ref()
-                        .map(|f| serde_json::to_string(f).unwrap_or_else(|_| "[]".to_string()));
+        Some(conn) => match crate::database::get_security_product_by_id(&conn, id).await {
+            Ok(Some(_)) => {
+                let features = req
+                    .features
+                    .as_ref()
+                    .map(|f| serde_json::to_string(f).unwrap_or_else(|_| "[]".to_string()));
 
-                    match crate::database::update_security_product(
-                        &conn,
-                        id,
-                        req.name.as_deref(),
-                        req.category.as_deref(),
-                        req.vendor.as_deref(),
-                        req.model.as_deref(),
-                        req.version.as_deref(),
-                        req.serial_number.as_deref(),
-                        req.license_type.as_deref(),
-                        req.license_expiry.as_deref(),
-                        req.management_ip.as_deref(),
-                        req.deployment_mode.as_deref(),
-                        req.cloud_platform_id,
-                        req.machine_room_id,
-                        req.provider_id,
-                        req.status.as_deref(),
-                        features.as_deref(),
-                        req.throughput.as_deref(),
-                        req.contact_person.as_deref(),
-                        req.contact_phone.as_deref(),
-                        req.remarks.as_deref(),
-                    ).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "UPDATE_SECURITY_PRODUCT",
-                                &format!("{}", id),
-                                &format!("Updated security product: {}", id),
-                            );
+                match crate::database::update_security_product(
+                    &conn,
+                    id,
+                    req.name.as_deref(),
+                    req.category.as_deref(),
+                    req.vendor.as_deref(),
+                    req.model.as_deref(),
+                    req.version.as_deref(),
+                    req.serial_number.as_deref(),
+                    req.license_type.as_deref(),
+                    req.license_expiry.as_deref(),
+                    req.management_ip.as_deref(),
+                    req.deployment_mode.as_deref(),
+                    req.cloud_platform_id,
+                    req.machine_room_id,
+                    req.provider_id,
+                    req.status.as_deref(),
+                    features.as_deref(),
+                    req.throughput.as_deref(),
+                    req.contact_person.as_deref(),
+                    req.contact_phone.as_deref(),
+                    req.remarks.as_deref(),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        log_action_auth(
+                            &state.audit_logs,
+                            &user,
+                            "UPDATE_SECURITY_PRODUCT",
+                            &format!("{}", id),
+                            &format!("Updated security product: {}", id),
+                        );
 
-                            match crate::database::get_security_product_by_id(&conn, id).await {
-                                Ok(Some(product)) => {
-                                    Ok(Json(json!({
-                                        "message": "安全产品更新成功",
-                                        "data": product
-                                    })).into_response())
-                                }
-                                _ => {
-                                    Ok(Json(json!({ "message": "安全产品更新成功" })).into_response())
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Error updating security product: {}", e);
-                            Err(ApiError::internal("Failed to update security product"))
+                        match crate::database::get_security_product_by_id(&conn, id).await {
+                            Ok(Some(product)) => Ok(Json(json!({
+                                "message": "安全产品更新成功",
+                                "data": product
+                            }))
+                            .into_response()),
+                            _ => Ok(Json(json!({ "message": "安全产品更新成功" })).into_response()),
                         }
                     }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Security product not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error checking security product existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    Err(e) => {
+                        eprintln!("Error updating security product: {}", e);
+                        Err(ApiError::internal("Failed to update security product"))
+                    }
                 }
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+            Ok(None) => Err(ApiError::not_found("Security product not found")),
+            Err(e) => {
+                eprintln!("Error checking security product existence: {}", e);
+                Err(ApiError::internal("Database error"))
+            }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -314,38 +302,30 @@ pub async fn delete_security_product(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_security_product_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    match crate::database::delete_security_product(&conn, id).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "DELETE_SECURITY_PRODUCT",
-                                &format!("{}", id),
-                                &format!("Deleted security product: {}", id),
-                            );
+        Some(conn) => match crate::database::get_security_product_by_id(&conn, id).await {
+            Ok(Some(_)) => match crate::database::delete_security_product(&conn, id).await {
+                Ok(_) => {
+                    log_action_auth(
+                        &state.audit_logs,
+                        &user,
+                        "DELETE_SECURITY_PRODUCT",
+                        &format!("{}", id),
+                        &format!("Deleted security product: {}", id),
+                    );
 
-                            Ok(Json(json!({ "message": "安全产品删除成功" })).into_response())
-                        }
-                        Err(e) => {
-                            eprintln!("Error deleting security product: {}", e);
-                            Err(ApiError::internal("Failed to delete security product"))
-                        }
-                    }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Security product not found"))
+                    Ok(Json(json!({ "message": "安全产品删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error checking security product existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    eprintln!("Error deleting security product: {}", e);
+                    Err(ApiError::internal("Failed to delete security product"))
                 }
+            },
+            Ok(None) => Err(ApiError::not_found("Security product not found")),
+            Err(e) => {
+                eprintln!("Error checking security product existence: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }

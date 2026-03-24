@@ -29,9 +29,7 @@ pub struct VirtualScrollerProps<T: Clone + PartialEq + 'static> {
 /// }
 /// ```
 #[allow(non_snake_case)]
-pub fn VirtualScroller<T: Clone + PartialEq + 'static>(
-    props: VirtualScrollerProps<T>,
-) -> Element {
+pub fn VirtualScroller<T: Clone + PartialEq + 'static>(props: VirtualScrollerProps<T>) -> Element {
     let mut current_page = use_signal(|| 0);
 
     let total_items = props.items.len();
@@ -44,7 +42,8 @@ pub fn VirtualScroller<T: Clone + PartialEq + 'static>(
     let start_index = *current_page.read() * props.page_size;
     let end_index = (start_index + props.page_size).min(total_items);
 
-    let visible_items: Vec<T> = props.items
+    let visible_items: Vec<T> = props
+        .items
         .iter()
         .cloned()
         .skip(start_index)
@@ -70,7 +69,7 @@ pub fn VirtualScroller<T: Clone + PartialEq + 'static>(
                     key: "{start_index + index}",
                     class: "border-b border-gray-100 last:border-b-0",
                     {
-                        (props.render_item.call(item.clone()))
+                        props.render_item.call(item.clone())
                     }
                 }
             }
@@ -152,9 +151,8 @@ pub struct VirtualListProps<T: Clone + PartialEq + 'static> {
 
 /// 虚拟列表组件 - 表格版本（分页）
 #[allow(non_snake_case)]
-pub fn VirtualList<T: Clone + PartialEq + 'static>(
-    props: VirtualListProps<T>,
-) -> Element {
+#[allow(dead_code)]
+pub fn VirtualList<T: Clone + PartialEq + 'static>(props: VirtualListProps<T>) -> Element {
     let mut current_page = use_signal(|| 0);
 
     let total_items = props.items.len();
@@ -167,7 +165,8 @@ pub fn VirtualList<T: Clone + PartialEq + 'static>(
     let start_index = *current_page.read() * props.page_size;
     let end_index = (start_index + props.page_size).min(total_items);
 
-    let visible_items: Vec<T> = props.items
+    let visible_items: Vec<T> = props
+        .items
         .iter()
         .cloned()
         .skip(start_index)
@@ -204,7 +203,7 @@ pub fn VirtualList<T: Clone + PartialEq + 'static>(
                         key: "{start_index + index}",
                         class: "border-b border-gray-200 hover:bg-gray-50 transition-colors",
                         {
-                            (props.render_row.call(item.clone()))
+                            props.render_row.call(item.clone())
                         }
                     }
                 }

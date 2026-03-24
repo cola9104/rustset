@@ -1,7 +1,7 @@
 use crate::components::resource_ticket::network_policy::network_policy_request::{
-    NetworkPolicyRequest, init_network_policy_requests, NetworkPolicyStatus,
-    AccessDirection, PolicyProtocol,
+    AccessDirection, NetworkPolicyRequest, NetworkPolicyStatus, PolicyProtocol,
 };
+use dioxus::prelude::ReadableExt;
 
 /// 网络策略配置（用于全局状态管理）
 #[derive(Clone, Debug, PartialEq)]
@@ -61,18 +61,19 @@ impl From<NetworkPolicyConfig> for NetworkPolicyRequest {
     }
 }
 
-/// 初始化网络策略数据
+/// 初始化网络策略数据（已废弃，仅供兼容性保留）
 pub fn init_network_policies() -> Vec<NetworkPolicyConfig> {
-    init_network_policy_requests()
-        .into_iter()
-        .map(NetworkPolicyConfig::from)
-        .collect()
+    Vec::new()
 }
 
 /// 获取已生效的网络策略（用于端口安全检查）
 pub fn get_active_network_policies() -> Vec<NetworkPolicyConfig> {
-    init_network_policies()
-        .into_iter()
+    // 从全局状态获取已生效的网络策略
+    use crate::app::NETWORK_POLICIES_STATE;
+    NETWORK_POLICIES_STATE
+        .read()
+        .iter()
         .filter(|p| p.status == NetworkPolicyStatus::Active)
+        .cloned()
         .collect()
 }

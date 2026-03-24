@@ -1,9 +1,9 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{FaPlus, FaXmark};
+use crate::app::{CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE, NETWORK_ZONES_STATE};
+use crate::components::common::{ErrorMessage, Modal, ModalFooter};
 use crate::state::network_zone::NetworkZone;
-use crate::app::{NETWORK_ZONES_STATE, CLOUD_PLATFORMS_STATE, MACHINE_ROOMS_STATE};
-use crate::components::common::{Modal, ModalFooter, ErrorMessage};
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{FaPlus, FaXmark};
+use dioxus_free_icons::Icon;
 
 /// 表单模式
 #[derive(Clone, Copy, PartialEq)]
@@ -48,7 +48,11 @@ impl From<&NetworkZone> for ZoneFormData {
         Self {
             name: zone.name.clone(),
             description: zone.description.clone(),
-            zone_type: if zone.is_cloud_zone() { "cloud".to_string() } else { "physical".to_string() },
+            zone_type: if zone.is_cloud_zone() {
+                "cloud".to_string()
+            } else {
+                "physical".to_string()
+            },
             cloud_platform_id: zone.cloud_platform_id,
             machine_room_id: zone.machine_room_id,
             cidr_blocks: zone.cidr_blocks.clone(),
@@ -64,8 +68,16 @@ impl ZoneFormData {
         NetworkZone {
             id,
             name: self.name.clone(),
-            cloud_platform_id: if self.zone_type == "cloud" { self.cloud_platform_id } else { None },
-            machine_room_id: if self.zone_type == "physical" { self.machine_room_id } else { None },
+            cloud_platform_id: if self.zone_type == "cloud" {
+                self.cloud_platform_id
+            } else {
+                None
+            },
+            machine_room_id: if self.zone_type == "physical" {
+                self.machine_room_id
+            } else {
+                None
+            },
             cidr_blocks: self.cidr_blocks.clone(),
             ip_ranges: self.ip_ranges.clone(),
             description: self.description.clone(),
@@ -106,7 +118,9 @@ pub struct ZoneFormProps {
 #[component]
 pub fn ZoneForm(props: ZoneFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.zone.as_ref()
+    let initial_data = props
+        .zone
+        .as_ref()
         .map(ZoneFormData::from)
         .unwrap_or_default();
 
@@ -122,14 +136,16 @@ pub fn ZoneForm(props: ZoneFormProps) -> Element {
     let editing_zone_id = props.zone.as_ref().map(|z| z.id);
 
     // 计算已被分配的云平台ID（编辑时排除当前区域）
-    let assigned_cloud_ids: std::collections::HashSet<i32> = NETWORK_ZONES_STATE.read()
+    let assigned_cloud_ids: std::collections::HashSet<i32> = NETWORK_ZONES_STATE
+        .read()
         .iter()
         .filter(|z| Some(z.id) != editing_zone_id)
         .filter_map(|z| z.cloud_platform_id)
         .collect();
 
     // 计算已被分配的机房ID（编辑时排除当前区域）
-    let assigned_room_ids: std::collections::HashSet<i32> = NETWORK_ZONES_STATE.read()
+    let assigned_room_ids: std::collections::HashSet<i32> = NETWORK_ZONES_STATE
+        .read()
         .iter()
         .filter(|z| Some(z.id) != editing_zone_id)
         .filter_map(|z| z.machine_room_id)

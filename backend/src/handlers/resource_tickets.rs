@@ -2,22 +2,23 @@ use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Json},
 };
-use serde_json::json;
-use std::sync::RwLock;
 use chrono::Utc;
+use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
+use crate::database::{
+    delete_resource_ticket as db_delete_resource_ticket, get_cloud_platform_config_by_id,
+    get_machine_room_by_id, get_resource_ticket as db_get_resource_ticket,
+    get_resource_tickets as db_get_resource_tickets, get_service_provider_by_id,
+    insert_resource_ticket_wrapper, update_resource_ticket as db_update_resource_ticket,
+};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
 use shared::{
-    ResourceTicket, ResourceType, TicketStatus,
-    CreateResourceTicketRequest, UpdateResourceTicketRequest,
-    ApproveTicketRequest, ProvisionTicketRequest, DeliverTicketRequest,
-    ResourceTicketQuery, Role,
+    ApproveTicketRequest, CreateResourceTicketRequest, DeliverTicketRequest,
+    ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, Role, TicketStatus,
+    UpdateResourceTicketRequest,
 };
-
-// 内存缓存
-pub static RESOURCE_TICKETS: RwLock<Vec<ResourceTicket>> = RwLock::new(Vec::new());
 
 /// 获取资源工单列表
 pub async fn get_resource_tickets(
@@ -25,57 +26,44 @@ pub async fn get_resource_tickets(
     _user: AuthUser,
     Query(query): Query<ResourceTicketQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let tickets = RESOURCE_TICKETS.read().unwrap();
-    let mut filtered: Vec<_> = tickets.iter()
-        .filter(|t| {
-            let mut matches = true;
+    let mut tickets = db_get_resource_tickets()
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load resource tickets: {}", e)))?;
 
-            if let Some(ref keyword) = query.search_keyword {
-                let keyword = keyword.to_lowercase();
-                let search_match = t.ecs_name.to_lowercase().contains(&keyword)
-                    || t.customer_name.as_ref().map(|s| s.to_lowercase().contains(&keyword)).unwrap_or(false)
-                    || t.application_name.as_ref().map(|s| s.to_lowercase().contains(&keyword)).unwrap_or(false)
-                    || t.ip_address.as_ref().map(|s| s.to_lowercase().contains(&keyword)).unwrap_or(false);
-                matches = matches && search_match;
-            }
+    tickets.retain(|t| {
+        let keyword_match = query.search_keyword.as_ref().is_none_or(|keyword| {
+            let keyword = keyword.to_lowercase();
+            t.ecs_name.to_lowercase().contains(&keyword)
+                || t.customer_name
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&keyword))
+                || t.application_name
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&keyword))
+                || t.ip_address
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&keyword))
+        });
 
-            if let Some(ref rt) = query.resource_type {
-                let rt_match = match rt.as_str() {
-                    "physical" => t.resource_type == ResourceType::Physical,
-                    "cloud" => t.resource_type == ResourceType::Cloud,
-                    "network" => t.resource_type == ResourceType::Network,
-                    _ => true,
-                };
-                matches = matches && rt_match;
-            }
+        let resource_type_match = query
+            .resource_type
+            .as_ref()
+            .is_none_or(|resource_type| t.resource_type.as_str() == resource_type.as_str());
 
-            if let Some(ref status) = query.ticket_status {
-                let status_match = match status.as_str() {
-                    "pending_approval" => t.ticket_status == TicketStatus::PendingApproval,
-                    "approved" => t.ticket_status == TicketStatus::Approved,
-                    "rejected" => t.ticket_status == TicketStatus::Rejected,
-                    "pending_provision" => t.ticket_status == TicketStatus::PendingProvision,
-                    "provisioning" => t.ticket_status == TicketStatus::Provisioning,
-                    "pending_delivery" => t.ticket_status == TicketStatus::PendingDelivery,
-                    "delivered" => t.ticket_status == TicketStatus::Delivered,
-                    _ => true,
-                };
-                matches = matches && status_match;
-            }
+        let status_match = query
+            .ticket_status
+            .as_ref()
+            .is_none_or(|status| t.ticket_status.as_str() == status.as_str());
 
-            if let Some(provider_id) = query.provider_id {
-                matches = matches && t.provider_id == Some(provider_id);
-            }
+        let provider_match = query
+            .provider_id
+            .is_none_or(|provider_id| t.provider_id == Some(provider_id));
 
-            matches
-        })
-        .cloned()
-        .collect();
+        keyword_match && resource_type_match && status_match && provider_match
+    });
 
-    // 按创建时间倒序排列
-    filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-
-    Ok(Json(filtered).into_response())
+    tickets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Ok(Json(tickets).into_response())
 }
 
 /// 获取单个资源工单
@@ -84,12 +72,12 @@ pub async fn get_resource_ticket(
     _user: AuthUser,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let tickets = RESOURCE_TICKETS.read().unwrap();
-    if let Some(ticket) = tickets.iter().find(|t| t.id == Some(id)) {
-        Ok(Json(ticket.clone()).into_response())
-    } else {
-        Err(ApiError::not_found("Ticket not found"))
-    }
+    let ticket = db_get_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    Ok(Json(ticket).into_response())
 }
 
 /// 创建资源工单
@@ -98,42 +86,28 @@ pub async fn create_resource_ticket(
     user: AuthUser,
     Json(req): Json<CreateResourceTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // 检查权限
-    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied"));
-    }
+    ensure_operator(&user)?;
 
-    let now = Utc::now();
-    let created_at_str = now.format("%Y-%m-%d %H:%M").to_string();
+    let created_at = Utc::now().format("%Y-%m-%d %H:%M").to_string();
+    let (provider_name, cloud_platform_name, machine_room_name) =
+        resolve_related_names(req.provider_id, req.cloud_platform_id, req.machine_room_id).await?;
 
-    // 获取新的ID
-    let new_id = {
-        let tickets = RESOURCE_TICKETS.read().unwrap();
-        tickets.iter().filter_map(|t| t.id).max().unwrap_or(0) + 1
-    };
-
-    // 获取关联的名称
-    let (provider_name, cloud_platform_name, machine_room_name) = get_related_names(&req);
-
-    let ticket = ResourceTicket {
-        id: Some(new_id),
+    let mut ticket = ResourceTicket {
+        id: None,
         resource_type: req.resource_type.clone(),
         ecs_name: req.ecs_name.clone(),
         ticket_status: TicketStatus::PendingApproval,
-
         provider_id: req.provider_id,
         provider_name,
         cloud_platform_id: req.cloud_platform_id,
         cloud_platform_name,
         machine_room_id: req.machine_room_id,
         machine_room_name,
-
         cloud_region: req.cloud_region,
         cloud_category: req.cloud_category,
         zone_name: req.zone_name,
         zone_cabinet: req.zone_cabinet,
         rack_units: req.rack_units.unwrap_or(0),
-
         customer_name: req.customer_name,
         application_name: req.application_name,
         contract_name: req.contract_name,
@@ -145,27 +119,22 @@ pub async fn create_resource_ticket(
         system_disk_size_gb: req.system_disk_size_gb.unwrap_or(0),
         data_disk: req.data_disk,
         has_security_product: req.has_security_product.unwrap_or(false),
-        security_products: req.security_products.clone(),
+        security_products: req.security_products,
         ip_address: req.ip_address,
         delivery_status: Some("未交付".to_string()),
         remarks: req.remarks,
-
-        created_at: created_at_str,
-        updated_at: None,
+        created_at: created_at.clone(),
+        updated_at: Some(created_at.clone()),
         created_by: user.username.clone(),
-
         approver: None,
         approve_time: None,
         approve_comment: None,
-
         provisioner: None,
         provision_time: None,
         provision_details: None,
-
         deliverer: None,
         deliver_time: None,
         deliver_comment: None,
-
         fw_source_zone: req.fw_source_zone,
         fw_source_address: req.fw_source_address,
         fw_dest_zone: req.fw_dest_zone,
@@ -177,24 +146,28 @@ pub async fn create_resource_ticket(
         fw_firewall_name: req.fw_firewall_name,
     };
 
-    // 添加到内存
-    {
-        let mut tickets = RESOURCE_TICKETS.write().unwrap();
-        tickets.push(ticket.clone());
-    }
+    let id = insert_resource_ticket_wrapper(&ticket)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to create ticket: {}", e)))?;
+    ticket.id = Some(id);
 
     log_action_auth(
         &state.audit_logs,
         &user,
         "CREATE_RESOURCE_TICKET",
-        &format!("{}", new_id),
-        &format!("创建资源工单: {} ({})", ticket.ecs_name, ticket.resource_type.as_str()),
+        &id.to_string(),
+        &format!(
+            "创建资源工单: {} ({})",
+            ticket.ecs_name,
+            ticket.resource_type.as_str()
+        ),
     );
 
     Ok(Json(json!({
         "message": "工单创建成功",
         "data": ticket
-    })).into_response())
+    }))
+    .into_response())
 }
 
 /// 更新资源工单
@@ -204,59 +177,114 @@ pub async fn update_resource_ticket(
     Path(id): Path<i32>,
     Json(req): Json<UpdateResourceTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied"));
+    ensure_operator(&user)?;
+
+    let mut ticket = db_get_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if let Some(value) = req.ecs_name {
+        ticket.ecs_name = value;
+    }
+    if let Some(value) = req.provider_id {
+        ticket.provider_id = Some(value);
+    }
+    if let Some(value) = req.cloud_platform_id {
+        ticket.cloud_platform_id = Some(value);
+    }
+    if let Some(value) = req.machine_room_id {
+        ticket.machine_room_id = Some(value);
+    }
+    if let Some(value) = req.cloud_region {
+        ticket.cloud_region = Some(value);
+    }
+    if let Some(value) = req.cloud_category {
+        ticket.cloud_category = Some(value);
+    }
+    if let Some(value) = req.zone_name {
+        ticket.zone_name = Some(value);
+    }
+    if let Some(value) = req.zone_cabinet {
+        ticket.zone_cabinet = Some(value);
+    }
+    if let Some(value) = req.rack_units {
+        ticket.rack_units = value;
+    }
+    if let Some(value) = req.customer_name {
+        ticket.customer_name = Some(value);
+    }
+    if let Some(value) = req.application_name {
+        ticket.application_name = Some(value);
+    }
+    if let Some(value) = req.contract_name {
+        ticket.contract_name = Some(value);
+    }
+    if let Some(value) = req.ecs_type {
+        ticket.ecs_type = Some(value);
+    }
+    if let Some(value) = req.ecs_os {
+        ticket.ecs_os = Some(value);
+    }
+    if let Some(value) = req.cpu_cores {
+        ticket.cpu_cores = value;
+    }
+    if let Some(value) = req.memory_gb {
+        ticket.memory_gb = value;
+    }
+    if let Some(value) = req.system_disk {
+        ticket.system_disk = Some(value);
+    }
+    if let Some(value) = req.system_disk_size_gb {
+        ticket.system_disk_size_gb = value;
+    }
+    if let Some(value) = req.data_disk {
+        ticket.data_disk = Some(value);
+    }
+    if let Some(value) = req.has_security_product {
+        ticket.has_security_product = value;
+    }
+    if let Some(value) = req.security_products {
+        ticket.security_products = Some(value);
+    }
+    if let Some(value) = req.ip_address {
+        ticket.ip_address = Some(value);
+    }
+    if let Some(value) = req.delivery_status {
+        ticket.delivery_status = Some(value);
+    }
+    if let Some(value) = req.remarks {
+        ticket.remarks = Some(value);
     }
 
-    let now = Utc::now();
-    let updated_at_str = now.format("%Y-%m-%d %H:%M").to_string();
+    let (provider_name, cloud_platform_name, machine_room_name) = resolve_related_names(
+        ticket.provider_id,
+        ticket.cloud_platform_id,
+        ticket.machine_room_id,
+    )
+    .await?;
+    ticket.provider_name = provider_name;
+    ticket.cloud_platform_name = cloud_platform_name;
+    ticket.machine_room_name = machine_room_name;
+    ticket.updated_at = Some(Utc::now().format("%Y-%m-%d %H:%M").to_string());
 
-    let mut tickets = RESOURCE_TICKETS.write().unwrap();
-    if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
-        // 更新字段
-        if let Some(v) = req.ecs_name { ticket.ecs_name = v; }
-        if let Some(v) = req.provider_id { ticket.provider_id = Some(v); }
-        if let Some(v) = req.cloud_platform_id { ticket.cloud_platform_id = Some(v); }
-        if let Some(v) = req.machine_room_id { ticket.machine_room_id = Some(v); }
-        if let Some(v) = req.cloud_region { ticket.cloud_region = Some(v); }
-        if let Some(v) = req.cloud_category { ticket.cloud_category = Some(v); }
-        if let Some(v) = req.zone_name { ticket.zone_name = Some(v); }
-        if let Some(v) = req.zone_cabinet { ticket.zone_cabinet = Some(v); }
-        if let Some(v) = req.rack_units { ticket.rack_units = v; }
-        if let Some(v) = req.customer_name { ticket.customer_name = Some(v); }
-        if let Some(v) = req.application_name { ticket.application_name = Some(v); }
-        if let Some(v) = req.contract_name { ticket.contract_name = Some(v); }
-        if let Some(v) = req.ecs_type { ticket.ecs_type = Some(v); }
-        if let Some(v) = req.ecs_os { ticket.ecs_os = Some(v); }
-        if let Some(v) = req.cpu_cores { ticket.cpu_cores = v; }
-        if let Some(v) = req.memory_gb { ticket.memory_gb = v; }
-        if let Some(v) = req.system_disk { ticket.system_disk = Some(v); }
-        if let Some(v) = req.system_disk_size_gb { ticket.system_disk_size_gb = v; }
-        if let Some(v) = req.data_disk { ticket.data_disk = Some(v); }
-        if let Some(v) = req.has_security_product { ticket.has_security_product = v; }
-        if let Some(v) = req.ip_address { ticket.ip_address = Some(v); }
-        if let Some(v) = req.delivery_status { ticket.delivery_status = Some(v); }
-        if let Some(v) = req.remarks { ticket.remarks = Some(v); }
+    db_update_resource_ticket(id, &ticket)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to update ticket: {}", e)))?;
 
-        ticket.updated_at = Some(updated_at_str);
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "UPDATE_RESOURCE_TICKET",
+        &id.to_string(),
+        &format!("更新资源工单: {}", id),
+    );
 
-        let updated = ticket.clone();
-
-        log_action_auth(
-            &state.audit_logs,
-            &user,
-            "UPDATE_RESOURCE_TICKET",
-            &format!("{}", id),
-            &format!("更新资源工单: {}", id),
-        );
-
-        Ok(Json(json!({
-            "message": "工单更新成功",
-            "data": updated
-        })).into_response())
-    } else {
-        Err(ApiError::not_found("Ticket not found"))
-    }
+    Ok(Json(json!({
+        "message": "工单更新成功",
+        "data": ticket
+    }))
+    .into_response())
 }
 
 /// 删除资源工单
@@ -269,24 +297,22 @@ pub async fn delete_resource_ticket(
         return Err(ApiError::forbidden("Only SysAdmin can delete tickets"));
     }
 
-    let mut tickets = RESOURCE_TICKETS.write().unwrap();
-    if let Some(pos) = tickets.iter().position(|t| t.id == Some(id)) {
-        tickets.remove(pos);
+    db_delete_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to delete ticket: {}", e)))?;
 
-        log_action_auth(
-            &state.audit_logs,
-            &user,
-            "DELETE_RESOURCE_TICKET",
-            &format!("{}", id),
-            &format!("删除资源工单: {}", id),
-        );
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "DELETE_RESOURCE_TICKET",
+        &id.to_string(),
+        &format!("删除资源工单: {}", id),
+    );
 
-        Ok(Json(json!({
-            "message": "工单删除成功"
-        })).into_response())
-    } else {
-        Err(ApiError::not_found("Ticket not found"))
-    }
+    Ok(Json(json!({
+        "message": "工单删除成功"
+    }))
+    .into_response())
 }
 
 /// 审批工单
@@ -296,49 +322,49 @@ pub async fn approve_ticket(
     Path(id): Path<i32>,
     Json(req): Json<ApproveTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // 只有管理员和审批员可以审批
-    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied"));
+    ensure_operator(&user)?;
+
+    let mut ticket = db_get_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if ticket.ticket_status != TicketStatus::PendingApproval {
+        return Err(ApiError::bad_request("只能审批待审批状态的工单"));
     }
 
-    let now = Utc::now();
-    let time_str = now.format("%Y-%m-%d %H:%M").to_string();
-
-    let mut tickets = RESOURCE_TICKETS.write().unwrap();
-    if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
-        if ticket.ticket_status != TicketStatus::PendingApproval {
-            return Err(ApiError::bad_request("只能审批待审批状态的工单"));
-        }
-
-        ticket.approver = Some(user.username.clone());
-        ticket.approve_time = Some(time_str.clone());
-        ticket.approve_comment = req.comment.clone();
-
-        if req.approved {
-            ticket.ticket_status = TicketStatus::Approved;
-        } else {
-            ticket.ticket_status = TicketStatus::Rejected;
-        }
-
-        ticket.updated_at = Some(time_str);
-
-        let updated = ticket.clone();
-
-        log_action_auth(
-            &state.audit_logs,
-            &user,
-            "APPROVE_RESOURCE_TICKET",
-            &format!("{}", id),
-            &format!("审批工单 {}: {}", id, if req.approved { "通过" } else { "拒绝" }),
-        );
-
-        Ok(Json(json!({
-            "message": if req.approved { "工单审批通过" } else { "工单已拒绝" },
-            "data": updated
-        })).into_response())
+    let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
+    ticket.approver = Some(user.username.clone());
+    ticket.approve_time = Some(now.clone());
+    ticket.approve_comment = req.comment.clone();
+    ticket.ticket_status = if req.approved {
+        TicketStatus::Approved
     } else {
-        Err(ApiError::not_found("Ticket not found"))
-    }
+        TicketStatus::Rejected
+    };
+    ticket.updated_at = Some(now);
+
+    db_update_resource_ticket(id, &ticket)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to update ticket: {}", e)))?;
+
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "APPROVE_RESOURCE_TICKET",
+        &id.to_string(),
+        &format!(
+            "审批工单 {}: {}",
+            id,
+            if req.approved { "通过" } else { "拒绝" }
+        ),
+    );
+
+    Ok(Json(json!({
+        "message": if req.approved { "工单审批通过" } else { "工单已拒绝" },
+        "data": ticket
+    }))
+    .into_response())
 }
 
 /// 开始配置工单
@@ -348,43 +374,41 @@ pub async fn provision_ticket(
     Path(id): Path<i32>,
     Json(req): Json<ProvisionTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // 只有运维人员可以配置
-    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied"));
+    ensure_operator(&user)?;
+
+    let mut ticket = db_get_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if ticket.ticket_status != TicketStatus::Approved {
+        return Err(ApiError::bad_request("只能配置已批准的工单"));
     }
 
-    let now = Utc::now();
-    let time_str = now.format("%Y-%m-%d %H:%M").to_string();
+    let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
+    ticket.provisioner = Some(user.username.clone());
+    ticket.provision_time = Some(now.clone());
+    ticket.provision_details = req.details.clone();
+    ticket.ticket_status = TicketStatus::PendingDelivery;
+    ticket.updated_at = Some(now);
 
-    let mut tickets = RESOURCE_TICKETS.write().unwrap();
-    if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
-        if ticket.ticket_status != TicketStatus::Approved {
-            return Err(ApiError::bad_request("只能配置已批准的工单"));
-        }
+    db_update_resource_ticket(id, &ticket)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to update ticket: {}", e)))?;
 
-        ticket.provisioner = Some(user.username.clone());
-        ticket.provision_time = Some(time_str.clone());
-        ticket.provision_details = req.details.clone();
-        ticket.ticket_status = TicketStatus::PendingDelivery;
-        ticket.updated_at = Some(time_str);
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "PROVISION_RESOURCE_TICKET",
+        &id.to_string(),
+        &format!("配置工单: {}", id),
+    );
 
-        let updated = ticket.clone();
-
-        log_action_auth(
-            &state.audit_logs,
-            &user,
-            "PROVISION_RESOURCE_TICKET",
-            &format!("{}", id),
-            &format!("配置工单: {}", id),
-        );
-
-        Ok(Json(json!({
-            "message": "工单配置完成",
-            "data": updated
-        })).into_response())
-    } else {
-        Err(ApiError::not_found("Ticket not found"))
-    }
+    Ok(Json(json!({
+        "message": "工单配置完成",
+        "data": ticket
+    }))
+    .into_response())
 }
 
 /// 交付工单
@@ -394,49 +418,82 @@ pub async fn deliver_ticket(
     Path(id): Path<i32>,
     Json(req): Json<DeliverTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // 只有运维和交付人员可以交付
+    ensure_operator(&user)?;
+
+    let mut ticket = db_get_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if ticket.ticket_status != TicketStatus::PendingDelivery {
+        return Err(ApiError::bad_request("只能交付待交付状态的工单"));
+    }
+
+    let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
+    ticket.deliverer = Some(user.username.clone());
+    ticket.deliver_time = Some(now.clone());
+    ticket.deliver_comment = req.comment.clone();
+    ticket.ticket_status = TicketStatus::Delivered;
+    ticket.delivery_status = Some("已交付".to_string());
+    ticket.updated_at = Some(now);
+
+    db_update_resource_ticket(id, &ticket)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to update ticket: {}", e)))?;
+
+    log_action_auth(
+        &state.audit_logs,
+        &user,
+        "DELIVER_RESOURCE_TICKET",
+        &id.to_string(),
+        &format!("交付工单: {}", id),
+    );
+
+    Ok(Json(json!({
+        "message": "工单交付完成",
+        "data": ticket
+    }))
+    .into_response())
+}
+
+fn ensure_operator(user: &AuthUser) -> Result<(), ApiError> {
     if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
         return Err(ApiError::forbidden("Access denied"));
     }
-
-    let now = Utc::now();
-    let time_str = now.format("%Y-%m-%d %H:%M").to_string();
-
-    let mut tickets = RESOURCE_TICKETS.write().unwrap();
-    if let Some(ticket) = tickets.iter_mut().find(|t| t.id == Some(id)) {
-        if ticket.ticket_status != TicketStatus::PendingDelivery {
-            return Err(ApiError::bad_request("只能交付待交付状态的工单"));
-        }
-
-        ticket.deliverer = Some(user.username.clone());
-        ticket.deliver_time = Some(time_str.clone());
-        ticket.deliver_comment = req.comment.clone();
-        ticket.ticket_status = TicketStatus::Delivered;
-        ticket.delivery_status = Some("已交付".to_string());
-        ticket.updated_at = Some(time_str);
-
-        let updated = ticket.clone();
-
-        log_action_auth(
-            &state.audit_logs,
-            &user,
-            "DELIVER_RESOURCE_TICKET",
-            &format!("{}", id),
-            &format!("交付工单: {}", id),
-        );
-
-        Ok(Json(json!({
-            "message": "工单交付完成",
-            "data": updated
-        })).into_response())
-    } else {
-        Err(ApiError::not_found("Ticket not found"))
-    }
+    Ok(())
 }
 
-/// 辅助函数：获取关联名称
-fn get_related_names(_req: &CreateResourceTicketRequest) -> (Option<String>, Option<String>, Option<String>) {
-    // 这里简化处理，实际应该从数据库查询
-    // 暂时返回 None，前端会提供名称
-    (None, None, None)
+async fn resolve_related_names(
+    provider_id: Option<i32>,
+    cloud_platform_id: Option<i32>,
+    machine_room_id: Option<i32>,
+) -> Result<(Option<String>, Option<String>, Option<String>), ApiError> {
+    let conn =
+        crate::database::get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+
+    let provider_name = match provider_id {
+        Some(id) => get_service_provider_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load service provider: {}", e)))?
+            .map(|provider| provider.short_name),
+        None => None,
+    };
+
+    let cloud_platform_name = match cloud_platform_id {
+        Some(id) => get_cloud_platform_config_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load cloud platform: {}", e)))?
+            .map(|platform| platform.platform_name),
+        None => None,
+    };
+
+    let machine_room_name = match machine_room_id {
+        Some(id) => get_machine_room_by_id(conn.as_ref(), id)
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load machine room: {}", e)))?
+            .map(|room| room.room_name),
+        None => None,
+    };
+
+    Ok((provider_name, cloud_platform_name, machine_room_name))
 }

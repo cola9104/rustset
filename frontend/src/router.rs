@@ -1,26 +1,26 @@
 use dioxus::prelude::*;
 use dioxus_router::Routable;
 
-use crate::components::layout::Layout;
-use crate::components::auth::Login;
-use crate::components::dashboard::Dashboard;
 use crate::components::asset::AssetManagement;
-use crate::components::task::TaskCenter;
-use crate::components::risk::RiskCenter;
 use crate::components::audit::AuditLogs;
-use crate::components::user::UserManagement;
-use crate::components::permission::PermissionManagement;
-use crate::components::password::PasswordPolicy;
-use crate::components::resource_ticket::ResourceTicket;
-use crate::components::resource_ticket::cloud_service::CloudServiceRequest;
-use crate::components::resource_ticket::physical_server::PhysicalServerRequest;
-use crate::components::resource_ticket::network_policy::NetworkPolicyRequest;
-use crate::components::cloud_platform::CloudPlatformManagement;
-use crate::components::machine_room::MachineRoomManagement;
-use crate::components::service_provider::ServiceProviderManagement;
+use crate::components::auth::Login;
 use crate::components::business::BusinessApplication;
+use crate::components::cloud_platform::CloudPlatformManagement;
+use crate::components::dashboard::Dashboard;
+use crate::components::layout::Layout;
+use crate::components::machine_room::MachineRoomManagement;
 use crate::components::network_zone::NetworkZoneManagement;
+use crate::components::password::PasswordPolicy;
+use crate::components::permission::PermissionManagement;
+use crate::components::resource_ticket::cloud_service::CloudServiceRequest;
+use crate::components::resource_ticket::network_policy::NetworkPolicyRequest;
+use crate::components::resource_ticket::physical_server::PhysicalServerRequest;
+use crate::components::resource_ticket::ResourceTicket;
+use crate::components::risk::RiskCenter;
 use crate::components::security_product::SecurityProductManagement;
+use crate::components::service_provider::ServiceProviderManagement;
+use crate::components::task::TaskCenter;
+use crate::components::user::UserManagement;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -31,7 +31,6 @@ pub enum Route {
 
     // 主布局包装的路由
     #[layout(Layout)]
-
     // 仪表板
     #[route("/")]
     Dashboard {},
@@ -104,7 +103,6 @@ pub enum Route {
 
     // 结束布局
     #[end_layout]
-
     // 404 页面
     #[route("/:..route")]
     NotFound { route: Vec<String> },

@@ -1,20 +1,22 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaMagnifyingGlass, FaShieldHalved, FaCheck, FaClock, FaXmark,
-    FaCircleCheck, FaPen, FaEye, FaArrowRight, FaArrowLeft
-};
 use crate::app::NETWORK_POLICIES_STATE;
+use crate::services::resource_ticket_api::fetch_resource_tickets;
+use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaArrowLeft, FaArrowRight, FaCheck, FaCircleCheck, FaClock, FaEye, FaMagnifyingGlass, FaPen,
+    FaPlus, FaShieldHalved, FaXmark,
+};
+use dioxus_free_icons::Icon;
 
 /// 网络策略申请状态
 #[derive(Clone, Debug, PartialEq)]
 pub enum NetworkPolicyStatus {
-    Pending,    // 待审批
-    Approved,   // 已批准
-    Rejected,   // 已拒绝
+    Pending,     // 待审批
+    Approved,    // 已批准
+    Rejected,    // 已拒绝
     Configuring, // 配置中
-    Active,     // 已交付
-    Expired,    // 已过期
+    Active,      // 已交付
+    Expired,     // 已过期
 }
 
 impl NetworkPolicyStatus {
@@ -44,8 +46,8 @@ impl NetworkPolicyStatus {
 /// 访问方向
 #[derive(Clone, Debug, PartialEq)]
 pub enum AccessDirection {
-    Inbound,   // 入站
-    Outbound,  // 出站
+    Inbound,       // 入站
+    Outbound,      // 出站
     Bidirectional, // 双向
 }
 
@@ -97,115 +99,66 @@ pub struct NetworkPolicyRequest {
     pub created_at: String,
 }
 
-/// 初始化示例网络策略申请数据
-pub fn init_network_policy_requests() -> Vec<NetworkPolicyRequest> {
-    vec![
-        NetworkPolicyRequest {
-            id: 1,
-            title: "OA系统访问互联网策略".to_string(),
-            applicant: "张三".to_string(),
-            department: "信息部".to_string(),
-            source_zone: "办公网".to_string(),
-            destination_zone: "互联网DMZ".to_string(),
-            direction: AccessDirection::Outbound,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "443, 80".to_string(),
-            description: "允许OA系统访问外部更新服务".to_string(),
-            valid_until: "2025-03-01".to_string(),
-            status: NetworkPolicyStatus::Pending,
-            created_at: "2024-03-01 10:30".to_string(),
-        },
-        NetworkPolicyRequest {
-            id: 2,
-            title: "机房A服务器SSH访问策略".to_string(),
-            applicant: "李四".to_string(),
-            department: "运维部".to_string(),
-            source_zone: "全网".to_string(),
-            destination_zone: "机房A".to_string(),
-            direction: AccessDirection::Inbound,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "22, 80, 443, 3306".to_string(),
-            description: "机房A服务器远程管理和业务访问".to_string(),
-            valid_until: "2025-12-31".to_string(),
-            status: NetworkPolicyStatus::Active,
-            created_at: "2024-02-28 14:20".to_string(),
-        },
-        NetworkPolicyRequest {
-            id: 3,
-            title: "API网关访问策略".to_string(),
-            applicant: "王五".to_string(),
-            department: "研发部".to_string(),
-            source_zone: "政务网DMZ".to_string(),
-            destination_zone: "可信区".to_string(),
-            direction: AccessDirection::Bidirectional,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "8443".to_string(),
-            description: "API网关与后端服务通信".to_string(),
-            valid_until: "2025-01-01".to_string(),
-            status: NetworkPolicyStatus::Configuring,
-            created_at: "2024-03-02 09:15".to_string(),
-        },
-        NetworkPolicyRequest {
-            id: 4,
-            title: "华东1-杭州云服务器访问策略".to_string(),
-            applicant: "赵六".to_string(),
-            department: "运维部".to_string(),
-            source_zone: "全网".to_string(),
-            destination_zone: "华东1-杭州".to_string(),
-            direction: AccessDirection::Inbound,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "22, 80, 443".to_string(),
-            description: "杭州区域云服务器业务访问".to_string(),
-            valid_until: "2025-12-31".to_string(),
-            status: NetworkPolicyStatus::Active,
-            created_at: "2024-02-25 16:45".to_string(),
-        },
-        NetworkPolicyRequest {
-            id: 5,
-            title: "工作站远程桌面策略".to_string(),
-            applicant: "钱七".to_string(),
-            department: "信息部".to_string(),
-            source_zone: "全网".to_string(),
-            destination_zone: "机房A".to_string(),
-            direction: AccessDirection::Inbound,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "22, 3389".to_string(),
-            description: "工作站远程桌面和SSH访问".to_string(),
-            valid_until: "2025-06-30".to_string(),
-            status: NetworkPolicyStatus::Active,
-            created_at: "2024-03-05 11:00".to_string(),
-        },
-        NetworkPolicyRequest {
-            id: 6,
-            title: "市政务云机房A Redis访问策略".to_string(),
-            applicant: "孙八".to_string(),
-            department: "研发部".to_string(),
-            source_zone: "全网".to_string(),
-            destination_zone: "市政务云机房A".to_string(),
-            direction: AccessDirection::Inbound,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "22, 6379".to_string(),
-            description: "Redis缓存服务器访问".to_string(),
-            valid_until: "2025-12-31".to_string(),
-            status: NetworkPolicyStatus::Active,
-            created_at: "2024-03-08 09:30".to_string(),
-        },
-        NetworkPolicyRequest {
-            id: 7,
-            title: "移动核心机房文件服务器策略".to_string(),
-            applicant: "周九".to_string(),
-            department: "运维部".to_string(),
-            source_zone: "全网".to_string(),
-            destination_zone: "移动核心机房".to_string(),
-            direction: AccessDirection::Inbound,
-            protocol: PolicyProtocol::Tcp,
-            port_range: "22, 80, 443, 2049".to_string(),
-            description: "文件服务器NFS和Web访问".to_string(),
-            valid_until: "2025-12-31".to_string(),
-            status: NetworkPolicyStatus::Active,
-            created_at: "2024-03-10 14:00".to_string(),
-        },
-    ]
+/// 从后端 ResourceTicket 转换为前端 NetworkPolicyRequest
+fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
+    // 映射状态
+    let status = match ticket.ticket_status {
+        TicketStatus::PendingApproval => NetworkPolicyStatus::Pending,
+        TicketStatus::Approved => NetworkPolicyStatus::Approved,
+        TicketStatus::Rejected => NetworkPolicyStatus::Rejected,
+        TicketStatus::PendingProvision | TicketStatus::Provisioning => {
+            NetworkPolicyStatus::Configuring
+        }
+        TicketStatus::PendingDelivery | TicketStatus::Delivered => NetworkPolicyStatus::Active,
+        _ => NetworkPolicyStatus::Pending,
+    };
+
+    // 映射协议
+    let protocol = ticket
+        .fw_protocol
+        .as_ref()
+        .and_then(|p| match p.to_lowercase().as_str() {
+            "tcp" => Some(PolicyProtocol::Tcp),
+            "udp" => Some(PolicyProtocol::Udp),
+            "icmp" => Some(PolicyProtocol::Icmp),
+            "any" => Some(PolicyProtocol::Any),
+            _ => Some(PolicyProtocol::Tcp),
+        })
+        .unwrap_or(PolicyProtocol::Tcp);
+
+    // 映射方向
+    let direction = ticket
+        .fw_direction
+        .as_ref()
+        .and_then(|d| match d.as_str() {
+            "入站" => Some(AccessDirection::Inbound),
+            "出站" => Some(AccessDirection::Outbound),
+            "双向" => Some(AccessDirection::Bidirectional),
+            _ => Some(AccessDirection::Inbound),
+        })
+        .unwrap_or(AccessDirection::Inbound);
+
+    NetworkPolicyRequest {
+        id: ticket.id,
+        title: ticket.ecs_name.clone(),
+        applicant: ticket.created_by.clone(),
+        department: "信息部".to_string(), // 后端暂无部门字段，使用默认值
+        source_zone: ticket
+            .fw_source_zone
+            .clone()
+            .unwrap_or_else(|| String::new()),
+        destination_zone: ticket.fw_dest_zone.clone().unwrap_or_else(|| String::new()),
+        direction,
+        protocol,
+        port_range: ticket.fw_port.clone().unwrap_or_else(|| String::new()),
+        description: ticket.remarks.clone(),
+        valid_until: ticket
+            .fw_valid_until
+            .clone()
+            .unwrap_or_else(|| String::new()),
+        status,
+        created_at: ticket.created_at.clone(),
+    }
 }
 
 /// 网络策略申请页面
@@ -217,15 +170,63 @@ pub fn NetworkPolicyRequest() -> Element {
     let mut status_filter = use_signal(|| "全部".to_string());
     let mut show_new_form = use_signal(|| false);
     let mut show_edit_form = use_signal(|| None::<i32>);
+    let mut is_loaded = use_signal(|| false);
+
+    // 在组件挂载时从 API 获取数据
+    use_effect(move || {
+        if *is_loaded.read() {
+            return;
+        }
+
+        spawn(async move {
+            match fetch_resource_tickets().await {
+                Ok(tickets) => {
+                    // 过滤出网络策略类型的工单
+                    let network_policies: Vec<NetworkPolicyRequest> = tickets
+                        .iter()
+                        .filter(|t| t.resource_type == ResourceType::Network)
+                        .map(ticket_to_policy_request)
+                        .collect();
+
+                    // 更新全局状态
+                    NETWORK_POLICIES_STATE.write().clear();
+                    for policy in network_policies {
+                        NETWORK_POLICIES_STATE.write().push(policy.into());
+                    }
+
+                    is_loaded.set(true);
+                }
+                Err(e) => {
+                    tracing::error!("获取网络策略数据失败: {}", e);
+                    // 失败时显示空列表
+                    NETWORK_POLICIES_STATE.write().clear();
+                    is_loaded.set(true);
+                }
+            }
+        });
+    });
 
     // 统计数据
     let total_count = requests.read().len() as i32;
-    let pending_count = requests.read().iter().filter(|r| r.status == NetworkPolicyStatus::Pending).count() as i32;
-    let configuring_count = requests.read().iter().filter(|r| r.status == NetworkPolicyStatus::Configuring).count() as i32;
-    let active_count = requests.read().iter().filter(|r| r.status == NetworkPolicyStatus::Active).count() as i32;
+    let pending_count = requests
+        .read()
+        .iter()
+        .filter(|r| r.status == NetworkPolicyStatus::Pending)
+        .count() as i32;
+    let configuring_count = requests
+        .read()
+        .iter()
+        .filter(|r| r.status == NetworkPolicyStatus::Configuring)
+        .count() as i32;
+    let active_count = requests
+        .read()
+        .iter()
+        .filter(|r| r.status == NetworkPolicyStatus::Active)
+        .count() as i32;
 
     // 过滤请求
-    let filtered_requests: Vec<NetworkPolicyRequest> = requests.read()
+    let filtered_requests: Vec<NetworkPolicyRequest> = requests
+        .read()
         .iter()
         .filter(|req| {
             let query = search_query.read().to_lowercase();

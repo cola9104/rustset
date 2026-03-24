@@ -1,6 +1,6 @@
 use sea_orm_migration::prelude::*;
 
-use sea_orm_migration::schema::{pk_auto, string, text, integer, timestamp};
+use sea_orm_migration::schema::{integer, pk_auto, string, text, timestamp};
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;
@@ -25,7 +25,7 @@ impl MigrationTrait for Migration {
                             .name("fk_cloud_services_zone_id")
                             .from(CloudServices::Table, CloudServices::ZoneId)
                             .to(CloudZones::Table, CloudZones::Id)
-                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_delete(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

@@ -1,9 +1,66 @@
-use gloo_net::http::Request;
-use serde_json::json;
+use crate::config::api_base;
 use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
+use gloo_net::http::Request;
+use serde::Serialize;
 use web_sys::RequestCredentials;
 
-const API_BASE: &str = "http://localhost:3003/api";
+/// 创建资源工单请求
+#[derive(Clone, Debug, Serialize)]
+pub struct CreateResourceTicketRequest {
+    pub resource_type: String,
+    pub ecs_name: String,
+    pub provider_id: Option<i32>,
+    pub cloud_platform_id: Option<i32>,
+    pub machine_room_id: Option<i32>,
+    pub cloud_region: Option<String>,
+    pub cloud_category: Option<String>,
+    pub zone_name: Option<String>,
+    pub zone_cabinet: Option<String>,
+    pub rack_units: Option<i32>,
+    pub customer_name: Option<String>,
+    pub application_name: Option<String>,
+    pub contract_name: Option<String>,
+    pub ecs_type: Option<String>,
+    pub ecs_os: Option<String>,
+    pub cpu_cores: Option<i32>,
+    pub memory_gb: Option<i32>,
+    pub system_disk: Option<String>,
+    pub system_disk_size_gb: Option<i32>,
+    pub data_disk: Option<String>,
+    pub has_security_product: Option<bool>,
+    pub security_products: Option<String>,
+    pub ip_address: Option<String>,
+    pub remarks: Option<String>,
+    // 网络策略专用字段
+    pub fw_source_zone: Option<String>,
+    pub fw_source_address: Option<String>,
+    pub fw_dest_zone: Option<String>,
+    pub fw_dest_address: Option<String>,
+    pub fw_protocol: Option<String>,
+    pub fw_port: Option<String>,
+    pub fw_direction: Option<String>,
+    pub fw_valid_until: Option<String>,
+    pub fw_firewall_name: Option<String>,
+}
+
+/// 审批工单请求
+#[derive(Clone, Debug, Serialize)]
+pub struct ApproveTicketRequest {
+    pub approved: bool,
+    pub comment: Option<String>,
+}
+
+/// 配置工单请求
+#[derive(Clone, Debug, Serialize)]
+pub struct ProvisionTicketRequest {
+    pub details: Option<String>,
+}
+
+/// 交付工单请求
+#[derive(Clone, Debug, Serialize)]
+pub struct DeliverTicketRequest {
+    pub comment: Option<String>,
+}
 
 /// 后端返回的资源工单结构（与shared库匹配）
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -92,7 +149,10 @@ impl BackendResourceTicket {
             has_security_product: self.has_security_product,
             security_products: self.security_products.clone().unwrap_or_default(),
             ip_address: self.ip_address.clone().unwrap_or_default(),
-            delivery_status: self.delivery_status.clone().unwrap_or_else(|| "未交付".to_string()),
+            delivery_status: self
+                .delivery_status
+                .clone()
+                .unwrap_or_else(|| "未交付".to_string()),
             remarks: self.remarks.clone().unwrap_or_default(),
             created_at: self.created_at.clone(),
             updated_at: self.updated_at.clone().unwrap_or_default(),
@@ -119,9 +179,125 @@ impl BackendResourceTicket {
     }
 }
 
+impl From<&ResourceTicket> for CreateResourceTicketRequest {
+    fn from(ticket: &ResourceTicket) -> Self {
+        Self {
+            resource_type: ticket.resource_type.to_api_str().to_string(),
+            ecs_name: ticket.ecs_name.clone(),
+            provider_id: ticket.provider_id,
+            cloud_platform_id: ticket.cloud_platform_id,
+            machine_room_id: ticket.machine_room_id,
+            cloud_region: if ticket.cloud_region.is_empty() {
+                None
+            } else {
+                Some(ticket.cloud_region.clone())
+            },
+            cloud_category: if ticket.cloud_category.is_empty() {
+                None
+            } else {
+                Some(ticket.cloud_category.clone())
+            },
+            zone_name: if ticket.zone_name.is_empty() {
+                None
+            } else {
+                Some(ticket.zone_name.clone())
+            },
+            zone_cabinet: if ticket.zone_cabinet.is_empty() {
+                None
+            } else {
+                Some(ticket.zone_cabinet.clone())
+            },
+            rack_units: if ticket.rack_units == 0 {
+                None
+            } else {
+                Some(ticket.rack_units)
+            },
+            customer_name: if ticket.customer_name.is_empty() {
+                None
+            } else {
+                Some(ticket.customer_name.clone())
+            },
+            application_name: if ticket.application_name.is_empty() {
+                None
+            } else {
+                Some(ticket.application_name.clone())
+            },
+            contract_name: if ticket.contract_name.is_empty() {
+                None
+            } else {
+                Some(ticket.contract_name.clone())
+            },
+            ecs_type: if ticket.ecs_type.is_empty() {
+                None
+            } else {
+                Some(ticket.ecs_type.clone())
+            },
+            ecs_os: if ticket.ecs_os.is_empty() {
+                None
+            } else {
+                Some(ticket.ecs_os.clone())
+            },
+            cpu_cores: if ticket.cpu_cores == 0 {
+                None
+            } else {
+                Some(ticket.cpu_cores)
+            },
+            memory_gb: if ticket.memory_gb == 0 {
+                None
+            } else {
+                Some(ticket.memory_gb)
+            },
+            system_disk: if ticket.system_disk.is_empty() {
+                None
+            } else {
+                Some(ticket.system_disk.clone())
+            },
+            system_disk_size_gb: if ticket.system_disk_size_gb == 0 {
+                None
+            } else {
+                Some(ticket.system_disk_size_gb)
+            },
+            data_disk: if ticket.data_disk.is_empty() {
+                None
+            } else {
+                Some(ticket.data_disk.clone())
+            },
+            has_security_product: if !ticket.has_security_product {
+                None
+            } else {
+                Some(ticket.has_security_product)
+            },
+            security_products: if ticket.security_products.is_empty() {
+                None
+            } else {
+                Some(ticket.security_products.clone())
+            },
+            ip_address: if ticket.ip_address.is_empty() {
+                None
+            } else {
+                Some(ticket.ip_address.clone())
+            },
+            remarks: if ticket.remarks.is_empty() {
+                None
+            } else {
+                Some(ticket.remarks.clone())
+            },
+            fw_source_zone: ticket.fw_source_zone.clone(),
+            fw_source_address: ticket.fw_source_address.clone(),
+            fw_dest_zone: ticket.fw_dest_zone.clone(),
+            fw_dest_address: ticket.fw_dest_address.clone(),
+            fw_protocol: ticket.fw_protocol.clone(),
+            fw_port: ticket.fw_port.clone(),
+            fw_direction: ticket.fw_direction.clone(),
+            fw_valid_until: ticket.fw_valid_until.clone(),
+            fw_firewall_name: ticket.fw_firewall_name.clone(),
+        }
+    }
+}
+
 /// 获取资源工单列表 (使用 Session Cookie 认证)
 pub async fn fetch_resource_tickets() -> Result<Vec<ResourceTicket>, String> {
-    let response = Request::get(&format!("{}/resource-tickets", API_BASE))
+    let response = Request::get(&format!("{}/resource-tickets", api_base()))
         .credentials(RequestCredentials::Include)
         .send()
         .await
@@ -137,4 +313,127 @@ pub async fn fetch_resource_tickets() -> Result<Vec<ResourceTicket>, String> {
         .map_err(|e| format!("解析失败: {}", e))?;
 
     Ok(backend_tickets.iter().map(|t| t.to_frontend()).collect())
+}
+
+/// 创建资源工单（从 ResourceTicket 转换）
+pub async fn create_resource_ticket(ticket: &ResourceTicket) -> Result<ResourceTicket, String> {
+    let req = CreateResourceTicketRequest::from(ticket);
+    create_resource_ticket_with_req(req).await
+}
+
+/// 创建资源工单（使用请求结构）
+pub async fn create_resource_ticket_with_req(
+    req: CreateResourceTicketRequest,
+) -> Result<ResourceTicket, String> {
+    let response = Request::post(&format!("{}/resource-tickets", api_base()))
+        .credentials(RequestCredentials::Include)
+        .json(&req)
+        .map_err(|e| format!("构建请求失败: {}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析失败: {}", e))?;
+
+    if let Some(data) = json.get("data") {
+        let backend_ticket: BackendResourceTicket =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
+        Ok(backend_ticket.to_frontend())
+    } else {
+        Err("响应格式错误".to_string())
+    }
+}
+
+/// 审批工单
+pub async fn approve_ticket(id: i32, req: ApproveTicketRequest) -> Result<ResourceTicket, String> {
+    let response = Request::post(&format!("{}/resource-tickets/{}/approve", api_base(), id))
+        .credentials(RequestCredentials::Include)
+        .json(&req)
+        .map_err(|e| format!("构建请求失败: {}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析失败: {}", e))?;
+
+    if let Some(data) = json.get("data") {
+        let backend_ticket: BackendResourceTicket =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
+        Ok(backend_ticket.to_frontend())
+    } else {
+        Err("响应格式错误".to_string())
+    }
+}
+
+/// 配置工单
+pub async fn provision_ticket(
+    id: i32,
+    req: ProvisionTicketRequest,
+) -> Result<ResourceTicket, String> {
+    let response = Request::post(&format!("{}/resource-tickets/{}/provision", api_base(), id))
+        .credentials(RequestCredentials::Include)
+        .json(&req)
+        .map_err(|e| format!("构建请求失败: {}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析失败: {}", e))?;
+
+    if let Some(data) = json.get("data") {
+        let backend_ticket: BackendResourceTicket =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
+        Ok(backend_ticket.to_frontend())
+    } else {
+        Err("响应格式错误".to_string())
+    }
+}
+
+/// 交付工单
+pub async fn deliver_ticket(id: i32, req: DeliverTicketRequest) -> Result<ResourceTicket, String> {
+    let response = Request::post(&format!("{}/resource-tickets/{}/deliver", api_base(), id))
+        .credentials(RequestCredentials::Include)
+        .json(&req)
+        .map_err(|e| format!("构建请求失败: {}", e))?
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析失败: {}", e))?;
+
+    if let Some(data) = json.get("data") {
+        let backend_ticket: BackendResourceTicket =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
+        Ok(backend_ticket.to_frontend())
+    } else {
+        Err("响应格式错误".to_string())
+    }
 }

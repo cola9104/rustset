@@ -1,20 +1,17 @@
 use axum::{
-    routing::{get, post, delete, put},
+    routing::{delete, get, post, put},
     Router,
 };
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock as StdRwLock};
 use tokio::sync::RwLock as TokioRwLock;
+use tower_cookies::CookieManagerLayer;
 use tower_http::trace::TraceLayer;
-use utoipa::OpenApi;
 // use utoipa_swagger_ui::SwaggerUi;  // 暂时禁用
-use shared::{
-    Asset, NetworkZone, PortInfo, ZoneConfig,
-    User, Role, PasswordPolicy,
-};
 use chrono::Utc;
-use uuid::Uuid;
 use sea_orm::ConnectionTrait;
+use shared::{Asset, NetworkZone, PasswordPolicy, PortInfo, Role, User, ZoneConfig};
+use uuid::Uuid;
 
 // 加载 .env 文件
 fn load_env() {
@@ -22,7 +19,9 @@ fn load_env() {
         if let Ok(content) = std::fs::read_to_string(".env") {
             for line in content.lines() {
                 if let Some((key, value)) = line.split_once('=') {
-                    if key.starts_with('#') { continue; }
+                    if key.starts_with('#') {
+                        continue;
+                    }
                     // 只有环境变量不存在时才设置
                     if std::env::var(key).is_err() {
                         std::env::set_var(key.trim(), value.trim());
@@ -36,7 +35,9 @@ fn load_env() {
         if let Ok(content) = std::fs::read_to_string("backend/.env") {
             for line in content.lines() {
                 if let Some((key, value)) = line.split_once('=') {
-                    if key.starts_with('#') { continue; }
+                    if key.starts_with('#') {
+                        continue;
+                    }
                     if std::env::var(key).is_err() {
                         std::env::set_var(key.trim(), value.trim());
                     }
@@ -46,142 +47,139 @@ fn load_env() {
     }
 }
 
+mod auth;
+mod config;
+mod database;
+mod entities;
+mod handlers;
+mod middleware;
+mod migration;
+mod openapi;
+mod password;
+mod scanners;
 mod state;
 mod utils;
-mod auth;
-mod password;
-mod handlers;
-mod scanners;
-mod database;
-mod config;
-mod entities;
-mod migration;
-mod middleware;
-mod openapi;
 
-use state::AppState;
-use middleware::rate_limit::{init_rate_limiter, RateLimitConfig, rate_limit_middleware};
-use middleware::performance::performance_monitoring;
-use middleware::cors::create_cors_layer;
-use middleware::auth_middleware::auth_middleware;
 use handlers::{
-    auth::{login, logout, refresh_token},
-    users::{get_users, create_user, delete_user, update_user_permissions, change_password, get_password_policy, update_password_policy, get_current_user_info},
-    logs::get_audit_logs,
-    assets::{get_assets, add_asset, update_asset, delete_asset, add_asset_port, update_asset_port, delete_asset_port, bind_port},
-    tasks::{get_tasks, create_task, update_task, delete_task, trigger_scan},
-    risks::{get_risks, resolve_risk, update_risk_status},
-    zones::{get_zones, create_zone, update_zone, delete_zone},
-    business_resources::{get_business_resources, create_business_resource, update_business_resource, delete_business_resource},
     advanced_scan::{
-        execute_advanced_scan, get_advanced_tasks, get_advanced_task,
-        cancel_advanced_scan, delete_advanced_scan, export_scan_results,
-        get_scan_engines_status, scan_progress_stream,
+        cancel_advanced_scan, delete_advanced_scan, execute_advanced_scan, export_scan_results,
+        get_advanced_task, get_advanced_tasks, get_scan_engines_status, scan_progress_stream,
     },
-    cloud_providers::{
-        get_cloud_provider_configs, get_cloud_provider_config, create_cloud_provider_config,
-        update_cloud_provider_config, delete_cloud_provider_config, test_cloud_provider_connection,
-        get_cloud_provider_options, get_active_cloud_provider_configs,
+    assets::{
+        add_asset, add_asset_port, bind_port, delete_asset, delete_asset_port, get_assets,
+        update_asset, update_asset_port,
     },
-    cloud_zones::{
-        get_cloud_zones, get_cloud_zone, create_cloud_zone, update_cloud_zone, delete_cloud_zone,
-    },
-    cloud_platforms::{
-        get_cloud_platforms, get_cloud_platform, create_cloud_platform, update_cloud_platform,
-        delete_cloud_platform, get_platforms_by_zone,
-    },
-    cloud_service_assets::{
-        get_cloud_service_assets,
-        get_cloud_service_stats,
-    },
-    ip_zones::{
-        find_zone_by_ip, get_ip_zones, create_ip_zone, update_ip_zone, delete_ip_zone,
-    },
-    port_details::{
-        get_port_details, get_port_detail, create_port_detail, 
-        update_port_detail, delete_port_detail, batch_bind_ports,
-    },
-    scanners::{
-        scan_ip, batch_scan_ips, get_scan_results, get_scan_result,
-        get_scanners, create_scanner, update_scanner, delete_scanner,
-    },
-    health::{
-        health_check, readiness_check, liveness_check, metrics,
-    },
-    resource_tickets::{
-        get_resource_tickets, get_resource_ticket, create_resource_ticket,
-        update_resource_ticket, delete_resource_ticket,
-        approve_ticket, provision_ticket, deliver_ticket,
-    },
-    service_providers::{
-        get_service_providers, get_service_provider, create_service_provider,
-        update_service_provider, delete_service_provider,
-    },
-    machine_rooms::{
-        get_machine_rooms, get_machine_room, create_machine_room,
-        update_machine_room, delete_machine_room,
-    },
-    security_products::{
-        get_security_products, get_security_product, create_security_product,
-        update_security_product, delete_security_product,
+    auth::{login, logout, refresh_token},
+    business_resources::{
+        create_business_resource, delete_business_resource, get_business_resources,
+        update_business_resource,
     },
     cloud_platform_configs::{
-        get_cloud_platform_configs, get_cloud_platform_config, create_cloud_platform_config,
-        update_cloud_platform_config, delete_cloud_platform_config,
+        create_cloud_platform_config, delete_cloud_platform_config, get_cloud_platform_config,
+        get_cloud_platform_configs, update_cloud_platform_config,
     },
+    cloud_platforms::{
+        create_cloud_platform, delete_cloud_platform, get_cloud_platform, get_cloud_platforms,
+        get_platforms_by_zone, update_cloud_platform,
+    },
+    cloud_providers::{
+        create_cloud_provider_config, delete_cloud_provider_config,
+        get_active_cloud_provider_configs, get_cloud_provider_config, get_cloud_provider_configs,
+        get_cloud_provider_options, test_cloud_provider_connection, update_cloud_provider_config,
+    },
+    cloud_service_assets::{get_cloud_service_assets, get_cloud_service_stats},
+    cloud_zones::{
+        create_cloud_zone, delete_cloud_zone, get_cloud_zone, get_cloud_zones, update_cloud_zone,
+    },
+    dashboard::get_dashboard_summary,
+    health::{health_check, liveness_check, metrics, readiness_check},
+    ip_zones::{create_ip_zone, delete_ip_zone, find_zone_by_ip, get_ip_zones, update_ip_zone},
+    logs::get_audit_logs,
+    machine_rooms::{
+        create_machine_room, delete_machine_room, get_machine_room, get_machine_rooms,
+        update_machine_room,
+    },
+    port_details::{
+        batch_bind_ports, create_port_detail, delete_port_detail, get_port_detail,
+        get_port_details, update_port_detail,
+    },
+    resource_tickets::{
+        approve_ticket, create_resource_ticket, delete_resource_ticket, deliver_ticket,
+        get_resource_ticket, get_resource_tickets, provision_ticket, update_resource_ticket,
+    },
+    risks::{get_risks, resolve_risk, update_risk_status},
+    scanners::{
+        batch_scan_ips, create_scanner, delete_scanner, get_scan_result, get_scan_results,
+        get_scanners, scan_ip, update_scanner,
+    },
+    security_products::{
+        create_security_product, delete_security_product, get_security_product,
+        get_security_products, update_security_product,
+    },
+    service_providers::{
+        create_service_provider, delete_service_provider, get_service_provider,
+        get_service_providers, update_service_provider,
+    },
+    tasks::{create_task, delete_task, get_tasks, trigger_scan, update_task},
+    users::{
+        change_password, create_user, delete_user, get_current_user_info, get_password_policy,
+        get_users, update_password_policy, update_user_permissions,
+    },
+    zones::{create_zone, delete_zone, get_zones, update_zone},
 };
+use middleware::auth_middleware::auth_middleware;
+use middleware::cors::create_cors_layer;
+use middleware::performance::performance_monitoring;
+use middleware::rate_limit::{init_rate_limiter, rate_limit_middleware, RateLimitConfig};
+use middleware::session::create_session_layer_sync;
+use state::AppState;
 
 #[tokio::main]
 async fn main() {
     // 加载 .env 文件（优先级最低，不会覆盖现有环境变量）
     load_env();
-    
+
     tracing_subscriber::fmt::init();
 
     // Initial mock data
-    let initial_assets = vec![
-        Asset {
-            id: Some(1),
-            name: "Gateway Server".to_string(),
-            ip: "192.168.1.1".to_string(),
-            zone: NetworkZone::Intranet,
-            ports: vec![
-                PortInfo { 
-                    port: 80, 
-                    is_open: true, 
-                    service: Some("HTTP".to_string()), 
-                    version: Some("1.18.0".to_string()),
-                    banner: Some("Server: nginx/1.18.0".to_string()),
-                    is_bound: true,
-                    system_name: Some("Gateway Portal".to_string()),
-                    middleware: Some("Nginx".to_string()),
-                    created_by: Some("system".to_string()),
-                    updated_by: None,
-                },
-            ],
-            last_scanned: Some(Utc::now()),
-            contact_person: Some("Admin".to_string()),
-            contact_phone: Some("13800000000".to_string()),
+    let initial_assets = vec![Asset {
+        id: Some(1),
+        name: "Gateway Server".to_string(),
+        ip: "192.168.1.1".to_string(),
+        zone: NetworkZone::Intranet,
+        ports: vec![PortInfo {
+            port: 80,
+            is_open: true,
+            service: Some("HTTP".to_string()),
+            version: Some("1.18.0".to_string()),
+            banner: Some("Server: nginx/1.18.0".to_string()),
+            is_bound: true,
+            system_name: Some("Gateway Portal".to_string()),
+            middleware: Some("Nginx".to_string()),
             created_by: Some("system".to_string()),
             updated_by: None,
-            owner: Some("IT Dept".to_string()),
-            weight: 80,
-            labels: vec!["Core".to_string(), "Gateway".to_string()],
-            os: Some("Linux".to_string()),
-            device_type: Some("Server".to_string()),
-        }
-    ];
+        }],
+        last_scanned: Some(Utc::now()),
+        contact_person: Some("Admin".to_string()),
+        contact_phone: Some("13800000000".to_string()),
+        created_by: Some("system".to_string()),
+        updated_by: None,
+        owner: Some("IT Dept".to_string()),
+        weight: 80,
+        labels: vec!["Core".to_string(), "Gateway".to_string()],
+        os: Some("Linux".to_string()),
+        device_type: Some("Server".to_string()),
+    }];
 
     // Default Users (with password hashing)
     let initial_users = vec![
         {
             let admin_password = "admin";
-            let password_hash = password::hash_password(admin_password)
-                .unwrap_or_else(|e| {
-                    eprintln!("Failed to hash admin password: {}", e);
-                    // Fallback to plain text (not recommended for production)
-                    admin_password.to_string()
-                });
+            let password_hash = password::hash_password(admin_password).unwrap_or_else(|e| {
+                eprintln!("Failed to hash admin password: {}", e);
+                // Fallback to plain text (not recommended for production)
+                admin_password.to_string()
+            });
             User {
                 id: Uuid::new_v4().to_string(),
                 username: "admin".to_string(),
@@ -190,9 +188,10 @@ async fn main() {
                 permissions: Some(shared::Permissions::sys_admin()),
                 created_at: Utc::now(),
                 password_changed_at: Some(Utc::now()),
-                password_strength: Some(password::get_strength_label(
-                    password::check_password_strength(admin_password)
-                ).to_string()),
+                password_strength: Some(
+                    password::get_strength_label(password::check_password_strength(admin_password))
+                        .to_string(),
+                ),
                 force_password_change: Some(true), // Force change on first login for security
                 last_login_at: None,
                 email: Some("admin@rustset.local".to_string()),
@@ -204,11 +203,10 @@ async fn main() {
         },
         {
             let sec_password = "sec";
-            let password_hash = password::hash_password(sec_password)
-                .unwrap_or_else(|e| {
-                    eprintln!("Failed to hash sec password: {}", e);
-                    sec_password.to_string()
-                });
+            let password_hash = password::hash_password(sec_password).unwrap_or_else(|e| {
+                eprintln!("Failed to hash sec password: {}", e);
+                sec_password.to_string()
+            });
             User {
                 id: Uuid::new_v4().to_string(),
                 username: "sec".to_string(),
@@ -217,9 +215,10 @@ async fn main() {
                 permissions: Some(shared::Permissions::sec_admin()),
                 created_at: Utc::now(),
                 password_changed_at: Some(Utc::now()),
-                password_strength: Some(password::get_strength_label(
-                    password::check_password_strength(sec_password)
-                ).to_string()),
+                password_strength: Some(
+                    password::get_strength_label(password::check_password_strength(sec_password))
+                        .to_string(),
+                ),
                 force_password_change: Some(true), // Force change on first login for security
                 last_login_at: None,
                 email: Some("sec@rustset.local".to_string()),
@@ -231,11 +230,10 @@ async fn main() {
         },
         {
             let audit_password = "audit";
-            let password_hash = password::hash_password(audit_password)
-                .unwrap_or_else(|e| {
-                    eprintln!("Failed to hash audit password: {}", e);
-                    audit_password.to_string()
-                });
+            let password_hash = password::hash_password(audit_password).unwrap_or_else(|e| {
+                eprintln!("Failed to hash audit password: {}", e);
+                audit_password.to_string()
+            });
             User {
                 id: Uuid::new_v4().to_string(),
                 username: "audit".to_string(),
@@ -244,9 +242,10 @@ async fn main() {
                 permissions: Some(shared::Permissions::auditor()),
                 created_at: Utc::now(),
                 password_changed_at: Some(Utc::now()),
-                password_strength: Some(password::get_strength_label(
-                    password::check_password_strength(audit_password)
-                ).to_string()),
+                password_strength: Some(
+                    password::get_strength_label(password::check_password_strength(audit_password))
+                        .to_string(),
+                ),
                 force_password_change: Some(true), // Force change on first login for security
                 last_login_at: None,
                 email: Some("audit@rustset.local".to_string()),
@@ -263,9 +262,14 @@ async fn main() {
     database::init_db(&db_config.connection_string)
         .await
         .expect("Failed to initialize database");
-    println!("Database initialized: type={}, url={}",
+    println!(
+        "Database initialized: type={}, url={}",
         db_config.db_type,
-        db_config.connection_string.chars().take(50).collect::<String>() // 只显示前50个字符避免泄露密码
+        db_config
+            .connection_string
+            .chars()
+            .take(50)
+            .collect::<String>() // 只显示前50个字符避免泄露密码
     );
 
     // 获取数据库连接
@@ -285,7 +289,7 @@ async fn main() {
         match db_conn.execute_unprepared(sql).await {
             Ok(result) => {
                 println!("Added new column(s), result: {:?}", result);
-            },
+            }
             Err(e) => {
                 // 字段可能已存在，忽略错误
                 println!("Note: Column might already exist: {}", e);
@@ -296,7 +300,7 @@ async fn main() {
     // 从数据库加载数据 (使用 SeaORM)
     let loaded_users = load_users_from_db(&db_conn).await;
     println!("Loaded {} users from database", loaded_users.len());
-    
+
     // 如果数据库为空，插入初始用户到数据库
     let initial_users = if loaded_users.is_empty() {
         println!("Database empty, inserting initial users...");
@@ -312,32 +316,41 @@ async fn main() {
         }
         // 重新加载用户
         load_users_from_db(&db_conn).await
-    } else { 
-        loaded_users 
+    } else {
+        loaded_users
     };
 
     let loaded_audit_logs = load_audit_logs_from_db(&db_conn).await;
-    println!("Loaded {} audit logs from database", loaded_audit_logs.len());
+    println!(
+        "Loaded {} audit logs from database",
+        loaded_audit_logs.len()
+    );
 
     // Load cloud zones and platforms from database
     let loaded_cloud_zones = load_cloud_zones_from_db(&db_conn).await;
-    println!("Loaded {} cloud zones from database", loaded_cloud_zones.len());
+    println!(
+        "Loaded {} cloud zones from database",
+        loaded_cloud_zones.len()
+    );
 
     let loaded_cloud_platforms = load_cloud_platforms_from_db(&db_conn).await;
-    println!("Loaded {} cloud platforms from database", loaded_cloud_platforms.len());
+    println!(
+        "Loaded {} cloud platforms from database",
+        loaded_cloud_platforms.len()
+    );
 
     // 初始化扫描管理器
     let scan_manager = scanners::engine::ScanManager::new().await.ok();
 
     // 初始化 Rate Limiter
     let rate_limit_config = RateLimitConfig {
-        requests_per_minute: 60,  // 每分钟60次请求
-        block_duration_seconds: 60,  // 超限后阻塞60秒
+        requests_per_minute: 60,    // 每分钟60次请求
+        block_duration_seconds: 60, // 超限后阻塞60秒
     };
     init_rate_limiter(rate_limit_config.clone());
-    println!("Rate limiter initialized: {} requests/minute, {}s block duration",
-        rate_limit_config.requests_per_minute,
-        rate_limit_config.block_duration_seconds
+    println!(
+        "Rate limiter initialized: {} requests/minute, {}s block duration",
+        rate_limit_config.requests_per_minute, rate_limit_config.block_duration_seconds
     );
 
     let state = AppState {
@@ -345,8 +358,18 @@ async fn main() {
         tasks: Arc::new(StdRwLock::new(vec![])),
         risks: Arc::new(StdRwLock::new(vec![])),
         zones: Arc::new(StdRwLock::new(vec![
-            ZoneConfig { id: "1".to_string(), name: "Intranet".to_string(), cidr: "192.168.0.0/16".to_string(), priority: 10 },
-            ZoneConfig { id: "2".to_string(), name: "DMZ".to_string(), cidr: "10.0.0.0/8".to_string(), priority: 20 },
+            ZoneConfig {
+                id: "1".to_string(),
+                name: "Intranet".to_string(),
+                cidr: "192.168.0.0/16".to_string(),
+                priority: 10,
+            },
+            ZoneConfig {
+                id: "2".to_string(),
+                name: "DMZ".to_string(),
+                cidr: "10.0.0.0/8".to_string(),
+                priority: 20,
+            },
         ])),
         users: Arc::new(StdRwLock::new(initial_users)),
         audit_logs: Arc::new(StdRwLock::new(loaded_audit_logs)),
@@ -376,8 +399,9 @@ async fn main() {
     async fn load_audit_logs_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::AuditLog> {
         use crate::database::get_audit_logs_with_conn as get_audit_logs_db;
         match get_audit_logs_db(conn, Some(1000)).await {
-            Ok(logs) => logs.into_iter().map(|db_log| {
-                shared::AuditLog {
+            Ok(logs) => logs
+                .into_iter()
+                .map(|db_log| shared::AuditLog {
                     id: db_log.id,
                     user_id: db_log.user_id,
                     username: db_log.username,
@@ -387,8 +411,8 @@ async fn main() {
                     timestamp: chrono::DateTime::parse_from_rfc3339(&db_log.timestamp)
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(|_| Utc::now()),
-                }
-            }).collect(),
+                })
+                .collect(),
             Err(e) => {
                 eprintln!("Error loading audit logs from database: {}", e);
                 vec![]
@@ -396,19 +420,24 @@ async fn main() {
         }
     }
 
-    async fn load_cloud_zones_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::CloudZone> {
+    async fn load_cloud_zones_from_db(
+        conn: &sea_orm::DatabaseConnection,
+    ) -> Vec<shared::CloudZone> {
         use crate::database::get_all_cloud_zones;
-        
+
         match get_all_cloud_zones(conn).await {
-            Ok(zones) => zones.into_iter().map(|db| shared::CloudZone {
-                id: Some(db.id),
-                zone_name: db.zone_name.clone(),
-                zone_code: db.zone_code.clone(),
-                description: db.description.clone(),
-                created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now()),
-            }).collect(),
+            Ok(zones) => zones
+                .into_iter()
+                .map(|db| shared::CloudZone {
+                    id: Some(db.id),
+                    zone_name: db.zone_name.clone(),
+                    zone_code: db.zone_code.clone(),
+                    description: db.description.clone(),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                })
+                .collect(),
             Err(e) => {
                 eprintln!("Error loading cloud zones from database: {}", e);
                 vec![]
@@ -416,26 +445,34 @@ async fn main() {
         }
     }
 
-    async fn load_cloud_platforms_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::CloudPlatform> {
+    async fn load_cloud_platforms_from_db(
+        conn: &sea_orm::DatabaseConnection,
+    ) -> Vec<shared::CloudPlatform> {
         use crate::database::get_all_cloud_platforms;
-        
+
         match get_all_cloud_platforms(conn).await {
-            Ok(platforms) => platforms.into_iter().map(|db| shared::CloudPlatform {
-                id: Some(db.id),
-                zone_id: db.zone_id,
-                platform_name: db.service_name.clone(),
-                platform_code: db.service_code.clone(),
-                description: db.description.clone(),
-                created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now()),
-            }).collect(),
+            Ok(platforms) => platforms
+                .into_iter()
+                .map(|db| shared::CloudPlatform {
+                    id: Some(db.id),
+                    zone_id: db.zone_id,
+                    platform_name: db.service_name.clone(),
+                    platform_code: db.service_code.clone(),
+                    description: db.description.clone(),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                })
+                .collect(),
             Err(e) => {
                 eprintln!("Error loading cloud platforms from database: {}", e);
                 vec![]
             }
         }
     }
+
+    // 不需要创建 session layer，使用中间件方式
+    // session 会通过 session_middleware 中间件注入
 
     let app = Router::new()
         // Health & Metrics
@@ -452,16 +489,31 @@ async fn main() {
         .route("/api/users/{id}", delete(delete_user))
         .route("/api/users/{id}/permissions", put(update_user_permissions))
         .route("/api/users/change-password", post(change_password))
-        .route("/api/password-policy", get(get_password_policy).put(update_password_policy))
+        .route("/api/dashboard-summary", get(get_dashboard_summary))
+        .route(
+            "/api/password-policy",
+            get(get_password_policy).put(update_password_policy),
+        )
         .route("/api/logs", get(get_audit_logs))
         // Roles
-        .route("/api/roles", get(handlers::roles::get_roles).post(handlers::roles::create_role))
-        .route("/api/roles/{id}", get(handlers::roles::get_role).put(handlers::roles::update_role).delete(handlers::roles::delete_role))
+        .route(
+            "/api/roles",
+            get(handlers::roles::get_roles).post(handlers::roles::create_role),
+        )
+        .route(
+            "/api/roles/{id}",
+            get(handlers::roles::get_role)
+                .put(handlers::roles::update_role)
+                .delete(handlers::roles::delete_role),
+        )
         // Assets
         .route("/api/assets", get(get_assets).post(add_asset))
         .route("/api/assets/{id}", delete(delete_asset).put(update_asset))
         .route("/api/assets/{id}/ports", post(add_asset_port))
-        .route("/api/assets/{id}/ports/{port}", delete(delete_asset_port).put(update_asset_port))
+        .route(
+            "/api/assets/{id}/ports/{port}",
+            delete(delete_asset_port).put(update_asset_port),
+        )
         .route("/api/assets/{ip}/ports/{port}/bind", post(bind_port))
         // Tasks & Risks
         .route("/api/tasks", get(get_tasks).post(create_task))
@@ -473,43 +525,117 @@ async fn main() {
         .route("/api/zones", get(get_zones).post(create_zone))
         .route("/api/zones/{id}", delete(delete_zone).put(update_zone))
         // Business Resources (业务申请)
-        .route("/api/business-resources", get(get_business_resources).post(create_business_resource))
-        .route("/api/business-resources/{id}", put(update_business_resource).delete(delete_business_resource))
+        .route(
+            "/api/business-resources",
+            get(get_business_resources).post(create_business_resource),
+        )
+        .route(
+            "/api/business-resources/{id}",
+            put(update_business_resource).delete(delete_business_resource),
+        )
         // Advanced Scanning (新增高级扫描 API)
         .route("/api/scan/advanced", post(execute_advanced_scan))
         .route("/api/scan/advanced/tasks", get(get_advanced_tasks))
-        .route("/api/scan/advanced/tasks/{id}", get(get_advanced_task).delete(delete_advanced_scan))
-        .route("/api/scan/advanced/tasks/{id}/cancel", post(cancel_advanced_scan))
-        .route("/api/scan/advanced/tasks/{id}/export", get(export_scan_results))
-        .route("/api/scan/advanced/engines/status", get(get_scan_engines_status))
-        .route("/api/scan/advanced/tasks/{id}/progress", get(scan_progress_stream))
+        .route(
+            "/api/scan/advanced/tasks/{id}",
+            get(get_advanced_task).delete(delete_advanced_scan),
+        )
+        .route(
+            "/api/scan/advanced/tasks/{id}/cancel",
+            post(cancel_advanced_scan),
+        )
+        .route(
+            "/api/scan/advanced/tasks/{id}/export",
+            get(export_scan_results),
+        )
+        .route(
+            "/api/scan/advanced/engines/status",
+            get(get_scan_engines_status),
+        )
+        .route(
+            "/api/scan/advanced/tasks/{id}/progress",
+            get(scan_progress_stream),
+        )
         // Cloud Provider Configuration (云厂商对接)
-        .route("/api/cloud-provider-configs", get(get_cloud_provider_configs).post(create_cloud_provider_config))
-        .route("/api/cloud-provider-configs/options", get(get_cloud_provider_options))
-        .route("/api/cloud-provider-configs/active", get(get_active_cloud_provider_configs))
-        .route("/api/cloud-provider-configs/{id}", get(get_cloud_provider_config).put(update_cloud_provider_config).delete(delete_cloud_provider_config))
-        .route("/api/cloud-provider-configs/{id}/test", post(test_cloud_provider_connection))
+        .route(
+            "/api/cloud-provider-configs",
+            get(get_cloud_provider_configs).post(create_cloud_provider_config),
+        )
+        .route(
+            "/api/cloud-provider-configs/options",
+            get(get_cloud_provider_options),
+        )
+        .route(
+            "/api/cloud-provider-configs/active",
+            get(get_active_cloud_provider_configs),
+        )
+        .route(
+            "/api/cloud-provider-configs/{id}",
+            get(get_cloud_provider_config)
+                .put(update_cloud_provider_config)
+                .delete(delete_cloud_provider_config),
+        )
+        .route(
+            "/api/cloud-provider-configs/{id}/test",
+            post(test_cloud_provider_connection),
+        )
         // Providers/Vendors (运营商/厂家管理)
-        .route("/api/providers", get(get_cloud_zones).post(create_cloud_zone))
-        .route("/api/providers/{id}", get(get_cloud_zone).put(update_cloud_zone).delete(delete_cloud_zone))
+        .route(
+            "/api/providers",
+            get(get_cloud_zones).post(create_cloud_zone),
+        )
+        .route(
+            "/api/providers/{id}",
+            get(get_cloud_zone)
+                .put(update_cloud_zone)
+                .delete(delete_cloud_zone),
+        )
         // Cloud Services (云服务管理)
-        .route("/api/cloud-services", get(get_cloud_platforms).post(create_cloud_platform))
-        .route("/api/cloud-services/{id}", get(get_cloud_platform).put(update_cloud_platform).delete(delete_cloud_platform))
-        .route("/api/cloud-services/provider/{provider_id}", get(get_platforms_by_zone))
+        .route(
+            "/api/cloud-services",
+            get(get_cloud_platforms).post(create_cloud_platform),
+        )
+        .route(
+            "/api/cloud-services/{id}",
+            get(get_cloud_platform)
+                .put(update_cloud_platform)
+                .delete(delete_cloud_platform),
+        )
+        .route(
+            "/api/cloud-services/provider/{provider_id}",
+            get(get_platforms_by_zone),
+        )
         // Cloud Service Assets (云服务资产 - 统一视图)
         .route("/api/cloud-service-assets", get(get_cloud_service_assets))
-        .route("/api/cloud-service-assets/stats", get(get_cloud_service_stats))
+        .route(
+            "/api/cloud-service-assets/stats",
+            get(get_cloud_service_stats),
+        )
         // IP Zones (IP 区域管理)
         .route("/api/ip-zones", get(get_ip_zones).post(create_ip_zone))
-        .route("/api/ip-zones/{id}", delete(delete_ip_zone).put(update_ip_zone))
+        .route(
+            "/api/ip-zones/{id}",
+            delete(delete_ip_zone).put(update_ip_zone),
+        )
         .route("/api/ip-zones/find", get(find_zone_by_ip))
         // Port Details (端口详细信息管理)
-        .route("/api/port-details", get(get_port_details).post(create_port_detail))
-        .route("/api/port-details/{id}", get(get_port_detail).put(update_port_detail).delete(delete_port_detail))
+        .route(
+            "/api/port-details",
+            get(get_port_details).post(create_port_detail),
+        )
+        .route(
+            "/api/port-details/{id}",
+            get(get_port_detail)
+                .put(update_port_detail)
+                .delete(delete_port_detail),
+        )
         .route("/api/port-details/batch-bind", post(batch_bind_ports))
         // Scanner Configuration (扫描器配置管理)
         .route("/api/scanners", get(get_scanners).post(create_scanner))
-        .route("/api/scanners/{id}", put(update_scanner).delete(delete_scanner))
+        .route(
+            "/api/scanners/{id}",
+            put(update_scanner).delete(delete_scanner),
+        )
         // Scanners (扫描器接口)
         .route("/api/scan-ip", post(scan_ip))
         .route("/api/batch-scan-ips", post(batch_scan_ips))
@@ -523,30 +649,93 @@ async fn main() {
         // Scan
         .route("/api/scan", post(trigger_scan))
         // Resource Tickets (资源工单)
-        .route("/api/resource-tickets", get(get_resource_tickets).post(create_resource_ticket))
-        .route("/api/resource-tickets/{id}", get(get_resource_ticket).put(update_resource_ticket).delete(delete_resource_ticket))
+        .route(
+            "/api/resource-tickets",
+            get(get_resource_tickets).post(create_resource_ticket),
+        )
+        .route(
+            "/api/resource-tickets/{id}",
+            get(get_resource_ticket)
+                .put(update_resource_ticket)
+                .delete(delete_resource_ticket),
+        )
         .route("/api/resource-tickets/{id}/approve", post(approve_ticket))
-        .route("/api/resource-tickets/{id}/provision", post(provision_ticket))
+        .route(
+            "/api/resource-tickets/{id}/provision",
+            post(provision_ticket),
+        )
         .route("/api/resource-tickets/{id}/deliver", post(deliver_ticket))
         // Service Providers (服务商管理)
-        .route("/api/service-providers", get(get_service_providers).post(create_service_provider))
-        .route("/api/service-providers/{id}", get(get_service_provider).put(update_service_provider).delete(delete_service_provider))
+        .route(
+            "/api/service-providers",
+            get(get_service_providers).post(create_service_provider),
+        )
+        .route(
+            "/api/service-providers/{id}",
+            get(get_service_provider)
+                .put(update_service_provider)
+                .delete(delete_service_provider),
+        )
         // Machine Rooms (机房管理)
-        .route("/api/machine-rooms", get(get_machine_rooms).post(create_machine_room))
-        .route("/api/machine-rooms/{id}", get(get_machine_room).put(update_machine_room).delete(delete_machine_room))
+        .route(
+            "/api/machine-rooms",
+            get(get_machine_rooms).post(create_machine_room),
+        )
+        .route(
+            "/api/machine-rooms/{id}",
+            get(get_machine_room)
+                .put(update_machine_room)
+                .delete(delete_machine_room),
+        )
         // Security Products (安全产品管理)
-        .route("/api/security-products", get(get_security_products).post(create_security_product))
-        .route("/api/security-products/{id}", get(get_security_product).put(update_security_product).delete(delete_security_product))
+        .route(
+            "/api/security-products",
+            get(get_security_products).post(create_security_product),
+        )
+        .route(
+            "/api/security-products/{id}",
+            get(get_security_product)
+                .put(update_security_product)
+                .delete(delete_security_product),
+        )
         // Cloud Platform Configs (云平台配置管理)
-        .route("/api/cloud-platform-configs", get(get_cloud_platform_configs).post(create_cloud_platform_config))
-        .route("/api/cloud-platform-configs/{id}", get(get_cloud_platform_config).put(update_cloud_platform_config).delete(delete_cloud_platform_config))
+        .route(
+            "/api/cloud-platform-configs",
+            get(get_cloud_platform_configs).post(create_cloud_platform_config),
+        )
+        .route(
+            "/api/cloud-platform-configs/{id}",
+            get(get_cloud_platform_config)
+                .put(update_cloud_platform_config)
+                .delete(delete_cloud_platform_config),
+        )
         .with_state(state)
         // Swagger UI - 暂时禁用，网络问题导致下载失败
         // .merge(
         //     SwaggerUi::new("/api-docs")
         //         .url("/api-docs/openapi.json", openapi::ApiDoc::openapi())
         // )
+        // Layer order is important! With Axum .layer(), each call wraps the previous service.
+        // For incoming requests, layers run from last-added to first-added (outside to inside).
+        // For outgoing responses, layers run from first-added to last-added (inside to outside).
+        //
+        // The correct order for sessions:
+        // 1. CookieManager (outermost) - must run first to parse cookies
+        // 2. SessionManager - loads session from cookie
+        // 3. Auth middleware - validates user from session
+        // 4. Rate limiting, performance, trace, CORS
+        //
+        // Current layer chain (last to run = first to execute for incoming):
+        // - CORS (outermost, runs last)
+        // - Trace
+        // - Performance monitoring
+        // - Rate limiting
+        // - CookieManager
+        // - SessionManager
+        // - Auth middleware (innermost, runs first)
         .layer(axum::middleware::from_fn(auth_middleware))
+        .layer(create_session_layer_sync())
+        .layer(CookieManagerLayer::new())
         .layer(axum::middleware::from_fn(rate_limit_middleware))
         .layer(axum::middleware::from_fn(performance_monitoring))
         .layer(TraceLayer::new_for_http())

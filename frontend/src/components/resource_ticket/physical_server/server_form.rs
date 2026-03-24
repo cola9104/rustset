@@ -1,11 +1,15 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::FaShieldHalved;
-use crate::components::common::{Modal, ModalFooter, ErrorMessage, FormMode};
-use crate::components::security_product::security_product_selector::SecurityProductSelector;
-use crate::app::{PROVIDERS_STATE, MACHINE_ROOMS_STATE, SECURITY_PRODUCTS_STATE};
-use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
 use super::physical_server_request::{PhysicalServerRequest, PhysicalServerStatus};
+use crate::app::{MACHINE_ROOMS_STATE, PROVIDERS_STATE, SECURITY_PRODUCTS_STATE};
+use crate::components::common::{ErrorMessage, FormMode, Modal, ModalFooter};
+use crate::components::security_product::security_product_selector::SecurityProductSelector;
+use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
+use crate::services::{
+    machine_room_api::fetch_machine_rooms, security_product_api::fetch_security_products,
+    service_provider_api::fetch_service_providers,
+};
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::FaShieldHalved;
+use dioxus_free_icons::Icon;
 
 /// 物理机申请表单数据结构
 #[derive(Clone, Debug, Default)]
@@ -45,7 +49,12 @@ impl From<&PhysicalServerRequest> for PhysicalServerFormData {
 
 impl PhysicalServerFormData {
     /// 转换为 PhysicalServerRequest
-    pub fn to_request(&self, id: i32, status: PhysicalServerStatus, created_at: String) -> PhysicalServerRequest {
+    pub fn to_request(
+        &self,
+        id: i32,
+        status: PhysicalServerStatus,
+        created_at: String,
+    ) -> PhysicalServerRequest {
         PhysicalServerRequest {
             id,
             title: self.title.clone(),
@@ -104,7 +113,9 @@ pub struct PhysicalServerFormProps {
 #[component]
 pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.request.as_ref()
+    let initial_data = props
+        .request
+        .as_ref()
         .map(PhysicalServerFormData::from)
         .unwrap_or_default();
 
@@ -112,6 +123,47 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
     let mut error_msg = use_signal(String::new);
     let mut show_security_selector = use_signal(|| false);
     let security_products_signal = use_signal(|| form_data.read().security_products.clone());
+
+    // 如果全局状态为空，从API获取数据
+    use_effect(move || {
+        spawn(async move {
+            // 获取服务商
+            if PROVIDERS_STATE.read().is_empty() {
+                match fetch_service_providers().await {
+                    Ok(providers) => {
+                        *PROVIDERS_STATE.write() = providers;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载服务商数据失败: {}", e);
+                    }
+                }
+            }
+
+            // 获取机房
+            if MACHINE_ROOMS_STATE.read().is_empty() {
+                match fetch_machine_rooms().await {
+                    Ok(rooms) => {
+                        *MACHINE_ROOMS_STATE.write() = rooms;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载机房数据失败: {}", e);
+                    }
+                }
+            }
+
+            // 获取安全产品
+            if SECURITY_PRODUCTS_STATE.read().is_empty() {
+                match fetch_security_products().await {
+                    Ok(products) => {
+                        *SECURITY_PRODUCTS_STATE.write() = products;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载安全产品数据失败: {}", e);
+                    }
+                }
+            }
+        });
+    });
 
     // 获取服务商和机房列表
     let providers = PROVIDERS_STATE.read().clone();

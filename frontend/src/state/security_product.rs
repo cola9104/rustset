@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 /// 安全产品分类枚举
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum SecurityProductCategory {
-    Firewall,   // 防火墙
-    Waf,        // Web应用防火墙
-    Ips,        // 入侵防御系统
-    Ids,        // 入侵检测系统
-    AntiDdos,   // 抗DDoS
-    Vpn,        // VPN网关
-    Bastion,    // 堡垒机
-    Siem,       // 安全信息和事件管理
+    Firewall, // 防火墙
+    Waf,      // Web应用防火墙
+    Ips,      // 入侵防御系统
+    Ids,      // 入侵检测系统
+    AntiDdos, // 抗DDoS
+    Vpn,      // VPN网关
+    Bastion,  // 堡垒机
+    Siem,     // 安全信息和事件管理
 }
 
 impl SecurityProductCategory {
@@ -110,25 +110,25 @@ impl SecurityProductStatus {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SecurityProduct {
     pub id: i32,
-    pub name: String,                         // 产品名称
-    pub category: SecurityProductCategory,    // 产品分类
-    pub vendor: String,                       // 厂商
-    pub model: String,                        // 型号
-    pub version: String,                      // 版本
-    pub serial_number: Option<String>,        // 序列号
-    pub license_type: String,                 // 授权类型
-    pub license_expiry: Option<String>,       // 授权到期日
-    pub management_ip: Option<String>,        // 管理IP
-    pub deployment_mode: String,              // 部署模式
-    pub cloud_platform_id: Option<i32>,       // 云平台ID
-    pub machine_room_id: Option<i32>,         // 机房ID
-    pub provider_id: Option<i32>,             // 服务商ID
-    pub status: SecurityProductStatus,        // 状态
-    pub features: Vec<String>,                // 功能特性
-    pub throughput: Option<String>,           // 吞吐量
-    pub contact_person: String,               // 负责人
-    pub contact_phone: String,                // 联系电话
-    pub remarks: Option<String>,              // 备注
+    pub name: String,                      // 产品名称
+    pub category: SecurityProductCategory, // 产品分类
+    pub vendor: String,                    // 厂商
+    pub model: String,                     // 型号
+    pub version: String,                   // 版本
+    pub serial_number: Option<String>,     // 序列号
+    pub license_type: String,              // 授权类型
+    pub license_expiry: Option<String>,    // 授权到期日
+    pub management_ip: Option<String>,     // 管理IP
+    pub deployment_mode: String,           // 部署模式
+    pub cloud_platform_id: Option<i32>,    // 云平台ID
+    pub machine_room_id: Option<i32>,      // 机房ID
+    pub provider_id: Option<i32>,          // 服务商ID
+    pub status: SecurityProductStatus,     // 状态
+    pub features: Vec<String>,             // 功能特性
+    pub throughput: Option<String>,        // 吞吐量
+    pub contact_person: String,            // 负责人
+    pub contact_phone: String,             // 联系电话
+    pub remarks: Option<String>,           // 备注
     pub created_at: String,
 }
 
@@ -172,7 +172,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: Some(1),
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["应用识别".to_string(), "入侵防御".to_string(), "病毒过滤".to_string()],
+            features: vec![
+                "应用识别".to_string(),
+                "入侵防御".to_string(),
+                "病毒过滤".to_string(),
+            ],
             throughput: Some("40 Gbps".to_string()),
             contact_person: "张三".to_string(),
             contact_phone: "13800138001".to_string(),
@@ -219,7 +223,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: None,
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["OWASP防护".to_string(), "CC防护".to_string(), "Bot检测".to_string()],
+            features: vec![
+                "OWASP防护".to_string(),
+                "CC防护".to_string(),
+                "Bot检测".to_string(),
+            ],
             throughput: Some("10 Gbps".to_string()),
             contact_person: "王五".to_string(),
             contact_phone: "13800138003".to_string(),
@@ -243,7 +251,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: Some(1),
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["实时阻断".to_string(), "漏洞防护".to_string(), "威胁情报".to_string()],
+            features: vec![
+                "实时阻断".to_string(),
+                "漏洞防护".to_string(),
+                "威胁情报".to_string(),
+            ],
             throughput: Some("15 Gbps".to_string()),
             contact_person: "赵六".to_string(),
             contact_phone: "13800138004".to_string(),
@@ -267,7 +279,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: Some(2),
             provider_id: Some(2),
             status: SecurityProductStatus::Active,
-            features: vec!["流量分析".to_string(), "异常检测".to_string(), "日志审计".to_string()],
+            features: vec![
+                "流量分析".to_string(),
+                "异常检测".to_string(),
+                "日志审计".to_string(),
+            ],
             throughput: Some("20 Gbps".to_string()),
             contact_person: "孙七".to_string(),
             contact_phone: "13800138005".to_string(),
@@ -291,7 +307,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: Some(1),
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["流量清洗".to_string(), "CC防护".to_string(), "黑洞引流".to_string()],
+            features: vec![
+                "流量清洗".to_string(),
+                "CC防护".to_string(),
+                "黑洞引流".to_string(),
+            ],
             throughput: Some("100 Gbps".to_string()),
             contact_person: "周八".to_string(),
             contact_phone: "13800138006".to_string(),
@@ -315,7 +335,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: Some(1),
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["SSL加密".to_string(), "双因素认证".to_string(), "访问控制".to_string()],
+            features: vec![
+                "SSL加密".to_string(),
+                "双因素认证".to_string(),
+                "访问控制".to_string(),
+            ],
             throughput: Some("5 Gbps".to_string()),
             contact_person: "吴九".to_string(),
             contact_phone: "13800138007".to_string(),
@@ -339,7 +363,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: Some(1),
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["账号管理".to_string(), "操作审计".to_string(), "权限控制".to_string()],
+            features: vec![
+                "账号管理".to_string(),
+                "操作审计".to_string(),
+                "权限控制".to_string(),
+            ],
             throughput: None,
             contact_person: "郑十".to_string(),
             contact_phone: "13800138008".to_string(),
@@ -363,7 +391,11 @@ pub fn init_security_products() -> Vec<SecurityProduct> {
             machine_room_id: None,
             provider_id: Some(1),
             status: SecurityProductStatus::Active,
-            features: vec!["日志采集".to_string(), "威胁分析".to_string(), "态势大屏".to_string()],
+            features: vec![
+                "日志采集".to_string(),
+                "威胁分析".to_string(),
+                "态势大屏".to_string(),
+            ],
             throughput: Some("100000 EPS".to_string()),
             contact_person: "钱十一".to_string(),
             contact_phone: "13800138009".to_string(),

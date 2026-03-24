@@ -2,10 +2,10 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Json},
 };
-use serde_json::json;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
 use shared::Role;
@@ -68,18 +68,14 @@ pub async fn get_cloud_platform_configs(
     _user: AuthUser,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_all_cloud_platform_configs(&conn).await {
-                Ok(configs) => Ok(Json(configs).into_response()),
-                Err(e) => {
-                    eprintln!("Error loading cloud platform configs from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_all_cloud_platform_configs(&conn).await {
+            Ok(configs) => Ok(Json(configs).into_response()),
+            Err(e) => {
+                eprintln!("Error loading cloud platform configs from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -90,21 +86,15 @@ pub async fn get_cloud_platform_config(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
-                Ok(Some(config)) => Ok(Json(config).into_response()),
-                Ok(None) => {
-                    Err(ApiError::not_found("Cloud platform config not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error loading cloud platform config from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
+            Ok(Some(config)) => Ok(Json(config).into_response()),
+            Ok(None) => Err(ApiError::not_found("Cloud platform config not found")),
+            Err(e) => {
+                eprintln!("Error loading cloud platform config from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -136,7 +126,9 @@ pub async fn create_cloud_platform_config(
                 req.remarks.as_deref(),
                 &status,
                 &now,
-            ).await {
+            )
+            .await
+            {
                 Ok(id) => {
                     let config = CloudPlatformConfig {
                         id,
@@ -167,7 +159,8 @@ pub async fn create_cloud_platform_config(
                     Ok(Json(json!({
                         "message": "云平台配置创建成功",
                         "data": config
-                    })).into_response())
+                    }))
+                    .into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud platform config: {}", e);
@@ -175,9 +168,7 @@ pub async fn create_cloud_platform_config(
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -193,66 +184,61 @@ pub async fn update_cloud_platform_config(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    let now = chrono::Utc::now().to_rfc3339();
-                    match crate::database::update_cloud_platform_config(
-                        &conn,
-                        id,
-                        req.platform_name.as_deref(),
-                        req.provider_id,
-                        req.cloud_type.as_deref(),
-                        req.foundation.as_deref(),
-                        req.region_id.as_deref(),
-                        req.machine_room_id,
-                        req.access_key_id.as_deref(),
-                        req.access_key_secret.as_deref(),
-                        req.remarks.as_deref(),
-                        req.status.as_deref(),
-                        req.last_test_time.as_deref(),
-                        req.last_test_result.as_deref(),
-                        Some(&now),
-                    ).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "UPDATE_CLOUD_PLATFORM_CONFIG",
-                                &format!("{}", id),
-                                &format!("Updated cloud platform config: {}", id),
-                            );
+        Some(conn) => match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
+            Ok(Some(_)) => {
+                let now = chrono::Utc::now().to_rfc3339();
+                match crate::database::update_cloud_platform_config(
+                    &conn,
+                    id,
+                    req.platform_name.as_deref(),
+                    req.provider_id,
+                    req.cloud_type.as_deref(),
+                    req.foundation.as_deref(),
+                    req.region_id.as_deref(),
+                    req.machine_room_id,
+                    req.access_key_id.as_deref(),
+                    req.access_key_secret.as_deref(),
+                    req.remarks.as_deref(),
+                    req.status.as_deref(),
+                    req.last_test_time.as_deref(),
+                    req.last_test_result.as_deref(),
+                    Some(&now),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        log_action_auth(
+                            &state.audit_logs,
+                            &user,
+                            "UPDATE_CLOUD_PLATFORM_CONFIG",
+                            &format!("{}", id),
+                            &format!("Updated cloud platform config: {}", id),
+                        );
 
-                            match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
-                                Ok(Some(config)) => {
-                                    Ok(Json(json!({
-                                        "message": "云平台配置更新成功",
-                                        "data": config
-                                    })).into_response())
-                                }
-                                _ => {
-                                    Ok(Json(json!({ "message": "云平台配置更新成功" })).into_response())
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Error updating cloud platform config: {}", e);
-                            Err(ApiError::internal("Failed to update cloud platform config"))
+                        match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
+                            Ok(Some(config)) => Ok(Json(json!({
+                                "message": "云平台配置更新成功",
+                                "data": config
+                            }))
+                            .into_response()),
+                            _ => Ok(
+                                Json(json!({ "message": "云平台配置更新成功" })).into_response()
+                            ),
                         }
                     }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Cloud platform config not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error checking cloud platform config existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    Err(e) => {
+                        eprintln!("Error updating cloud platform config: {}", e);
+                        Err(ApiError::internal("Failed to update cloud platform config"))
+                    }
                 }
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+            Ok(None) => Err(ApiError::not_found("Cloud platform config not found")),
+            Err(e) => {
+                eprintln!("Error checking cloud platform config existence: {}", e);
+                Err(ApiError::internal("Database error"))
+            }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -267,38 +253,30 @@ pub async fn delete_cloud_platform_config(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    match crate::database::delete_cloud_platform_config(&conn, id).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "DELETE_CLOUD_PLATFORM_CONFIG",
-                                &format!("{}", id),
-                                &format!("Deleted cloud platform config: {}", id),
-                            );
+        Some(conn) => match crate::database::get_cloud_platform_config_by_id(&conn, id).await {
+            Ok(Some(_)) => match crate::database::delete_cloud_platform_config(&conn, id).await {
+                Ok(_) => {
+                    log_action_auth(
+                        &state.audit_logs,
+                        &user,
+                        "DELETE_CLOUD_PLATFORM_CONFIG",
+                        &format!("{}", id),
+                        &format!("Deleted cloud platform config: {}", id),
+                    );
 
-                            Ok(Json(json!({ "message": "云平台配置删除成功" })).into_response())
-                        }
-                        Err(e) => {
-                            eprintln!("Error deleting cloud platform config: {}", e);
-                            Err(ApiError::internal("Failed to delete cloud platform config"))
-                        }
-                    }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Cloud platform config not found"))
+                    Ok(Json(json!({ "message": "云平台配置删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error checking cloud platform config existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    eprintln!("Error deleting cloud platform config: {}", e);
+                    Err(ApiError::internal("Failed to delete cloud platform config"))
                 }
+            },
+            Ok(None) => Err(ApiError::not_found("Cloud platform config not found")),
+            Err(e) => {
+                eprintln!("Error checking cloud platform config existence: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }

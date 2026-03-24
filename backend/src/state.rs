@@ -1,10 +1,13 @@
-use std::sync::{Arc, RwLock as StdRwLock};
-use tokio::sync::RwLock as TokioRwLock;
-use chrono::{DateTime, Utc};
-use shared::{Asset, Task, Risk, ZoneConfig, User, AuditLog, AdvancedScanTask, PasswordPolicy, CustomRole, CloudZone, CloudPlatform, ScannerConfig};
-use crate::scanners::engine::ScanManager;
 use crate::handlers::port_details::PortDetail;
 use crate::handlers::scanners::ScanResult;
+use crate::scanners::engine::ScanManager;
+use chrono::{DateTime, Utc};
+use shared::{
+    AdvancedScanTask, Asset, AuditLog, CloudPlatform, CloudZone, CustomRole, PasswordPolicy, Risk,
+    ScannerConfig, Task, User, ZoneConfig,
+};
+use std::sync::{Arc, RwLock as StdRwLock};
+use tokio::sync::RwLock as TokioRwLock;
 
 #[derive(Clone)]
 pub struct AppState {

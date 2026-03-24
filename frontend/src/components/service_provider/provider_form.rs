@@ -1,6 +1,6 @@
-use dioxus::prelude::*;
+use crate::components::common::{ErrorMessage, Modal, ModalFooter};
 use crate::state::service_provider::ServiceProviderConfig;
-use crate::components::common::{Modal, ModalFooter, ErrorMessage};
+use dioxus::prelude::*;
 
 /// 表单模式
 #[derive(Clone, Copy, PartialEq)]
@@ -81,7 +81,12 @@ impl From<&ServiceProviderConfig> for ProviderFormData {
 
 impl ProviderFormData {
     /// 转换为 ServiceProviderConfig
-    pub fn to_config(&self, id: i32, created_at: String, updated_at: Option<String>) -> ServiceProviderConfig {
+    pub fn to_config(
+        &self,
+        id: i32,
+        created_at: String,
+        updated_at: Option<String>,
+    ) -> ServiceProviderConfig {
         ServiceProviderConfig {
             id,
             provider_name: self.provider_name.clone(),
@@ -94,7 +99,11 @@ impl ProviderFormData {
             headquarters: self.headquarters.clone(),
             service_area: self.service_area.clone(),
             business_license: self.business_license.clone(),
-            remarks: if self.remarks.is_empty() { None } else { Some(self.remarks.clone()) },
+            remarks: if self.remarks.is_empty() {
+                None
+            } else {
+                Some(self.remarks.clone())
+            },
             status: self.status.clone(),
             created_at,
             updated_at,
@@ -137,7 +146,9 @@ pub struct ProviderFormProps {
 #[component]
 pub fn ProviderForm(props: ProviderFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.provider.as_ref()
+    let initial_data = props
+        .provider
+        .as_ref()
         .map(ProviderFormData::from)
         .unwrap_or_default();
 

@@ -1,10 +1,10 @@
 mod app;
 mod components;
+mod config;
 mod router;
 mod services;
 mod state;
 mod utils;
-mod config;
 
 fn main() {
     // 初始化 panic hook

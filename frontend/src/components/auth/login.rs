@@ -1,14 +1,16 @@
 use dioxus::prelude::*;
-use dioxus_router::navigator;
+use dioxus_free_icons::icons::fa_solid_icons::{FaLock, FaUser};
 use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{FaUser, FaLock};
+use dioxus_router::navigator;
 use serde::{Deserialize, Serialize};
+use web_sys::RequestCredentials;
 
 use crate::app::AuthUser;
 use crate::app::AUTH_STATE;
-use crate::router::Route;
-use crate::utils::storage::set_token;
 use crate::config::login_url;
+use crate::router::Route;
+use crate::state::user_role::{use_auth, AuthState as WorkflowAuthState};
+use crate::utils::storage::set_token;
 
 /// 登录请求
 #[derive(Debug, Serialize)]
@@ -163,12 +165,14 @@ struct LoginPermissions {
 impl LoginUser {
     /// 将后端用户转换为前端 AuthUser
     fn to_auth_user(&self) -> AuthUser {
-        let permissions = self.permissions.as_ref()
+        let permissions = self
+            .permissions
+            .as_ref()
             .map(|p| p.to_permission_strings())
             .unwrap_or_default();
 
         AuthUser {
-            id: self.id.parse().unwrap_or(0),
+            id: self.id.clone(),
             username: self.username.clone(),
             role: self.role.to_string(),
             permissions,
@@ -179,11 +183,11 @@ impl LoginUser {
 impl LoginRole {
     fn to_string(&self) -> String {
         match self {
-                    LoginRole::SysAdmin => "SysAdmin".to_string(),
-                    LoginRole::SecAdmin => "SecAdmin".to_string(),
-                    LoginRole::Auditor => "Auditor".to_string(),
-                    LoginRole::Operator => "Operator".to_string(),
-                    LoginRole::Custom => "Custom".to_string(),
+            LoginRole::SysAdmin => "SysAdmin".to_string(),
+            LoginRole::SecAdmin => "SecAdmin".to_string(),
+            LoginRole::Auditor => "Auditor".to_string(),
+            LoginRole::Operator => "Operator".to_string(),
+            LoginRole::Custom => "Custom".to_string(),
         }
     }
 }
@@ -192,39 +196,105 @@ impl LoginPermissions {
     /// 将权限转换为字符串列表
     fn to_permission_strings(&self) -> Vec<String> {
         let mut perms = Vec::new();
-        if self.can_access_general { perms.push("can_access_general".to_string()); }
-        if self.can_view_dashboard { perms.push("can_view_dashboard".to_string()); }
-        if self.can_view_tasks { perms.push("can_view_tasks".to_string()); }
-        if self.can_create_task { perms.push("can_create_task".to_string()); }
-        if self.can_delete_task { perms.push("can_delete_task".to_string()); }
-        if self.can_update_task { perms.push("can_update_task".to_string()); }
-        if self.can_view_advanced_scan { perms.push("can_view_advanced_scan".to_string()); }
-        if self.can_create_scan { perms.push("can_create_scan".to_string()); }
-        if self.can_delete_scan { perms.push("can_delete_scan".to_string()); }
-        if self.can_export_scan { perms.push("can_export_scan".to_string()); }
-        if self.can_access_assets_risks { perms.push("can_access_assets_risks".to_string()); }
-        if self.can_view_cloud_assets { perms.push("can_view_cloud_assets".to_string()); }
-        if self.can_create_cloud_asset { perms.push("can_create_cloud_asset".to_string()); }
-        if self.can_update_cloud_asset { perms.push("can_update_cloud_asset".to_string()); }
-        if self.can_delete_cloud_asset { perms.push("can_delete_cloud_asset".to_string()); }
-        if self.can_view_audit_logs { perms.push("can_view_audit_logs".to_string()); }
-        if self.can_view_users { perms.push("can_view_users".to_string()); }
-        if self.can_create_user { perms.push("can_create_user".to_string()); }
-        if self.can_update_user { perms.push("can_update_user".to_string()); }
-        if self.can_delete_user { perms.push("can_delete_user".to_string()); }
-        if self.can_view_roles { perms.push("can_view_roles".to_string()); }
-        if self.can_create_role { perms.push("can_create_role".to_string()); }
-        if self.can_update_role { perms.push("can_update_role".to_string()); }
-        if self.can_delete_role { perms.push("can_delete_role".to_string()); }
-        if self.can_view_service_providers { perms.push("can_view_service_providers".to_string()); }
-        if self.can_view_machine_rooms { perms.push("can_view_machine_rooms".to_string()); }
-        if self.can_view_cloud_platforms { perms.push("can_view_cloud_platforms".to_string()); }
-        if self.can_view_security_products { perms.push("can_view_security_products".to_string()); }
-        if self.can_view_network_zones { perms.push("can_view_network_zones".to_string()); }
-        if self.can_view_resource_tickets { perms.push("can_view_resource_tickets".to_string()); }
-        if self.can_view_ip_zones { perms.push("can_view_ip_zones".to_string()); }
-        if self.can_view_scanners { perms.push("can_view_scanners".to_string()); }
-        if self.can_view_port_details { perms.push("can_view_port_details".to_string()); }
+        if self.can_access_general {
+            perms.push("can_access_general".to_string());
+        }
+        if self.can_view_dashboard {
+            perms.push("can_view_dashboard".to_string());
+        }
+        if self.can_view_tasks {
+            perms.push("can_view_tasks".to_string());
+        }
+        if self.can_create_task {
+            perms.push("can_create_task".to_string());
+        }
+        if self.can_delete_task {
+            perms.push("can_delete_task".to_string());
+        }
+        if self.can_update_task {
+            perms.push("can_update_task".to_string());
+        }
+        if self.can_view_advanced_scan {
+            perms.push("can_view_advanced_scan".to_string());
+        }
+        if self.can_create_scan {
+            perms.push("can_create_scan".to_string());
+        }
+        if self.can_delete_scan {
+            perms.push("can_delete_scan".to_string());
+        }
+        if self.can_export_scan {
+            perms.push("can_export_scan".to_string());
+        }
+        if self.can_access_assets_risks {
+            perms.push("can_access_assets_risks".to_string());
+        }
+        if self.can_view_cloud_assets {
+            perms.push("can_view_cloud_assets".to_string());
+        }
+        if self.can_create_cloud_asset {
+            perms.push("can_create_cloud_asset".to_string());
+        }
+        if self.can_update_cloud_asset {
+            perms.push("can_update_cloud_asset".to_string());
+        }
+        if self.can_delete_cloud_asset {
+            perms.push("can_delete_cloud_asset".to_string());
+        }
+        if self.can_view_audit_logs {
+            perms.push("can_view_audit_logs".to_string());
+        }
+        if self.can_view_users {
+            perms.push("can_view_users".to_string());
+        }
+        if self.can_create_user {
+            perms.push("can_create_user".to_string());
+        }
+        if self.can_update_user {
+            perms.push("can_update_user".to_string());
+        }
+        if self.can_delete_user {
+            perms.push("can_delete_user".to_string());
+        }
+        if self.can_view_roles {
+            perms.push("can_view_roles".to_string());
+        }
+        if self.can_create_role {
+            perms.push("can_create_role".to_string());
+        }
+        if self.can_update_role {
+            perms.push("can_update_role".to_string());
+        }
+        if self.can_delete_role {
+            perms.push("can_delete_role".to_string());
+        }
+        if self.can_view_service_providers {
+            perms.push("can_view_service_providers".to_string());
+        }
+        if self.can_view_machine_rooms {
+            perms.push("can_view_machine_rooms".to_string());
+        }
+        if self.can_view_cloud_platforms {
+            perms.push("can_view_cloud_platforms".to_string());
+        }
+        if self.can_view_security_products {
+            perms.push("can_view_security_products".to_string());
+        }
+        if self.can_view_network_zones {
+            perms.push("can_view_network_zones".to_string());
+        }
+        if self.can_view_resource_tickets {
+            perms.push("can_view_resource_tickets".to_string());
+        }
+        if self.can_view_ip_zones {
+            perms.push("can_view_ip_zones".to_string());
+        }
+        if self.can_view_scanners {
+            perms.push("can_view_scanners".to_string());
+        }
+        if self.can_view_port_details {
+            perms.push("can_view_port_details".to_string());
+        }
         perms
     }
 }
@@ -236,6 +306,7 @@ pub fn Login() -> Element {
     let mut password = use_signal(String::new);
     let mut error = use_signal(String::new);
     let mut loading = use_signal(|| false);
+    let mut auth_state = use_auth();
     let nav = navigator();
 
     let handle_login = move |_| {
@@ -260,6 +331,7 @@ pub fn Login() -> Element {
             };
 
             match gloo_net::http::Request::post(&login_url())
+                .credentials(RequestCredentials::Include)
                 .header("Content-Type", "application/json")
                 .body(serde_json::to_string(&request_body).unwrap_or_default())
             {
@@ -275,6 +347,7 @@ pub fn Login() -> Element {
 
                                         // 转换用户数据并更新认证状态
                                         let auth_user = login_response.user.to_auth_user();
+                                        auth_state.set(WorkflowAuthState::from(&auth_user));
                                         *AUTH_STATE.write() = Some(auth_user);
 
                                         // 跳转到仪表板
@@ -289,7 +362,9 @@ pub fn Login() -> Element {
                                 let status = response.status();
                                 match response.json::<serde_json::Value>().await {
                                     Ok(error_json) => {
-                                        if let Some(error_msg) = error_json.get("error").and_then(|v| v.as_str()) {
+                                        if let Some(error_msg) =
+                                            error_json.get("error").and_then(|v| v.as_str())
+                                        {
                                             error.set(error_msg.to_string());
                                         } else {
                                             error.set(format!("登录失败 (HTTP {})", status));

@@ -2,10 +2,10 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Json},
 };
-use serde_json::json;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
 use shared::Role;
@@ -73,18 +73,14 @@ pub async fn get_machine_rooms(
     _user: AuthUser,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_all_machine_rooms(&conn).await {
-                Ok(rooms) => Ok(Json(rooms).into_response()),
-                Err(e) => {
-                    eprintln!("Error loading machine rooms from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_all_machine_rooms(&conn).await {
+            Ok(rooms) => Ok(Json(rooms).into_response()),
+            Err(e) => {
+                eprintln!("Error loading machine rooms from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -95,21 +91,15 @@ pub async fn get_machine_room(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_machine_room_by_id(&conn, id).await {
-                Ok(Some(room)) => Ok(Json(room).into_response()),
-                Ok(None) => {
-                    Err(ApiError::not_found("Machine room not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error loading machine room from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_machine_room_by_id(&conn, id).await {
+            Ok(Some(room)) => Ok(Json(room).into_response()),
+            Ok(None) => Err(ApiError::not_found("Machine room not found")),
+            Err(e) => {
+                eprintln!("Error loading machine room from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -144,7 +134,9 @@ pub async fn create_machine_room(
                 req.remarks.as_deref(),
                 &status,
                 &now,
-            ).await {
+            )
+            .await
+            {
                 Ok(id) => {
                     let room = MachineRoom {
                         id,
@@ -176,7 +168,8 @@ pub async fn create_machine_room(
                     Ok(Json(json!({
                         "message": "机房创建成功",
                         "data": room
-                    })).into_response())
+                    }))
+                    .into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting machine room: {}", e);
@@ -184,9 +177,7 @@ pub async fn create_machine_room(
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -202,67 +193,60 @@ pub async fn update_machine_room(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_machine_room_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    let now = chrono::Utc::now().to_rfc3339();
-                    match crate::database::update_machine_room(
-                        &conn,
-                        id,
-                        req.room_name.as_deref(),
-                        req.room_code.as_deref(),
-                        req.facility_type.as_deref(),
-                        req.address.as_deref(),
-                        req.provider_id,
-                        req.room_type.as_deref(),
-                        req.contact_person.as_deref(),
-                        req.contact_phone.as_deref(),
-                        req.floor.as_deref(),
-                        req.cabinet_count,
-                        req.area_size.as_deref(),
-                        req.remarks.as_deref(),
-                        req.status.as_deref(),
-                        Some(&now),
-                    ).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "UPDATE_MACHINE_ROOM",
-                                &format!("{}", id),
-                                &format!("Updated machine room: {}", id),
-                            );
+        Some(conn) => match crate::database::get_machine_room_by_id(&conn, id).await {
+            Ok(Some(_)) => {
+                let now = chrono::Utc::now().to_rfc3339();
+                match crate::database::update_machine_room(
+                    &conn,
+                    id,
+                    req.room_name.as_deref(),
+                    req.room_code.as_deref(),
+                    req.facility_type.as_deref(),
+                    req.address.as_deref(),
+                    req.provider_id,
+                    req.room_type.as_deref(),
+                    req.contact_person.as_deref(),
+                    req.contact_phone.as_deref(),
+                    req.floor.as_deref(),
+                    req.cabinet_count,
+                    req.area_size.as_deref(),
+                    req.remarks.as_deref(),
+                    req.status.as_deref(),
+                    Some(&now),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        log_action_auth(
+                            &state.audit_logs,
+                            &user,
+                            "UPDATE_MACHINE_ROOM",
+                            &format!("{}", id),
+                            &format!("Updated machine room: {}", id),
+                        );
 
-                            match crate::database::get_machine_room_by_id(&conn, id).await {
-                                Ok(Some(room)) => {
-                                    Ok(Json(json!({
-                                        "message": "机房更新成功",
-                                        "data": room
-                                    })).into_response())
-                                }
-                                _ => {
-                                    Ok(Json(json!({ "message": "机房更新成功" })).into_response())
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Error updating machine room: {}", e);
-                            Err(ApiError::internal("Failed to update machine room"))
+                        match crate::database::get_machine_room_by_id(&conn, id).await {
+                            Ok(Some(room)) => Ok(Json(json!({
+                                "message": "机房更新成功",
+                                "data": room
+                            }))
+                            .into_response()),
+                            _ => Ok(Json(json!({ "message": "机房更新成功" })).into_response()),
                         }
                     }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Machine room not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error checking machine room existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    Err(e) => {
+                        eprintln!("Error updating machine room: {}", e);
+                        Err(ApiError::internal("Failed to update machine room"))
+                    }
                 }
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+            Ok(None) => Err(ApiError::not_found("Machine room not found")),
+            Err(e) => {
+                eprintln!("Error checking machine room existence: {}", e);
+                Err(ApiError::internal("Database error"))
+            }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -277,38 +261,30 @@ pub async fn delete_machine_room(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_machine_room_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    match crate::database::delete_machine_room(&conn, id).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "DELETE_MACHINE_ROOM",
-                                &format!("{}", id),
-                                &format!("Deleted machine room: {}", id),
-                            );
+        Some(conn) => match crate::database::get_machine_room_by_id(&conn, id).await {
+            Ok(Some(_)) => match crate::database::delete_machine_room(&conn, id).await {
+                Ok(_) => {
+                    log_action_auth(
+                        &state.audit_logs,
+                        &user,
+                        "DELETE_MACHINE_ROOM",
+                        &format!("{}", id),
+                        &format!("Deleted machine room: {}", id),
+                    );
 
-                            Ok(Json(json!({ "message": "机房删除成功" })).into_response())
-                        }
-                        Err(e) => {
-                            eprintln!("Error deleting machine room: {}", e);
-                            Err(ApiError::internal("Failed to delete machine room"))
-                        }
-                    }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Machine room not found"))
+                    Ok(Json(json!({ "message": "机房删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error checking machine room existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    eprintln!("Error deleting machine room: {}", e);
+                    Err(ApiError::internal("Failed to delete machine room"))
                 }
+            },
+            Ok(None) => Err(ApiError::not_found("Machine room not found")),
+            Err(e) => {
+                eprintln!("Error checking machine room existence: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }

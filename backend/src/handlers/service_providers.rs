@@ -2,11 +2,11 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Json},
 };
-use serde_json::json;
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::log_action_auth;
 use shared::Role;
@@ -71,18 +71,14 @@ pub async fn get_service_providers(
     _user: AuthUser,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_all_service_providers(&conn).await {
-                Ok(providers) => Ok(Json(providers).into_response()),
-                Err(e) => {
-                    eprintln!("Error loading service providers from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_all_service_providers(&conn).await {
+            Ok(providers) => Ok(Json(providers).into_response()),
+            Err(e) => {
+                eprintln!("Error loading service providers from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -93,21 +89,15 @@ pub async fn get_service_provider(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_service_provider_by_id(&conn, id).await {
-                Ok(Some(provider)) => Ok(Json(provider).into_response()),
-                Ok(None) => {
-                    Err(ApiError::not_found("Service provider not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error loading service provider from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match crate::database::get_service_provider_by_id(&conn, id).await {
+            Ok(Some(provider)) => Ok(Json(provider).into_response()),
+            Ok(None) => Err(ApiError::not_found("Service provider not found")),
+            Err(e) => {
+                eprintln!("Error loading service provider from database: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -141,7 +131,9 @@ pub async fn create_service_provider(
                 req.remarks.as_deref(),
                 &status,
                 &now,
-            ).await {
+            )
+            .await
+            {
                 Ok(id) => {
                     let provider = ServiceProvider {
                         id,
@@ -172,7 +164,8 @@ pub async fn create_service_provider(
                     Ok(Json(json!({
                         "message": "服务商创建成功",
                         "data": provider
-                    })).into_response())
+                    }))
+                    .into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting service provider: {}", e);
@@ -180,9 +173,7 @@ pub async fn create_service_provider(
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -219,7 +210,9 @@ pub async fn update_service_provider(
                         req.remarks.as_deref(),
                         req.status.as_deref(),
                         Some(&now),
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(_) => {
                             log_action_auth(
                                 &state.audit_logs,
@@ -231,12 +224,11 @@ pub async fn update_service_provider(
 
                             // 返回更新后的数据
                             match crate::database::get_service_provider_by_id(&conn, id).await {
-                                Ok(Some(provider)) => {
-                                    Ok(Json(json!({
-                                        "message": "服务商更新成功",
-                                        "data": provider
-                                    })).into_response())
-                                }
+                                Ok(Some(provider)) => Ok(Json(json!({
+                                    "message": "服务商更新成功",
+                                    "data": provider
+                                }))
+                                .into_response()),
                                 _ => {
                                     Ok(Json(json!({ "message": "服务商更新成功" })).into_response())
                                 }
@@ -248,18 +240,14 @@ pub async fn update_service_provider(
                         }
                     }
                 }
-                Ok(None) => {
-                    Err(ApiError::not_found("Service provider not found"))
-                }
+                Ok(None) => Err(ApiError::not_found("Service provider not found")),
                 Err(e) => {
                     eprintln!("Error checking service provider existence: {}", e);
                     Err(ApiError::internal("Database error"))
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -274,38 +262,30 @@ pub async fn delete_service_provider(
     }
 
     match crate::database::get_db() {
-        Some(conn) => {
-            match crate::database::get_service_provider_by_id(&conn, id).await {
-                Ok(Some(_)) => {
-                    match crate::database::delete_service_provider(&conn, id).await {
-                        Ok(_) => {
-                            log_action_auth(
-                                &state.audit_logs,
-                                &user,
-                                "DELETE_SERVICE_PROVIDER",
-                                &format!("{}", id),
-                                &format!("Deleted service provider: {}", id),
-                            );
+        Some(conn) => match crate::database::get_service_provider_by_id(&conn, id).await {
+            Ok(Some(_)) => match crate::database::delete_service_provider(&conn, id).await {
+                Ok(_) => {
+                    log_action_auth(
+                        &state.audit_logs,
+                        &user,
+                        "DELETE_SERVICE_PROVIDER",
+                        &format!("{}", id),
+                        &format!("Deleted service provider: {}", id),
+                    );
 
-                            Ok(Json(json!({ "message": "服务商删除成功" })).into_response())
-                        }
-                        Err(e) => {
-                            eprintln!("Error deleting service provider: {}", e);
-                            Err(ApiError::internal("Failed to delete service provider"))
-                        }
-                    }
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Service provider not found"))
+                    Ok(Json(json!({ "message": "服务商删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error checking service provider existence: {}", e);
-                    Err(ApiError::internal("Database error"))
+                    eprintln!("Error deleting service provider: {}", e);
+                    Err(ApiError::internal("Failed to delete service provider"))
                 }
+            },
+            Ok(None) => Err(ApiError::not_found("Service provider not found")),
+            Err(e) => {
+                eprintln!("Error checking service provider existence: {}", e);
+                Err(ApiError::internal("Database error"))
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }

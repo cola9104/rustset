@@ -5,47 +5,48 @@ use axum::{
     http::{header, Method, Request, StatusCode},
     Router,
 };
-use serde_json::json;
-use tower::ServiceExt;
+use backend::handlers::users::{create_user, delete_user, get_users};
 use backend::state::AppState;
-use backend::handlers::users::{get_users, create_user, delete_user};
-use shared::{User, Role};
+use serde_json::json;
+use shared::{Role, User};
+use tower::ServiceExt;
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
     Router::new()
-        .route("/api/users", axum::routing::get(get_users).post(create_user))
+        .route(
+            "/api/users",
+            axum::routing::get(get_users).post(create_user),
+        )
         .route("/api/users/{id}", axum::routing::delete(delete_user))
         .with_state(state)
 }
 
 /// 创建测试用的 AppState
 async fn create_test_state() -> AppState {
-    use std::sync::{Arc, RwLock};
-    use chrono::Utc;
     use backend::password;
+    use chrono::Utc;
+    use std::sync::{Arc, RwLock};
 
     // 创建测试管理员用户
     let password_hash = password::hash_password("admin123").unwrap();
-    let test_users = vec![
-        User {
-            id: "admin_user".to_string(),
-            username: "admin".to_string(),
-            password: password_hash,
-            role: Role::SysAdmin,
-            permissions: Some(shared::Permissions::sys_admin()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("strong".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: None,
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
-        },
-    ];
+    let test_users = vec![User {
+        id: "admin_user".to_string(),
+        username: "admin".to_string(),
+        password: password_hash,
+        role: Role::SysAdmin,
+        permissions: Some(shared::Permissions::sys_admin()),
+        created_at: Utc::now(),
+        password_changed_at: Some(Utc::now()),
+        password_strength: Some("strong".to_string()),
+        force_password_change: Some(false),
+        last_login_at: None,
+        email: None,
+        phone: None,
+        status: Some("active".to_string()),
+        failed_login_attempts: Some(0),
+        locked_until: None,
+    }];
 
     AppState {
         assets: Arc::new(RwLock::new(vec![])),
@@ -100,7 +101,9 @@ async fn test_get_users_forbidden() {
     let response = app.oneshot(request).await.unwrap();
 
     // 期望：401（未授权）或 403（禁止访问）
-    assert!(response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::FORBIDDEN);
+    assert!(
+        response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::FORBIDDEN
+    );
 }
 
 #[tokio::test]
@@ -112,11 +115,14 @@ async fn test_create_user_unauthorized() {
         .method(Method::POST)
         .uri("/api/users")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "username": "testuser",
-            "password": "TestPass123",
-            "role": "SecAdmin"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "username": "testuser",
+                "password": "TestPass123",
+                "role": "SecAdmin"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();

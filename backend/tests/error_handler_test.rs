@@ -80,9 +80,18 @@ mod error_handler_tests {
         assert_eq!(ApiError::bad_request("").error_type(), "bad_request");
         assert_eq!(ApiError::internal("").error_type(), "internal_error");
         assert_eq!(ApiError::conflict("").error_type(), "conflict");
-        assert_eq!(ApiError::payload_too_large("").error_type(), "payload_too_large");
-        assert_eq!(ApiError::unsupported_media_type("").error_type(), "unsupported_media_type");
-        assert_eq!(ApiError::service_unavailable("").error_type(), "service_unavailable");
+        assert_eq!(
+            ApiError::payload_too_large("").error_type(),
+            "payload_too_large"
+        );
+        assert_eq!(
+            ApiError::unsupported_media_type("").error_type(),
+            "unsupported_media_type"
+        );
+        assert_eq!(
+            ApiError::service_unavailable("").error_type(),
+            "service_unavailable"
+        );
         assert_eq!(ApiError::database("").error_type(), "database_error");
         assert_eq!(ApiError::validation("").error_type(), "validation_error");
     }
@@ -120,10 +129,16 @@ mod error_handler_tests {
         assert_eq!(ApiError::payload_too_large("").status_code().as_u16(), 413);
 
         // 415
-        assert_eq!(ApiError::unsupported_media_type("").status_code().as_u16(), 415);
+        assert_eq!(
+            ApiError::unsupported_media_type("").status_code().as_u16(),
+            415
+        );
 
         // 503
-        assert_eq!(ApiError::service_unavailable("").status_code().as_u16(), 503);
+        assert_eq!(
+            ApiError::service_unavailable("").status_code().as_u16(),
+            503
+        );
     }
 
     #[test]

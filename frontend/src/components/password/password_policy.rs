@@ -1,11 +1,12 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
-    FaShield, FaKey, FaClock, FaLock, FaUserShield, FaCheck
+    FaCheck, FaClock, FaKey, FaLock, FaShield, FaUserShield,
 };
+use dioxus_free_icons::Icon;
 
 /// 全局安全策略状态
-pub static SECURITY_POLICY_STATE: GlobalSignal<SecurityPolicy> = Signal::global(SecurityPolicy::default);
+pub static SECURITY_POLICY_STATE: GlobalSignal<SecurityPolicy> =
+    Signal::global(SecurityPolicy::default);
 
 /// 安全策略配置（全局唯一）
 #[derive(Clone, Debug, PartialEq)]

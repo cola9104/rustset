@@ -1,28 +1,27 @@
 /// Rate Limiting 集成测试
 ///
 /// 测试 Rate Limiting 中间件在实际 HTTP 请求场景中的行为
-
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     Router,
 };
 use tower::ServiceExt;
-use serde_json::json;
 
 /// 创建测试应用
 async fn create_test_app() -> Router {
     use std::sync::Arc;
-    use tokio::sync::RwLock;
 
-    use backend::state::AppState;
-    use backend::middleware::rate_limit::{init_rate_limiter, RateLimitConfig, rate_limit_middleware};
     use backend::handlers::health::{health_check, readiness_check};
+    use backend::middleware::rate_limit::{
+        init_rate_limiter, rate_limit_middleware, RateLimitConfig,
+    };
+    use backend::state::AppState;
 
     // 初始化 Rate Limiter（较小的限制用于测试）
     let rate_limit_config = RateLimitConfig {
-        requests_per_minute: 5,  // 每分钟5次请求
-        block_duration_seconds: 10,  // 阻塞10秒
+        requests_per_minute: 5,     // 每分钟5次请求
+        block_duration_seconds: 10, // 阻塞10秒
     };
     init_rate_limiter(rate_limit_config);
 
@@ -64,6 +63,7 @@ async fn test_rate_limit_within_bounds() {
             .oneshot(
                 Request::builder()
                     .uri("/health")
+                    .header("X-Forwarded-For", "198.51.100.10")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -73,7 +73,8 @@ async fn test_rate_limit_within_bounds() {
         assert_eq!(
             response.status(),
             StatusCode::OK,
-            "Request {} should succeed", i
+            "Request {} should succeed",
+            i
         );
     }
 }
@@ -86,12 +87,13 @@ async fn test_rate_limit_exceeded() {
     let mut success_count = 0;
     let mut rate_limited_count = 0;
 
-    for i in 0..6 {
+    for _i in 0..6 {
         let response = app
             .clone()
             .oneshot(
                 Request::builder()
                     .uri("/health")
+                    .header("X-Forwarded-For", "198.51.100.11")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -143,8 +145,16 @@ async fn test_rate_limit_with_different_ips() {
         }
 
         // 每个IP应该独立计算限流
-        assert_eq!(success_count, 5, "IP {} should have 5 successful requests", ip);
-        assert_eq!(rate_limited_count, 1, "IP {} should have 1 rate-limited request", ip);
+        assert_eq!(
+            success_count, 5,
+            "IP {} should have 5 successful requests",
+            ip
+        );
+        assert_eq!(
+            rate_limited_count, 1,
+            "IP {} should have 1 rate-limited request",
+            ip
+        );
     }
 }
 

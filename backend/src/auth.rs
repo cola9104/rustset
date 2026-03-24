@@ -20,7 +20,9 @@ fn jwt_secret() -> Result<String, ApiError> {
         .map_err(|_| ApiError::internal("JWT_SECRET environment variable is not set"))?;
 
     if secret.trim().is_empty() {
-        return Err(ApiError::internal("JWT_SECRET environment variable is empty"));
+        return Err(ApiError::internal(
+            "JWT_SECRET environment variable is empty",
+        ));
     }
 
     Ok(secret)
@@ -66,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_generate_and_verify_token() {
-        std::env::set_var("JWT_SECRET", "test-secret");
+        std::env::set_var("JWT_SECRET", "test-jwt-secret");
 
         let user = User {
             id: "123".to_string(),
@@ -96,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_verify_invalid_token() {
-        std::env::set_var("JWT_SECRET", "test-secret");
+        std::env::set_var("JWT_SECRET", "test-jwt-secret");
 
         let result = verify_token("invalid.jwt.token");
         assert!(result.is_err());
@@ -104,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_token_expiration() {
-        std::env::set_var("JWT_SECRET", "test-secret");
+        std::env::set_var("JWT_SECRET", "test-jwt-secret");
 
         let user = User {
             id: "123".to_string(),

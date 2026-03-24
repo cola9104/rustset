@@ -48,12 +48,12 @@ impl ResourceType {
 /// 网络区域
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum NetworkZone {
-    InternetDmz,      // 互联网DMZ
-    GovDmz,           // 政务网DMZ
-    OfficeNetwork,    // 办公网
-    DataCenter,       // 数据中心
-    TrustedZone,      // 可信区
-    Other(String),    // 其他
+    InternetDmz,   // 互联网DMZ
+    GovDmz,        // 政务网DMZ
+    OfficeNetwork, // 办公网
+    DataCenter,    // 数据中心
+    TrustedZone,   // 可信区
+    Other(String), // 其他
 }
 
 impl NetworkZone {
@@ -112,8 +112,8 @@ impl FirewallProtocol {
 /// 访问方向
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AccessDirection {
-    Inbound,   // 入站
-    Outbound,  // 出站
+    Inbound,       // 入站
+    Outbound,      // 出站
     Bidirectional, // 双向
 }
 
@@ -224,18 +224,18 @@ pub struct ResourceTicket {
     pub ticket_status: TicketStatus,
 
     // 关联字段
-    pub provider_id: Option<i32>,            // 关联的服务商ID
-    pub provider_name: String,               // 冗余字段，便于显示
-    pub cloud_platform_id: Option<i32>,      // 关联的云平台ID
-    pub cloud_platform_name: String,        // 冗余字段，便于显示
-    pub machine_room_id: Option<i32>,         // 关联的机房ID
-    pub machine_room_name: String,           // 冗余字段，便于显示
+    pub provider_id: Option<i32>,       // 关联的服务商ID
+    pub provider_name: String,          // 冗余字段，便于显示
+    pub cloud_platform_id: Option<i32>, // 关联的云平台ID
+    pub cloud_platform_name: String,    // 冗余字段，便于显示
+    pub machine_room_id: Option<i32>,   // 关联的机房ID
+    pub machine_room_name: String,      // 冗余字段，便于显示
 
     pub cloud_region: String,
     pub cloud_category: String,
-    pub zone_name: String,          // 可用区（云资源）/ 区域（物理机）
-    pub zone_cabinet: String,       // 机柜（物理机）
-    pub rack_units: i32,            // 机位(U数)（物理机）
+    pub zone_name: String,    // 可用区（云资源）/ 区域（物理机）
+    pub zone_cabinet: String, // 机柜（物理机）
+    pub rack_units: i32,      // 机位(U数)（物理机）
     pub customer_name: String,
     pub application_name: String,
     pub contract_name: String,
@@ -247,7 +247,7 @@ pub struct ResourceTicket {
     pub system_disk_size_gb: i32,
     pub data_disk: String,
     pub has_security_product: bool,
-    pub security_products: String,  // 选中的安全产品名称，逗号分隔
+    pub security_products: String, // 选中的安全产品名称，逗号分隔
     pub ip_address: String,
     pub delivery_status: String,
     pub remarks: String,
@@ -271,15 +271,15 @@ pub struct ResourceTicket {
     pub deliver_comment: Option<String>,
 
     // 网络策略工单专用字段（防火墙端口开放申请）
-    pub fw_source_zone: Option<String>,         // 源区域
-    pub fw_source_address: Option<String>,      // 源地址/IP段
-    pub fw_dest_zone: Option<String>,           // 目标区域
-    pub fw_dest_address: Option<String>,        // 目标地址/IP
-    pub fw_protocol: Option<String>,            // 协议类型 (TCP/UDP/ICMP/ANY)
-    pub fw_port: Option<String>,                // 端口 (单个端口或范围，如 "80" 或 "8080-8090")
-    pub fw_direction: Option<String>,           // 访问方向 (入站/出站/双向)
-    pub fw_valid_until: Option<String>,         // 有效期限
-    pub fw_firewall_name: Option<String>,       // 防火墙设备名称
+    pub fw_source_zone: Option<String>,    // 源区域
+    pub fw_source_address: Option<String>, // 源地址/IP段
+    pub fw_dest_zone: Option<String>,      // 目标区域
+    pub fw_dest_address: Option<String>,   // 目标地址/IP
+    pub fw_protocol: Option<String>,       // 协议类型 (TCP/UDP/ICMP/ANY)
+    pub fw_port: Option<String>,           // 端口 (单个端口或范围，如 "80" 或 "8080-8090")
+    pub fw_direction: Option<String>,      // 访问方向 (入站/出站/双向)
+    pub fw_valid_until: Option<String>,    // 有效期限
+    pub fw_firewall_name: Option<String>,  // 防火墙设备名称
 }
 
 /// 创建测试数据（与云平台和机房关联）

@@ -5,41 +5,43 @@ use axum::{
     http::{header, Method, Request, StatusCode},
     Router,
 };
-use tower::ServiceExt;
 use backend::state::AppState;
+use tower::ServiceExt;
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
     Router::new()
-        .route("/api/port-details", axum::routing::get(backend::handlers::port_details::get_port_details).post(backend::handlers::port_details::create_port_detail))
+        .route(
+            "/api/port-details",
+            axum::routing::get(backend::handlers::port_details::get_port_details)
+                .post(backend::handlers::port_details::create_port_detail),
+        )
         .with_state(state)
 }
 
 /// 创建测试用的 AppState
 async fn create_test_state() -> AppState {
-    use std::sync::{Arc, RwLock};
-    use shared::{User, Role};
     use chrono::Utc;
+    use shared::{Role, User};
+    use std::sync::{Arc, RwLock};
 
-    let test_users = vec![
-        User {
-            id: "test_user_1".to_string(),
-            username: "admin".to_string(),
-            password: "test_hash".to_string(),
-            role: Role::SysAdmin,
-            permissions: Some(shared::Permissions::sys_admin()),
-            created_at: Utc::now(),
-            password_changed_at: Some(Utc::now()),
-            password_strength: Some("strong".to_string()),
-            force_password_change: Some(false),
-            last_login_at: None,
-            email: None,
-            phone: None,
-            status: Some("active".to_string()),
-            failed_login_attempts: Some(0),
-            locked_until: None,
-        },
-    ];
+    let test_users = vec![User {
+        id: "test_user_1".to_string(),
+        username: "admin".to_string(),
+        password: "test_hash".to_string(),
+        role: Role::SysAdmin,
+        permissions: Some(shared::Permissions::sys_admin()),
+        created_at: Utc::now(),
+        password_changed_at: Some(Utc::now()),
+        password_strength: Some("strong".to_string()),
+        force_password_change: Some(false),
+        last_login_at: None,
+        email: None,
+        phone: None,
+        status: Some("active".to_string()),
+        failed_login_attempts: Some(0),
+        locked_until: None,
+    }];
 
     AppState {
         assets: Arc::new(RwLock::new(vec![])),
@@ -94,10 +96,12 @@ async fn test_create_port_detail_with_service_detection() {
     let response = app.oneshot(request).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(result["port"], 22);
     assert_eq!(result["service"], "SSH");
 }
@@ -118,10 +122,12 @@ async fn test_create_port_detail_http() {
     let response = app.oneshot(request).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let result: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    
+
     assert_eq!(result["port"], 443);
     assert_eq!(result["service"], "HTTPS");
 }

@@ -2,15 +2,15 @@
 //!
 //! Simple in-memory rate limiting for API endpoints
 
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
 use axum::{
     extract::Request,
     http::{HeaderMap, StatusCode},
     middleware::Next,
     response::Response,
 };
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 /// Rate limiter configuration
 #[derive(Clone)]
@@ -71,7 +71,10 @@ impl RateLimiter {
         if let Some(blocked_until) = state.blocked_until {
             if now < blocked_until {
                 let remaining = (blocked_until - now).as_secs();
-                return Err(format!("Rate limit exceeded. Try again in {} seconds.", remaining));
+                return Err(format!(
+                    "Rate limit exceeded. Try again in {} seconds.",
+                    remaining
+                ));
             } else {
                 // Unblock
                 state.blocked_until = None;
@@ -92,11 +95,11 @@ impl RateLimiter {
         state.request_count += 1;
         if state.request_count > self.config.requests_per_minute {
             // Block client
-            state.blocked_until = Some(now + Duration::from_secs(self.config.block_duration_seconds));
+            state.blocked_until =
+                Some(now + Duration::from_secs(self.config.block_duration_seconds));
             return Err(format!(
                 "Rate limit exceeded ({} requests/minute). Blocked for {} seconds.",
-                self.config.requests_per_minute,
-                self.config.block_duration_seconds
+                self.config.requests_per_minute, self.config.block_duration_seconds
             ));
         }
 
@@ -136,7 +139,10 @@ fn extract_client_ip(headers: &HeaderMap) -> String {
         return real_ip.to_string();
     }
 
-    if let Some(cf_connecting_ip) = headers.get("cf-connecting-ip").and_then(|v| v.to_str().ok()) {
+    if let Some(cf_connecting_ip) = headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+    {
         return cf_connecting_ip.to_string();
     }
 
@@ -145,10 +151,7 @@ fn extract_client_ip(headers: &HeaderMap) -> String {
 }
 
 /// Axum middleware for rate limiting
-pub async fn rate_limit_middleware(
-    req: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
+pub async fn rate_limit_middleware(req: Request, next: Next) -> Result<Response, StatusCode> {
     let headers = req.headers();
     let client_ip = extract_client_ip(headers);
 
@@ -159,7 +162,11 @@ pub async fn rate_limit_middleware(
             Ok(next.run(req).await)
         }
         Err(error_msg) => {
-            tracing::warn!("Rate limit exceeded for client {}: {}", client_ip, error_msg);
+            tracing::warn!(
+                "Rate limit exceeded for client {}: {}",
+                client_ip,
+                error_msg
+            );
             // Return 429 Too Many Requests
             Err(StatusCode::TOO_MANY_REQUESTS)
         }
@@ -220,7 +227,10 @@ mod tests {
 
         // 4th request should be blocked
         let result = limiter.check("client2");
-        assert!(result.is_err(), "Request should be blocked after exceeding limit");
+        assert!(
+            result.is_err(),
+            "Request should be blocked after exceeding limit"
+        );
         assert!(result.unwrap_err().contains("Rate limit exceeded"));
     }
 
@@ -265,7 +275,10 @@ mod tests {
 
         // Should be allowed again
         let result = limiter.check("client3");
-        assert!(result.is_ok(), "Request should be allowed after block duration");
+        assert!(
+            result.is_ok(),
+            "Request should be allowed after block duration"
+        );
     }
 
     #[test]

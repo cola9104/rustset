@@ -118,43 +118,93 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_index(Index::drop().name("idx_users_username").table(Users::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_users_username")
+                    .table(Users::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_services_zone_id").table(CloudServices::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_cloud_services_zone_id")
+                    .table(CloudServices::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_provider_configs_status").table(CloudProviderConfigs::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_cloud_provider_configs_status")
+                    .table(CloudProviderConfigs::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_provider_configs_zone_id").table(CloudProviderConfigs::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_cloud_provider_configs_zone_id")
+                    .table(CloudProviderConfigs::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_business_resources_ecs_status").table(BusinessResources::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_business_resources_ecs_status")
+                    .table(BusinessResources::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_business_resources_customer_name").table(BusinessResources::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_business_resources_customer_name")
+                    .table(BusinessResources::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_business_resources_delivery_status").table(BusinessResources::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_business_resources_delivery_status")
+                    .table(BusinessResources::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_physical_machines_business_resource_id").table(PhysicalMachines::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_physical_machines_business_resource_id")
+                    .table(PhysicalMachines::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_cloud_virtual_machines_business_resource_id").table(CloudVirtualMachines::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_cloud_virtual_machines_business_resource_id")
+                    .table(CloudVirtualMachines::Table)
+                    .to_owned(),
+            )
             .await?;
 
         manager
-            .drop_index(Index::drop().name("idx_quick_scan_results_task_id").table(QuickScanResults::Table).to_owned())
+            .drop_index(
+                Index::drop()
+                    .name("idx_quick_scan_results_task_id")
+                    .table(QuickScanResults::Table)
+                    .to_owned(),
+            )
             .await?;
 
         Ok(())

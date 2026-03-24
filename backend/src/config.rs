@@ -41,7 +41,10 @@ impl DatabaseConfig {
                 let name = env::var("DB_NAME").unwrap_or_else(|_| "rustset".to_string());
                 let user = env::var("DB_USER").unwrap_or_else(|_| "postgres".to_string());
                 let password = env::var("DB_PASSWORD").unwrap_or_else(|_| "".to_string());
-                format!("postgres://{}:{}@{}:{}/{}", user, password, host, port, name)
+                format!(
+                    "postgres://{}:{}@{}:{}/{}",
+                    user, password, host, port, name
+                )
             }
             "mysql" | "mariadb" => {
                 let host = env::var("DB_HOST").unwrap_or_else(|_| "localhost".to_string());
@@ -58,7 +61,10 @@ impl DatabaseConfig {
                 let name = env::var("DB_NAME").unwrap_or_else(|_| "rustset".to_string());
                 let user = env::var("DB_USER").unwrap_or_else(|_| "postgres".to_string());
                 let password = env::var("DB_PASSWORD").unwrap_or_else(|_| "".to_string());
-                format!("postgres://{}:{}@{}:{}/{}", user, password, host, port, name)
+                format!(
+                    "postgres://{}:{}@{}:{}/{}",
+                    user, password, host, port, name
+                )
             }
         };
 
@@ -95,8 +101,14 @@ mod tests {
 
     #[test]
     fn test_detect_db_type() {
-        assert_eq!(DatabaseConfig::detect_db_type("postgres://localhost/mydb"), "postgresql");
-        assert_eq!(DatabaseConfig::detect_db_type("mysql://localhost/mydb"), "mysql");
+        assert_eq!(
+            DatabaseConfig::detect_db_type("postgres://localhost/mydb"),
+            "postgresql"
+        );
+        assert_eq!(
+            DatabaseConfig::detect_db_type("mysql://localhost/mydb"),
+            "mysql"
+        );
     }
 
     #[test]

@@ -2,27 +2,23 @@ use dioxus::prelude::*;
 use dioxus_router::Router;
 
 use crate::router::Route;
+use crate::state::user_role::AuthState as WorkflowAuthState;
 use crate::state::{
-    service_provider::ServiceProviderConfig,
-    machine_room::MachineRoomConfig,
-    cloud_platform::CloudPlatformConfig,
-    network_zone::NetworkZone,
-    security_product::SecurityProduct,
-    network_policy::NetworkPolicyConfig,
-    init_service_providers,
-    init_machine_rooms,
-    init_cloud_platforms,
-    init_network_zones,
-    init_security_products,
-    init_network_policies,
+    cloud_platform::CloudPlatformConfig, machine_room::MachineRoomConfig,
+    network_policy::NetworkPolicyConfig, network_zone::NetworkZone,
+    security_product::SecurityProduct, service_provider::ServiceProviderConfig,
 };
+use crate::utils::storage::clear_token;
 
 /// 全局安全产品数据状态
-pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> = Signal::global(init_security_products);
+pub static SECURITY_PRODUCTS_STATE: GlobalSignal<Vec<SecurityProduct>> =
+    Signal::global(|| Vec::new());
 
 /// 主应用组件
 #[allow(non_snake_case)]
 pub fn App() -> Element {
+    use_context_provider(|| Signal::new(WorkflowAuthState::guest()));
+
     rsx! {
         Router::<Route> {}
     }
@@ -31,7 +27,7 @@ pub fn App() -> Element {
 /// 认证用户信息
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AuthUser {
-    pub id: i32,
+    pub id: String,
     pub username: String,
     pub role: String,
     pub permissions: Vec<String>,
@@ -41,24 +37,23 @@ pub struct AuthUser {
 pub static AUTH_STATE: GlobalSignal<Option<AuthUser>> = Signal::global(|| None);
 
 /// 全局服务商数据状态
-pub static PROVIDERS_STATE: GlobalSignal<Vec<ServiceProviderConfig>> = Signal::global(init_service_providers);
+pub static PROVIDERS_STATE: GlobalSignal<Vec<ServiceProviderConfig>> =
+    Signal::global(|| Vec::new());
 
 /// 全局机房数据状态
-pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> = Signal::global(init_machine_rooms);
+pub static MACHINE_ROOMS_STATE: GlobalSignal<Vec<MachineRoomConfig>> =
+    Signal::global(|| Vec::new());
 
 /// 全局云平台数据状态
-pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> = Signal::global(init_cloud_platforms);
+pub static CLOUD_PLATFORMS_STATE: GlobalSignal<Vec<CloudPlatformConfig>> =
+    Signal::global(|| Vec::new());
 
 /// 全局网络区域数据状态
-/// 从云平台和机房数据动态生成网络区域
-pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(|| {
-    let cloud_platforms = init_cloud_platforms();
-    let machine_rooms = init_machine_rooms();
-    init_network_zones(&cloud_platforms, &machine_rooms)
-});
+pub static NETWORK_ZONES_STATE: GlobalSignal<Vec<NetworkZone>> = Signal::global(|| Vec::new());
 
 /// 全局网络策略数据状态
-pub static NETWORK_POLICIES_STATE: GlobalSignal<Vec<NetworkPolicyConfig>> = Signal::global(init_network_policies);
+pub static NETWORK_POLICIES_STATE: GlobalSignal<Vec<NetworkPolicyConfig>> =
+    Signal::global(|| Vec::new());
 
 /// 检查是否已认证
 #[allow(dead_code)]
@@ -69,22 +64,25 @@ pub fn is_authenticated() -> bool {
 /// 登出
 #[allow(dead_code)]
 pub fn logout() {
+    clear_token();
     *AUTH_STATE.write() = None;
 }
 
 /// 检查是否是管理员
 #[allow(dead_code)]
 pub fn is_admin() -> bool {
-    AUTH_STATE.read()
+    AUTH_STATE
+        .read()
         .as_ref()
-        .map(|u| u.role == "admin")
+        .map(|u| matches!(u.role.as_str(), "SysAdmin" | "SecAdmin"))
         .unwrap_or(false)
 }
 
 /// 检查是否有权限
 #[allow(dead_code)]
 pub fn has_permission(permission: &str) -> bool {
-    AUTH_STATE.read()
+    AUTH_STATE
+        .read()
         .as_ref()
         .map(|u| u.permissions.contains(&permission.to_string()))
         .unwrap_or(false)

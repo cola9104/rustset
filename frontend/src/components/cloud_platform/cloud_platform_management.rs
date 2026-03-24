@@ -1,16 +1,16 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaPenToSquare, FaTrash, FaMagnifyingGlass, FaCloud,
-    FaCheck, FaEye, FaVial, FaPowerOff, FaXmark,
+use super::platform_form::{FormMode, PlatformForm};
+use crate::app::{MACHINE_ROOMS_STATE, PROVIDERS_STATE};
+use crate::services::{
+    create_cloud_platform_config, delete_cloud_platform_config, fetch_cloud_platform_configs,
+    fetch_machine_rooms, fetch_service_providers, update_cloud_platform_config,
 };
 use crate::state::cloud_platform::CloudPlatformConfig;
-use crate::app::{PROVIDERS_STATE, MACHINE_ROOMS_STATE};
-use crate::services::{
-    fetch_cloud_platform_configs, create_cloud_platform_config, update_cloud_platform_config, delete_cloud_platform_config,
-    fetch_service_providers, fetch_machine_rooms,
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaCheck, FaCloud, FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaPowerOff, FaTrash, FaVial,
+    FaXmark,
 };
-use super::platform_form::{PlatformForm, FormMode};
+use dioxus_free_icons::Icon;
 
 /// 测试连接结果
 #[derive(Clone, Debug, PartialEq)]
@@ -93,7 +93,8 @@ pub fn CloudPlatformManagement() -> Element {
 
     // 获取服务商名称的辅助函数
     let get_provider_name = |provider_id: i32| -> String {
-        PROVIDERS_STATE.read()
+        PROVIDERS_STATE
+            .read()
             .iter()
             .find(|p| p.id == provider_id)
             .map(|p| p.short_name.clone())
@@ -102,7 +103,8 @@ pub fn CloudPlatformManagement() -> Element {
 
     // 获取机房名称的辅助函数
     let get_room_name = |room_id: i32| -> String {
-        MACHINE_ROOMS_STATE.read()
+        MACHINE_ROOMS_STATE
+            .read()
             .iter()
             .find(|r| r.id == room_id)
             .map(|r| r.room_name.clone())
@@ -110,12 +112,13 @@ pub fn CloudPlatformManagement() -> Element {
     };
 
     // 过滤配置
-    let filtered_configs: Vec<CloudPlatformConfig> = platforms.read()
+    let filtered_configs: Vec<CloudPlatformConfig> = platforms
+        .read()
         .iter()
         .filter(|config| {
             let query = search_query.read().to_lowercase();
-            let status_match = status_filter.read().as_str() == "全部"
-                || *status_filter.read() == config.status;
+            let status_match =
+                status_filter.read().as_str() == "全部" || *status_filter.read() == config.status;
             let provider_match = provider_filter.read().as_str() == "全部"
                 || provider_filter.read().parse::<i32>().ok() == Some(config.provider_id);
             let cloud_type_match = cloud_type_filter.read().as_str() == "全部"
@@ -124,38 +127,63 @@ pub fn CloudPlatformManagement() -> Element {
             let provider_name = get_provider_name(config.provider_id);
             let room_name = get_room_name(config.machine_room_id);
 
-            status_match && provider_match && cloud_type_match && (query.is_empty()
-                || config.platform_name.to_lowercase().contains(&query)
-                || room_name.to_lowercase().contains(&query)
-                || provider_name.to_lowercase().contains(&query)
-                || config.foundation.to_lowercase().contains(&query))
+            status_match
+                && provider_match
+                && cloud_type_match
+                && (query.is_empty()
+                    || config.platform_name.to_lowercase().contains(&query)
+                    || room_name.to_lowercase().contains(&query)
+                    || provider_name.to_lowercase().contains(&query)
+                    || config.foundation.to_lowercase().contains(&query))
         })
         .cloned()
         .collect();
 
     // 计算统计数据
     let total_count = platforms.read().len() as i32;
-    let active_count = platforms.read().iter().filter(|c| c.status == "active").count() as i32;
-    let public_count = platforms.read().iter().filter(|c| c.cloud_type == "公有云").count() as i32;
-    let gov_count = platforms.read().iter().filter(|c| c.cloud_type == "政务云").count() as i32;
+    let active_count = platforms
+        .read()
+        .iter()
+        .filter(|c| c.status == "active")
+        .count() as i32;
+    let public_count = platforms
+        .read()
+        .iter()
+        .filter(|c| c.cloud_type == "公有云")
+        .count() as i32;
+    let gov_count = platforms
+        .read()
+        .iter()
+        .filter(|c| c.cloud_type == "政务云")
+        .count() as i32;
 
     // 动态计算每个服务商的云平台数量
-    let provider_stats: Vec<(i32, String, String, i32)> = PROVIDERS_STATE.read()
+    let provider_stats: Vec<(i32, String, String, i32)> = PROVIDERS_STATE
+        .read()
         .iter()
         .map(|provider| {
-            let count = platforms.read().iter().filter(|c| c.provider_id == provider.id).count() as i32;
-            (provider.id, provider.short_name.clone(), provider.provider_name.clone(), count)
+            let count = platforms
+                .read()
+                .iter()
+                .filter(|c| c.provider_id == provider.id)
+                .count() as i32;
+            (
+                provider.id,
+                provider.short_name.clone(),
+                provider.provider_name.clone(),
+                count,
+            )
         })
         .collect();
 
     // 服务商颜色映射
     let get_provider_color = |id: i32| -> &'static str {
         match id {
-            1 => "bg-blue-600",      // 电信 - 蓝色
-            2 => "bg-orange-600",    // 联通 - 橙色
-            3 => "bg-green-600",     // 移动 - 绿色
-            4 => "bg-red-600",       // 广电 - 红色
-            _ => "bg-gray-600",      // 其他 - 灰色
+            1 => "bg-blue-600",   // 电信 - 蓝色
+            2 => "bg-orange-600", // 联通 - 橙色
+            3 => "bg-green-600",  // 移动 - 绿色
+            4 => "bg-red-600",    // 广电 - 红色
+            _ => "bg-gray-600",   // 其他 - 灰色
         }
     };
 
@@ -537,17 +565,19 @@ fn ConfigDetailModal(
     test_result: Signal<TestConnectionResult>,
     on_close: EventHandler<()>,
     on_test: EventHandler<()>,
-    on_toggle_status: EventHandler<()>
+    on_toggle_status: EventHandler<()>,
 ) -> Element {
     // 获取服务商名称
-    let provider_name = PROVIDERS_STATE.read()
+    let provider_name = PROVIDERS_STATE
+        .read()
         .iter()
         .find(|p| p.id == config.provider_id)
         .map(|p| p.short_name.clone())
         .unwrap_or_else(|| "未知服务商".to_string());
 
     // 获取机房名称
-    let room_name = MACHINE_ROOMS_STATE.read()
+    let room_name = MACHINE_ROOMS_STATE
+        .read()
         .iter()
         .find(|r| r.id == config.machine_room_id)
         .map(|r| r.room_name.clone())

@@ -2,12 +2,12 @@
 //!
 //! Provides service fingerprinting capabilities for common services.
 
+use regex::Regex;
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
-use tokio::net::TcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
-use regex::Regex;
 
 /// Detected service information
 #[derive(Debug, Clone)]
@@ -44,146 +44,210 @@ impl ServiceDetector {
     /// Load service detection patterns
     fn load_service_patterns(&mut self) {
         // HTTP/HTTPS services
-        self.service_patterns.insert(80, vec![
-            ServiceProbe::new("http", "GET / HTTP/1.0\r\n\r\n", vec![
-                (r"Server:\s*(.+)", "version"),
-                (r"nginx", "name"),
-                (r"Apache", "name"),
-                (r"IIS", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            80,
+            vec![ServiceProbe::new(
+                "http",
+                "GET / HTTP/1.0\r\n\r\n",
+                vec![
+                    (r"Server:\s*(.+)", "version"),
+                    (r"nginx", "name"),
+                    (r"Apache", "name"),
+                    (r"IIS", "name"),
+                ],
+            )],
+        );
 
-        self.service_patterns.insert(443, vec![
-            ServiceProbe::new("https", "GET / HTTP/1.0\r\n\r\n", vec![
-                (r"Server:\s*(.+)", "version"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            443,
+            vec![ServiceProbe::new(
+                "https",
+                "GET / HTTP/1.0\r\n\r\n",
+                vec![(r"Server:\s*(.+)", "version")],
+            )],
+        );
 
-        self.service_patterns.insert(8080, vec![
-            ServiceProbe::new("http-alt", "GET / HTTP/1.0\r\n\r\n", vec![
-                (r"Server:\s*(.+)", "version"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            8080,
+            vec![ServiceProbe::new(
+                "http-alt",
+                "GET / HTTP/1.0\r\n\r\n",
+                vec![(r"Server:\s*(.+)", "version")],
+            )],
+        );
 
         // Additional HTTP ports (common alternate ports)
         for port in [8000, 8001, 8008, 8888, 9000, 9090, 3000, 5000, 5001, 8443] {
-            self.service_patterns.insert(port, vec![
-                ServiceProbe::new("http", "GET / HTTP/1.0\r\n\r\n", vec![
-                    (r"Server:\s*(.+)", "version"),
-                    (r"HTTP/\d\.\d\s+200", "banner"),
-                ]),
-            ]);
+            self.service_patterns.insert(
+                port,
+                vec![ServiceProbe::new(
+                    "http",
+                    "GET / HTTP/1.0\r\n\r\n",
+                    vec![
+                        (r"Server:\s*(.+)", "version"),
+                        (r"HTTP/\d\.\d\s+200", "banner"),
+                    ],
+                )],
+            );
         }
 
         // SSH
-        self.service_patterns.insert(22, vec![
-            ServiceProbe::new("ssh", "", vec![
-                (r"SSH-[\d.]+-(.+)", "version"),
-                (r"OpenSSH", "name"),
-                (r"Dropbear", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            22,
+            vec![ServiceProbe::new(
+                "ssh",
+                "",
+                vec![
+                    (r"SSH-[\d.]+-(.+)", "version"),
+                    (r"OpenSSH", "name"),
+                    (r"Dropbear", "name"),
+                ],
+            )],
+        );
 
         // FTP
-        self.service_patterns.insert(21, vec![
-            ServiceProbe::new("ftp", "", vec![
-                (r"220\s+(.+)", "banner"),
-                (r"vsftpd", "name"),
-                (r"ProFTPD", "name"),
-                (r"FileZilla", "name"),
-                (r"Microsoft FTP", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            21,
+            vec![ServiceProbe::new(
+                "ftp",
+                "",
+                vec![
+                    (r"220\s+(.+)", "banner"),
+                    (r"vsftpd", "name"),
+                    (r"ProFTPD", "name"),
+                    (r"FileZilla", "name"),
+                    (r"Microsoft FTP", "name"),
+                ],
+            )],
+        );
 
         // SMTP
-        self.service_patterns.insert(25, vec![
-            ServiceProbe::new("smtp", "", vec![
-                (r"220\s+(.+)", "banner"),
-                (r"Postfix", "name"),
-                (r"Sendmail", "name"),
-                (r"Exim", "name"),
-                (r"Microsoft ESMTP", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            25,
+            vec![ServiceProbe::new(
+                "smtp",
+                "",
+                vec![
+                    (r"220\s+(.+)", "banner"),
+                    (r"Postfix", "name"),
+                    (r"Sendmail", "name"),
+                    (r"Exim", "name"),
+                    (r"Microsoft ESMTP", "name"),
+                ],
+            )],
+        );
 
-        self.service_patterns.insert(587, vec![
-            ServiceProbe::new("smtp-submission", "", vec![
-                (r"220\s+(.+)", "banner"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            587,
+            vec![ServiceProbe::new(
+                "smtp-submission",
+                "",
+                vec![(r"220\s+(.+)", "banner")],
+            )],
+        );
 
         // DNS
-        self.service_patterns.insert(53, vec![
-            ServiceProbe::new("dns", "\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00", vec![]),
-        ]);
+        self.service_patterns.insert(
+            53,
+            vec![ServiceProbe::new(
+                "dns",
+                "\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+                vec![],
+            )],
+        );
 
         // POP3
-        self.service_patterns.insert(110, vec![
-            ServiceProbe::new("pop3", "", vec![
-                (r"\+OK\s+(.+)", "banner"),
-                (r"Dovecot", "name"),
-                (r"Courier", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            110,
+            vec![ServiceProbe::new(
+                "pop3",
+                "",
+                vec![
+                    (r"\+OK\s+(.+)", "banner"),
+                    (r"Dovecot", "name"),
+                    (r"Courier", "name"),
+                ],
+            )],
+        );
 
         // IMAP
-        self.service_patterns.insert(143, vec![
-            ServiceProbe::new("imap", "", vec![
-                (r"\*\s+OK\s+(.+)", "banner"),
-                (r"Dovecot", "name"),
-                (r"Courier", "name"),
-                (r"Microsoft Exchange", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            143,
+            vec![ServiceProbe::new(
+                "imap",
+                "",
+                vec![
+                    (r"\*\s+OK\s+(.+)", "banner"),
+                    (r"Dovecot", "name"),
+                    (r"Courier", "name"),
+                    (r"Microsoft Exchange", "name"),
+                ],
+            )],
+        );
 
         // MySQL
-        self.service_patterns.insert(3306, vec![
-            ServiceProbe::new("mysql", "", vec![
-                (r"(\d+\.\d+\.\d+)", "version"),
-                (r"MariaDB", "name"),
-                (r"MySQL", "name"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            3306,
+            vec![ServiceProbe::new(
+                "mysql",
+                "",
+                vec![
+                    (r"(\d+\.\d+\.\d+)", "version"),
+                    (r"MariaDB", "name"),
+                    (r"MySQL", "name"),
+                ],
+            )],
+        );
 
         // PostgreSQL
-        self.service_patterns.insert(5432, vec![
-            ServiceProbe::new("postgresql", "", vec![
-                (r"PostgreSQL\s+(\d+\.\d+)", "version"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            5432,
+            vec![ServiceProbe::new(
+                "postgresql",
+                "",
+                vec![(r"PostgreSQL\s+(\d+\.\d+)", "version")],
+            )],
+        );
 
         // Redis
-        self.service_patterns.insert(6379, vec![
-            ServiceProbe::new("redis", "*1\r\n$4\r\nINFO\r\n", vec![
-                (r"redis_version:(.+)", "version"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            6379,
+            vec![ServiceProbe::new(
+                "redis",
+                "*1\r\n$4\r\nINFO\r\n",
+                vec![(r"redis_version:(.+)", "version")],
+            )],
+        );
 
         // MongoDB
-        self.service_patterns.insert(27017, vec![
-            ServiceProbe::new("mongodb", "", vec![
-                (r"version:\s*([\d.]+)", "version"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            27017,
+            vec![ServiceProbe::new(
+                "mongodb",
+                "",
+                vec![(r"version:\s*([\d.]+)", "version")],
+            )],
+        );
 
         // RDP
-        self.service_patterns.insert(3389, vec![
-            ServiceProbe::new("rdp", "", vec![]),
-        ]);
+        self.service_patterns
+            .insert(3389, vec![ServiceProbe::new("rdp", "", vec![])]);
 
         // VNC
-        self.service_patterns.insert(5900, vec![
-            ServiceProbe::new("vnc", "", vec![
-                (r"RFB\s+(\d+\.\d+)", "version"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            5900,
+            vec![ServiceProbe::new(
+                "vnc",
+                "",
+                vec![(r"RFB\s+(\d+\.\d+)", "version")],
+            )],
+        );
 
         // Telnet
-        self.service_patterns.insert(23, vec![
-            ServiceProbe::new("telnet", "", vec![
-                (r"(.+)", "banner"),
-            ]),
-        ]);
+        self.service_patterns.insert(
+            23,
+            vec![ServiceProbe::new("telnet", "", vec![(r"(.+)", "banner")])],
+        );
     }
 
     /// Detect service on a specific port
@@ -201,7 +265,12 @@ impl ServiceDetector {
     }
 
     /// Try a specific probe
-    async fn try_probe(&self, target: &str, port: u16, probe: &ServiceProbe) -> Option<ServiceInfo> {
+    async fn try_probe(
+        &self,
+        target: &str,
+        port: u16,
+        probe: &ServiceProbe,
+    ) -> Option<ServiceInfo> {
         let addr_str = format!("{}:{}", target, port);
         let addrs: Vec<std::net::SocketAddr> = match addr_str.to_socket_addrs() {
             Ok(a) => a.collect(),
@@ -225,7 +294,9 @@ impl ServiceDetector {
                 let mut buffer = vec![0u8; 1024];
                 let mut response = String::new();
 
-                if let Ok(Ok(n)) = timeout(Duration::from_millis(500), stream.read(&mut buffer)).await {
+                if let Ok(Ok(n)) =
+                    timeout(Duration::from_millis(500), stream.read(&mut buffer)).await
+                {
                     response = String::from_utf8_lossy(&buffer[..n]).to_string();
                 }
 
@@ -237,7 +308,12 @@ impl ServiceDetector {
     }
 
     /// Analyze probe response against patterns
-    fn analyze_response(&self, default_name: &str, response: &str, patterns: &[(Regex, PatternType)]) -> Option<ServiceInfo> {
+    fn analyze_response(
+        &self,
+        default_name: &str,
+        response: &str,
+        patterns: &[(Regex, PatternType)],
+    ) -> Option<ServiceInfo> {
         let mut name = default_name.to_string();
         let mut version = None;
         let mut banner = None;

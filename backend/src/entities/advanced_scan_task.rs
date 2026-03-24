@@ -8,8 +8,8 @@ pub struct Model {
     pub id: String,
     pub name: String,
     pub targets: String, // JSON array of strings
-    pub config: String, // JSON of AdvancedScanConfig
-    pub status: String, // TaskStatus as string
+    pub config: String,  // JSON of AdvancedScanConfig
+    pub status: String,  // TaskStatus as string
     pub progress: f32,
     pub current_target: Option<String>,
     pub scanned_count: i32,

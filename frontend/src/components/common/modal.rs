@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::FaXmark;
+use dioxus_free_icons::Icon;
 
 /// 通用模态框组件属性
 #[derive(Props, Clone, PartialEq)]

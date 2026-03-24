@@ -1,40 +1,37 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaMagnifyingGlass, FaTicket, FaServer, FaCloud,
-    FaCheck, FaWrench, FaBoxOpen, FaPaperPlane, FaXmark, FaFileLines,
-    FaCircleCheck, FaCircleXmark, FaGear, FaArrowLeft, FaFile,
-    FaShieldHalved, FaClock,
+    FaArrowLeft, FaBoxOpen, FaCheck, FaCircleCheck, FaCircleXmark, FaClock, FaCloud, FaFile,
+    FaFileLines, FaGear, FaMagnifyingGlass, FaPaperPlane, FaPlus, FaServer, FaShieldHalved,
+    FaTicket, FaWrench, FaXmark,
 };
+use dioxus_free_icons::Icon;
 
-use crate::state::user_role::{use_auth, UserRole, ApplicationTab};
-use crate::state::resource_ticket::{
-    TicketStatus, ResourceTicket, ResourceType, init_test_tickets,
-};
-use crate::state::cloud_platform::init_cloud_platforms;
-use crate::state::machine_room::init_machine_rooms;
-use crate::state::service_provider::init_service_providers;
-use crate::app::PROVIDERS_STATE;
+use crate::app::CLOUD_PLATFORMS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
+use crate::app::PROVIDERS_STATE;
 use crate::app::SECURITY_PRODUCTS_STATE;
-use crate::components::security_product::security_product_selector::{SecurityProductSelector, SelectedSecurityProducts};
+use crate::components::security_product::security_product_selector::{
+    SecurityProductSelector, SelectedSecurityProducts,
+};
+use crate::services::{
+    cloud_platform_api::fetch_cloud_platform_configs,
+    machine_room_api::fetch_machine_rooms,
+    resource_ticket_api::{
+        approve_ticket, create_resource_ticket, deliver_ticket, fetch_resource_tickets,
+        provision_ticket,
+    },
+    service_provider_api::fetch_service_providers,
+};
+use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
+use crate::state::user_role::{use_auth, ApplicationTab, UserRole};
 
 // 导入三个模块的表单组件和请求类型
-use crate::components::resource_ticket::cloud_service::CloudServiceForm;
 use crate::components::resource_ticket::cloud_service::cloud_service_request::CloudServiceRequest;
-use crate::components::resource_ticket::physical_server::PhysicalServerForm;
-use crate::components::resource_ticket::physical_server::physical_server_request::PhysicalServerRequest;
-use crate::components::resource_ticket::network_policy::NetworkPolicyForm;
+use crate::components::resource_ticket::cloud_service::CloudServiceForm;
 use crate::components::resource_ticket::network_policy::network_policy_request::NetworkPolicyRequest;
-
-// 导入API服务
-use crate::services::resource_ticket_api::{
-    fetch_resource_tickets,
-    create_resource_ticket,
-    approve_ticket,
-    provision_ticket,
-    deliver_ticket,
-};
+use crate::components::resource_ticket::network_policy::NetworkPolicyForm;
+use crate::components::resource_ticket::physical_server::physical_server_request::PhysicalServerRequest;
+use crate::components::resource_ticket::physical_server::PhysicalServerForm;
 
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
 #[allow(non_snake_case)]
@@ -43,7 +40,14 @@ pub fn ResourceTicket() -> Element {
     let tickets = use_signal(Vec::new);
     let is_loading = use_signal(|| true);
     let mut resource_type_tab = use_signal(|| ResourceType::Cloud);
-    let mut workflow_tab = use_signal(|| auth.read().role.accessible_tabs().first().copied().unwrap_or(ApplicationTab::MyApplications));
+    let mut workflow_tab = use_signal(|| {
+        auth.read()
+            .role
+            .accessible_tabs()
+            .first()
+            .copied()
+            .unwrap_or(ApplicationTab::MyApplications)
+    });
     let mut search_query = use_signal(String::new);
     let mut selected_ticket = use_signal(|| Option::<i32>::None);
     let mut show_new_form = use_signal(|| false);
@@ -61,8 +65,8 @@ pub fn ResourceTicket() -> Element {
                     }
                     Err(e) => {
                         tracing::error!("加载工单数据失败: {}", e);
-                        // 加载失败时使用测试数据
-                        tickets_clone.set(init_test_tickets());
+                        // 加载失败时显示空列表
+                        tickets_clone.set(Vec::new());
                         is_loading_clone.set(false);
                     }
                 }
@@ -76,39 +80,64 @@ pub fn ResourceTicket() -> Element {
     // 计算各资源类型的待处理数量（待审批+待配置+待交付）
     let all_tickets = tickets.read().clone();
 
-    let cloud_pending_count = all_tickets.iter()
-        .filter(|t| t.resource_type == ResourceType::Cloud &&
-            (t.ticket_status == TicketStatus::PendingApproval ||
-             t.ticket_status == TicketStatus::PendingProvision ||
-             t.ticket_status == TicketStatus::PendingDelivery))
+    let cloud_pending_count = all_tickets
+        .iter()
+        .filter(|t| {
+            t.resource_type == ResourceType::Cloud
+                && (t.ticket_status == TicketStatus::PendingApproval
+                    || t.ticket_status == TicketStatus::PendingProvision
+                    || t.ticket_status == TicketStatus::PendingDelivery)
+        })
         .count();
 
-    let physical_pending_count = all_tickets.iter()
-        .filter(|t| t.resource_type == ResourceType::Physical &&
-            (t.ticket_status == TicketStatus::PendingApproval ||
-             t.ticket_status == TicketStatus::PendingProvision ||
-             t.ticket_status == TicketStatus::PendingDelivery))
+    let physical_pending_count = all_tickets
+        .iter()
+        .filter(|t| {
+            t.resource_type == ResourceType::Physical
+                && (t.ticket_status == TicketStatus::PendingApproval
+                    || t.ticket_status == TicketStatus::PendingProvision
+                    || t.ticket_status == TicketStatus::PendingDelivery)
+        })
         .count();
 
-    let network_pending_count = all_tickets.iter()
-        .filter(|t| t.resource_type == ResourceType::Network &&
-            (t.ticket_status == TicketStatus::PendingApproval ||
-             t.ticket_status == TicketStatus::PendingProvision ||
-             t.ticket_status == TicketStatus::PendingDelivery))
+    let network_pending_count = all_tickets
+        .iter()
+        .filter(|t| {
+            t.resource_type == ResourceType::Network
+                && (t.ticket_status == TicketStatus::PendingApproval
+                    || t.ticket_status == TicketStatus::PendingProvision
+                    || t.ticket_status == TicketStatus::PendingDelivery)
+        })
         .count();
 
     // 计算当前资源类型的统计数据
-    let current_type_tickets = all_tickets.iter()
+    let current_type_tickets = all_tickets
+        .iter()
         .filter(|t| t.resource_type == *resource_type_tab.read())
         .cloned()
         .collect::<Vec<_>>();
 
     let total_count = current_type_tickets.len();
-    let pending_count = current_type_tickets.iter().filter(|t| t.ticket_status == TicketStatus::PendingApproval).count();
-    let pending_provision_count = current_type_tickets.iter().filter(|t| t.ticket_status == TicketStatus::PendingProvision).count();
-    let pending_delivery_count = current_type_tickets.iter().filter(|t| t.ticket_status == TicketStatus::PendingDelivery).count();
-    let delivered_count = current_type_tickets.iter().filter(|t| t.ticket_status == TicketStatus::Delivered).count();
-    let archived_count = current_type_tickets.iter().filter(|t| t.ticket_status == TicketStatus::Archived).count();
+    let pending_count = current_type_tickets
+        .iter()
+        .filter(|t| t.ticket_status == TicketStatus::PendingApproval)
+        .count();
+    let pending_provision_count = current_type_tickets
+        .iter()
+        .filter(|t| t.ticket_status == TicketStatus::PendingProvision)
+        .count();
+    let pending_delivery_count = current_type_tickets
+        .iter()
+        .filter(|t| t.ticket_status == TicketStatus::PendingDelivery)
+        .count();
+    let delivered_count = current_type_tickets
+        .iter()
+        .filter(|t| t.ticket_status == TicketStatus::Delivered)
+        .count();
+    let archived_count = current_type_tickets
+        .iter()
+        .filter(|t| t.ticket_status == TicketStatus::Archived)
+        .count();
 
     rsx! {
         div { class: "flex flex-col h-full bg-gray-50",
@@ -656,6 +685,7 @@ fn RoleSwitcher(current_role: Signal<crate::state::user_role::AuthState>) -> Ele
                         class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
                         onclick: move |_| {
                             current_role.write().role = UserRole::Applicant;
+                            current_role.write().role_label = UserRole::Applicant.display_name().to_string();
                             is_open.set(false);
                         },
                         "申请人员"
@@ -664,6 +694,7 @@ fn RoleSwitcher(current_role: Signal<crate::state::user_role::AuthState>) -> Ele
                         class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
                         onclick: move |_| {
                             current_role.write().role = UserRole::Approver;
+                            current_role.write().role_label = UserRole::Approver.display_name().to_string();
                             is_open.set(false);
                         },
                         "审批人员"
@@ -672,6 +703,7 @@ fn RoleSwitcher(current_role: Signal<crate::state::user_role::AuthState>) -> Ele
                         class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
                         onclick: move |_| {
                             current_role.write().role = UserRole::Operator;
+                            current_role.write().role_label = UserRole::Operator.display_name().to_string();
                             is_open.set(false);
                         },
                         "运维人员"
@@ -680,6 +712,7 @@ fn RoleSwitcher(current_role: Signal<crate::state::user_role::AuthState>) -> Ele
                         class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
                         onclick: move |_| {
                             current_role.write().role = UserRole::Deliverer;
+                            current_role.write().role_label = UserRole::Deliverer.display_name().to_string();
                             is_open.set(false);
                         },
                         "交付人员"
@@ -688,6 +721,7 @@ fn RoleSwitcher(current_role: Signal<crate::state::user_role::AuthState>) -> Ele
                         class: "w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2",
                         onclick: move |_| {
                             current_role.write().role = UserRole::Admin;
+                            current_role.write().role_label = UserRole::Admin.display_name().to_string();
                             is_open.set(false);
                         },
                         "管理员"
@@ -718,9 +752,15 @@ fn TicketListViewByTypeAndWorkflow(
             // 工作流程筛选
             match workflow_tab {
                 ApplicationTab::MyApplications => true,
-                ApplicationTab::PendingApproval => ticket.ticket_status == TicketStatus::PendingApproval,
-                ApplicationTab::PendingProvision => ticket.ticket_status == TicketStatus::PendingProvision,
-                ApplicationTab::PendingDelivery => ticket.ticket_status == TicketStatus::PendingDelivery,
+                ApplicationTab::PendingApproval => {
+                    ticket.ticket_status == TicketStatus::PendingApproval
+                }
+                ApplicationTab::PendingProvision => {
+                    ticket.ticket_status == TicketStatus::PendingProvision
+                }
+                ApplicationTab::PendingDelivery => {
+                    ticket.ticket_status == TicketStatus::PendingDelivery
+                }
                 ApplicationTab::Delivered => ticket.ticket_status == TicketStatus::Delivered,
                 ApplicationTab::Archived => ticket.ticket_status == TicketStatus::Archived,
             }
@@ -826,11 +866,31 @@ fn TicketListView(
     let all_tickets = tickets.read().clone();
     let filtered_tickets = match current_tab {
         ApplicationTab::MyApplications => all_tickets.clone(),
-        ApplicationTab::PendingApproval => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::PendingApproval).collect(),
-        ApplicationTab::PendingProvision => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::PendingProvision).collect(),
-        ApplicationTab::PendingDelivery => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::PendingDelivery).collect(),
-        ApplicationTab::Delivered => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::Delivered).collect(),
-        ApplicationTab::Archived => all_tickets.clone().into_iter().filter(|ticket| ticket.ticket_status == TicketStatus::Archived).collect(),
+        ApplicationTab::PendingApproval => all_tickets
+            .clone()
+            .into_iter()
+            .filter(|ticket| ticket.ticket_status == TicketStatus::PendingApproval)
+            .collect(),
+        ApplicationTab::PendingProvision => all_tickets
+            .clone()
+            .into_iter()
+            .filter(|ticket| ticket.ticket_status == TicketStatus::PendingProvision)
+            .collect(),
+        ApplicationTab::PendingDelivery => all_tickets
+            .clone()
+            .into_iter()
+            .filter(|ticket| ticket.ticket_status == TicketStatus::PendingDelivery)
+            .collect(),
+        ApplicationTab::Delivered => all_tickets
+            .clone()
+            .into_iter()
+            .filter(|ticket| ticket.ticket_status == TicketStatus::Delivered)
+            .collect(),
+        ApplicationTab::Archived => all_tickets
+            .clone()
+            .into_iter()
+            .filter(|ticket| ticket.ticket_status == TicketStatus::Archived)
+            .collect(),
     };
 
     let filtered_tickets: Vec<_> = filtered_tickets
@@ -1156,7 +1216,11 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                         let mut tickets_ref = tickets_clone;
                         is_approving.set(true);
                         spawn(async move {
-                            match approve_ticket(ticket_id, true, comment_val).await {
+                            let req = crate::services::resource_ticket_api::ApproveTicketRequest {
+                                approved: true,
+                                comment: comment_val,
+                            };
+                            match approve_ticket(ticket_id, req).await {
                                 Ok(updated) => {
                                     tickets_ref.with_mut(|tickets| {
                                         if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
@@ -1182,7 +1246,11 @@ fn ApprovalPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                         let mut tickets_ref = tickets_clone2;
                         is_approving.set(true);
                         spawn(async move {
-                            match approve_ticket(ticket_id, false, comment_val).await {
+                            let req = crate::services::resource_ticket_api::ApproveTicketRequest {
+                                approved: false,
+                                comment: comment_val,
+                            };
+                            match approve_ticket(ticket_id, req).await {
                                 Ok(updated) => {
                                     tickets_ref.with_mut(|tickets| {
                                         if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
@@ -1237,12 +1305,14 @@ fn ProvisionPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) 
                 disabled: *is_provisioning.read(),
                 onclick: move |_| {
                     let ticket_id = ticket_clone.id;
-                    let ip_val = if !ip_address.read().is_empty() { Some(ip_address.read().clone()) } else { None };
                     let details_val = if !details.read().is_empty() { Some(details.read().clone()) } else { None };
                     let mut tickets_ref = tickets_clone;
                     is_provisioning.set(true);
                     spawn(async move {
-                        match provision_ticket(ticket_id, ip_val, details_val).await {
+                        let req = crate::services::resource_ticket_api::ProvisionTicketRequest {
+                            details: details_val,
+                        };
+                        match provision_ticket(ticket_id, req).await {
                             Ok(updated) => {
                                 tickets_ref.with_mut(|tickets| {
                                     if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
@@ -1299,7 +1369,10 @@ fn DeliveryPanel(ticket: ResourceTicket, tickets: Signal<Vec<ResourceTicket>>) -
                     let mut tickets_ref = tickets_clone;
                     is_delivering.set(true);
                     spawn(async move {
-                        match deliver_ticket(ticket_id, comment_val).await {
+                        let req = crate::services::resource_ticket_api::DeliverTicketRequest {
+                            comment: comment_val,
+                        };
+                        match deliver_ticket(ticket_id, req).await {
                             Ok(updated) => {
                                 tickets_ref.with_mut(|tickets| {
                                     if let Some(t) = tickets.iter_mut().find(|t| t.id == ticket_id) {
@@ -1406,7 +1479,10 @@ fn TimelineItem(
 
 /// 信息行组件
 #[component]
-fn InfoRow<T: std::fmt::Display + Clone + PartialEq + 'static>(label: &'static str, value: T) -> Element {
+fn InfoRow<T: std::fmt::Display + Clone + PartialEq + 'static>(
+    label: &'static str,
+    value: T,
+) -> Element {
     let value_str = value.to_string();
     rsx! {
         div {
@@ -1442,21 +1518,42 @@ fn NewTicketForm(
     // 选中的服务商
     let mut selected_provider_id = use_signal(|| 1i32);
 
-    // 获取服务商数据
-    let service_providers = init_service_providers();
+    use_effect(move || {
+        spawn(async move {
+            if PROVIDERS_STATE.read().is_empty() {
+                if let Ok(data) = fetch_service_providers().await {
+                    *PROVIDERS_STATE.write() = data;
+                }
+            }
+
+            if CLOUD_PLATFORMS_STATE.read().is_empty() {
+                if let Ok(data) = fetch_cloud_platform_configs().await {
+                    *CLOUD_PLATFORMS_STATE.write() = data;
+                }
+            }
+
+            if MACHINE_ROOMS_STATE.read().is_empty() {
+                if let Ok(data) = fetch_machine_rooms().await {
+                    *MACHINE_ROOMS_STATE.write() = data;
+                }
+            }
+        });
+    });
+
+    let service_providers = PROVIDERS_STATE.read().clone();
+    let cloud_platforms_all = CLOUD_PLATFORMS_STATE.read().clone();
+    let machine_rooms_all = MACHINE_ROOMS_STATE.read().clone();
 
     // 为闭包克隆数据
     let service_providers_for_select = service_providers.clone();
-    let cloud_platforms_all = init_cloud_platforms();
-    let machine_rooms_all = init_machine_rooms();
 
     // 选中的云平台和机房
     let mut selected_cloud_platform_id = use_signal(|| Option::<i32>::None);
     let mut selected_machine_room_id = use_signal(|| Option::<i32>::None);
-    let resource_type = default_resource_type;  // 直接使用传入的类型，不可切换
-    let zone_name = use_signal(String::new);       // 区域
-    let mut zone_cabinet = use_signal(String::new);    // 机柜
-    let mut rack_units = use_signal(|| 0i32);               // 机位(U数)
+    let resource_type = default_resource_type; // 直接使用传入的类型，不可切换
+    let zone_name = use_signal(String::new); // 区域
+    let mut zone_cabinet = use_signal(String::new); // 机柜
+    let mut rack_units = use_signal(|| 0i32); // 机位(U数)
     let mut ecs_type = use_signal(|| "ecs.g6.xlarge".to_string());
     let mut ecs_os = use_signal(|| "CentOS 7.9".to_string());
     let mut data_disk_type = use_signal(String::new);
@@ -1471,9 +1568,9 @@ fn NewTicketForm(
         let mut products = SelectedSecurityProducts::new();
         use crate::state::security_product::SecurityProductCategory;
         // 只预选指定的三个分类（堡垒机ID=8, VPN ID=7, SIEM ID=9）
-        products.set(SecurityProductCategory::Bastion, 8);  // 堡垒机
-        products.set(SecurityProductCategory::Vpn, 7);         // VPN网关
-        products.set(SecurityProductCategory::Siem, 9);        // SIEM
+        products.set(SecurityProductCategory::Bastion, 8); // 堡垒机
+        products.set(SecurityProductCategory::Vpn, 7); // VPN网关
+        products.set(SecurityProductCategory::Siem, 9); // SIEM
         products
     });
     let mut show_security_selector = use_signal(|| false);

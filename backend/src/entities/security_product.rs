@@ -20,7 +20,7 @@ pub struct Model {
     pub machine_room_id: Option<i32>,
     pub provider_id: Option<i32>,
     pub status: String,
-    pub features: Option<String>,      // JSON array
+    pub features: Option<String>, // JSON array
     pub throughput: Option<String>,
     pub contact_person: String,
     pub contact_phone: String,

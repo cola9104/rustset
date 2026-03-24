@@ -1,11 +1,15 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::FaShieldHalved;
-use crate::components::common::{Modal, ModalFooter, ErrorMessage, FormMode};
-use crate::components::security_product::security_product_selector::SecurityProductSelector;
-use crate::app::{PROVIDERS_STATE, CLOUD_PLATFORMS_STATE, SECURITY_PRODUCTS_STATE};
-use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
 use super::cloud_service_request::{CloudServiceRequest, CloudServiceStatus};
+use crate::app::{CLOUD_PLATFORMS_STATE, PROVIDERS_STATE, SECURITY_PRODUCTS_STATE};
+use crate::components::common::{ErrorMessage, FormMode, Modal, ModalFooter};
+use crate::components::security_product::security_product_selector::SecurityProductSelector;
+use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
+use crate::services::{
+    cloud_platform_api::fetch_cloud_platform_configs,
+    security_product_api::fetch_security_products, service_provider_api::fetch_service_providers,
+};
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::FaShieldHalved;
+use dioxus_free_icons::Icon;
 
 /// 云服务申请表单数据结构
 #[derive(Clone, Debug, Default)]
@@ -41,7 +45,12 @@ impl From<&CloudServiceRequest> for CloudServiceFormData {
 
 impl CloudServiceFormData {
     /// 转换为 CloudServiceRequest
-    pub fn to_request(&self, id: i32, status: CloudServiceStatus, created_at: String) -> CloudServiceRequest {
+    pub fn to_request(
+        &self,
+        id: i32,
+        status: CloudServiceStatus,
+        created_at: String,
+    ) -> CloudServiceRequest {
         CloudServiceRequest {
             id,
             title: self.title.clone(),
@@ -101,7 +110,9 @@ pub struct CloudServiceFormProps {
 #[component]
 pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
     // 初始化表单数据
-    let initial_data = props.request.as_ref()
+    let initial_data = props
+        .request
+        .as_ref()
         .map(CloudServiceFormData::from)
         .unwrap_or_default();
 
@@ -109,6 +120,47 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
     let mut error_msg = use_signal(String::new);
     let mut show_security_selector = use_signal(|| false);
     let security_products_signal = use_signal(|| form_data.read().security_products.clone());
+
+    // 如果全局状态为空，从API获取数据
+    use_effect(move || {
+        spawn(async move {
+            // 获取服务商
+            if PROVIDERS_STATE.read().is_empty() {
+                match fetch_service_providers().await {
+                    Ok(providers) => {
+                        *PROVIDERS_STATE.write() = providers;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载服务商数据失败: {}", e);
+                    }
+                }
+            }
+
+            // 获取云平台
+            if CLOUD_PLATFORMS_STATE.read().is_empty() {
+                match fetch_cloud_platform_configs().await {
+                    Ok(platforms) => {
+                        *CLOUD_PLATFORMS_STATE.write() = platforms;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载云平台数据失败: {}", e);
+                    }
+                }
+            }
+
+            // 获取安全产品
+            if SECURITY_PRODUCTS_STATE.read().is_empty() {
+                match fetch_security_products().await {
+                    Ok(products) => {
+                        *SECURITY_PRODUCTS_STATE.write() = products;
+                    }
+                    Err(e) => {
+                        tracing::error!("加载安全产品数据失败: {}", e);
+                    }
+                }
+            }
+        });
+    });
 
     // 获取服务商和云平台列表
     let providers = PROVIDERS_STATE.read().clone();

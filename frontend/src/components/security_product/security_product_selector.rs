@@ -1,12 +1,12 @@
 use dioxus::prelude::*;
-use std::collections::HashMap;
-use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{FaShieldHalved, FaXmark};
+use dioxus_free_icons::Icon;
+use std::collections::HashMap;
 
+use crate::app::SECURITY_PRODUCTS_STATE;
 use crate::state::security_product::{
     SecurityProduct, SecurityProductCategory, SecurityProductStatus,
 };
-use crate::app::SECURITY_PRODUCTS_STATE;
 
 /// 已选择的安全产品（每个分类一个）
 #[derive(Clone, Debug, Default, PartialEq)]

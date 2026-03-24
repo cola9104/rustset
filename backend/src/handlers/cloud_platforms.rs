@@ -2,25 +2,22 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Json},
 };
-use serde_json::json;
 use chrono::Utc;
+use serde_json::json;
 
-use crate::middleware::{AuthUser, ApiError};
-use crate::state::AppState;
-use crate::utils::log_action_auth;
 use crate::database::{
+    delete_cloud_platform as db_delete_cloud_platform,
     get_all_cloud_platforms as db_get_all_cloud_platforms,
+    get_all_cloud_zones as db_get_all_cloud_zones,
     get_cloud_platform_by_id as db_get_cloud_platform_by_id,
     get_platforms_by_zone_id as db_get_platforms_by_zone_id,
-    get_all_cloud_zones as db_get_all_cloud_zones,
     insert_cloud_platform_wrapper as db_insert_cloud_platform,
     update_cloud_platform as db_update_cloud_platform,
-    delete_cloud_platform as db_delete_cloud_platform,
 };
-use shared::{
-    CloudPlatform, CreateCloudPlatformRequest, UpdateCloudPlatformRequest,
-    Role,
-};
+use crate::middleware::{ApiError, AuthUser};
+use crate::state::AppState;
+use crate::utils::log_action_auth;
+use shared::{CloudPlatform, CreateCloudPlatformRequest, Role, UpdateCloudPlatformRequest};
 
 /// 获取云平台列表 (直接从数据库读取)
 pub async fn get_cloud_platforms(
@@ -28,10 +25,11 @@ pub async fn get_cloud_platforms(
     _user: AuthUser,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match db_get_all_cloud_platforms(&conn).await {
-                Ok(db_platforms) => {
-                    let platforms: Vec<CloudPlatform> = db_platforms.into_iter().map(|db| CloudPlatform {
+        Some(conn) => match db_get_all_cloud_platforms(&conn).await {
+            Ok(db_platforms) => {
+                let platforms: Vec<CloudPlatform> = db_platforms
+                    .into_iter()
+                    .map(|db| CloudPlatform {
                         id: Some(db.id),
                         zone_id: db.zone_id,
                         platform_name: db.service_name.clone(),
@@ -40,18 +38,16 @@ pub async fn get_cloud_platforms(
                         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
-                    }).collect();
-                    Ok(Json(platforms).into_response())
-                }
-                Err(e) => {
-                    eprintln!("Error loading cloud platforms from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+                    })
+                    .collect();
+                Ok(Json(platforms).into_response())
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+            Err(e) => {
+                eprintln!("Error loading cloud platforms from database: {}", e);
+                Err(ApiError::internal("Database error"))
+            }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -62,33 +58,27 @@ pub async fn get_cloud_platform(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match db_get_cloud_platform_by_id(&conn, id).await {
-                Ok(Some(db)) => {
-                    let platform = CloudPlatform {
-                        id: Some(db.id),
-                        zone_id: db.zone_id,
-                        platform_name: db.service_name.clone(),
-                        platform_code: db.service_code.clone(),
-                        description: db.description.clone(),
-                        created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
-                            .map(|dt| dt.with_timezone(&chrono::Utc))
-                            .unwrap_or_else(|_| Utc::now()),
-                    };
-                    Ok(Json(platform).into_response())
-                }
-                Ok(None) => {
-                    Err(ApiError::not_found("Cloud service not found"))
-                }
-                Err(e) => {
-                    eprintln!("Error loading cloud platform from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+        Some(conn) => match db_get_cloud_platform_by_id(&conn, id).await {
+            Ok(Some(db)) => {
+                let platform = CloudPlatform {
+                    id: Some(db.id),
+                    zone_id: db.zone_id,
+                    platform_name: db.service_name.clone(),
+                    platform_code: db.service_code.clone(),
+                    description: db.description.clone(),
+                    created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                };
+                Ok(Json(platform).into_response())
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+            Ok(None) => Err(ApiError::not_found("Cloud service not found")),
+            Err(e) => {
+                eprintln!("Error loading cloud platform from database: {}", e);
+                Err(ApiError::internal("Database error"))
+            }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -99,10 +89,11 @@ pub async fn get_platforms_by_zone(
     Path(zone_id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     match crate::database::get_db() {
-        Some(conn) => {
-            match db_get_platforms_by_zone_id(&conn, zone_id).await {
-                Ok(db_platforms) => {
-                    let platforms: Vec<CloudPlatform> = db_platforms.into_iter().map(|db| CloudPlatform {
+        Some(conn) => match db_get_platforms_by_zone_id(&conn, zone_id).await {
+            Ok(db_platforms) => {
+                let platforms: Vec<CloudPlatform> = db_platforms
+                    .into_iter()
+                    .map(|db| CloudPlatform {
                         id: Some(db.id),
                         zone_id: db.zone_id,
                         platform_name: db.service_name.clone(),
@@ -111,18 +102,16 @@ pub async fn get_platforms_by_zone(
                         created_at: chrono::DateTime::parse_from_rfc3339(&db.created_at)
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .unwrap_or_else(|_| Utc::now()),
-                    }).collect();
-                    Ok(Json(platforms).into_response())
-                }
-                Err(e) => {
-                    eprintln!("Error loading cloud platforms by zone from database: {}", e);
-                    Err(ApiError::internal("Database error"))
-                }
+                    })
+                    .collect();
+                Ok(Json(platforms).into_response())
             }
-        }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+            Err(e) => {
+                eprintln!("Error loading cloud platforms by zone from database: {}", e);
+                Err(ApiError::internal("Database error"))
+            }
+        },
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -156,8 +145,13 @@ pub async fn create_cloud_platform(
             // 检查同一zone下platform_code是否重复
             match db_get_all_cloud_platforms(&conn).await {
                 Ok(existing_platforms) => {
-                    if existing_platforms.iter().any(|p| p.zone_id == req.zone_id && p.service_code == req.platform_code) {
-                        return Err(ApiError::bad_request("Cloud service code already exists in this operator/manufacturer"));
+                    if existing_platforms
+                        .iter()
+                        .any(|p| p.zone_id == req.zone_id && p.service_code == req.platform_code)
+                    {
+                        return Err(ApiError::bad_request(
+                            "Cloud service code already exists in this operator/manufacturer",
+                        ));
                     }
                 }
                 Err(e) => {
@@ -175,7 +169,9 @@ pub async fn create_cloud_platform(
                 &req.platform_code,
                 req.description.as_deref(),
                 &created_at_str,
-            ).await {
+            )
+            .await
+            {
                 Ok(id) => {
                     let platform = CloudPlatform {
                         id: Some(id),
@@ -192,13 +188,17 @@ pub async fn create_cloud_platform(
                         &user,
                         "CREATE_CLOUD_PLATFORM",
                         &req.platform_name,
-                        &format!("Created cloud platform: {} in zone: {}", req.platform_name, req.zone_id),
+                        &format!(
+                            "Created cloud platform: {} in zone: {}",
+                            req.platform_name, req.zone_id
+                        ),
                     );
 
                     Ok(Json(json!({
                         "message": "云服务创建成功",
                         "data": platform
-                    })).into_response())
+                    }))
+                    .into_response())
                 }
                 Err(e) => {
                     eprintln!("Error inserting cloud platform: {}", e);
@@ -206,9 +206,7 @@ pub async fn create_cloud_platform(
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -257,8 +255,12 @@ pub async fn update_cloud_platform(
             if let Some(ref code) = req.platform_code {
                 match db_get_all_cloud_platforms(&conn).await {
                     Ok(existing_platforms) => {
-                        if existing_platforms.iter().any(|p| p.id != id && p.zone_id == zone_id_to_check && p.service_code == *code) {
-                            return Err(ApiError::bad_request("Cloud service code already exists in this operator/manufacturer"));
+                        if existing_platforms.iter().any(|p| {
+                            p.id != id && p.zone_id == zone_id_to_check && p.service_code == *code
+                        }) {
+                            return Err(ApiError::bad_request(
+                                "Cloud service code already exists in this operator/manufacturer",
+                            ));
                         }
                     }
                     Err(e) => {
@@ -274,7 +276,9 @@ pub async fn update_cloud_platform(
                 req.platform_name.as_deref(),
                 req.platform_code.as_deref(),
                 req.description.as_deref(),
-            ).await {
+            )
+            .await
+            {
                 Ok(_) => {
                     // 记录日志
                     log_action_auth(
@@ -301,11 +305,10 @@ pub async fn update_cloud_platform(
                             Ok(Json(json!({
                                 "message": "云服务更新成功",
                                 "data": platform
-                            })).into_response())
+                            }))
+                            .into_response())
                         }
-                        _ => {
-                            Ok(Json(json!({ "message": "云服务更新成功" })).into_response())
-                        }
+                        _ => Ok(Json(json!({ "message": "云服务更新成功" })).into_response()),
                     }
                 }
                 Err(e) => {
@@ -314,9 +317,7 @@ pub async fn update_cloud_platform(
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }
 
@@ -356,17 +357,13 @@ pub async fn delete_cloud_platform(
                         }
                     }
                 }
-                Ok(None) => {
-                    Err(ApiError::not_found("Cloud service not found"))
-                }
+                Ok(None) => Err(ApiError::not_found("Cloud service not found")),
                 Err(e) => {
                     eprintln!("Error checking platform existence: {}", e);
                     Err(ApiError::internal("Database error"))
                 }
             }
         }
-        None => {
-            Err(ApiError::internal("Database not available"))
-        }
+        None => Err(ApiError::internal("Database not available")),
     }
 }

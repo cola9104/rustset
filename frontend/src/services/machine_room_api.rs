@@ -1,13 +1,8 @@
+use crate::config::api_base;
+use crate::state::machine_room::MachineRoomConfig;
 use gloo_net::http::Request;
 use serde::{Deserialize, Serialize};
-use crate::state::machine_room::MachineRoomConfig;
-use crate::utils::storage::get_token;
-
-const API_BASE: &str = "http://localhost:3003/api";
-
-fn auth_header() -> Result<String, String> {
-    get_token().ok_or_else(|| "未登录，请先登录".to_string())
-}
+use web_sys::RequestCredentials;
 
 /// 后端返回的机房结构
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -55,9 +50,8 @@ impl BackendMachineRoom {
 
 /// 获取机房列表
 pub async fn fetch_machine_rooms() -> Result<Vec<MachineRoomConfig>, String> {
-    let token = auth_header()?;
-    let response = Request::get(&format!("{}/machine-rooms", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::get(&format!("{}/machine-rooms", api_base()))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;
@@ -114,11 +108,10 @@ impl From<&MachineRoomConfig> for CreateMachineRoomRequest {
 
 /// 创建机房
 pub async fn create_machine_room(config: &MachineRoomConfig) -> Result<MachineRoomConfig, String> {
-    let token = auth_header()?;
     let request_body = CreateMachineRoomRequest::from(config);
 
-    let response = Request::post(&format!("{}/machine-rooms", API_BASE))
-        .header("Authorization", &token)
+    let response = Request::post(&format!("{}/machine-rooms", api_base()))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -135,8 +128,8 @@ pub async fn create_machine_room(config: &MachineRoomConfig) -> Result<MachineRo
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let created: BackendMachineRoom = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let created: BackendMachineRoom =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(created.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -144,12 +137,14 @@ pub async fn create_machine_room(config: &MachineRoomConfig) -> Result<MachineRo
 }
 
 /// 更新机房
-pub async fn update_machine_room(id: i32, config: &MachineRoomConfig) -> Result<MachineRoomConfig, String> {
-    let token = auth_header()?;
+pub async fn update_machine_room(
+    id: i32,
+    config: &MachineRoomConfig,
+) -> Result<MachineRoomConfig, String> {
     let request_body = CreateMachineRoomRequest::from(config);
 
-    let response = Request::put(&format!("{}/machine-rooms/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::put(&format!("{}/machine-rooms/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .json(&request_body)
         .map_err(|e| format!("构建请求失败: {}", e))?
         .send()
@@ -166,8 +161,8 @@ pub async fn update_machine_room(id: i32, config: &MachineRoomConfig) -> Result<
         .map_err(|e| format!("解析失败: {}", e))?;
 
     if let Some(data) = json.get("data") {
-        let updated: BackendMachineRoom = serde_json::from_value(data.clone())
-            .map_err(|e| format!("解析响应失败: {}", e))?;
+        let updated: BackendMachineRoom =
+            serde_json::from_value(data.clone()).map_err(|e| format!("解析响应失败: {}", e))?;
         Ok(updated.to_frontend())
     } else {
         Err("响应格式错误".to_string())
@@ -176,9 +171,8 @@ pub async fn update_machine_room(id: i32, config: &MachineRoomConfig) -> Result<
 
 /// 删除机房
 pub async fn delete_machine_room(id: i32) -> Result<(), String> {
-    let token = auth_header()?;
-    let response = Request::delete(&format!("{}/machine-rooms/{}", API_BASE, id))
-        .header("Authorization", &token)
+    let response = Request::delete(&format!("{}/machine-rooms/{}", api_base(), id))
+        .credentials(RequestCredentials::Include)
         .send()
         .await
         .map_err(|e| format!("请求失败: {}", e))?;

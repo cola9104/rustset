@@ -1,24 +1,37 @@
 use dioxus::prelude::*;
-use dioxus_router::{Outlet, navigator};
-use dioxus_free_icons::Icon;
 use dioxus_free_icons::icons::fa_solid_icons::{FaBars, FaRightFromBracket};
+use dioxus_free_icons::Icon;
+use dioxus_router::{navigator, Outlet};
+use gloo_net::http::Request;
+use web_sys::RequestCredentials;
 
 use super::Sidebar;
+use crate::app::{is_authenticated, logout};
+use crate::config::logout_url;
 use crate::router::Route;
-use crate::state::user_role::use_auth;
-use crate::app::logout;
+use crate::state::user_role::{use_auth, AuthState as WorkflowAuthState};
 
 /// 主布局组件
 #[allow(non_snake_case)]
 pub fn Layout() -> Element {
     let mut sidebar_collapsed = use_signal(|| false);
     let mut show_user_menu = use_signal(|| false);
-    let auth_state = use_auth();
+    let mut auth_state = use_auth();
     let nav = navigator();
+
+    use_effect(move || {
+        if !is_authenticated() {
+            nav.push(Route::Login {});
+        }
+    });
+
+    if !is_authenticated() {
+        return rsx! { div {} };
+    }
 
     // 获取用户名的首字母作为头像
     let user_initial = auth_state.read().username.chars().next().unwrap_or('U');
-    let user_role_name = auth_state.read().role.display_name();
+    let user_role_name = auth_state.read().display_role_label().to_string();
 
     rsx! {
         div { class: "flex h-screen bg-gray-100",
@@ -62,10 +75,16 @@ pub fn Layout() -> Element {
                                 button {
                                     class: "w-full flex items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 transition-colors",
                                     onclick: move |_| {
-                                        // 调用登出函数清除认证状态
+                                        spawn(async move {
+                                            let _ = Request::post(&logout_url())
+                                                .credentials(RequestCredentials::Include)
+                                                .send()
+                                                .await;
+                                        });
+
                                         logout();
+                                        auth_state.set(WorkflowAuthState::guest());
                                         show_user_menu.set(false);
-                                        // 导航到登录页面
                                         nav.push(Route::Login {});
                                     },
                                     Icon { icon: FaRightFromBracket, width: 16, height: 16, class: "text-gray-500" }

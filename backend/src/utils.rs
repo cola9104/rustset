@@ -1,11 +1,11 @@
-use axum::http::{HeaderMap, header::AUTHORIZATION};
-use std::sync::{Arc, RwLock};
-use shared::{User, AuditLog, ZoneConfig, NetworkZone};
 use crate::middleware::AuthUser;
+use axum::http::{header::AUTHORIZATION, HeaderMap};
 use chrono::Utc;
-use uuid::Uuid;
-use std::net::IpAddr;
 use ipnetwork::IpNetwork;
+use shared::{AuditLog, NetworkZone, User, ZoneConfig};
+use std::net::IpAddr;
+use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 pub fn get_current_user(headers: &HeaderMap, users: &Arc<RwLock<Vec<User>>>) -> Option<User> {
     let auth_header = headers.get(AUTHORIZATION)?;
@@ -86,7 +86,8 @@ pub fn log_action_auth(
 
 pub fn determine_zone(ip_str: &str, zones: &[ZoneConfig]) -> NetworkZone {
     if let Ok(ip) = ip_str.parse::<IpAddr>() {
-        let mut matching_zones: Vec<&ZoneConfig> = zones.iter()
+        let mut matching_zones: Vec<&ZoneConfig> = zones
+            .iter()
             .filter(|z| {
                 if let Ok(net) = z.cidr.parse::<IpNetwork>() {
                     net.contains(ip)
@@ -113,9 +114,9 @@ pub fn determine_zone(ip_str: &str, zones: &[ZoneConfig]) -> NetworkZone {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, RwLock};
-    use shared::Role;
     use axum::http::HeaderMap;
+    use shared::Role;
+    use std::sync::{Arc, RwLock};
 
     fn setup_jwt_secret() {
         std::env::set_var("JWT_SECRET", "test-jwt-secret");
@@ -149,7 +150,10 @@ mod tests {
         let token = crate::auth::generate_token(&user).unwrap();
 
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+        headers.insert(
+            "Authorization",
+            format!("Bearer {}", token).parse().unwrap(),
+        );
 
         let result = get_current_user(&headers, &users);
         assert!(result.is_some());
@@ -164,7 +168,10 @@ mod tests {
         let token = crate::auth::generate_token(&user).unwrap();
 
         let mut headers = HeaderMap::new();
-        headers.insert("Authorization", format!("Bearer {}", token).parse().unwrap());
+        headers.insert(
+            "Authorization",
+            format!("Bearer {}", token).parse().unwrap(),
+        );
 
         let result = get_current_user(&headers, &users);
         assert!(result.is_some());
@@ -214,14 +221,12 @@ mod tests {
 
     #[test]
     fn test_determine_zone_internet() {
-        let zones = vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "Intranet".to_string(),
-                cidr: "10.0.0.0/8".to_string(),
-                priority: 100,
-            },
-        ];
+        let zones = vec![ZoneConfig {
+            id: "1".to_string(),
+            name: "Intranet".to_string(),
+            cidr: "10.0.0.0/8".to_string(),
+            priority: 100,
+        }];
 
         let result = determine_zone("8.8.8.8", &zones);
         assert!(matches!(result, NetworkZone::Internet));
@@ -229,14 +234,12 @@ mod tests {
 
     #[test]
     fn test_determine_zone_intranet() {
-        let zones = vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "Intranet".to_string(),
-                cidr: "10.0.0.0/8".to_string(),
-                priority: 100,
-            },
-        ];
+        let zones = vec![ZoneConfig {
+            id: "1".to_string(),
+            name: "Intranet".to_string(),
+            cidr: "10.0.0.0/8".to_string(),
+            priority: 100,
+        }];
 
         let result = determine_zone("10.0.1.5", &zones);
         assert!(matches!(result, NetworkZone::Intranet));
@@ -244,14 +247,12 @@ mod tests {
 
     #[test]
     fn test_determine_zone_dmz() {
-        let zones = vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "DMZ".to_string(),
-                cidr: "192.168.1.0/24".to_string(),
-                priority: 100,
-            },
-        ];
+        let zones = vec![ZoneConfig {
+            id: "1".to_string(),
+            name: "DMZ".to_string(),
+            cidr: "192.168.1.0/24".to_string(),
+            priority: 100,
+        }];
 
         let result = determine_zone("192.168.1.10", &zones);
         assert!(matches!(result, NetworkZone::DMZ));
@@ -259,14 +260,12 @@ mod tests {
 
     #[test]
     fn test_determine_zone_custom() {
-        let zones = vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "CustomZone".to_string(),
-                cidr: "172.16.0.0/16".to_string(),
-                priority: 100,
-            },
-        ];
+        let zones = vec![ZoneConfig {
+            id: "1".to_string(),
+            name: "CustomZone".to_string(),
+            cidr: "172.16.0.0/16".to_string(),
+            priority: 100,
+        }];
 
         let result = determine_zone("172.16.5.10", &zones);
         assert!(matches!(result, NetworkZone::Custom(_)));
@@ -277,14 +276,12 @@ mod tests {
 
     #[test]
     fn test_determine_zone_invalid_ip() {
-        let zones = vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "Intranet".to_string(),
-                cidr: "10.0.0.0/8".to_string(),
-                priority: 100,
-            },
-        ];
+        let zones = vec![ZoneConfig {
+            id: "1".to_string(),
+            name: "Intranet".to_string(),
+            cidr: "10.0.0.0/8".to_string(),
+            priority: 100,
+        }];
 
         let result = determine_zone("invalid-ip", &zones);
         assert!(matches!(result, NetworkZone::Internet));
@@ -316,14 +313,12 @@ mod tests {
 
     #[test]
     fn test_determine_zone_invalid_cidr() {
-        let zones = vec![
-            ZoneConfig {
-                id: "1".to_string(),
-                name: "InvalidZone".to_string(),
-                cidr: "invalid-cidr".to_string(),
-                priority: 100,
-            },
-        ];
+        let zones = vec![ZoneConfig {
+            id: "1".to_string(),
+            name: "InvalidZone".to_string(),
+            cidr: "invalid-cidr".to_string(),
+            priority: 100,
+        }];
 
         // Invalid CIDR should be skipped, return Internet default
         let result = determine_zone("10.0.1.5", &zones);

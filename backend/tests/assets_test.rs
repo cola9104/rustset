@@ -5,17 +5,23 @@ use axum::{
     http::{header, Method, Request, StatusCode},
     Router,
 };
-use serde_json::json;
-use tower::ServiceExt;
+use backend::handlers::assets::{add_asset, delete_asset, get_assets, update_asset};
 use backend::state::AppState;
-use backend::handlers::assets::{get_assets, add_asset, update_asset, delete_asset};
-use shared::{Asset, NetworkZone};
+use serde_json::json;
+use shared::NetworkZone;
+use tower::ServiceExt;
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
     Router::new()
-        .route("/api/assets", axum::routing::get(get_assets).post(add_asset))
-        .route("/api/assets/{id}", axum::routing::put(update_asset).delete(delete_asset))
+        .route(
+            "/api/assets",
+            axum::routing::get(get_assets).post(add_asset),
+        )
+        .route(
+            "/api/assets/{id}",
+            axum::routing::put(update_asset).delete(delete_asset),
+        )
         .with_state(state)
 }
 
@@ -68,10 +74,13 @@ async fn test_add_asset_unauthorized() {
         .method(Method::POST)
         .uri("/api/assets")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "name": "Test Server",
-            "ip": "192.168.1.100"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "name": "Test Server",
+                "ip": "192.168.1.100"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
@@ -89,10 +98,13 @@ async fn test_update_asset_unauthorized() {
         .method(Method::PUT)
         .uri("/api/assets/1")
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(json!({
-            "name": "Updated Server",
-            "ip": "192.168.1.101"
-        }).to_string()))
+        .body(Body::from(
+            json!({
+                "name": "Updated Server",
+                "ip": "192.168.1.101"
+            })
+            .to_string(),
+        ))
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();

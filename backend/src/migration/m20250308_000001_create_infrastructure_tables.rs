@@ -19,19 +19,64 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(ServiceProviders::ProviderName).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::ProviderCode).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::ShortName).text().not_null())
+                    .col(
+                        ColumnDef::new(ServiceProviders::ProviderName)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::ProviderCode)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::ShortName)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ServiceProviders::LogoUrl).text().null())
-                    .col(ColumnDef::new(ServiceProviders::ContactPerson).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::ContactPhone).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::ContactEmail).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::Headquarters).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::ServiceArea).text().not_null())
-                    .col(ColumnDef::new(ServiceProviders::BusinessLicense).text().not_null())
+                    .col(
+                        ColumnDef::new(ServiceProviders::ContactPerson)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::ContactPhone)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::ContactEmail)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::Headquarters)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::ServiceArea)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::BusinessLicense)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ServiceProviders::Remarks).text().null())
-                    .col(ColumnDef::new(ServiceProviders::Status).text().not_null().default("active"))
-                    .col(ColumnDef::new(ServiceProviders::CreatedAt).text().not_null())
+                    .col(
+                        ColumnDef::new(ServiceProviders::Status)
+                            .text()
+                            .not_null()
+                            .default("active"),
+                    )
+                    .col(
+                        ColumnDef::new(ServiceProviders::CreatedAt)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(ServiceProviders::UpdatedAt).text().null())
                     .to_owned(),
             )
@@ -54,15 +99,28 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(MachineRooms::RoomCode).text().not_null())
                     .col(ColumnDef::new(MachineRooms::FacilityType).text().not_null())
                     .col(ColumnDef::new(MachineRooms::Address).text().not_null())
-                    .col(ColumnDef::new(MachineRooms::ProviderId).integer().not_null())
+                    .col(
+                        ColumnDef::new(MachineRooms::ProviderId)
+                            .integer()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(MachineRooms::RoomType).text().not_null())
-                    .col(ColumnDef::new(MachineRooms::ContactPerson).text().not_null())
+                    .col(
+                        ColumnDef::new(MachineRooms::ContactPerson)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(MachineRooms::ContactPhone).text().not_null())
                     .col(ColumnDef::new(MachineRooms::Floor).text().null())
                     .col(ColumnDef::new(MachineRooms::CabinetCount).integer().null())
                     .col(ColumnDef::new(MachineRooms::AreaSize).text().null())
                     .col(ColumnDef::new(MachineRooms::Remarks).text().null())
-                    .col(ColumnDef::new(MachineRooms::Status).text().not_null().default("active"))
+                    .col(
+                        ColumnDef::new(MachineRooms::Status)
+                            .text()
+                            .not_null()
+                            .default("active"),
+                    )
                     .col(ColumnDef::new(MachineRooms::CreatedAt).text().not_null())
                     .col(ColumnDef::new(MachineRooms::UpdatedAt).text().null())
                     .foreign_key(
@@ -89,31 +147,90 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(ColumnDef::new(CloudPlatformConfigs::PlatformName).text().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::ProviderId).integer().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::CloudType).text().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::Foundation).text().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::RegionId).text().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::MachineRoomId).integer().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::AccessKeyId).text().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::AccessKeySecret).text().not_null())
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::PlatformName)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::ProviderId)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::CloudType)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::Foundation)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::RegionId)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::MachineRoomId)
+                            .integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::AccessKeyId)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::AccessKeySecret)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(CloudPlatformConfigs::Remarks).text().null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::Status).text().not_null().default("active"))
-                    .col(ColumnDef::new(CloudPlatformConfigs::LastTestTime).text().null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::LastTestResult).text().null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::CreatedAt).text().not_null())
-                    .col(ColumnDef::new(CloudPlatformConfigs::UpdatedAt).text().null())
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::Status)
+                            .text()
+                            .not_null()
+                            .default("active"),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::LastTestTime)
+                            .text()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::LastTestResult)
+                            .text()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::CreatedAt)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(CloudPlatformConfigs::UpdatedAt)
+                            .text()
+                            .null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_cloud_platform_provider")
-                            .from(CloudPlatformConfigs::Table, CloudPlatformConfigs::ProviderId)
+                            .from(
+                                CloudPlatformConfigs::Table,
+                                CloudPlatformConfigs::ProviderId,
+                            )
                             .to(ServiceProviders::Table, ServiceProviders::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_cloud_platform_machine_room")
-                            .from(CloudPlatformConfigs::Table, CloudPlatformConfigs::MachineRoomId)
+                            .from(
+                                CloudPlatformConfigs::Table,
+                                CloudPlatformConfigs::MachineRoomId,
+                            )
                             .to(MachineRooms::Table, MachineRooms::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
@@ -140,20 +257,61 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(SecurityProducts::Model).text().not_null())
                     .col(ColumnDef::new(SecurityProducts::Version).text().not_null())
                     .col(ColumnDef::new(SecurityProducts::SerialNumber).text().null())
-                    .col(ColumnDef::new(SecurityProducts::LicenseType).text().not_null())
-                    .col(ColumnDef::new(SecurityProducts::LicenseExpiry).text().null())
+                    .col(
+                        ColumnDef::new(SecurityProducts::LicenseType)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(SecurityProducts::LicenseExpiry)
+                            .text()
+                            .null(),
+                    )
                     .col(ColumnDef::new(SecurityProducts::ManagementIp).text().null())
-                    .col(ColumnDef::new(SecurityProducts::DeploymentMode).text().not_null())
-                    .col(ColumnDef::new(SecurityProducts::CloudPlatformId).integer().null())
-                    .col(ColumnDef::new(SecurityProducts::MachineRoomId).integer().null())
-                    .col(ColumnDef::new(SecurityProducts::ProviderId).integer().null())
-                    .col(ColumnDef::new(SecurityProducts::Status).text().not_null().default("active"))
+                    .col(
+                        ColumnDef::new(SecurityProducts::DeploymentMode)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(SecurityProducts::CloudPlatformId)
+                            .integer()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(SecurityProducts::MachineRoomId)
+                            .integer()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(SecurityProducts::ProviderId)
+                            .integer()
+                            .null(),
+                    )
+                    .col(
+                        ColumnDef::new(SecurityProducts::Status)
+                            .text()
+                            .not_null()
+                            .default("active"),
+                    )
                     .col(ColumnDef::new(SecurityProducts::Features).text().null())
                     .col(ColumnDef::new(SecurityProducts::Throughput).text().null())
-                    .col(ColumnDef::new(SecurityProducts::ContactPerson).text().not_null())
-                    .col(ColumnDef::new(SecurityProducts::ContactPhone).text().not_null())
+                    .col(
+                        ColumnDef::new(SecurityProducts::ContactPerson)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(SecurityProducts::ContactPhone)
+                            .text()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(SecurityProducts::Remarks).text().null())
-                    .col(ColumnDef::new(SecurityProducts::CreatedAt).text().not_null())
+                    .col(
+                        ColumnDef::new(SecurityProducts::CreatedAt)
+                            .text()
+                            .not_null(),
+                    )
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_security_product_cloud_platform")

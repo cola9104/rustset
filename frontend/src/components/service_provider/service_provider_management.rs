@@ -1,14 +1,14 @@
-use dioxus::prelude::*;
-use dioxus_free_icons::Icon;
-use dioxus_free_icons::icons::fa_solid_icons::{
-    FaPlus, FaMagnifyingGlass, FaBuilding, FaPhone,
-    FaEnvelope, FaCircleCheck, FaCircleXmark,
+use super::provider_form::{FormMode, ProviderForm};
+use crate::services::{
+    create_service_provider, delete_service_provider, fetch_service_providers,
+    update_service_provider,
 };
 use crate::state::service_provider::ServiceProviderConfig;
-use crate::services::{
-    fetch_service_providers, create_service_provider, update_service_provider, delete_service_provider,
+use dioxus::prelude::*;
+use dioxus_free_icons::icons::fa_solid_icons::{
+    FaBuilding, FaCircleCheck, FaCircleXmark, FaEnvelope, FaMagnifyingGlass, FaPhone, FaPlus,
 };
-use super::provider_form::{ProviderForm, FormMode};
+use dioxus_free_icons::Icon;
 
 /// 服务商管理页面
 #[component]
@@ -63,21 +63,38 @@ pub fn ServiceProviderManagement() -> Element {
 
     // 统计数据
     let total_count = providers.read().len() as i32;
-    let active_count = providers.read().iter().filter(|p| p.status == "active").count() as i32;
-    let inactive_count = providers.read().iter().filter(|p| p.status == "inactive").count() as i32;
+    let active_count = providers
+        .read()
+        .iter()
+        .filter(|p| p.status == "active")
+        .count() as i32;
+    let inactive_count = providers
+        .read()
+        .iter()
+        .filter(|p| p.status == "inactive")
+        .count() as i32;
 
     // 筛选逻辑
-    let filtered_providers = providers.read().iter().filter(|provider| {
-        let matches_search = search_query.read().is_empty()
-            || provider.provider_name.contains(search_query.read().as_str())
-            || provider.short_name.contains(search_query.read().as_str())
-            || provider.provider_code.contains(search_query.read().as_str());
+    let filtered_providers = providers
+        .read()
+        .iter()
+        .filter(|provider| {
+            let matches_search = search_query.read().is_empty()
+                || provider
+                    .provider_name
+                    .contains(search_query.read().as_str())
+                || provider.short_name.contains(search_query.read().as_str())
+                || provider
+                    .provider_code
+                    .contains(search_query.read().as_str());
 
-        let matches_status = status_filter.read().as_str() == "all"
-            || status_filter.read().as_str() == provider.status;
+            let matches_status = status_filter.read().as_str() == "all"
+                || status_filter.read().as_str() == provider.status;
 
-        matches_search && matches_status
-    }).cloned().collect::<Vec<_>>();
+            matches_search && matches_status
+        })
+        .cloned()
+        .collect::<Vec<_>>();
 
     rsx! {
         div { class: "p-6",

@@ -13,9 +13,9 @@ impl MigrationTrait for Migration {
                     .add_column(
                         ColumnDef::new(ResourceTicket::SecurityProducts)
                             .text()
-                            .null()
+                            .null(),
                     )
-                    .to_owned()
+                    .to_owned(),
             )
             .await
     }
@@ -26,7 +26,7 @@ impl MigrationTrait for Migration {
                 Table::alter()
                     .table(ResourceTicket::Table)
                     .drop_column(ResourceTicket::SecurityProducts)
-                    .to_owned()
+                    .to_owned(),
             )
             .await
     }

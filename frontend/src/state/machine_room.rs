@@ -2,19 +2,19 @@
 #[derive(Clone, Debug, PartialEq)]
 pub struct MachineRoomConfig {
     pub id: i32,
-    pub room_name: String,                // 机房名称
-    pub room_code: String,                // 机房编码
-    pub facility_type: String,            // 设施类型（政务云中心、数据中心、服务商机房）
-    pub address: String,                  // 详细地址
-    pub provider_id: i32,                 // 所属服务商ID
-    pub room_type: String,                // 机房类型（核心机房、DMZ机房（公有云）、DMZ机房（政务云））
-    pub contact_person: String,           // 负责人
-    pub contact_phone: String,            // 联系电话
-    pub floor: Option<String>,            // 楼层
-    pub cabinet_count: Option<i32>,       // 机柜数量
-    pub area_size: Option<String>,        // 面积（平方米）
-    pub remarks: Option<String>,          // 备注
-    pub status: String,                   // 状态（active/inactive）
+    pub room_name: String,          // 机房名称
+    pub room_code: String,          // 机房编码
+    pub facility_type: String,      // 设施类型（政务云中心、数据中心、服务商机房）
+    pub address: String,            // 详细地址
+    pub provider_id: i32,           // 所属服务商ID
+    pub room_type: String,          // 机房类型（核心机房、DMZ机房（公有云）、DMZ机房（政务云））
+    pub contact_person: String,     // 负责人
+    pub contact_phone: String,      // 联系电话
+    pub floor: Option<String>,      // 楼层
+    pub cabinet_count: Option<i32>, // 机柜数量
+    pub area_size: Option<String>,  // 面积（平方米）
+    pub remarks: Option<String>,    // 备注
+    pub status: String,             // 状态（active/inactive）
     pub created_at: String,
     pub updated_at: Option<String>,
 }

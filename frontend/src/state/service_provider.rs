@@ -2,18 +2,18 @@
 #[derive(Clone, Debug, PartialEq)]
 pub struct ServiceProviderConfig {
     pub id: i32,
-    pub provider_name: String,           // 服务商名称（电信/联通/移动/广电）
-    pub provider_code: String,           // 服务商编码
-    pub short_name: String,              // 简称
-    pub logo_url: Option<String>,        // Logo URL
-    pub contact_person: String,          // 负责人
-    pub contact_phone: String,           // 联系电话
-    pub contact_email: String,           // 联系邮箱
-    pub headquarters: String,            // 总部地址
-    pub service_area: String,            // 服务区域
-    pub business_license: String,        // 营业执照号
-    pub remarks: Option<String>,         // 备注
-    pub status: String,                  // 状态（active/inactive）
+    pub provider_name: String,    // 服务商名称（电信/联通/移动/广电）
+    pub provider_code: String,    // 服务商编码
+    pub short_name: String,       // 简称
+    pub logo_url: Option<String>, // Logo URL
+    pub contact_person: String,   // 负责人
+    pub contact_phone: String,    // 联系电话
+    pub contact_email: String,    // 联系邮箱
+    pub headquarters: String,     // 总部地址
+    pub service_area: String,     // 服务区域
+    pub business_license: String, // 营业执照号
+    pub remarks: Option<String>,  // 备注
+    pub status: String,           // 状态（active/inactive）
     pub created_at: String,
     pub updated_at: Option<String>,
 }

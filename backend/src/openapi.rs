@@ -1,5 +1,5 @@
-use utoipa::OpenApi;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(

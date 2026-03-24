@@ -3,11 +3,11 @@
 pub struct CloudPlatformConfig {
     pub id: i32,
     pub platform_name: String,
-    pub provider_id: i32,                // 服务商ID
-    pub cloud_type: String,              // 云类型（公有云、政务云）
-    pub foundation: String,              // 底座（阿里云、华为云等）
+    pub provider_id: i32,   // 服务商ID
+    pub cloud_type: String, // 云类型（公有云、政务云）
+    pub foundation: String, // 底座（阿里云、华为云等）
     pub region_id: String,
-    pub machine_room_id: i32,            // 机房ID
+    pub machine_room_id: i32, // 机房ID
     pub access_key_id: String,
     pub access_key_secret: String,
     pub remarks: Option<String>,
@@ -38,7 +38,7 @@ pub fn init_cloud_platforms() -> Vec<CloudPlatformConfig> {
             cloud_type: "公有云".to_string(),
             foundation: "阿里云".to_string(),
             region_id: "cn-hangzhou".to_string(),
-            machine_room_id: 1,  // 市政务云机房A
+            machine_room_id: 1, // 市政务云机房A
             access_key_id: "LTAI5tdxxxxxxxxxxxxx".to_string(),
             access_key_secret: "****************************".to_string(),
             remarks: Some("面向互联网服务".to_string()),
@@ -55,7 +55,7 @@ pub fn init_cloud_platforms() -> Vec<CloudPlatformConfig> {
             cloud_type: "政务云".to_string(),
             foundation: "阿里云".to_string(),
             region_id: "cn-hangzhou".to_string(),
-            machine_room_id: 2,  // 核心机房(电信)
+            machine_room_id: 2, // 核心机房(电信)
             access_key_id: "LTAI5texxxxxxxxxxxxx".to_string(),
             access_key_secret: "****************************".to_string(),
             remarks: Some("政务专用云环境".to_string()),
@@ -73,7 +73,7 @@ pub fn init_cloud_platforms() -> Vec<CloudPlatformConfig> {
             cloud_type: "公有云".to_string(),
             foundation: "华为云".to_string(),
             region_id: "cn-north-1".to_string(),
-            machine_room_id: 3,  // 市政务云机房B
+            machine_room_id: 3, // 市政务云机房B
             access_key_id: "HWSKTlxxxxxxxxxxxxxx".to_string(),
             access_key_secret: "****************************".to_string(),
             remarks: Some("对外业务服务".to_string()),
@@ -90,7 +90,7 @@ pub fn init_cloud_platforms() -> Vec<CloudPlatformConfig> {
             cloud_type: "政务云".to_string(),
             foundation: "华为云".to_string(),
             region_id: "cn-north-1".to_string(),
-            machine_room_id: 4,  // 联通核心机房
+            machine_room_id: 4, // 联通核心机房
             access_key_id: "HWSKTuxxxxxxxxxxxxxx".to_string(),
             access_key_secret: "****************************".to_string(),
             remarks: Some("政务专用云环境".to_string()),
@@ -108,7 +108,7 @@ pub fn init_cloud_platforms() -> Vec<CloudPlatformConfig> {
             cloud_type: "公有云".to_string(),
             foundation: "阿里云".to_string(),
             region_id: "cn-shenzhen".to_string(),
-            machine_room_id: 5,  // 市政务云机房C
+            machine_room_id: 5, // 市政务云机房C
             access_key_id: "LTAI5tmxxxxxxxxxxxxx".to_string(),
             access_key_secret: "****************************".to_string(),
             remarks: Some("公共服务平台".to_string()),
@@ -125,7 +125,7 @@ pub fn init_cloud_platforms() -> Vec<CloudPlatformConfig> {
             cloud_type: "政务云".to_string(),
             foundation: "阿里云".to_string(),
             region_id: "cn-shenzhen".to_string(),
-            machine_room_id: 6,  // 移动核心机房
+            machine_room_id: 6, // 移动核心机房
             access_key_id: "LTAI5tnxxxxxxxxxxxxx".to_string(),
             access_key_secret: "****************************".to_string(),
             remarks: Some("政务专用云环境".to_string()),

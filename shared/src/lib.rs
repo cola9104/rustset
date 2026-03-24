@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NetworkZone {
@@ -17,19 +17,19 @@ pub enum NetworkZone {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CloudProvider {
     #[serde(rename = "aliyun")]
-    Aliyun,        // 阿里云
+    Aliyun, // 阿里云
     #[serde(rename = "tencent")]
-    Tencent,       // 腾讯云
+    Tencent, // 腾讯云
     #[serde(rename = "huawei")]
-    Huawei,        // 华为云
+    Huawei, // 华为云
     #[serde(rename = "aws")]
-    Aws,           // AWS
+    Aws, // AWS
     #[serde(rename = "azure")]
-    Azure,         // Azure
+    Azure, // Azure
     #[serde(rename = "gcp")]
-    Gcp,           // Google Cloud
+    Gcp, // Google Cloud
     #[serde(rename = "baidu")]
-    Baidu,         // 百度云
+    Baidu, // 百度云
     #[serde(rename = "custom")]
     Custom(String), // 自定义/其他
 }
@@ -53,11 +53,11 @@ impl CloudProvider {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BillingMode {
     #[serde(rename = "pay_as_you_go")]
-    PayAsYouGo,     // 按量付费
+    PayAsYouGo, // 按量付费
     #[serde(rename = "subscription")]
-    Subscription,   // 包年包月/订阅
+    Subscription, // 包年包月/订阅
     #[serde(rename = "spot")]
-    Spot,          // 抢占式实例
+    Spot, // 抢占式实例
 }
 
 /// 部门信息
@@ -74,7 +74,7 @@ pub struct Department {
 pub struct Project {
     pub id: String,
     pub name: String,
-    pub code: String,            // 项目编码
+    pub code: String, // 项目编码
     pub department_id: Option<String>,
 }
 
@@ -96,11 +96,11 @@ pub struct ContactPerson {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ResourceType {
     #[serde(rename = "cloud")]
-    Cloud,           // 云服务器 (ECS/云主机)
+    Cloud, // 云服务器 (ECS/云主机)
     #[serde(rename = "physical")]
-    Physical,        // 物理机
+    Physical, // 物理机
     #[serde(rename = "network")]
-    Network,         // 网络策略
+    Network, // 网络策略
 }
 
 impl ResourceType {
@@ -131,12 +131,12 @@ impl std::str::FromStr for ResourceType {
 pub struct PhysicalMachineInfo {
     pub id: Option<i32>,
     pub business_resource_id: Option<i32>,
-    pub serial_number: Option<String>,           // 设备序列号
-    pub rack_location: Option<String>,    // 机架位置 (如: A区-03机柜-U12)
-    pub hardware_model: Option<String>,   // 硬件型号 (如: Dell PowerEdge R740)
+    pub serial_number: Option<String>,          // 设备序列号
+    pub rack_location: Option<String>,          // 机架位置 (如: A区-03机柜-U12)
+    pub hardware_model: Option<String>,         // 硬件型号 (如: Dell PowerEdge R740)
     pub warranty_expiry: Option<DateTime<Utc>>, // 维保到期时间
-    pub agent_status: Option<String>,     // Agent 状态 (installed/online/offline/none)
-    pub ipmi_address: Option<String>,     // IPMI/iDRAC 地址
+    pub agent_status: Option<String>,           // Agent 状态 (installed/online/offline/none)
+    pub ipmi_address: Option<String>,           // IPMI/iDRAC 地址
 }
 
 /// 云虚拟机特有信息
@@ -144,15 +144,15 @@ pub struct PhysicalMachineInfo {
 pub struct CloudVirtualMachineInfo {
     pub id: Option<i32>,
     pub business_resource_id: Option<i32>,
-    pub billing_mode: Option<String>,         // 计费模式 (按量付费/包年包月)
-    pub expire_time: Option<DateTime<Utc>>,   // 到期时间
-    pub charge_type: Option<String>,          // 付费类型
+    pub billing_mode: Option<String>, // 计费模式 (按量付费/包年包月)
+    pub expire_time: Option<DateTime<Utc>>, // 到期时间
+    pub charge_type: Option<String>,  // 付费类型
     pub instance_charge_type: Option<String>, // 实例计费类型
     pub internet_charge_type: Option<String>, // 网络计费类型
     pub internet_max_bandwidth_out: Option<i32>, // 公网带宽出带宽最大值
-    pub image_id: Option<String>,             // 镜像ID
-    pub v_switch_id: Option<String>,          // 虚拟交换机ID
-    pub vpc_id: Option<String>,               // VPC ID
+    pub image_id: Option<String>,     // 镜像ID
+    pub v_switch_id: Option<String>,  // 虚拟交换机ID
+    pub vpc_id: Option<String>,       // VPC ID
     pub security_group_ids: Option<Vec<String>>, // 安全组ID列表
 }
 
@@ -214,103 +214,103 @@ pub struct BusinessResource {
     pub id: Option<i32>,
 
     // 资源类型
-    pub resource_type: String,          // 资源类型: cloud(云服务器) / physical(物理机)
+    pub resource_type: String, // 资源类型: cloud(云服务器) / physical(物理机)
 
     // 基本信息
-    pub ecs_name: String,                // ECS名称/物理机名称
-    pub ecs_status: String,              // ECS状态 (运行中/已停止/已释放等)
-    pub resource_id: String,             // 资源ID
-    pub cloud_region: String,            // 云区域 (如 华东1-杭州) 或 机房位置
-    pub cloud_category: String,          // 云类别 (阿里云/腾讯云/华为云/AWS等) 或 机房名称
-    pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
-    pub zone_name: Option<String>,       // 地区名称 (如 华北区、华南区、华东区)
-    pub platform_name: Option<String>,   // 云平台名称 (如 公众云、政务云、内外核心云)
-    pub county_city: Option<String>,     // 县市区
-    pub vdc_name: Option<String>,        // VDC名称
+    pub ecs_name: String,                      // ECS名称/物理机名称
+    pub ecs_status: String,                    // ECS状态 (运行中/已停止/已释放等)
+    pub resource_id: String,                   // 资源ID
+    pub cloud_region: String,                  // 云区域 (如 华东1-杭州) 或 机房位置
+    pub cloud_category: String,                // 云类别 (阿里云/腾讯云/华为云/AWS等) 或 机房名称
+    pub cloud_provider_config_id: Option<i32>, // 关联的云区对接配置ID
+    pub zone_name: Option<String>,             // 地区名称 (如 华北区、华南区、华东区)
+    pub platform_name: Option<String>,         // 云平台名称 (如 公众云、政务云、内外核心云)
+    pub county_city: Option<String>,           // 县市区
+    pub vdc_name: Option<String>,              // VDC名称
 
     // 业务信息
-    pub customer_name: String,           // 客户名称
+    pub customer_name: String,            // 客户名称
     pub application_name: Option<String>, // 应用名称
-    pub contract_name: Option<String>,  // 合同名称
-    pub instance_id: String,             // 实例ID / 物理机序列号
-    pub ecs_type: String,               // ECS类型 (如 ecs.g6.large) 或 物理机型号
+    pub contract_name: Option<String>,    // 合同名称
+    pub instance_id: String,              // 实例ID / 物理机序列号
+    pub ecs_type: String,                 // ECS类型 (如 ecs.g6.large) 或 物理机型号
 
     // 配置信息
-    pub ecs_os: String,                 // ECS操作系统 (如 CentOS 7.9, Windows Server 2019)
-    pub cpu_cores: u32,                 // CPU核数
-    pub memory_gb: u32,                 // 内存(GB)
-    pub system_disk: String,            // 系统盘类型 (如 cloud_ssd, cloud_essd) 或 物理磁盘类型
-    pub system_disk_size_gb: u32,       // 系统盘大小(GB)
-    pub data_disk: Option<String>,      // 数据盘信息 (JSON字符串存储多块盘信息)
+    pub ecs_os: String,      // ECS操作系统 (如 CentOS 7.9, Windows Server 2019)
+    pub cpu_cores: u32,      // CPU核数
+    pub memory_gb: u32,      // 内存(GB)
+    pub system_disk: String, // 系统盘类型 (如 cloud_ssd, cloud_essd) 或 物理磁盘类型
+    pub system_disk_size_gb: u32, // 系统盘大小(GB)
+    pub data_disk: Option<String>, // 数据盘信息 (JSON字符串存储多块盘信息)
 
     // 时间信息
     pub completion_time: Option<DateTime<Utc>>, // 完成时间
-    pub release_time: Option<DateTime<Utc>>,   // 释放时间
+    pub release_time: Option<DateTime<Utc>>,    // 释放时间
 
     // 安全产品
-    pub has_security_product: bool,    // 是否创建安全产品
+    pub has_security_product: bool, // 是否创建安全产品
 
     // 网络信息
-    pub ip_address: String,             // IP地址
-    pub ecs_login_method: Option<String>, // ECS远程登录方式 (SSH/RDP/堡垒机等)
-    pub ecs_login_username: Option<String>, // ECS登录用户名
+    pub ip_address: String,                   // IP地址
+    pub ecs_login_method: Option<String>,     // ECS远程登录方式 (SSH/RDP/堡垒机等)
+    pub ecs_login_username: Option<String>,   // ECS登录用户名
     pub ecs_initial_password: Option<String>, // ECS初始密码
 
     // 堡垒机信息
-    pub bastion_address: Option<String>,     // 堡垒机地址
-    pub bastion_admin_account: Option<String>, // 堡垒机管理员账号
+    pub bastion_address: Option<String>,          // 堡垒机地址
+    pub bastion_admin_account: Option<String>,    // 堡垒机管理员账号
     pub bastion_initial_password: Option<String>, // 堡垒机初始密码
 
     // 资源类型特有信息 (根据 resource_type 选择其一)
-    pub physical_machine_info: Option<PhysicalMachineInfo>,    // 物理机特有信息
-    pub cloud_vm_info: Option<CloudVirtualMachineInfo>,        // 云虚拟机特有信息
+    pub physical_machine_info: Option<PhysicalMachineInfo>, // 物理机特有信息
+    pub cloud_vm_info: Option<CloudVirtualMachineInfo>,     // 云虚拟机特有信息
 
     // 其他
-    pub remarks: Option<String>,         // 备注
+    pub remarks: Option<String>, // 备注
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
     pub created_by: Option<String>,
     pub updated_by: Option<String>,
 
     // 申请流程相关
-    pub applicant: Option<String>,              // 申请人
-    pub department: Option<String>,             // 申请部门
-    pub approver: Option<String>,               // 审批人
-    pub approval_time: Option<DateTime<Utc>>,   // 审批时间
-    pub approval_remarks: Option<String>,       // 审批备注
-    pub rejection_reason: Option<String>,       // 拒绝原因
+    pub applicant: Option<String>,            // 申请人
+    pub department: Option<String>,           // 申请部门
+    pub approver: Option<String>,             // 审批人
+    pub approval_time: Option<DateTime<Utc>>, // 审批时间
+    pub approval_remarks: Option<String>,     // 审批备注
+    pub rejection_reason: Option<String>,     // 拒绝原因
 
     // 资源配置相关
-    pub bandwidth_mbps: Option<u32>,            // 带宽大小(Mbps)
-    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
-    pub public_ip_count: Option<u32>,           // 公网IP数量
-    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+    pub bandwidth_mbps: Option<u32>,    // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>, // 带宽类型(按量/包月)
+    pub public_ip_count: Option<u32>,   // 公网IP数量
+    pub network_type: Option<String>,   // 网络类型(VPC/经典网络)
 
     // 业务关联相关
-    pub project_name: Option<String>,           // 项目名称
-    pub project_code: Option<String>,           // 项目编号
-    pub business_owner: Option<String>,         // 业务负责人
-    pub tech_owner: Option<String>,             // 技术负责人
-    pub contact_phone: Option<String>,          // 联系电话
+    pub project_name: Option<String>,   // 项目名称
+    pub project_code: Option<String>,   // 项目编号
+    pub business_owner: Option<String>, // 业务负责人
+    pub tech_owner: Option<String>,     // 技术负责人
+    pub contact_phone: Option<String>,  // 联系电话
 
     // 费用相关
-    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
-    pub purchase_duration: Option<u32>,         // 购买时长(月)
-    pub cost_center: Option<String>,            // 成本中心
+    pub billing_method: Option<String>, // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<u32>, // 购买时长(月)
+    pub cost_center: Option<String>,    // 成本中心
 
     // 合规相关
-    pub security_level: Option<String>,         // 等保级别(二级/三级)
-    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+    pub security_level: Option<String>,   // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>, // 数据敏感级别(公开/内部/机密/绝密)
 
     // 其他
-    pub purpose: Option<String>,                // 用途说明
+    pub purpose: Option<String>,                       // 用途说明
     pub expected_delivery_time: Option<DateTime<Utc>>, // 期望交付时间
 
     // 申请与交付状态管理
-    pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
-    pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
+    pub application_status: Option<String>, // 申请状态: 待审核、已批准、已拒绝
+    pub delivery_status: Option<String>,    // 交付状态: 待交付、交付中、已交付
     pub delivery_confirmed_at: Option<DateTime<Utc>>, // 交付确认时间
-    pub delivery_confirmed_by: Option<String>,     // 交付确认人
+    pub delivery_confirmed_by: Option<String>, // 交付确认人
 }
 
 // 默认值函数
@@ -325,22 +325,22 @@ fn default_delivery_status() -> Option<String> {
 /// 创建业务资源请求
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CreateBusinessResourceRequest {
-    pub resource_type: String,         // 资源类型: cloud / physical
+    pub resource_type: String, // 资源类型: cloud / physical
     pub ecs_name: String,
     pub ecs_status: String,
-    #[serde(default)]  // 默认为空字符串，由运维/编排分配
+    #[serde(default)] // 默认为空字符串，由运维/编排分配
     pub resource_id: Option<String>,
     pub cloud_region: String,
     pub cloud_category: String,
-    pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
-    pub zone_name: Option<String>,       // 地区名称
-    pub platform_name: Option<String>,   // 云平台名称
+    pub cloud_provider_config_id: Option<i32>, // 关联的云区对接配置ID
+    pub zone_name: Option<String>,             // 地区名称
+    pub platform_name: Option<String>,         // 云平台名称
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: String,
     pub application_name: Option<String>,
     pub contract_name: Option<String>,
-    #[serde(default)]  // 默认为空字符串，由运维/编排分配
+    #[serde(default)] // 默认为空字符串，由运维/编排分配
     pub instance_id: Option<String>,
     pub ecs_type: String,
     pub ecs_os: String,
@@ -360,72 +360,71 @@ pub struct CreateBusinessResourceRequest {
     pub bastion_admin_account: Option<String>,
     pub bastion_initial_password: Option<String>,
     // 资源类型特有信息 (根据 resource_type 选择其一)
-    pub physical_machine_info: Option<CreatePhysicalMachineInfo>,    // 物理机特有信息
-    pub cloud_vm_info: Option<CreateCloudVirtualMachineInfo>,        // 云虚拟机特有信息
+    pub physical_machine_info: Option<CreatePhysicalMachineInfo>, // 物理机特有信息
+    pub cloud_vm_info: Option<CreateCloudVirtualMachineInfo>,     // 云虚拟机特有信息
     pub remarks: Option<String>,
 
     // 申请流程相关
-    pub applicant: Option<String>,              // 申请人
-    pub department: Option<String>,             // 申请部门
-    pub approver: Option<String>,               // 审批人
-    pub approval_time: Option<DateTime<Utc>>,   // 审批时间
-    pub approval_remarks: Option<String>,       // 审批备注
-    pub rejection_reason: Option<String>,       // 拒绝原因
+    pub applicant: Option<String>,            // 申请人
+    pub department: Option<String>,           // 申请部门
+    pub approver: Option<String>,             // 审批人
+    pub approval_time: Option<DateTime<Utc>>, // 审批时间
+    pub approval_remarks: Option<String>,     // 审批备注
+    pub rejection_reason: Option<String>,     // 拒绝原因
 
     // 资源配置相关
-    pub bandwidth_mbps: Option<u32>,            // 带宽大小(Mbps)
-    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
-    pub public_ip_count: Option<u32>,           // 公网IP数量
-    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+    pub bandwidth_mbps: Option<u32>,    // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>, // 带宽类型(按量/包月)
+    pub public_ip_count: Option<u32>,   // 公网IP数量
+    pub network_type: Option<String>,   // 网络类型(VPC/经典网络)
 
     // 业务关联相关
-    pub project_name: Option<String>,           // 项目名称
-    pub project_code: Option<String>,           // 项目编号
-    pub business_owner: Option<String>,         // 业务负责人
-    pub tech_owner: Option<String>,             // 技术负责人
-    pub contact_phone: Option<String>,          // 联系电话
+    pub project_name: Option<String>,   // 项目名称
+    pub project_code: Option<String>,   // 项目编号
+    pub business_owner: Option<String>, // 业务负责人
+    pub tech_owner: Option<String>,     // 技术负责人
+    pub contact_phone: Option<String>,  // 联系电话
 
     // 费用相关
-    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
-    pub purchase_duration: Option<u32>,         // 购买时长(月)
-    pub cost_center: Option<String>,            // 成本中心
+    pub billing_method: Option<String>, // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<u32>, // 购买时长(月)
+    pub cost_center: Option<String>,    // 成本中心
 
     // 合规相关
-    pub security_level: Option<String>,         // 等保级别(二级/三级)
-    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+    pub security_level: Option<String>,   // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>, // 数据敏感级别(公开/内部/机密/绝密)
 
     // 其他
-    pub purpose: Option<String>,                // 用途说明
+    pub purpose: Option<String>,                       // 用途说明
     pub expected_delivery_time: Option<DateTime<Utc>>, // 期望交付时间,
 
     // 申请与交付状态管理
     #[serde(default = "default_application_status")]
-    pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
+    pub application_status: Option<String>, // 申请状态: 待审核、已批准、已拒绝
     #[serde(default = "default_delivery_status")]
-    pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
+    pub delivery_status: Option<String>, // 交付状态: 待交付、交付中、已交付
     pub delivery_confirmed_at: Option<DateTime<Utc>>, // 交付确认时间
-    pub delivery_confirmed_by: Option<String>,     // 交付确认人
+    pub delivery_confirmed_by: Option<String>,        // 交付确认人
 }
 
 /// 更新业务资源请求
-#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema, Default)]
 pub struct UpdateBusinessResourceRequest {
-    pub resource_type: Option<String>,         // 资源类型
+    pub resource_type: Option<String>, // 资源类型
     pub ecs_name: Option<String>,
     pub ecs_status: Option<String>,
-    pub resource_id: Option<String>,            // 云平台资源ID（由运维/编排分配）
+    pub resource_id: Option<String>, // 云平台资源ID（由运维/编排分配）
     pub cloud_region: Option<String>,
     pub cloud_category: Option<String>,
-    pub cloud_provider_config_id: Option<i32>,  // 关联的云区对接配置ID
-    pub zone_name: Option<String>,       // 地区名称
-    pub platform_name: Option<String>,   // 云平台名称
+    pub cloud_provider_config_id: Option<i32>, // 关联的云区对接配置ID
+    pub zone_name: Option<String>,             // 地区名称
+    pub platform_name: Option<String>,         // 云平台名称
     pub county_city: Option<String>,
     pub vdc_name: Option<String>,
     pub customer_name: Option<String>,
     pub application_name: Option<String>,
     pub contract_name: Option<String>,
-    pub instance_id: Option<String>,         // 实例ID（由运维/编排分配）
+    pub instance_id: Option<String>, // 实例ID（由运维/编排分配）
     pub ecs_type: Option<String>,
     pub ecs_os: Option<String>,
     pub cpu_cores: Option<u32>,
@@ -436,7 +435,7 @@ pub struct UpdateBusinessResourceRequest {
     pub completion_time: Option<DateTime<Utc>>,
     pub release_time: Option<DateTime<Utc>>,
     pub has_security_product: Option<bool>,
-    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
+    pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub ecs_login_method: Option<String>,
     pub ecs_login_username: Option<String>,
@@ -445,63 +444,62 @@ pub struct UpdateBusinessResourceRequest {
     pub bastion_admin_account: Option<String>,
     pub bastion_initial_password: Option<String>,
     // 资源类型特有信息更新 (根据 resource_type 选择其一)
-    pub physical_machine_info: Option<UpdatePhysicalMachineInfo>,    // 物理机特有信息更新
-    pub cloud_vm_info: Option<UpdateCloudVirtualMachineInfo>,        // 云虚拟机特有信息更新
+    pub physical_machine_info: Option<UpdatePhysicalMachineInfo>, // 物理机特有信息更新
+    pub cloud_vm_info: Option<UpdateCloudVirtualMachineInfo>,     // 云虚拟机特有信息更新
     pub remarks: Option<String>,
 
     // 申请流程相关
-    pub applicant: Option<String>,              // 申请人
-    pub department: Option<String>,             // 申请部门
-    pub approver: Option<String>,               // 审批人
-    pub approval_time: Option<DateTime<Utc>>,   // 审批时间
-    pub approval_remarks: Option<String>,       // 审批备注
-    pub rejection_reason: Option<String>,       // 拒绝原因
+    pub applicant: Option<String>,            // 申请人
+    pub department: Option<String>,           // 申请部门
+    pub approver: Option<String>,             // 审批人
+    pub approval_time: Option<DateTime<Utc>>, // 审批时间
+    pub approval_remarks: Option<String>,     // 审批备注
+    pub rejection_reason: Option<String>,     // 拒绝原因
 
     // 资源配置相关
-    pub bandwidth_mbps: Option<u32>,            // 带宽大小(Mbps)
-    pub bandwidth_type: Option<String>,         // 带宽类型(按量/包月)
-    pub public_ip_count: Option<u32>,           // 公网IP数量
-    pub network_type: Option<String>,           // 网络类型(VPC/经典网络)
+    pub bandwidth_mbps: Option<u32>,    // 带宽大小(Mbps)
+    pub bandwidth_type: Option<String>, // 带宽类型(按量/包月)
+    pub public_ip_count: Option<u32>,   // 公网IP数量
+    pub network_type: Option<String>,   // 网络类型(VPC/经典网络)
 
     // 业务关联相关
-    pub project_name: Option<String>,           // 项目名称
-    pub project_code: Option<String>,           // 项目编号
-    pub business_owner: Option<String>,         // 业务负责人
-    pub tech_owner: Option<String>,             // 技术负责人
-    pub contact_phone: Option<String>,          // 联系电话
+    pub project_name: Option<String>,   // 项目名称
+    pub project_code: Option<String>,   // 项目编号
+    pub business_owner: Option<String>, // 业务负责人
+    pub tech_owner: Option<String>,     // 技术负责人
+    pub contact_phone: Option<String>,  // 联系电话
 
     // 费用相关
-    pub billing_method: Option<String>,         // 计费方式(包年包月/按量付费)
-    pub purchase_duration: Option<u32>,         // 购买时长(月)
-    pub cost_center: Option<String>,            // 成本中心
+    pub billing_method: Option<String>, // 计费方式(包年包月/按量付费)
+    pub purchase_duration: Option<u32>, // 购买时长(月)
+    pub cost_center: Option<String>,    // 成本中心
 
     // 合规相关
-    pub security_level: Option<String>,         // 等保级别(二级/三级)
-    pub data_sensitivity: Option<String>,       // 数据敏感级别(公开/内部/机密/绝密)
+    pub security_level: Option<String>,   // 等保级别(二级/三级)
+    pub data_sensitivity: Option<String>, // 数据敏感级别(公开/内部/机密/绝密)
 
     // 其他
-    pub purpose: Option<String>,                // 用途说明
+    pub purpose: Option<String>,                       // 用途说明
     pub expected_delivery_time: Option<DateTime<Utc>>, // 期望交付时间,
 
     // 申请与交付状态管理
-    pub application_status: Option<String>,        // 申请状态: 待审核、已批准、已拒绝
-    pub delivery_status: Option<String>,           // 交付状态: 待交付、交付中、已交付
+    pub application_status: Option<String>, // 申请状态: 待审核、已批准、已拒绝
+    pub delivery_status: Option<String>,    // 交付状态: 待交付、交付中、已交付
     pub delivery_confirmed_at: Option<DateTime<Utc>>, // 交付确认时间
-    pub delivery_confirmed_by: Option<String>,     // 交付确认人
+    pub delivery_confirmed_by: Option<String>, // 交付确认人
 }
-
 
 /// 业务资源查询参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessResourceQuery {
-    pub search_keyword: Option<String>,     // 搜索关键词（ECS名称、客户名称、IP地址等）
-    pub resource_type: Option<String>,      // 资源类型筛选 (cloud/physical)
-    pub cloud_category: Option<String>,     // 云类别/机房筛选
-    pub ecs_status: Option<String>,         // 状态筛选
-    pub customer_name: Option<String>,      // 客户名称筛选
-    pub county_city: Option<String>,        // 县市区筛选
-    pub application_name: Option<String>,   // 应用名称筛选
-    pub contract_name: Option<String>,      // 合同名称筛选
+    pub search_keyword: Option<String>, // 搜索关键词（ECS名称、客户名称、IP地址等）
+    pub resource_type: Option<String>,  // 资源类型筛选 (cloud/physical)
+    pub cloud_category: Option<String>, // 云类别/机房筛选
+    pub ecs_status: Option<String>,     // 状态筛选
+    pub customer_name: Option<String>,  // 客户名称筛选
+    pub county_city: Option<String>,    // 县市区筛选
+    pub application_name: Option<String>, // 应用名称筛选
+    pub contract_name: Option<String>,  // 合同名称筛选
 }
 
 /// 业务资源统计
@@ -516,10 +514,10 @@ pub struct BusinessResourceStats {
     pub with_security_product_count: u32,
     pub cloud_count: u32,                   // 云资源数量
     pub physical_count: u32,                // 物理机数量
-    pub by_category: Vec<(String, u32)>,     // 按云类别统计
-    pub by_customer: Vec<(String, u32)>,     // 按客户统计
-    pub by_county: Vec<(String, u32)>,       // 按县市区统计
-    pub by_application: Vec<(String, u32)>,  // 按应用统计
+    pub by_category: Vec<(String, u32)>,    // 按云类别统计
+    pub by_customer: Vec<(String, u32)>,    // 按客户统计
+    pub by_county: Vec<(String, u32)>,      // 按县市区统计
+    pub by_application: Vec<(String, u32)>, // 按应用统计
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -536,11 +534,11 @@ pub struct Asset {
     pub created_by: Option<String>, // username
     pub updated_by: Option<String>, // username
     // Asset Mapping features
-    pub owner: Option<String>,      // Responsibility
-    pub weight: i32,                // Asset Importance (1-100)
-    pub labels: Vec<String>,        // Multi-level tags
-    pub os: Option<String>,         // OS Fingerprint
-    pub device_type: Option<String>,// Device Type Fingerprint
+    pub owner: Option<String>,       // Responsibility
+    pub weight: i32,                 // Asset Importance (1-100)
+    pub labels: Vec<String>,         // Multi-level tags
+    pub os: Option<String>,          // OS Fingerprint
+    pub device_type: Option<String>, // Device Type Fingerprint
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -548,9 +546,9 @@ pub struct PortInfo {
     pub port: u16,
     pub is_open: bool,
     pub service: Option<String>,
-    pub version: Option<String>,    // Service Version
-    pub banner: Option<String>,     // Service Banner
-    pub is_bound: bool, // If this port is manually confirmed/bound to a service
+    pub version: Option<String>, // Service Version
+    pub banner: Option<String>,  // Service Banner
+    pub is_bound: bool,          // If this port is manually confirmed/bound to a service
     pub system_name: Option<String>,
     pub middleware: Option<String>,
     // New: Track creator/modifier for ports if needed, but usually Asset level is enough or tracked via logs.
@@ -646,9 +644,9 @@ pub struct ZoneConfig {
 pub struct ScannerConfig {
     pub id: String,
     pub name: String,
-    pub scanner_type: String,  // rustscan, nmap, basic_tcp
+    pub scanner_type: String, // rustscan, nmap, basic_tcp
     pub enabled: bool,
-    pub config: serde_json::Value,  // 扫描器特定配置
+    pub config: serde_json::Value, // 扫描器特定配置
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
 }
@@ -671,14 +669,13 @@ pub struct UpdateScannerRequest {
     pub config: Option<serde_json::Value>,
 }
 
-
 // --- Auth & Audit ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, utoipa::ToSchema)]
 pub enum Role {
-    SysAdmin, // Manage users and permissions
-    SecAdmin, // Manage assets, tasks, risks
-    Auditor,  // View logs
+    SysAdmin,       // Manage users and permissions
+    SecAdmin,       // Manage assets, tasks, risks
+    Auditor,        // View logs
     Custom(String), // Custom role with specific permissions
 }
 
@@ -686,11 +683,11 @@ pub enum Role {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CustomRole {
     pub id: Option<i32>,
-    pub name: String,              // 角色名称
+    pub name: String,                // 角色名称
     pub description: Option<String>, // 角色描述
-    pub permissions: Permissions,   // 角色权限
-    pub created_at: Option<String>, // 创建时间
-    pub updated_at: Option<String>, // 更新时间
+    pub permissions: Permissions,    // 角色权限
+    pub created_at: Option<String>,  // 创建时间
+    pub updated_at: Option<String>,  // 更新时间
 }
 
 /// 创建自定义角色请求
@@ -713,50 +710,50 @@ pub struct UpdateRoleRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
 pub struct Permissions {
     // ========== 通用模块 ==========
-    pub can_access_general: bool,           // 顶级：访问通用模块
+    pub can_access_general: bool, // 顶级：访问通用模块
 
     // 仪表盘
-    pub can_view_dashboard: bool,           // 子级：查看仪表盘
+    pub can_view_dashboard: bool, // 子级：查看仪表盘
 
     // 任务中心
-    pub can_view_tasks: bool,               // 子级：查看任务中心
-    pub can_create_task: bool,              // 孙级：创建任务
-    pub can_delete_task: bool,              // 孙级：删除任务
-    pub can_update_task: bool,              // 孙级：更新任务
+    pub can_view_tasks: bool,  // 子级：查看任务中心
+    pub can_create_task: bool, // 孙级：创建任务
+    pub can_delete_task: bool, // 孙级：删除任务
+    pub can_update_task: bool, // 孙级：更新任务
 
     // 高级扫描
-    pub can_view_advanced_scan: bool,       // 子级：查看高级扫描页面
-    pub can_create_scan: bool,              // 孙级：创建扫描
-    pub can_delete_scan: bool,              // 孙级：删除扫描
-    pub can_export_scan: bool,              // 孙级：导出结果
+    pub can_view_advanced_scan: bool, // 子级：查看高级扫描页面
+    pub can_create_scan: bool,        // 孙级：创建扫描
+    pub can_delete_scan: bool,        // 孙级：删除扫描
+    pub can_export_scan: bool,        // 孙级：导出结果
 
     // ========== 资产与风险模块 ==========
-    pub can_access_assets_risks: bool,      // 顶级：访问资产与风险模块
+    pub can_access_assets_risks: bool, // 顶级：访问资产与风险模块
 
     // 云服务资产
-    pub can_view_cloud_assets: bool,        // 子级：查看云服务资产
-    pub can_create_cloud_asset: bool,       // 孙级：创建云资产
-    pub can_update_cloud_asset: bool,       // 孙级：更新云资产
-    pub can_delete_cloud_asset: bool,       // 孙级：删除云资产
+    pub can_view_cloud_assets: bool,  // 子级：查看云服务资产
+    pub can_create_cloud_asset: bool, // 孙级：创建云资产
+    pub can_update_cloud_asset: bool, // 孙级：更新云资产
+    pub can_delete_cloud_asset: bool, // 孙级：删除云资产
 
     // 风险监控
-    pub can_view_risks: bool,               // 子级：查看风险监控
-    pub can_resolve_risk: bool,             // 孙级：处置风险
-    pub can_delete_risk: bool,              // 孙级：删除风险
+    pub can_view_risks: bool,   // 子级：查看风险监控
+    pub can_resolve_risk: bool, // 孙级：处置风险
+    pub can_delete_risk: bool,  // 孙级：删除风险
 
     // 业务流程
-    pub can_view_business_process: bool,    // 子级：查看业务流程
+    pub can_view_business_process: bool, // 子级：查看业务流程
 
     // 业务申请
-    pub can_view_business_applications: bool,  // 孙级：查看业务申请列表
-    pub can_create_business_application: bool,  // 孙级：创建业务申请
-    pub can_approve_business_application: bool,  // 孙级：审批业务申请
+    pub can_view_business_applications: bool, // 孙级：查看业务申请列表
+    pub can_create_business_application: bool, // 孙级：创建业务申请
+    pub can_approve_business_application: bool, // 孙级：审批业务申请
     pub can_supplement_business_application: bool, // 孙级：补充业务申请信息
-    pub can_delete_business_application: bool,    // 孙级：删除业务申请
+    pub can_delete_business_application: bool, // 孙级：删除业务申请
 
     // 运维管理
-    pub can_view_operations_management: bool,  // 孙级：查看运维管理
-    pub can_manage_operations: bool,           // 孙级：运维操作权限
+    pub can_view_operations_management: bool, // 孙级：查看运维管理
+    pub can_manage_operations: bool,          // 孙级：运维操作权限
 
     // 自动化资源编排
     pub can_view_automation_orchestration: bool, // 孙级：查看自动化编排
@@ -764,31 +761,31 @@ pub struct Permissions {
     pub can_manage_orchestration: bool,          // 孙级：管理编排任务
 
     // ========== Cloud模块 ==========
-    pub can_access_cloud: bool,             // 顶级：访问Cloud模块
+    pub can_access_cloud: bool, // 顶级：访问Cloud模块
 
     // 云厂商对接
-    pub can_view_cloud_providers: bool,     // 子级：查看云厂商对接
-    pub can_manage_cloud_providers: bool,   // 孙级：管理云厂商对接
+    pub can_view_cloud_providers: bool,   // 子级：查看云厂商对接
+    pub can_manage_cloud_providers: bool, // 孙级：管理云厂商对接
 
     // ========== 用户管理模块 ==========
-    pub can_access_user_management: bool,   // 顶级：访问用户管理模块
+    pub can_access_user_management: bool, // 顶级：访问用户管理模块
 
     // 用户管理
-    pub can_view_users: bool,               // 子级：查看用户管理
-    pub can_create_user: bool,              // 孙级：创建用户
-    pub can_update_user: bool,              // 孙级：更新用户
-    pub can_delete_user: bool,              // 孙级：删除用户
-    pub can_manage_permissions: bool,       // 孙级：管理权限
+    pub can_view_users: bool,         // 子级：查看用户管理
+    pub can_create_user: bool,        // 孙级：创建用户
+    pub can_update_user: bool,        // 孙级：更新用户
+    pub can_delete_user: bool,        // 孙级：删除用户
+    pub can_manage_permissions: bool, // 孙级：管理权限
 
     // 密码策略管理
-    pub can_view_password_policy: bool,     // 子级：查看密码策略
-    pub can_manage_password_policy: bool,   // 孙级：管理密码策略
+    pub can_view_password_policy: bool,   // 子级：查看密码策略
+    pub can_manage_password_policy: bool, // 孙级：管理密码策略
 
     // ========== 审计模块 ==========
-    pub can_access_audit: bool,             // 顶级：访问审计模块
+    pub can_access_audit: bool, // 顶级：访问审计模块
 
     // 审计日志
-    pub can_view_audit_logs: bool,          // 子级：查看审计日志
+    pub can_view_audit_logs: bool, // 子级：查看审计日志
 }
 
 impl Permissions {
@@ -911,7 +908,8 @@ impl Permissions {
 pub struct User {
     pub id: String,
     pub username: String,
-    #[serde(skip_serializing, default)] // Don't send password hash to frontend, allow missing on receive
+    #[serde(skip_serializing, default)]
+    // Don't send password hash to frontend, allow missing on receive
     pub password: String, // In real app, this is a hash. For demo, we might store plain or simple hash.
     pub role: Role,
     pub permissions: Option<Permissions>, // 细化权限（如果 role 是 Custom）
@@ -948,16 +946,16 @@ pub struct CreateUserRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct PasswordPolicy {
     pub min_length: u32,           // 最小长度
-    pub require_uppercase: bool,    // 需要大写字母
-    pub require_lowercase: bool,    // 需要小写字母
-    pub require_number: bool,       // 需要数字
-    pub require_special: bool,      // 需要特殊字符
-    pub max_age_days: Option<u32>,  // 密码最大有效期（天）
-    pub prevent_reuse: u32,         // 防止重用最近N次密码
-    pub min_strength: String,       // 最低强度要求：weak/medium/strong
+    pub require_uppercase: bool,   // 需要大写字母
+    pub require_lowercase: bool,   // 需要小写字母
+    pub require_number: bool,      // 需要数字
+    pub require_special: bool,     // 需要特殊字符
+    pub max_age_days: Option<u32>, // 密码最大有效期（天）
+    pub prevent_reuse: u32,        // 防止重用最近N次密码
+    pub min_strength: String,      // 最低强度要求：weak/medium/strong
     // 账户锁定配置
-    pub max_login_attempts: Option<u32>,  // 最大登录失败次数，None表示不限制
-    pub lockout_duration_minutes: u32,    // 账户锁定时长（分钟）
+    pub max_login_attempts: Option<u32>, // 最大登录失败次数，None表示不限制
+    pub lockout_duration_minutes: u32,   // 账户锁定时长（分钟）
 }
 
 impl Default for PasswordPolicy {
@@ -968,11 +966,11 @@ impl Default for PasswordPolicy {
             require_lowercase: false,
             require_number: false,
             require_special: false,
-            max_age_days: Some(90),  // 默认90天有效期
+            max_age_days: Some(90), // 默认90天有效期
             prevent_reuse: 3,
             min_strength: "weak".to_string(),
             max_login_attempts: Some(5),  // 默认5次失败后锁定
-            lockout_duration_minutes: 30,  // 默认锁定30分钟
+            lockout_duration_minutes: 30, // 默认锁定30分钟
         }
     }
 }
@@ -1000,8 +998,8 @@ pub struct AuditLog {
     pub id: String,
     pub user_id: String,
     pub username: String,
-    pub action: String, // e.g., "CREATE_ASSET", "LOGIN", "DELETE_USER"
-    pub target: String, // e.g., "Asset: 1", "User: admin"
+    pub action: String,  // e.g., "CREATE_ASSET", "LOGIN", "DELETE_USER"
+    pub target: String,  // e.g., "Asset: 1", "User: admin"
     pub details: String, // JSON or text description
     pub timestamp: DateTime<Utc>,
 }
@@ -1011,20 +1009,20 @@ pub struct AuditLog {
 /// 扫描策略类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ScanStrategy {
-    Quick,              // 快速扫描（TOP 100）
-    Standard,           // 标准扫描（TOP 1000）
-    Full,               // 全端口扫描（1-65535）
-    Custom(Vec<u16>),   // 自定义端口列表
-    Cloud,              // 云平台优化扫描
+    Quick,            // 快速扫描（TOP 100）
+    Standard,         // 标准扫描（TOP 1000）
+    Full,             // 全端口扫描（1-65535）
+    Custom(Vec<u16>), // 自定义端口列表
+    Cloud,            // 云平台优化扫描
 }
 
 /// 扫描引擎类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ScanEngine {
-    BasicTcp,           // 基础 TCP 连接（现有实现）
-    RustScan,           // RustScan 快速扫描
-    Nmap,               // Nmap 深度扫描
-    Hybrid,             // RustScan + Nmap 混合
+    BasicTcp, // 基础 TCP 连接（现有实现）
+    RustScan, // RustScan 快速扫描
+    Nmap,     // Nmap 深度扫描
+    Hybrid,   // RustScan + Nmap 混合
 }
 
 /// 高级扫描配置
@@ -1183,7 +1181,7 @@ pub struct AdvancedScanTask {
     pub targets: Vec<String>,
     pub config: AdvancedScanConfig,
     pub status: TaskStatus,
-    pub progress: f32,  // 0.0 - 1.0
+    pub progress: f32, // 0.0 - 1.0
     pub current_target: Option<String>,
     pub scanned_count: u32,
     pub total_count: u32,
@@ -1216,8 +1214,8 @@ pub struct CreateAdvancedScanRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudZone {
     pub id: Option<i32>,
-    pub zone_name: String,        // 华北区、华南区、华东区
-    pub zone_code: String,        // north、south、east、west
+    pub zone_name: String, // 华北区、华南区、华东区
+    pub zone_code: String, // north、south、east、west
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -1226,9 +1224,9 @@ pub struct CloudZone {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudPlatform {
     pub id: Option<i32>,
-    pub zone_id: i32,             // 所属云区
-    pub platform_name: String,    // 公众云、政务云、内外核心云
-    pub platform_code: String,    // public、gov、internal
+    pub zone_id: i32,          // 所属云区
+    pub platform_name: String, // 公众云、政务云、内外核心云
+    pub platform_code: String, // public、gov、internal
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -1271,13 +1269,13 @@ pub struct UpdateCloudPlatformRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CloudProviderConfigStatus {
     #[serde(rename = "active")]
-    Active,     // 已启用，可用于业务申请
+    Active, // 已启用，可用于业务申请
     #[serde(rename = "inactive")]
-    Inactive,   // 已停用
+    Inactive, // 已停用
     #[serde(rename = "testing")]
-    Testing,    // 测试中
+    Testing, // 测试中
     #[serde(rename = "error")]
-    Error,      // 连接错误
+    Error, // 连接错误
 }
 
 impl CloudProviderConfigStatus {
@@ -1393,47 +1391,47 @@ pub struct ConnectionTestResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudServiceAsset {
     // 基础标识
-    pub id: String,                      // 统一ID，格式: "{type}-{id}"
-    pub asset_type: String,              // 资产类型: "physical"(物理机) / "virtual"(云虚拟机)
-    pub source_type: String,             // 来源类型: "business_resource"(业务受理) / "cloud_asset"(混合云同步)
+    pub id: String,          // 统一ID，格式: "{type}-{id}"
+    pub asset_type: String,  // 资产类型: "physical"(物理机) / "virtual"(云虚拟机)
+    pub source_type: String, // 来源类型: "business_resource"(业务受理) / "cloud_asset"(混合云同步)
 
     // 基本信息
-    pub name: String,                    // 资产名称
-    pub instance_id: String,             // 实例ID / 设备序列号
-    pub status: String,                  // 状态: 运行中/已停止/已释放等
-    pub region: Option<String>,           // 地区 (华北/华南/华东等)
-    pub cloud_platform: String,           // 云平台 (阿里云/腾讯云/华为云/AWS)
-    pub cloud_zone: String,               // 运营商/厂家 (云服务商或设备厂家)
-    pub cloud_service: Option<String>,    // 云服务 (对外服务/内部核心服务等)
+    pub name: String,                  // 资产名称
+    pub instance_id: String,           // 实例ID / 设备序列号
+    pub status: String,                // 状态: 运行中/已停止/已释放等
+    pub region: Option<String>,        // 地区 (华北/华南/华东等)
+    pub cloud_platform: String,        // 云平台 (阿里云/腾讯云/华为云/AWS)
+    pub cloud_zone: String,            // 运营商/厂家 (云服务商或设备厂家)
+    pub cloud_service: Option<String>, // 云服务 (对外服务/内部核心服务等)
 
     // 实例配置
-    pub instance_type: String,           // 实例类型 (如 ecs.g6.large) 或 物理机型号
-    pub cpu_cores: u32,                  // CPU核数
-    pub memory_gb: u32,                  // 内存(GB)
-    pub system_disk_type: String,        // 系统盘类型
-    pub system_disk_size_gb: u32,        // 系统盘大小(GB)
-    pub data_disk_info: Option<String>,  // 数据盘信息
+    pub instance_type: String, // 实例类型 (如 ecs.g6.large) 或 物理机型号
+    pub cpu_cores: u32,        // CPU核数
+    pub memory_gb: u32,        // 内存(GB)
+    pub system_disk_type: String, // 系统盘类型
+    pub system_disk_size_gb: u32, // 系统盘大小(GB)
+    pub data_disk_info: Option<String>, // 数据盘信息
 
     // 操作系统
-    pub os_type: String,                 // 操作系统类型
-    pub os_name: String,                 // 操作系统名称
+    pub os_type: String, // 操作系统类型
+    pub os_name: String, // 操作系统名称
 
     // 网络信息
-    pub ip_address: String,              // 主IP地址
-    pub public_ip: Option<String>,       // 公网IP
-    pub ipv6_address: Option<String>,    // IPv6地址
+    pub ip_address: String,           // 主IP地址
+    pub public_ip: Option<String>,    // 公网IP
+    pub ipv6_address: Option<String>, // IPv6地址
 
     // 业务信息
-    pub customer_name: String,           // 客户名称
-    pub department: Option<String>,      // 部门
-    pub project: Option<String>,         // 项目
+    pub customer_name: String,            // 客户名称
+    pub department: Option<String>,       // 部门
+    pub project: Option<String>,          // 项目
     pub application_name: Option<String>, // 应用名称
-    pub contract_name: Option<String>,   // 合同名称
-    pub owner_name: Option<String>,      // 负责人
+    pub contract_name: Option<String>,    // 合同名称
+    pub owner_name: Option<String>,       // 负责人
 
     // 访问信息
-    pub login_method: Option<String>,    // 登录方式 (SSH/RDP/堡垒机等)
-    pub login_username: Option<String>,  // 登录用户名
+    pub login_method: Option<String>, // 登录方式 (SSH/RDP/堡垒机等)
+    pub login_username: Option<String>, // 登录用户名
     pub bastion_address: Option<String>, // 堡垒机地址
     pub bastion_account: Option<String>, // 堡垒机账号
     pub bastion_initial_password: Option<String>, // 堡垒机密码
@@ -1447,18 +1445,18 @@ pub struct CloudServiceAsset {
     pub ipmi_address: Option<String>,    // IPMI/iDRAC地址
 
     // 云虚拟机特有信息
-    pub billing_mode: Option<String>,    // 计费模式
-    pub expire_time: Option<String>,     // 到期时间
-    pub charge_type: Option<String>,     // 付费类型
+    pub billing_mode: Option<String>, // 计费模式
+    pub expire_time: Option<String>,  // 到期时间
+    pub charge_type: Option<String>,  // 付费类型
 
     // 时间信息
-    pub created_at: String,              // 创建时间
-    pub updated_at: Option<String>,      // 更新时间
-    pub last_synced: Option<String>,     // 最后同步时间
+    pub created_at: String,          // 创建时间
+    pub updated_at: Option<String>,  // 更新时间
+    pub last_synced: Option<String>, // 最后同步时间
 
     // 其他
-    pub tags: Option<String>,            // 标签 (JSON字符串)
-    pub remarks: Option<String>,         // 备注
+    pub tags: Option<String>,    // 标签 (JSON字符串)
+    pub remarks: Option<String>, // 备注
 
     // 关联ID
     pub business_resource_id: Option<i32>, // 关联的业务资源ID
@@ -1468,22 +1466,22 @@ pub struct CloudServiceAsset {
 /// 云服务资产查询参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudServiceAssetQuery {
-    pub asset_type: Option<String>,      // 资产类型筛选
-    pub source_type: Option<String>,     // 来源类型筛选
-    pub cloud_platform: Option<String>,  // 云平台筛选
-    pub status: Option<String>,          // 状态筛选
-    pub customer_name: Option<String>,   // 客户筛选
-    pub department: Option<String>,      // 部门筛选
-    pub project: Option<String>,         // 项目筛选
-    pub search_keyword: Option<String>,  // 搜索关键词
+    pub asset_type: Option<String>,     // 资产类型筛选
+    pub source_type: Option<String>,    // 来源类型筛选
+    pub cloud_platform: Option<String>, // 云平台筛选
+    pub status: Option<String>,         // 状态筛选
+    pub customer_name: Option<String>,  // 客户筛选
+    pub department: Option<String>,     // 部门筛选
+    pub project: Option<String>,        // 项目筛选
+    pub search_keyword: Option<String>, // 搜索关键词
 }
 
 /// 云服务资产统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudServiceAssetStats {
     pub total_count: u32,
-    pub physical_count: u32,             // 物理机数量
-    pub virtual_count: u32,              // 云虚拟机数量
+    pub physical_count: u32, // 物理机数量
+    pub virtual_count: u32,  // 云虚拟机数量
     pub running_count: u32,
     pub stopped_count: u32,
     pub total_cpu_cores: u32,
@@ -1497,19 +1495,19 @@ pub struct CloudServiceAssetStats {
 /// 创建云服务资产请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCloudServiceAssetRequest {
-    pub business_resource_id: i32,     // 关联的业务资源ID（用于验证交付状态）
-    pub instance_id: String,             // 实例ID（云厂商返回）
-    pub public_ip: Option<String>,         // 公网IP
-    pub ipv6_address: Option<String>,      // IPv6地址
-    pub instance_type: String,            // 实例类型（ecs、gpu等）
-    pub cpu_cores: u32,                 // CPU核数
-    pub memory_gb: u32,                 // 内存（GB）
-    pub system_disk_gb: u32,            // 系统盘（GB）
-    pub data_disk_gb: u32,              // 数据盘（GB）
-    pub os_type: String,                 // 操作系统类型
-    pub status: String,                   // 初始状态：默认为"运行中"
-    pub tags: Option<String>,             // 标签（JSON字符串）
-    pub remarks: Option<String>,           // 备注
+    pub business_resource_id: i32, // 关联的业务资源ID（用于验证交付状态）
+    pub instance_id: String,       // 实例ID（云厂商返回）
+    pub public_ip: Option<String>, // 公网IP
+    pub ipv6_address: Option<String>, // IPv6地址
+    pub instance_type: String,     // 实例类型（ecs、gpu等）
+    pub cpu_cores: u32,            // CPU核数
+    pub memory_gb: u32,            // 内存（GB）
+    pub system_disk_gb: u32,       // 系统盘（GB）
+    pub data_disk_gb: u32,         // 数据盘（GB）
+    pub os_type: String,           // 操作系统类型
+    pub status: String,            // 初始状态：默认为"运行中"
+    pub tags: Option<String>,      // 标签（JSON字符串）
+    pub remarks: Option<String>,   // 备注
 }
 
 // ============== 资源工单系统 ==============
@@ -1517,14 +1515,14 @@ pub struct CreateCloudServiceAssetRequest {
 /// 工单状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TicketStatus {
-    PendingApproval,   // 待审批
-    Approved,          // 已批准
-    Rejected,          // 已拒绝
-    PendingProvision,  // 待配置
-    Provisioning,      // 配置中
-    PendingDelivery,   // 待交付
-    Delivered,         // 已交付
-    Archived,          // 已归档
+    PendingApproval,  // 待审批
+    Approved,         // 已批准
+    Rejected,         // 已拒绝
+    PendingProvision, // 待配置
+    Provisioning,     // 配置中
+    PendingDelivery,  // 待交付
+    Delivered,        // 已交付
+    Archived,         // 已归档
 }
 
 impl TicketStatus {
@@ -1595,7 +1593,7 @@ pub struct ResourceTicket {
     pub system_disk_size_gb: i32,
     pub data_disk: Option<String>,
     pub has_security_product: bool,
-    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
+    pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub delivery_status: Option<String>,
     pub remarks: Option<String>,
@@ -1662,7 +1660,7 @@ pub struct CreateResourceTicketRequest {
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
     pub has_security_product: Option<bool>,
-    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
+    pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub remarks: Option<String>,
 
@@ -1701,7 +1699,7 @@ pub struct UpdateResourceTicketRequest {
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
     pub has_security_product: Option<bool>,
-    pub security_products: Option<String>,  // 选中的安全产品名称，逗号分隔
+    pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub delivery_status: Option<String>,
     pub remarks: Option<String>,

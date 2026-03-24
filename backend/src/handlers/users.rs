@@ -1,16 +1,20 @@
-use axum::{
-    extract::{State, Json, Path},
-    http::{StatusCode, HeaderMap},
+use crate::database::{
+    delete_user as db_delete_user, get_users as db_get_users, insert_user as db_insert_user,
+    update_user as db_update_user,
 };
-use serde::{Deserialize, Serialize};
-use shared::{User, CreateUserRequest, Role, Permissions, PasswordPolicy};
+use crate::middleware::auth_middleware::AuthUser;
+use crate::middleware::ApiError;
+use crate::password;
 use crate::state::AppState;
 use crate::utils::{get_current_user, log_action};
-use crate::database::{get_users as db_get_users, insert_user as db_insert_user, delete_user as db_delete_user, update_user as db_update_user};
-use crate::password;
-use crate::middleware::ApiError;
-use uuid::Uuid;
+use axum::{
+    extract::{Json, Path, State},
+    http::{HeaderMap, StatusCode},
+};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use shared::{CreateUserRequest, PasswordPolicy, Permissions, Role, User};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct ChangePasswordRequest {
@@ -23,20 +27,32 @@ pub fn calculate_password_strength(password: &str) -> (String, u32) {
     let mut score = 0;
 
     // 长度检查
-    if password.len() >= 8 { score += 1; }
-    if password.len() >= 12 { score += 1; }
+    if password.len() >= 8 {
+        score += 1;
+    }
+    if password.len() >= 12 {
+        score += 1;
+    }
 
     // 包含小写字母
-    if password.chars().any(|c| c.is_ascii_lowercase()) { score += 1; }
+    if password.chars().any(|c| c.is_ascii_lowercase()) {
+        score += 1;
+    }
 
     // 包含大写字母
-    if password.chars().any(|c| c.is_ascii_uppercase()) { score += 1; }
+    if password.chars().any(|c| c.is_ascii_uppercase()) {
+        score += 1;
+    }
 
     // 包含数字
-    if password.chars().any(|c| c.is_ascii_digit()) { score += 1; }
+    if password.chars().any(|c| c.is_ascii_digit()) {
+        score += 1;
+    }
 
     // 包含特殊字符
-    if password.chars().any(|c| !c.is_alphanumeric()) { score += 1; }
+    if password.chars().any(|c| !c.is_alphanumeric()) {
+        score += 1;
+    }
 
     let strength = match score {
         0..=2 => "weak",
@@ -84,7 +100,10 @@ pub fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Resu
     };
 
     if score < strength_score {
-        return Err(format!("密码强度不足，需要{}强度或更高", policy.min_strength));
+        return Err(format!(
+            "密码强度不足，需要{}强度或更高",
+            policy.min_strength
+        ));
     }
 
     Ok(())
@@ -104,7 +123,10 @@ pub fn validate_password_policy(password: &str, policy: &PasswordPolicy) -> Resu
     ),
     tag = "users"
 )]
-pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Vec<User>>, ApiError> {
+pub async fn get_users(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<User>>, ApiError> {
     let user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
@@ -117,20 +139,24 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
         Ok(db_users) => {
             // 只有数据库有数据时才更新内存缓存
             if !db_users.is_empty() {
-                *state.users.write()
-                    .map_err(|e| ApiError::internal(format!("Failed to write users cache: {}", e)))? = db_users.clone();
+                *state.users.write().map_err(|e| {
+                    ApiError::internal(format!("Failed to write users cache: {}", e))
+                })? = db_users.clone();
                 Ok(Json(db_users))
             } else {
                 // 数据库为空，使用内存缓存（可能是初始用户）
-                let users = state.users.read()
-                    .map_err(|e| ApiError::internal(format!("Failed to read users cache: {}", e)))?;
+                let users = state.users.read().map_err(|e| {
+                    ApiError::internal(format!("Failed to read users cache: {}", e))
+                })?;
                 Ok(Json(users.clone()))
             }
         }
         Err(e) => {
             eprintln!("Error loading users from database: {}", e);
             // Fallback to memory cache
-            let users = state.users.read()
+            let users = state
+                .users
+                .read()
                 .map_err(|e| ApiError::internal(format!("Failed to read users cache: {}", e)))?;
             Ok(Json(users.clone()))
         }
@@ -153,7 +179,11 @@ pub async fn get_users(State(state): State<AppState>, headers: HeaderMap) -> Res
     ),
     tag = "users"
 )]
-pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<CreateUserRequest>) -> Result<Json<User>, ApiError> {
+pub async fn create_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateUserRequest>,
+) -> Result<Json<User>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
@@ -163,7 +193,9 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
 
     // Check if username exists in memory
     {
-        let users = state.users.read()
+        let users = state
+            .users
+            .read()
             .map_err(|e| ApiError::internal(format!("Failed to read users: {}", e)))?;
         if users.iter().any(|u| u.username == req.username) {
             return Err(ApiError::conflict("Username already exists"));
@@ -202,7 +234,9 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
 
     // Add to in-memory storage
     {
-        let mut users = state.users.write()
+        let mut users = state
+            .users
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write users: {}", e)))?;
         users.push(new_user.clone());
     }
@@ -212,7 +246,13 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
         eprintln!("Error inserting user to database: {}", e);
     }
 
-    log_action(&state.audit_logs, &current_user, "CREATE_USER", &new_user.username, "Created new user");
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "CREATE_USER",
+        &new_user.username,
+        "Created new user",
+    );
 
     Ok(Json(new_user))
 }
@@ -235,7 +275,11 @@ pub async fn create_user(State(state): State<AppState>, headers: HeaderMap, Json
     ),
     tag = "users"
 )]
-pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<String>, ApiError> {
+pub async fn delete_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<String>, ApiError> {
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
@@ -244,9 +288,14 @@ pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path
     }
 
     let removed = {
-        let mut users = state.users.write()
+        let mut users = state
+            .users
+            .write()
             .map_err(|e| ApiError::internal(format!("Failed to write users: {}", e)))?;
-        users.iter().position(|u| u.id == id).map(|idx| users.remove(idx))
+        users
+            .iter()
+            .position(|u| u.id == id)
+            .map(|idx| users.remove(idx))
     };
 
     if let Some(removed_user) = removed {
@@ -255,10 +304,19 @@ pub async fn delete_user(State(state): State<AppState>, headers: HeaderMap, Path
             eprintln!("Error deleting user from database: {}", e);
         }
 
-        log_action(&state.audit_logs, &current_user, "DELETE_USER", &removed_user.username, "Deleted user");
+        log_action(
+            &state.audit_logs,
+            &current_user,
+            "DELETE_USER",
+            &removed_user.username,
+            "Deleted user",
+        );
         Ok(Json("Deleted".to_string()))
     } else {
-        Err(ApiError::not_found(format!("User with ID '{}' not found", id)))
+        Err(ApiError::not_found(format!(
+            "User with ID '{}' not found",
+            id
+        )))
     }
 }
 
@@ -288,22 +346,35 @@ pub async fn update_user_permissions(
     Json(permissions): Json<Permissions>,
 ) -> Result<Json<User>, (StatusCode, String)> {
     println!("📝 收到权限更新请求 - 用户ID: {}", id);
-    println!("📝 通用模块: can_access_general={}", permissions.can_access_general);
+    println!(
+        "📝 通用模块: can_access_general={}",
+        permissions.can_access_general
+    );
     println!("📝 任务中心: can_view_tasks={}, can_create_task={}, can_delete_task={}, can_update_task={}",
         permissions.can_view_tasks, permissions.can_create_task, permissions.can_delete_task, permissions.can_update_task);
     println!("📝 高级扫描: can_view_advanced_scan={}, can_create_scan={}, can_delete_scan={}, can_export_scan={}",
         permissions.can_view_advanced_scan, permissions.can_create_scan, permissions.can_delete_scan, permissions.can_export_scan);
-    println!("📝 资产风险: can_access_assets_risks={}", permissions.can_access_assets_risks);
+    println!(
+        "📝 资产风险: can_access_assets_risks={}",
+        permissions.can_access_assets_risks
+    );
     println!("📝 云资产: can_view_cloud_assets={}, can_create_cloud_asset={}, can_update_cloud_asset={}, can_delete_cloud_asset={}",
         permissions.can_view_cloud_assets, permissions.can_create_cloud_asset, permissions.can_update_cloud_asset, permissions.can_delete_cloud_asset);
 
-    let current_user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+    let current_user = get_current_user(&headers, &state.users)
+        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
     println!("📝 当前用户: {}", current_user.username);
 
     // Check if current user has permission to manage permissions
-    let current_perms = current_user.permissions.as_ref().ok_or((StatusCode::FORBIDDEN, "No permissions set".to_string()))?;
-    println!("📝 当前用户权限 - can_manage_permissions: {}", current_perms.can_manage_permissions);
+    let current_perms = current_user
+        .permissions
+        .as_ref()
+        .ok_or((StatusCode::FORBIDDEN, "No permissions set".to_string()))?;
+    println!(
+        "📝 当前用户权限 - can_manage_permissions: {}",
+        current_perms.can_manage_permissions
+    );
 
     if !current_perms.can_manage_permissions {
         println!("❌ 权限不足: 用户没有管理权限的权限");
@@ -335,7 +406,13 @@ pub async fn update_user_permissions(
             eprintln!("Error updating user permissions in database: {}", e);
         }
 
-        log_action(&state.audit_logs, &current_user, "UPDATE_PERMISSIONS", &username, "Updated user permissions");
+        log_action(
+            &state.audit_logs,
+            &current_user,
+            "UPDATE_PERMISSIONS",
+            &username,
+            "Updated user permissions",
+        );
         println!("✅ 权限更新成功");
 
         // Get updated user for response
@@ -391,14 +468,17 @@ pub async fn change_password(
         if let Some(user) = users.iter().find(|u| u.id == current_user.id) {
             let password_valid = password::verify_password(&req.current_password, &user.password)
                 .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Password verification failed: {}", e),
-                    )
-                })?;
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Password verification failed: {}", e),
+                )
+            })?;
 
             if !password_valid {
-                return Err((StatusCode::BAD_REQUEST, "Current password is incorrect".to_string()));
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "Current password is incorrect".to_string(),
+                ));
             }
 
             (user.id.clone(), user.username.clone())
@@ -408,13 +488,12 @@ pub async fn change_password(
     };
 
     // Update password (release lock before async operation)
-    let new_password_hash = password::hash_password(&req.new_password)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to hash password: {}", e),
-            )
-        })?;
+    let new_password_hash = password::hash_password(&req.new_password).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to hash password: {}", e),
+        )
+    })?;
     let password_changed_at = Utc::now();
 
     {
@@ -444,14 +523,22 @@ pub async fn change_password(
         history.push((user_id.clone(), new_password_hash, Utc::now()));
     }
 
-    log_action(&state.audit_logs, &current_user, "CHANGE_PASSWORD", &username,
-               &format!("Password changed, strength: {}", strength));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "CHANGE_PASSWORD",
+        &username,
+        &format!("Password changed, strength: {}", strength),
+    );
 
     Ok(Json("Password changed successfully".to_string()))
 }
 
 // 获取密码策略
-pub async fn get_password_policy(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
+pub async fn get_password_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
     let user = get_current_user(&headers, &state.users)
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
@@ -481,9 +568,16 @@ pub async fn update_password_policy(
     let mut policy_state = state.password_policy.write().unwrap();
     *policy_state = policy.clone();
 
-    log_action(&state.audit_logs, &current_user, "UPDATE_PASSWORD_POLICY", "system",
-               &format!("Updated password policy: min_length={}, require_uppercase={}, require_number={}",
-                       policy.min_length, policy.require_uppercase, policy.require_number));
+    log_action(
+        &state.audit_logs,
+        &current_user,
+        "UPDATE_PASSWORD_POLICY",
+        "system",
+        &format!(
+            "Updated password policy: min_length={}, require_uppercase={}, require_number={}",
+            policy.min_length, policy.require_uppercase, policy.require_number
+        ),
+    );
 
     Ok(Json(policy))
 }
@@ -502,9 +596,21 @@ pub async fn update_password_policy(
     ),
     tag = "users"
 )]
-pub async fn get_current_user_info(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<User>, (StatusCode, String)> {
-    let user = get_current_user(&headers, &state.users).ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    Ok(Json(user))
+pub async fn get_current_user_info(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<User>, ApiError> {
+    let users = state
+        .users
+        .read()
+        .map_err(|e| ApiError::internal(format!("Failed to acquire read lock: {}", e)))?;
+
+    let user = users
+        .iter()
+        .find(|u| u.id == auth_user.user_id)
+        .ok_or_else(|| ApiError::unauthorized("User not found"))?;
+
+    Ok(Json(user.clone()))
 }
 
 #[cfg(test)]

@@ -1,10 +1,18 @@
-pub mod resource_ticket_api;
-pub mod service_provider_api;
-pub mod machine_room_api;
+pub mod asset_api;
+pub mod audit_api;
+pub mod business_resource_api;
 pub mod cloud_platform_api;
+pub mod dashboard_api;
+pub mod machine_room_api;
+pub mod resource_ticket_api;
+pub mod risk_api;
+pub mod role_api;
 pub mod security_product_api;
+pub mod service_provider_api;
+pub mod task_api;
+pub mod user_api;
 
-pub use service_provider_api::*;
-pub use machine_room_api::*;
 pub use cloud_platform_api::*;
+pub use machine_room_api::*;
 pub use security_product_api::*;
+pub use service_provider_api::*;
