@@ -87,6 +87,7 @@ impl DatabaseConfig {
     }
 
     /// 创建默认配置 (PostgreSQL)
+    #[allow(dead_code)]
     pub fn default_postgres() -> Self {
         DatabaseConfig {
             db_type: "postgresql".to_string(),

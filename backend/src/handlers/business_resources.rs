@@ -199,6 +199,7 @@ async fn db_to_business_resource_with_details(
 }
 
 /// 简化版本：不包含详情信息的转换（用于兼容旧代码）
+#[allow(dead_code)]
 fn db_to_business_resource(db: crate::database::DbBusinessResource) -> BusinessResource {
     BusinessResource {
         id: Some(db.id),

@@ -1,6 +1,7 @@
 //! 统一错误处理中间件
 //!
 //! 提供统一的错误类型、错误响应格式和错误处理中间件
+#![allow(dead_code)]
 
 use axum::{
     http::StatusCode,

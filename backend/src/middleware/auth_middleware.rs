@@ -16,6 +16,7 @@ pub struct AuthUser {
     pub user_id: String,
     pub username: String,
     pub role: Role,
+    #[allow(dead_code)]
     pub exp: usize,
 }
 

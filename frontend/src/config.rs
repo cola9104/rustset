@@ -1,6 +1,7 @@
-/// API 配置模块
-///
-/// 集中管理后端 API 的 URL 配置
+#![allow(dead_code)]
+//! API 配置模块
+//!
+//! 集中管理后端 API 的 URL 配置
 
 /// 获取后端 API 基础 URL
 pub fn api_base() -> String {

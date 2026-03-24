@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use tokio::sync::OnceCell;
 use tower_sessions::{MemoryStore, SessionManagerLayer};
 

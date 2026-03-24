@@ -1,6 +1,7 @@
 //! Database module using SeaORM
 //!
 //! This module provides database connectivity and CRUD operations using SeaORM.
+#![allow(dead_code)]
 
 use crate::entities::{
     advanced_scan_task, asset, audit_log, business_resource, cloud_provider_config, cloud_service,

@@ -8,6 +8,7 @@ use web_sys::RequestCredentials;
 
 /// 扫描结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ScanResult {
     pub id: String,
     pub target: String,
@@ -16,6 +17,7 @@ pub struct ScanResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct PortResult {
     pub port: u16,
     pub is_open: bool,

@@ -2,6 +2,7 @@
 //!
 //! This module implements an async port scanner using Rust's async capabilities
 //! to achieve high concurrency similar to RustScan.
+#![allow(dead_code)]
 
 use futures::stream::{self, StreamExt};
 use ipnetwork::IpNetwork;

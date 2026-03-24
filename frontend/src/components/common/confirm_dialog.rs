@@ -4,6 +4,7 @@ use dioxus_free_icons::Icon;
 
 /// 确认对话框类型
 #[derive(Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 pub enum ConfirmType {
     /// 危险操作（删除等）
     Danger,

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use sea_orm_migration::prelude::*;
 
 // Import schema helper functions

@@ -4,6 +4,7 @@
 //! - 单 IP 扫描
 //! - 批量 IP 扫描
 //! - 扫描结果查询
+#![allow(dead_code)]
 
 use axum::{
     extract::{Json, Path, Query, State},

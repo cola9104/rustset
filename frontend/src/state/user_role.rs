@@ -122,6 +122,7 @@ pub struct AuthState {
 
 impl AuthState {
     /// 创建新的认证状态
+    #[allow(dead_code)]
     pub fn new(username: String, role: UserRole, role_label: String) -> Self {
         Self {
             username,

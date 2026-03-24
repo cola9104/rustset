@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::OpenApi;
 

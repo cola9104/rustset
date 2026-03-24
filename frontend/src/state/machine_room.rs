@@ -20,6 +20,7 @@ pub struct MachineRoomConfig {
 }
 
 impl MachineRoomConfig {
+    #[allow(dead_code)]
     pub fn display_name(&self) -> String {
         format!("{} - {}", self.room_name, self.facility_type)
     }

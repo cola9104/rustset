@@ -1,6 +1,7 @@
 //! Service detection module
 //!
 //! Provides service fingerprinting capabilities for common services.
+#![allow(dead_code)]
 
 use regex::Regex;
 use std::collections::HashMap;

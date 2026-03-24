@@ -1,6 +1,7 @@
 //! Scan engine manager
 //!
 //! Manages scanning operations and provides a unified interface for different scan engines.
+#![allow(dead_code)]
 
 use chrono::Utc;
 use std::sync::Arc;

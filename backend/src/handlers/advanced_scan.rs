@@ -2,6 +2,8 @@
 //!
 //! Provides REST API endpoints for advanced scanning operations using RustScan.
 
+#![allow(dead_code)]
+
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use sea_orm_migration::prelude::*;
 
 use sea_orm_migration::schema::{integer, pk_auto, string, text, timestamp};

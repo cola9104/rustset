@@ -15,6 +15,7 @@ pub struct SelectedSecurityProducts {
 }
 
 impl SelectedSecurityProducts {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             products: HashMap::new(),
