@@ -12,11 +12,11 @@ use crate::entities::{
     CustomRole, NetworkZone, PhysicalMachine, Risk, Task, User,
 };
 use chrono::Utc;
+use sea_orm::Database as SeaDatabase;
 pub use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, NotSet,
-    QueryFilter, QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, NotSet, QueryFilter,
+    QueryOrder, QuerySelect, Set,
 };
-use sea_orm::{Database as SeaDatabase, Statement};
 use shared::User as SharedUser;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -49,74 +49,6 @@ pub async fn init_db(connection_string: &str) -> Result<(), DbErr> {
 /// Get the global database connection
 pub fn get_db() -> Option<Arc<DatabaseConnection>> {
     DB.get().cloned()
-}
-
-/// Database type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DatabaseType {
-    SQLite,
-    PostgreSQL,
-    MySQL,
-}
-
-impl DatabaseType {
-    /// From connection string
-    pub fn from_connection_string(conn_str: &str) -> Self {
-        let lower = conn_str.to_lowercase();
-        if lower.starts_with("sqlite://") || lower.starts_with("sqlite:") {
-            DatabaseType::SQLite
-        } else if lower.starts_with("postgres://") || lower.starts_with("postgresql://") {
-            DatabaseType::PostgreSQL
-        } else if lower.starts_with("mysql://") || lower.starts_with("mariadb://") {
-            DatabaseType::MySQL
-        } else {
-            DatabaseType::SQLite
-        }
-    }
-}
-
-pub struct Database {
-    conn: DatabaseConnection,
-    db_type: DatabaseType,
-}
-
-impl Database {
-    pub async fn new(connection_string: &str) -> Result<Self, DbErr> {
-        let db_type = DatabaseType::from_connection_string(connection_string);
-
-        // Create connection
-        let conn = SeaDatabase::connect(connection_string).await?;
-
-        let db = Database { conn, db_type };
-
-        // Run migrations
-        db.run_migrations().await?;
-
-        Ok(db)
-    }
-
-    pub fn conn(&self) -> &DatabaseConnection {
-        &self.conn
-    }
-
-    pub fn db_type(&self) -> DatabaseType {
-        self.db_type
-    }
-
-    async fn run_migrations(&self) -> Result<(), DbErr> {
-        // Run SeaORM migrations
-        use crate::migration::{Migrator, MigratorTrait};
-
-        Migrator::up(&self.conn, None).await?;
-        Ok(())
-    }
-
-    /// Execute a raw SQL query
-    pub async fn execute(&self, sql: &str) -> Result<u64, DbErr> {
-        let stmt = Statement::from_string(self.conn.get_database_backend(), sql.to_string());
-        let result = self.conn.execute_raw(stmt).await?;
-        Ok(result.rows_affected())
-    }
 }
 
 // ============== Helper functions for converting between entities and shared types ==============
