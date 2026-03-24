@@ -22,7 +22,10 @@ pub struct PortRecord {
 #[serde(untagged)]
 pub enum NetworkZoneRecord {
     Named(String),
-    Custom { Custom: String },
+    Custom {
+        #[serde(rename = "Custom")]
+        custom: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

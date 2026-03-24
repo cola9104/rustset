@@ -16,7 +16,6 @@ use dioxus_free_icons::Icon;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TestConnectionResult {
     Idle,
-    Testing,
     Success(String),
     Failed(String),
 }

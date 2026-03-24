@@ -81,42 +81,6 @@ struct LoginPermissions {
     #[serde(default)]
     can_delete_cloud_asset: bool,
     #[serde(default)]
-    can_view_risks: bool,
-    #[serde(default)]
-    can_resolve_risk: bool,
-    #[serde(default)]
-    can_delete_risk: bool,
-    #[serde(default)]
-    can_view_business_process: bool,
-    #[serde(default)]
-    can_view_business_applications: bool,
-    #[serde(default)]
-    can_create_business_application: bool,
-    #[serde(default)]
-    can_approve_business_application: bool,
-    #[serde(default)]
-    can_supplement_business_application: bool,
-    #[serde(default)]
-    can_delete_business_application: bool,
-    #[serde(default)]
-    can_view_operations_management: bool,
-    #[serde(default)]
-    can_manage_operations: bool,
-    #[serde(default)]
-    can_view_automation_orchestration: bool,
-    #[serde(default)]
-    can_execute_orchestration: bool,
-    #[serde(default)]
-    can_manage_orchestration: bool,
-    #[serde(default)]
-    can_access_cloud: bool,
-    #[serde(default)]
-    can_view_cloud_providers: bool,
-    #[serde(default)]
-    can_manage_cloud_providers: bool,
-    #[serde(default)]
-    can_access_user_management: bool,
-    #[serde(default)]
     can_view_users: bool,
     #[serde(default)]
     can_create_user: bool,
@@ -124,14 +88,6 @@ struct LoginPermissions {
     can_update_user: bool,
     #[serde(default)]
     can_delete_user: bool,
-    #[serde(default)]
-    can_manage_permissions: bool,
-    #[serde(default)]
-    can_view_password_policy: bool,
-    #[serde(default)]
-    can_manage_password_policy: bool,
-    #[serde(default)]
-    can_access_audit: bool,
     #[serde(default)]
     can_view_audit_logs: bool,
     #[serde(default)]

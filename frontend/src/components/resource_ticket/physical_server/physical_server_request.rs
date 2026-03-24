@@ -1,4 +1,3 @@
-use crate::app::{MACHINE_ROOMS_STATE, PROVIDERS_STATE};
 use crate::components::common::VirtualScroller;
 use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
 use crate::services::resource_ticket_api::fetch_resource_tickets;
@@ -9,6 +8,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
 };
 use dioxus_free_icons::Icon;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum PhysicalServerStatus {
     Pending,
@@ -17,30 +17,6 @@ pub enum PhysicalServerStatus {
     Processing,
     Deployed,
     Completed,
-}
-
-impl PhysicalServerStatus {
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            PhysicalServerStatus::Pending => "待审批",
-            PhysicalServerStatus::Approved => "已批准",
-            PhysicalServerStatus::Rejected => "已拒绝",
-            PhysicalServerStatus::Processing => "配置中",
-            PhysicalServerStatus::Deployed => "已部署",
-            PhysicalServerStatus::Completed => "已完成",
-        }
-    }
-
-    pub fn color_class(&self) -> &'static str {
-        match self {
-            PhysicalServerStatus::Pending => "bg-yellow-100 text-yellow-800",
-            PhysicalServerStatus::Approved => "bg-green-100 text-green-800",
-            PhysicalServerStatus::Rejected => "bg-red-100 text-red-800",
-            PhysicalServerStatus::Processing => "bg-blue-100 text-blue-800",
-            PhysicalServerStatus::Deployed => "bg-purple-100 text-purple-800",
-            PhysicalServerStatus::Completed => "bg-gray-100 text-gray-800",
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,48 +36,6 @@ pub struct PhysicalServerRequest {
     pub security_products: SelectedSecurityProducts,
     pub status: PhysicalServerStatus,
     pub created_at: String,
-}
-
-impl PhysicalServerRequest {
-    pub fn provider_name(&self) -> String {
-        if let Some(pid) = self.provider_id {
-            PROVIDERS_STATE
-                .read()
-                .iter()
-                .find(|provider| provider.id == pid)
-                .map(|provider| provider.short_name.clone())
-                .unwrap_or_else(|| format!("服务商{}", pid))
-        } else {
-            "未分配".to_string()
-        }
-    }
-
-    pub fn provider_color(&self) -> &'static str {
-        if let Some(pid) = self.provider_id {
-            match pid {
-                1 => "bg-blue-100 text-blue-800",
-                2 => "bg-orange-100 text-orange-800",
-                3 => "bg-green-100 text-green-800",
-                4 => "bg-purple-100 text-purple-800",
-                _ => "bg-gray-100 text-gray-800",
-            }
-        } else {
-            "bg-gray-100 text-gray-600"
-        }
-    }
-
-    pub fn machine_room_name(&self) -> String {
-        if let Some(mid) = self.machine_room_id {
-            MACHINE_ROOMS_STATE
-                .read()
-                .iter()
-                .find(|room| room.id == mid)
-                .map(|room| room.room_name.clone())
-                .unwrap_or_else(|| format!("机房{}", mid))
-        } else {
-            "未分配".to_string()
-        }
-    }
 }
 
 #[allow(non_snake_case)]

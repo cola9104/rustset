@@ -205,7 +205,7 @@ pub fn AssetManagement() -> Element {
 fn zone_key(zone: &NetworkZoneRecord) -> &str {
     match zone {
         NetworkZoneRecord::Named(value) => value.as_str(),
-        NetworkZoneRecord::Custom { Custom } => Custom.as_str(),
+        NetworkZoneRecord::Custom { custom } => custom.as_str(),
     }
 }
 

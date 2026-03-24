@@ -1,4 +1,3 @@
-use crate::app::PROVIDERS_STATE;
 use crate::components::common::VirtualScroller;
 use crate::components::security_product::security_product_selector::SelectedSecurityProducts;
 use crate::services::resource_ticket_api::fetch_resource_tickets;
@@ -9,6 +8,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
 };
 use dioxus_free_icons::Icon;
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum CloudServiceStatus {
     Pending,
@@ -16,28 +16,6 @@ pub enum CloudServiceStatus {
     Rejected,
     Processing,
     Completed,
-}
-
-impl CloudServiceStatus {
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            CloudServiceStatus::Pending => "待审批",
-            CloudServiceStatus::Approved => "已批准",
-            CloudServiceStatus::Rejected => "已拒绝",
-            CloudServiceStatus::Processing => "处理中",
-            CloudServiceStatus::Completed => "已完成",
-        }
-    }
-
-    pub fn color_class(&self) -> &'static str {
-        match self {
-            CloudServiceStatus::Pending => "bg-yellow-100 text-yellow-800",
-            CloudServiceStatus::Approved => "bg-green-100 text-green-800",
-            CloudServiceStatus::Rejected => "bg-red-100 text-red-800",
-            CloudServiceStatus::Processing => "bg-blue-100 text-blue-800",
-            CloudServiceStatus::Completed => "bg-gray-100 text-gray-800",
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -55,35 +33,6 @@ pub struct CloudServiceRequest {
     pub security_products: SelectedSecurityProducts,
     pub status: CloudServiceStatus,
     pub created_at: String,
-}
-
-impl CloudServiceRequest {
-    pub fn provider_name(&self) -> String {
-        if let Some(pid) = self.provider_id {
-            PROVIDERS_STATE
-                .read()
-                .iter()
-                .find(|provider| provider.id == pid)
-                .map(|provider| provider.short_name.clone())
-                .unwrap_or_else(|| format!("服务商{}", pid))
-        } else {
-            "未分配".to_string()
-        }
-    }
-
-    pub fn provider_color(&self) -> &'static str {
-        if let Some(pid) = self.provider_id {
-            match pid {
-                1 => "bg-blue-100 text-blue-800",
-                2 => "bg-orange-100 text-orange-800",
-                3 => "bg-green-100 text-green-800",
-                4 => "bg-purple-100 text-purple-800",
-                _ => "bg-gray-100 text-gray-800",
-            }
-        } else {
-            "bg-gray-100 text-gray-600"
-        }
-    }
 }
 
 #[allow(non_snake_case)]

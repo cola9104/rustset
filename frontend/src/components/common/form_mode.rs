@@ -23,14 +23,4 @@ impl FormMode {
             FormMode::Edit => "保存",
         }
     }
-
-    /// 判断是否为新增模式
-    pub fn is_new(&self) -> bool {
-        matches!(self, FormMode::New)
-    }
-
-    /// 判断是否为编辑模式
-    pub fn is_edit(&self) -> bool {
-        matches!(self, FormMode::Edit)
-    }
 }
