@@ -6,7 +6,10 @@ use axum::{extract::State, Json};
 use chrono::Utc;
 use serde::Serialize;
 
-use crate::database::get_db;
+use crate::database::{
+    get_assets as db_get_assets, get_audit_logs as db_get_audit_logs, get_db,
+    get_risks as db_get_risks, get_tasks as db_get_tasks, get_users as db_get_users,
+};
 use crate::state::AppState;
 
 /// 健康检查响应
@@ -41,16 +44,57 @@ fn get_start_time() -> std::time::Instant {
     *START_TIME.get_or_init(std::time::Instant::now)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RuntimeCounts {
+    users: usize,
+    assets: usize,
+    tasks: usize,
+    risks: usize,
+    audit_logs: usize,
+}
+
+async fn collect_runtime_counts(state: &AppState) -> RuntimeCounts {
+    let cache_counts = RuntimeCounts {
+        users: state.users.read().map(|u| u.len()).unwrap_or(0),
+        assets: state.assets.read().map(|a| a.len()).unwrap_or(0),
+        tasks: state.tasks.read().map(|t| t.len()).unwrap_or(0),
+        risks: state.risks.read().map(|r| r.len()).unwrap_or(0),
+        audit_logs: state.audit_logs.read().map(|l| l.len()).unwrap_or(0),
+    };
+
+    if get_db().is_none() {
+        return cache_counts;
+    }
+
+    RuntimeCounts {
+        users: db_get_users()
+            .await
+            .map(|items| items.len())
+            .unwrap_or(cache_counts.users),
+        assets: db_get_assets()
+            .await
+            .map(|items| items.len())
+            .unwrap_or(cache_counts.assets),
+        tasks: db_get_tasks()
+            .await
+            .map(|items| items.len())
+            .unwrap_or(cache_counts.tasks),
+        risks: db_get_risks()
+            .await
+            .map(|items| items.len())
+            .unwrap_or(cache_counts.risks),
+        audit_logs: db_get_audit_logs(None)
+            .await
+            .map(|items| items.len())
+            .unwrap_or(cache_counts.audit_logs),
+    }
+}
+
 /// 健康检查端点
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
     // 检查数据库连接
     let db_connected = get_db().is_some();
-
-    // 获取内存统计
-    let users_count = state.users.read().map(|u| u.len()).unwrap_or(0);
-    let assets_count = state.assets.read().map(|a| a.len()).unwrap_or(0);
-    let tasks_count = state.tasks.read().map(|t| t.len()).unwrap_or(0);
-    let audit_logs_count = state.audit_logs.read().map(|l| l.len()).unwrap_or(0);
+    let counts = collect_runtime_counts(&state).await;
 
     let status = if db_connected { "healthy" } else { "degraded" };
 
@@ -63,24 +107,28 @@ pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse>
             connected: db_connected,
         },
         memory: MemoryHealth {
-            users_count,
-            assets_count,
-            tasks_count,
-            audit_logs_count,
+            users_count: counts.users,
+            assets_count: counts.assets,
+            tasks_count: counts.tasks,
+            audit_logs_count: counts.audit_logs,
         },
     })
 }
 
 /// 就绪检查端点
 pub async fn readiness_check(State(state): State<AppState>) -> Json<serde_json::Value> {
-    // 检查数据库连接
-    let db_ready = get_db().is_some() && state.users.read().is_ok();
+    let cache_ready = state.users.read().is_ok();
+    let db_ready = if get_db().is_some() {
+        db_get_users().await.is_ok()
+    } else {
+        false
+    };
 
     Json(serde_json::json!({
-        "ready": db_ready,
+        "ready": db_ready || cache_ready,
         "checks": {
             "database": db_ready,
-            "memory": true
+            "memory": cache_ready
         }
     }))
 }
@@ -95,12 +143,7 @@ pub async fn liveness_check() -> Json<serde_json::Value> {
 
 /// Prometheus 指标端点
 pub async fn metrics(State(state): State<AppState>) -> String {
-    let users_count = state.users.read().map(|u| u.len()).unwrap_or(0);
-    let assets_count = state.assets.read().map(|a| a.len()).unwrap_or(0);
-    let tasks_count = state.tasks.read().map(|t| t.len()).unwrap_or(0);
-    let risks_count = state.risks.read().map(|r| r.len()).unwrap_or(0);
-    let audit_logs_count = state.audit_logs.read().map(|l| l.len()).unwrap_or(0);
-
+    let counts = collect_runtime_counts(&state).await;
     let uptime = get_start_time().elapsed().as_secs();
 
     format!(
@@ -128,6 +171,6 @@ rustset_audit_logs_total {}
 # TYPE rustset_uptime_seconds counter
 rustset_uptime_seconds {}
 "#,
-        users_count, assets_count, tasks_count, risks_count, audit_logs_count, uptime
+        counts.users, counts.assets, counts.tasks, counts.risks, counts.audit_logs, uptime
     )
 }
