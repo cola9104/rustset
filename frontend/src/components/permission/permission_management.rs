@@ -668,6 +668,37 @@ pub fn PermissionManagement() -> Element {
                             }
                         }
                     }
+                    div { class: "grid grid-cols-1 gap-4 lg:grid-cols-2",
+                        div { class: "rounded-lg border border-indigo-100 bg-indigo-50 p-4",
+                            h3 { class: "text-sm font-semibold text-indigo-900", "工单可见预览" }
+                            p { class: "mt-1 text-xs leading-5 text-indigo-700",
+                                "保存后，分配该角色的用户会按下面的范围和标签页看到资源工单。"
+                            }
+                            div { class: "mt-3 flex flex-wrap gap-2",
+                                span { class: "px-2 py-1 text-xs rounded-full border border-indigo-200 bg-white text-indigo-700",
+                                    "数据范围: {resource_ticket_scope_label(&editor_snapshot.resource_ticket_scope)}"
+                                }
+                                for tab in role_ticket_tabs_preview(&editor_snapshot) {
+                                    span { class: "px-2 py-1 text-xs rounded-full border border-indigo-100 bg-indigo-100 text-indigo-800",
+                                        "{tab}"
+                                    }
+                                }
+                            }
+                        }
+                        div { class: "rounded-lg border border-emerald-100 bg-emerald-50 p-4",
+                            h3 { class: "text-sm font-semibold text-emerald-900", "流程能力预览" }
+                            p { class: "mt-1 text-xs leading-5 text-emerald-700",
+                                "这里展示保存后会自动生效的工单流程能力，包含依赖补齐后的查看权限。"
+                            }
+                            div { class: "mt-3 flex flex-wrap gap-2",
+                                for item in role_workflow_preview(&editor_snapshot) {
+                                    span { class: "px-2 py-1 text-xs rounded-full border border-emerald-100 bg-white text-emerald-700",
+                                        "{item}"
+                                    }
+                                }
+                            }
+                        }
+                    }
                     div { class: "space-y-4",
                         for group in PERMISSION_GROUPS.iter() {
                             div { class: "rounded-lg border border-gray-200 bg-white p-4 shadow-sm",
@@ -824,6 +855,84 @@ fn all_permission_keys() -> Vec<&'static str> {
         .iter()
         .flat_map(|group| group.permissions.iter().map(|(key, _)| *key))
         .collect()
+}
+
+fn normalized_editor_permissions(editor: &RoleEditorState) -> BTreeMap<String, bool> {
+    let mut permission_values = editor.permission_values.clone();
+    apply_permission_dependencies(&mut permission_values);
+    permission_values
+}
+
+fn editor_permission_enabled(permission_values: &BTreeMap<String, bool>, key: &str) -> bool {
+    permission_values.get(key).copied().unwrap_or(false)
+}
+
+fn role_ticket_tabs_preview(editor: &RoleEditorState) -> Vec<String> {
+    let permission_values = normalized_editor_permissions(editor);
+    let scope = editor.resource_ticket_scope.as_str();
+    let can_view = editor_permission_enabled(&permission_values, "can_view_resource_tickets");
+    let can_submit = editor_permission_enabled(&permission_values, "can_create_resource_tickets");
+    let can_approve = editor_permission_enabled(&permission_values, "can_approve_resource_tickets");
+    let can_provision =
+        editor_permission_enabled(&permission_values, "can_provision_resource_tickets");
+    let can_deliver = editor_permission_enabled(&permission_values, "can_deliver_resource_tickets");
+    let mut items = Vec::new();
+
+    if can_view && scope != "self" {
+        items.push("范围内工单".to_string());
+    }
+    if can_submit || (can_view && scope == "self") {
+        items.push("我的申请".to_string());
+    }
+    if can_approve {
+        items.push("待审批".to_string());
+    }
+    if can_provision {
+        items.push("待配置".to_string());
+    }
+    if can_deliver {
+        items.push("待交付".to_string());
+    }
+    if can_view {
+        items.push("已交付".to_string());
+        items.push("已归档".to_string());
+    }
+
+    if items.is_empty() {
+        items.push("不会显示资源工单页签".to_string());
+    }
+
+    items
+}
+
+fn role_workflow_preview(editor: &RoleEditorState) -> Vec<String> {
+    let permission_values = normalized_editor_permissions(editor);
+    let mut items = Vec::new();
+
+    if editor_permission_enabled(&permission_values, "can_view_resource_tickets") {
+        items.push("可查看资源工单".to_string());
+    }
+    if editor_permission_enabled(&permission_values, "can_create_resource_tickets") {
+        items.push("可提交".to_string());
+    }
+    if editor_permission_enabled(&permission_values, "can_approve_resource_tickets") {
+        items.push("可审批".to_string());
+    }
+    if editor_permission_enabled(&permission_values, "can_provision_resource_tickets") {
+        items.push("可配置".to_string());
+    }
+    if editor_permission_enabled(&permission_values, "can_deliver_resource_tickets") {
+        items.push("可交付".to_string());
+    }
+    if editor_permission_enabled(&permission_values, "can_delete_resource_tickets") {
+        items.push("可删除工单".to_string());
+    }
+
+    if items.is_empty() {
+        items.push("暂无工单流程能力".to_string());
+    }
+
+    items
 }
 
 fn apply_permission_dependencies(permission_values: &mut BTreeMap<String, bool>) {
