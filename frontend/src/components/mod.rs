@@ -13,6 +13,7 @@ pub mod network_zone;
 pub mod organization;
 pub mod password;
 pub mod permission;
+pub mod profile;
 pub mod resource_ticket;
 pub mod risk;
 pub mod scanners;

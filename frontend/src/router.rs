@@ -14,6 +14,7 @@ use crate::components::network_zone::NetworkZoneManagement;
 use crate::components::organization::OrganizationManagement;
 use crate::components::password::PasswordPolicy;
 use crate::components::permission::PermissionManagement;
+use crate::components::profile::ProfilePage;
 use crate::components::resource_ticket::cloud_service::CloudServiceRequest;
 use crate::components::resource_ticket::network_policy::NetworkPolicyRequest;
 use crate::components::resource_ticket::physical_server::PhysicalServerRequest;
@@ -102,6 +103,9 @@ pub enum Route {
     #[route("/departments")]
     DepartmentManagement {},
 
+    #[route("/profile")]
+    ProfilePage {},
+
     // 权限管理
     #[route("/permissions")]
     PermissionManagement {},
@@ -160,6 +164,7 @@ pub fn can_access_route(route: &Route, auth: &AuthState) -> bool {
             ],
         ),
         Route::UserManagement {} => auth.can_view_users(),
+        Route::ProfilePage {} => auth.can_view_profile(),
         Route::OrganizationManagement {} | Route::DepartmentManagement {} => {
             auth.can_view_users() || auth.can_manage_permissions()
         }

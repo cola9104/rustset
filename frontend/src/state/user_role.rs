@@ -99,6 +99,10 @@ impl AuthState {
         &self.role_label
     }
 
+    pub fn can_view_profile(&self) -> bool {
+        self.role != UserRole::Guest && !self.username.trim().is_empty()
+    }
+
     pub fn has_permission(&self, permission: &str) -> bool {
         self.permissions.iter().any(|item| item == permission)
     }

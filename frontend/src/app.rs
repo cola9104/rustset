@@ -69,6 +69,8 @@ pub struct AuthUser {
     pub username: String,
     pub real_name: String,
     pub display_name: String,
+    pub email: String,
+    pub phone: String,
     pub role: String,
     pub permissions: Vec<String>,
     pub organization_id: Option<i32>,
@@ -120,6 +122,10 @@ struct CurrentUserResponse {
     real_name: Option<String>,
     #[serde(default)]
     display_name: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    phone: Option<String>,
     role: serde_json::Value,
     #[serde(default)]
     permissions: serde_json::Value,
@@ -162,6 +168,8 @@ impl CurrentUserResponse {
                 .filter(|value| !value.trim().is_empty())
                 .or_else(|| self.real_name.clone())
                 .unwrap_or_else(|| self.username.clone()),
+            email: self.email.clone().unwrap_or_default(),
+            phone: self.phone.clone().unwrap_or_default(),
             role,
             permissions,
             organization_id: self.organization_id,

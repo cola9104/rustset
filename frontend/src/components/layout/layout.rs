@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxus_free_icons::icons::fa_solid_icons::{FaBars, FaRightFromBracket};
+use dioxus_free_icons::icons::fa_solid_icons::{FaAddressCard, FaBars, FaRightFromBracket};
 use dioxus_free_icons::Icon;
 use dioxus_router::{navigator, use_route, Outlet};
 use gloo_net::http::Request;
@@ -81,6 +81,15 @@ pub fn Layout() -> Element {
                                 div { class: "px-4 py-2 border-b border-gray-100",
                                     p { class: "text-sm font-medium text-gray-800", "{current_auth.username}" }
                                     p { class: "text-xs text-gray-500", "{user_role_name}" }
+                                }
+                                button {
+                                    class: "w-full flex items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 transition-colors",
+                                    onclick: move |_| {
+                                        show_user_menu.set(false);
+                                        nav.push(Route::ProfilePage {});
+                                    },
+                                    Icon { icon: FaAddressCard, width: 16, height: 16, class: "text-gray-500" }
+                                    "个人资料"
                                 }
                                 button {
                                     class: "w-full flex items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 transition-colors",

@@ -47,6 +47,8 @@ impl LoginUser {
             username: self.username.clone(),
             real_name: String::new(),
             display_name: self.username.clone(),
+            email: String::new(),
+            phone: String::new(),
             role: parse_role_value(&self.role),
             permissions,
             organization_id: None,
