@@ -25,10 +25,13 @@ pub fn UserManagement() -> Element {
     let mut organizations = use_signal(Vec::<OrganizationRecord>::new);
     let mut departments = use_signal(Vec::<DepartmentRecord>::new);
     let mut search_query = use_signal(String::new);
+    let mut role_scope_filter = use_signal(|| "all".to_string());
+    let mut role_capability_filter = use_signal(|| "all".to_string());
     let mut editing_user = use_signal(|| None::<UserRecord>);
     let mut creating = use_signal(|| false);
     let mut loading = use_signal(|| true);
     let mut error = use_signal(String::new);
+    let role_catalog = roles.read().clone();
 
     let load_all = move || async move {
         loading.set(true);
@@ -60,6 +63,8 @@ pub fn UserManagement() -> Element {
     let refresh = move |_| {
         spawn(load_all());
     };
+    let scope_filter_value = role_scope_filter.read().clone();
+    let capability_filter_value = role_capability_filter.read().clone();
 
     let filtered_users: Vec<UserRecord> = users
         .read()
@@ -77,11 +82,26 @@ pub fn UserManagement() -> Element {
                 || department_name(&departments.read(), user.department_id)
                     .to_lowercase()
                     .contains(&query)
+                || user_role_scope(&role_catalog, user)
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&query)
+                || user_role_capability_summary(&role_catalog, user)
+                    .to_lowercase()
+                    .contains(&query)
+        })
+        .filter(|user| {
+            scope_filter_matches(
+                &scope_filter_value,
+                user_role_scope_key(&role_catalog, user).as_deref(),
+            ) && capability_filter_matches(
+                &capability_filter_value,
+                &user_role_capabilities(&role_catalog, user),
+            )
         })
         .cloned()
         .collect();
     let is_empty = filtered_users.is_empty();
-    let role_catalog = roles.read().clone();
 
     let total_count = users.read().len() as i32;
     let active_count = users
@@ -133,14 +153,38 @@ pub fn UserManagement() -> Element {
             }
 
             div { class: "bg-white rounded-lg shadow p-4",
-                div { class: "flex items-center",
-                    Icon { icon: FaMagnifyingGlass, width: 20, height: 20, class: "text-gray-400" }
-                    input {
-                        r#type: "text",
-                        class: "ml-2 flex-1 border-0 focus:outline-none",
-                        placeholder: "搜索账号、姓名、组织、部门或角色...",
-                        value: search_query,
-                        oninput: move |e| search_query.set(e.value()),
+                div { class: "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr),180px,220px]",
+                    div { class: "flex items-center",
+                        Icon { icon: FaMagnifyingGlass, width: 20, height: 20, class: "text-gray-400" }
+                        input {
+                            r#type: "text",
+                            class: "ml-2 flex-1 border-0 focus:outline-none",
+                            placeholder: "搜索账号、姓名、组织、部门或角色...",
+                            value: search_query,
+                            oninput: move |e| search_query.set(e.value()),
+                        }
+                    }
+                    select {
+                        class: "rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700",
+                        value: role_scope_filter,
+                        onchange: move |e| role_scope_filter.set(e.value()),
+                        option { value: "all", "全部范围" }
+                        option { value: "self", "仅自己" }
+                        option { value: "department", "本部门" }
+                        option { value: "organization", "本公司/组织" }
+                        option { value: "all_scope", "全部数据" }
+                    }
+                    select {
+                        class: "rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700",
+                        value: role_capability_filter,
+                        onchange: move |e| role_capability_filter.set(e.value()),
+                        option { value: "all", "全部能力" }
+                        option { value: "submit", "可提交工单" }
+                        option { value: "approve", "可审批" }
+                        option { value: "provision", "可配置" }
+                        option { value: "deliver", "可交付" }
+                        option { value: "permissions", "可管理权限" }
+                        option { value: "operations", "可运维操作" }
                     }
                 }
             }
@@ -792,14 +836,53 @@ fn user_role_scope(roles: &[RoleRecord], user: &UserRecord) -> Option<String> {
     user_role_record(roles, user).and_then(role_scope_label)
 }
 
-fn user_role_capability_summary(roles: &[RoleRecord], user: &UserRecord) -> String {
+fn user_role_scope_key(roles: &[RoleRecord], user: &UserRecord) -> Option<String> {
     user_role_record(roles, user)
-        .map(role_capabilities)
+        .and_then(|role| role.permissions.as_ref())
+        .and_then(Value::as_object)
+        .and_then(|map| map.get("resource_ticket_scope"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn user_role_capability_summary(roles: &[RoleRecord], user: &UserRecord) -> String {
+    user_role_capabilities(roles, user)
         .unwrap_or_default()
         .into_iter()
         .take(3)
         .collect::<Vec<_>>()
         .join(" / ")
+}
+
+fn user_role_capabilities(roles: &[RoleRecord], user: &UserRecord) -> Option<Vec<String>> {
+    user_role_record(roles, user).map(role_capabilities)
+}
+
+fn scope_filter_matches(selected: &str, scope_key: Option<&str>) -> bool {
+    match selected {
+        "all" => true,
+        "all_scope" => scope_key == Some("all"),
+        other => scope_key == Some(other),
+    }
+}
+
+fn capability_filter_matches(selected: &str, capabilities: &Option<Vec<String>>) -> bool {
+    match selected {
+        "all" => true,
+        "submit" => capability_contains(capabilities, "可提交"),
+        "approve" => capability_contains(capabilities, "可审批"),
+        "provision" => capability_contains(capabilities, "可配置"),
+        "deliver" => capability_contains(capabilities, "可交付"),
+        "permissions" => capability_contains(capabilities, "可管理权限"),
+        "operations" => capability_contains(capabilities, "可运维操作"),
+        _ => true,
+    }
+}
+
+fn capability_contains(capabilities: &Option<Vec<String>>, pattern: &str) -> bool {
+    capabilities
+        .as_ref()
+        .is_some_and(|items| items.iter().any(|item| item.contains(pattern)))
 }
 
 fn role_capabilities(role: &RoleRecord) -> Vec<String> {

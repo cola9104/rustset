@@ -10,7 +10,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use shared::{CreateRoleRequest, CustomRole, Permissions, UpdateRoleRequest};
+use shared::{CreateRoleRequest, CustomRole, DataScope, Permissions, UpdateRoleRequest};
 
 fn normalize_role_name(name: &str) -> String {
     name.trim().to_string()
@@ -177,6 +177,108 @@ fn validate_role_name(name: &str) -> Result<(), ApiError> {
     }
 
     Ok(())
+}
+
+fn data_scope_label(scope: DataScope) -> &'static str {
+    match scope {
+        DataScope::SelfOnly => "仅自己",
+        DataScope::Department => "本部门",
+        DataScope::Organization => "本公司/组织",
+        DataScope::All => "全部",
+    }
+}
+
+fn enabled_permission_count(permissions: &Permissions) -> usize {
+    [
+        permissions.can_access_general,
+        permissions.can_view_dashboard,
+        permissions.can_view_tasks,
+        permissions.can_create_task,
+        permissions.can_delete_task,
+        permissions.can_update_task,
+        permissions.can_view_advanced_scan,
+        permissions.can_create_scan,
+        permissions.can_delete_scan,
+        permissions.can_export_scan,
+        permissions.can_access_assets_risks,
+        permissions.can_view_cloud_assets,
+        permissions.can_create_cloud_asset,
+        permissions.can_update_cloud_asset,
+        permissions.can_delete_cloud_asset,
+        permissions.can_view_risks,
+        permissions.can_resolve_risk,
+        permissions.can_delete_risk,
+        permissions.can_view_business_process,
+        permissions.can_view_business_applications,
+        permissions.can_create_business_application,
+        permissions.can_approve_business_application,
+        permissions.can_supplement_business_application,
+        permissions.can_delete_business_application,
+        permissions.can_view_operations_management,
+        permissions.can_manage_operations,
+        permissions.can_view_automation_orchestration,
+        permissions.can_execute_orchestration,
+        permissions.can_manage_orchestration,
+        permissions.can_access_cloud,
+        permissions.can_view_cloud_providers,
+        permissions.can_manage_cloud_providers,
+        permissions.can_access_user_management,
+        permissions.can_view_users,
+        permissions.can_create_user,
+        permissions.can_update_user,
+        permissions.can_delete_user,
+        permissions.can_manage_permissions,
+        permissions.can_view_password_policy,
+        permissions.can_manage_password_policy,
+        permissions.can_access_audit,
+        permissions.can_view_audit_logs,
+        permissions.can_view_resource_tickets,
+        permissions.can_create_resource_tickets,
+        permissions.can_approve_resource_tickets,
+        permissions.can_provision_resource_tickets,
+        permissions.can_deliver_resource_tickets,
+        permissions.can_delete_resource_tickets,
+    ]
+    .into_iter()
+    .filter(|enabled| *enabled)
+    .count()
+}
+
+fn role_workflow_summary(permissions: &Permissions) -> String {
+    let mut items = Vec::new();
+
+    if permissions.can_create_resource_tickets {
+        items.push("提交");
+    }
+    if permissions.can_approve_resource_tickets {
+        items.push("审批");
+    }
+    if permissions.can_provision_resource_tickets {
+        items.push("配置");
+    }
+    if permissions.can_deliver_resource_tickets {
+        items.push("交付");
+    }
+    if permissions.can_delete_resource_tickets {
+        items.push("删除");
+    }
+
+    if items.is_empty() {
+        "无工单流程权限".to_string()
+    } else {
+        format!("工单能力: {}", items.join("/"))
+    }
+}
+
+fn role_audit_summary(role: &CustomRole, affected_users: usize) -> String {
+    format!(
+        "角色名: {}, 数据范围: {}, 布尔权限数: {}, {}, 影响用户: {}",
+        role.name,
+        data_scope_label(role.permissions.resource_ticket_scope),
+        enabled_permission_count(&role.permissions),
+        role_workflow_summary(&role.permissions),
+        affected_users
+    )
 }
 
 fn role_name_exists(
@@ -472,7 +574,11 @@ pub async fn create_role(
                 &current_user,
                 "ROLE_CREATED",
                 &role_name,
-                &format!("Created custom role with ID {}", id),
+                &format!(
+                    "创建自定义角色(ID: {})，{}",
+                    id,
+                    role_audit_summary(&new_role, 0)
+                ),
             );
 
             return Ok(Json(serde_json::json!({
@@ -500,7 +606,11 @@ pub async fn create_role(
         &current_user,
         "ROLE_CREATED",
         &role_name,
-        &format!("Created custom role with ID {}", new_id),
+        &format!(
+            "创建自定义角色(ID: {})，{}",
+            new_id,
+            role_audit_summary(&new_role, 0)
+        ),
     );
 
     Ok(Json(serde_json::json!({
@@ -623,6 +733,9 @@ pub async fn update_role(
         }
     }
 
+    let affected_users = load_users_assigned_to_custom_role(&state, &old_role_name)
+        .await?
+        .len();
     sync_users_for_custom_role(&state, &old_role_name, &updated_role).await?;
 
     // Audit log
@@ -631,7 +744,12 @@ pub async fn update_role(
         &current_user,
         "ROLE_UPDATED",
         id.as_str(),
-        &format!("Updated custom role with ID {}", target_id),
+        &format!(
+            "更新自定义角色(ID: {})，旧名称: {}，{}",
+            target_id,
+            old_role_name,
+            role_audit_summary(&updated_role, affected_users)
+        ),
     );
 
     Ok(Json(serde_json::json!({
@@ -725,7 +843,10 @@ pub async fn delete_role(
         &current_user,
         "ROLE_DELETED",
         id.as_str(),
-        &format!("Deleted custom role with ID {}", target_id),
+        &format!(
+            "删除自定义角色(ID: {})，角色名: {}，影响用户: 0",
+            target_id, role_name
+        ),
     );
 
     Ok(Json(serde_json::json!({
