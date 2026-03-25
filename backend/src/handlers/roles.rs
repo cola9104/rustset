@@ -12,6 +12,188 @@ use axum::{
 };
 use shared::{CreateRoleRequest, CustomRole, Permissions, UpdateRoleRequest};
 
+fn normalize_role_name(name: &str) -> String {
+    name.trim().to_string()
+}
+
+fn is_reserved_role_name(name: &str) -> bool {
+    matches!(
+        name,
+        "系统管理员" | "安全管理员" | "审计员" | "SysAdmin" | "SecAdmin" | "Auditor"
+    )
+}
+
+fn enable_if_any(target: &mut bool, sources: &[bool]) {
+    if sources.iter().any(|enabled| *enabled) {
+        *target = true;
+    }
+}
+
+fn normalize_role_permissions(permissions: &mut Permissions) {
+    enable_if_any(
+        &mut permissions.can_view_tasks,
+        &[
+            permissions.can_create_task,
+            permissions.can_update_task,
+            permissions.can_delete_task,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_view_advanced_scan,
+        &[
+            permissions.can_create_scan,
+            permissions.can_delete_scan,
+            permissions.can_export_scan,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_view_cloud_assets,
+        &[
+            permissions.can_create_cloud_asset,
+            permissions.can_update_cloud_asset,
+            permissions.can_delete_cloud_asset,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_view_risks,
+        &[permissions.can_resolve_risk, permissions.can_delete_risk],
+    );
+    enable_if_any(
+        &mut permissions.can_view_business_applications,
+        &[
+            permissions.can_create_business_application,
+            permissions.can_approve_business_application,
+            permissions.can_supplement_business_application,
+            permissions.can_delete_business_application,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_view_operations_management,
+        &[permissions.can_manage_operations],
+    );
+    enable_if_any(
+        &mut permissions.can_view_automation_orchestration,
+        &[
+            permissions.can_execute_orchestration,
+            permissions.can_manage_orchestration,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_view_cloud_providers,
+        &[permissions.can_manage_cloud_providers],
+    );
+    enable_if_any(
+        &mut permissions.can_view_users,
+        &[
+            permissions.can_create_user,
+            permissions.can_update_user,
+            permissions.can_delete_user,
+            permissions.can_manage_permissions,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_view_password_policy,
+        &[permissions.can_manage_password_policy],
+    );
+    enable_if_any(
+        &mut permissions.can_view_resource_tickets,
+        &[
+            permissions.can_create_resource_tickets,
+            permissions.can_approve_resource_tickets,
+            permissions.can_provision_resource_tickets,
+            permissions.can_deliver_resource_tickets,
+            permissions.can_delete_resource_tickets,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_access_general,
+        &[
+            permissions.can_view_dashboard,
+            permissions.can_view_tasks,
+            permissions.can_create_task,
+            permissions.can_update_task,
+            permissions.can_delete_task,
+            permissions.can_view_advanced_scan,
+            permissions.can_create_scan,
+            permissions.can_delete_scan,
+            permissions.can_export_scan,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_access_assets_risks,
+        &[
+            permissions.can_view_cloud_assets,
+            permissions.can_create_cloud_asset,
+            permissions.can_update_cloud_asset,
+            permissions.can_delete_cloud_asset,
+            permissions.can_view_risks,
+            permissions.can_resolve_risk,
+            permissions.can_delete_risk,
+            permissions.can_view_business_process,
+            permissions.can_view_business_applications,
+            permissions.can_create_business_application,
+            permissions.can_approve_business_application,
+            permissions.can_supplement_business_application,
+            permissions.can_delete_business_application,
+            permissions.can_view_operations_management,
+            permissions.can_manage_operations,
+            permissions.can_view_automation_orchestration,
+            permissions.can_execute_orchestration,
+            permissions.can_manage_orchestration,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_access_cloud,
+        &[
+            permissions.can_view_cloud_providers,
+            permissions.can_manage_cloud_providers,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_access_user_management,
+        &[
+            permissions.can_view_users,
+            permissions.can_create_user,
+            permissions.can_update_user,
+            permissions.can_delete_user,
+            permissions.can_manage_permissions,
+            permissions.can_view_password_policy,
+            permissions.can_manage_password_policy,
+        ],
+    );
+    enable_if_any(
+        &mut permissions.can_access_audit,
+        &[permissions.can_view_audit_logs],
+    );
+}
+
+fn validate_role_name(name: &str) -> Result<(), ApiError> {
+    if name.is_empty() {
+        return Err(ApiError::bad_request("角色名称不能为空"));
+    }
+
+    if is_reserved_role_name(name) {
+        return Err(ApiError::bad_request("角色名称不能与系统内置角色重名"));
+    }
+
+    Ok(())
+}
+
+fn role_name_exists(
+    state: &AppState,
+    name: &str,
+    exclude_id: Option<i32>,
+) -> Result<bool, ApiError> {
+    let custom_roles = state
+        .custom_roles
+        .read()
+        .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
+
+    Ok(custom_roles.iter().any(|role| {
+        role.id != exclude_id && normalize_role_name(&role.name).eq_ignore_ascii_case(name)
+    }))
+}
+
 /// Get all roles (including system predefined roles and custom roles)
 #[utoipa::path(
     get,
@@ -249,26 +431,22 @@ pub async fn create_role(
         return Err(ApiError::forbidden("Access denied"));
     }
 
-    // 检查角色名称是否已存在
-    {
-        let custom_roles = state
-            .custom_roles
-            .read()
-            .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
-        if custom_roles.iter().any(|r| r.name == req.name) {
-            return Ok(Json(serde_json::json!({
-                "error": "角色名称已存在"
-            })));
-        }
+    let role_name = normalize_role_name(&req.name);
+    validate_role_name(&role_name)?;
+    if role_name_exists(&state, &role_name, None)? {
+        return Err(ApiError::conflict("角色名称已存在"));
     }
+
+    let mut permissions = req.permissions;
+    normalize_role_permissions(&mut permissions);
 
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     let new_role = CustomRole {
         id: None, // Database will assign ID
-        name: req.name.clone(),
+        name: role_name.clone(),
         description: req.description,
-        permissions: req.permissions,
+        permissions,
         created_at: Some(now.clone()),
         updated_at: Some(now),
     };
@@ -293,13 +471,13 @@ pub async fn create_role(
                 &state.audit_logs,
                 &current_user,
                 "ROLE_CREATED",
-                &req.name,
+                &role_name,
                 &format!("Created custom role with ID {}", id),
             );
 
             return Ok(Json(serde_json::json!({
                 "id": id,
-                "name": req.name,
+                "name": role_name,
                 "message": "角色创建成功"
             })));
         }
@@ -321,13 +499,13 @@ pub async fn create_role(
         &state.audit_logs,
         &current_user,
         "ROLE_CREATED",
-        &req.name,
+        &role_name,
         &format!("Created custom role with ID {}", new_id),
     );
 
     Ok(Json(serde_json::json!({
         "id": new_id,
-        "name": req.name,
+        "name": role_name,
         "message": "角色创建成功"
     })))
 }
@@ -369,9 +547,7 @@ pub async fn update_role(
 
     // 不允许修改系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
-        return Ok(Json(serde_json::json!({
-            "error": "不能修改系统内置角色"
-        })));
+        return Err(ApiError::bad_request("不能修改系统内置角色"));
     }
 
     let role_id = id
@@ -413,12 +589,19 @@ pub async fn update_role(
     let old_role_name = current_role.name.clone();
     let mut updated_role = current_role.clone();
     if let Some(name) = req.name {
-        updated_role.name = name;
+        let normalized_name = normalize_role_name(&name);
+        validate_role_name(&normalized_name)?;
+        if role_name_exists(&state, &normalized_name, Some(target_id))? {
+            return Err(ApiError::conflict("角色名称已存在"));
+        }
+        updated_role.name = normalized_name;
     }
     if let Some(description) = req.description {
         updated_role.description = Some(description);
     }
     if let Some(permissions) = req.permissions {
+        let mut permissions = permissions;
+        normalize_role_permissions(&mut permissions);
         updated_role.permissions = permissions;
     }
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -491,9 +674,7 @@ pub async fn delete_role(
 
     // 不允许删除系统角色
     if matches!(id.as_str(), "sys_admin" | "sec_admin" | "auditor") {
-        return Ok(Json(serde_json::json!({
-            "error": "不能删除系统内置角色"
-        })));
+        return Err(ApiError::bad_request("不能删除系统内置角色"));
     }
 
     let role_id = id

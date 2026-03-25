@@ -85,6 +85,82 @@ fn is_pending_provision_status(status: TicketStatus) -> bool {
     status.is_pending_provision_stage()
 }
 
+fn scope_label(value: Option<&str>) -> &'static str {
+    match value {
+        Some("self") => "仅本人",
+        Some("department") => "本部门",
+        Some("organization") => "本公司/组织",
+        Some("all") => "全部数据",
+        _ => "未配置",
+    }
+}
+
+fn ticket_stage_guidance(
+    ticket: &ResourceTicket,
+    current_auth: &AuthState,
+) -> (&'static str, String) {
+    match ticket.ticket_status {
+        TicketStatus::PendingApproval => {
+            if current_auth.can_approve() {
+                (
+                    "info",
+                    "当前工单处于待审批状态，你可以在下方完成审批。".to_string(),
+                )
+            } else {
+                (
+                    "warning",
+                    format!(
+                        "当前工单处于待审批状态，但你的角色未开启“审批资源工单”权限。当前数据范围: {}。",
+                        scope_label(current_auth.scope_value("resource_ticket_scope"))
+                    ),
+                )
+            }
+        }
+        status if is_pending_provision_status(status) => {
+            if current_auth.can_provision() {
+                (
+                    "info",
+                    "当前工单已进入待配置阶段，你可以在下方提交配置结果。".to_string(),
+                )
+            } else {
+                (
+                    "warning",
+                    format!(
+                        "当前工单已进入待配置阶段，但你的角色未开启“配置资源工单”权限。当前数据范围: {}。",
+                        scope_label(current_auth.scope_value("resource_ticket_scope"))
+                    ),
+                )
+            }
+        }
+        TicketStatus::PendingDelivery => {
+            if current_auth.can_deliver() {
+                (
+                    "info",
+                    "当前工单已进入待交付阶段，你可以在下方复核并确认交付。".to_string(),
+                )
+            } else {
+                (
+                    "warning",
+                    format!(
+                        "当前工单已进入待交付阶段，但你的角色未开启“交付资源工单”权限。当前数据范围: {}。",
+                        scope_label(current_auth.scope_value("resource_ticket_scope"))
+                    ),
+                )
+            }
+        }
+        TicketStatus::Rejected => ("neutral", "该工单已被拒绝，流程不会继续流转。".to_string()),
+        TicketStatus::Delivered => (
+            "neutral",
+            "该工单已完成交付，当前页面为只读查看。".to_string(),
+        ),
+        TicketStatus::Archived => ("neutral", "该工单已归档，当前页面为只读查看。".to_string()),
+        _ => (
+            "neutral",
+            "当前工单暂不需要新的流程动作，可在此查看完整申请和流转记录。".to_string(),
+        ),
+    }
+}
+
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
 #[allow(non_snake_case)]
 pub fn ResourceTicket() -> Element {
@@ -1092,6 +1168,7 @@ fn TicketDetailView(
         || (is_pending_provision_status(ticket.ticket_status) && current_auth.can_provision());
     let show_delivery_section = delivery_completed
         || (ticket.ticket_status == TicketStatus::PendingDelivery && current_auth.can_deliver());
+    let (guidance_tone, guidance_message) = ticket_stage_guidance(&ticket, &current_auth);
 
     rsx! {
         div { class: "space-y-6",
@@ -1101,6 +1178,15 @@ fn TicketDetailView(
                 onclick: move |_| on_back.call(()),
                 Icon { icon: FaArrowLeft, class: "text-sm" }
                 "返回列表"
+            }
+
+            div {
+                class: match guidance_tone {
+                    "info" => "rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800",
+                    "warning" => "rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    _ => "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700",
+                },
+                "{guidance_message}"
             }
 
             // 主要内容卡片

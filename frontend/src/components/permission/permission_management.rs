@@ -20,6 +20,8 @@ struct RoleSummary {
     is_system: bool,
     user_count: usize,
     permissions: Vec<String>,
+    workflow_permissions: Vec<String>,
+    resource_ticket_scope: String,
     created_at: Option<String>,
 }
 
@@ -444,6 +446,14 @@ pub fn PermissionManagement() -> Element {
                                     }
                                 }
                                 div { class: "flex flex-wrap gap-2",
+                                    span { class: "px-2 py-1 text-xs rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700",
+                                        "工单范围: {role.resource_ticket_scope}"
+                                    }
+                                    for capability in role.workflow_permissions.iter() {
+                                        span { class: "px-2 py-1 text-xs rounded-full border border-emerald-100 bg-emerald-50 text-emerald-700",
+                                            "{capability}"
+                                        }
+                                    }
                                     for permission in role.permissions.iter().take(10) {
                                         span { class: "px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700",
                                             "{permission}"
@@ -551,6 +561,9 @@ pub fn PermissionManagement() -> Element {
                                 option { value: "organization", "本公司/组织" }
                                 option { value: "all", "全部" }
                             }
+                            p { class: "mt-2 text-xs leading-5 text-slate-500",
+                                "这里控制该角色在资源工单里默认能查看本人、部门、公司/组织还是全部数据。审批、配置、交付类角色通常应设置为“全部”或至少“本公司/组织”。"
+                            }
                         }
                     }
                     div {
@@ -645,6 +658,7 @@ pub fn PermissionManagement() -> Element {
 }
 
 fn build_role_summary(role: &RoleRecord, users: &[UserRecord]) -> RoleSummary {
+    let permissions_value = role.permissions.as_ref().and_then(Value::as_object);
     let user_count = users
         .iter()
         .filter(|user| user_matches_role(user, role))
@@ -659,6 +673,12 @@ fn build_role_summary(role: &RoleRecord, users: &[UserRecord]) -> RoleSummary {
         is_system: role.is_system,
         user_count,
         permissions: permissions_for_role(role),
+        workflow_permissions: workflow_permissions_for_role(role),
+        resource_ticket_scope: permissions_value
+            .and_then(|map| map.get("resource_ticket_scope"))
+            .and_then(Value::as_str)
+            .map(resource_ticket_scope_label)
+            .unwrap_or_else(|| default_scope_for_role(role).to_string()),
         created_at: role.created_at.clone(),
     }
 }
@@ -893,6 +913,49 @@ fn permissions_for_role(role: &RoleRecord) -> Vec<String> {
     }
 }
 
+fn workflow_permissions_for_role(role: &RoleRecord) -> Vec<String> {
+    let permissions = role.permissions.as_ref().and_then(Value::as_object);
+    let mut items = Vec::new();
+
+    if permission_enabled(permissions, "can_create_resource_tickets") {
+        items.push("可提交".to_string());
+    }
+    if permission_enabled(permissions, "can_approve_resource_tickets") {
+        items.push("可审批".to_string());
+    }
+    if permission_enabled(permissions, "can_provision_resource_tickets") {
+        items.push("可配置".to_string());
+    }
+    if permission_enabled(permissions, "can_deliver_resource_tickets") {
+        items.push("可交付".to_string());
+    }
+    if permission_enabled(permissions, "can_delete_resource_tickets") {
+        items.push("可删除工单".to_string());
+    }
+
+    if items.is_empty() && role.is_system {
+        match role.role.as_deref().unwrap_or_default() {
+            "SysAdmin" => {
+                items.push("可提交".to_string());
+                items.push("可审批".to_string());
+                items.push("可配置".to_string());
+                items.push("可交付".to_string());
+                items.push("可删除工单".to_string());
+            }
+            "SecAdmin" => {
+                items.push("可提交".to_string());
+                items.push("可审批".to_string());
+                items.push("可配置".to_string());
+                items.push("可交付".to_string());
+            }
+            "Auditor" => items.push("全局只读".to_string()),
+            _ => {}
+        }
+    }
+
+    items
+}
+
 fn system_role_permissions(role: Option<&str>) -> Vec<String> {
     match role.unwrap_or_default() {
         "SysAdmin" => vec![
@@ -942,17 +1005,34 @@ fn permission_label_text(key: &str) -> Option<&'static str> {
 
 fn permission_value_label(key: &str, value: &str) -> String {
     match key {
-        "resource_ticket_scope" => format!(
-            "资源工单范围: {}",
-            match value {
-                "self" => "仅自己",
-                "department" => "本部门",
-                "organization" => "本公司/组织",
-                "all" => "全部",
-                _ => value,
-            }
-        ),
+        "resource_ticket_scope" => {
+            format!("资源工单范围: {}", resource_ticket_scope_label(value))
+        }
         _ => format!("{}: {}", permission_label(key), value),
+    }
+}
+
+fn permission_enabled(permissions: Option<&Map<String, Value>>, key: &str) -> bool {
+    permissions
+        .and_then(|map| map.get(key))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn resource_ticket_scope_label(value: &str) -> String {
+    match value {
+        "self" => "仅自己".to_string(),
+        "department" => "本部门".to_string(),
+        "organization" => "本公司/组织".to_string(),
+        "all" => "全部".to_string(),
+        _ => value.to_string(),
+    }
+}
+
+fn default_scope_for_role(role: &RoleRecord) -> &'static str {
+    match role.role.as_deref().unwrap_or_default() {
+        "SysAdmin" | "SecAdmin" | "Auditor" => "全部",
+        _ => "仅自己",
     }
 }
 

@@ -36,6 +36,28 @@ fn with_auth(mut request: RequestBuilder) -> RequestBuilder {
     request
 }
 
+async fn read_error_message(response: gloo_net::http::Response) -> String {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|json| {
+            json.get("message")
+                .and_then(Value::as_str)
+                .or_else(|| json.get("error").and_then(Value::as_str))
+                .map(|msg| msg.to_string())
+        })
+        .filter(|msg| !msg.trim().is_empty())
+        .unwrap_or_else(|| {
+            if body.trim().is_empty() {
+                format!("服务器错误: {}", status)
+            } else {
+                body
+            }
+        })
+}
+
 pub async fn fetch_roles() -> Result<Vec<RoleRecord>, String> {
     let response = with_auth(
         Request::get(&format!("{}/roles", api_base())).credentials(RequestCredentials::Include),
@@ -45,7 +67,7 @@ pub async fn fetch_roles() -> Result<Vec<RoleRecord>, String> {
     .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     response
@@ -65,7 +87,7 @@ pub async fn create_role(payload: &RolePayload) -> Result<(), String> {
     .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     Ok(())
@@ -83,7 +105,7 @@ pub async fn update_role(id: &str, payload: &RolePayload) -> Result<(), String> 
     .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     Ok(())
@@ -99,7 +121,7 @@ pub async fn delete_role(id: &str) -> Result<(), String> {
     .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     Ok(())
