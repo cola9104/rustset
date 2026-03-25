@@ -130,7 +130,8 @@ use handlers::{
     tasks::{create_task, delete_task, get_tasks, trigger_scan, update_task},
     users::{
         change_password, create_user, delete_user, get_current_user_info, get_password_policy,
-        get_users, update_password_policy, update_user, update_user_permissions,
+        get_users, update_current_user_profile, update_password_policy, update_user,
+        update_user_permissions,
     },
     zones::{create_zone, delete_zone, get_zones, update_zone},
 };
@@ -391,7 +392,10 @@ async fn main() {
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
         .route("/api/refresh-token", post(refresh_token))
-        .route("/api/users/me", get(get_current_user_info)) // 必须在 {id} 之前
+        .route(
+            "/api/users/me",
+            get(get_current_user_info).put(update_current_user_profile),
+        ) // 必须在 {id} 之前
         .route("/api/users", get(get_users).post(create_user))
         .route("/api/users/{id}", put(update_user).delete(delete_user))
         .route("/api/users/{id}/permissions", put(update_user_permissions))

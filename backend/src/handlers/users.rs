@@ -26,6 +26,13 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
+pub struct UpdateCurrentUserProfileRequest {
+    pub real_name: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct CurrentUserInfoResponse {
     pub id: String,
@@ -200,6 +207,17 @@ async fn persist_user(state: &AppState, user: &User) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn normalize_optional_input(value: Option<String>) -> Option<String> {
+    value.and_then(|item| {
+        let trimmed = item.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
 fn is_builtin_system_account(username: &str) -> bool {
     matches!(username, "admin" | "sec" | "audit")
 }
@@ -239,6 +257,55 @@ async fn validate_user_binding(
     }
 
     Ok(())
+}
+
+async fn build_current_user_info_response(
+    state: &AppState,
+    user: &User,
+) -> Result<CurrentUserInfoResponse, ApiError> {
+    let (organization_name, department_name) = if let Some(conn) = get_db() {
+        let organization_name = match user.organization_id {
+            Some(id) => get_organization_by_id(conn.as_ref(), id)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to load organization: {}", e)))?
+                .map(|item| item.name),
+            None => None,
+        };
+
+        let department_name = match user.department_id {
+            Some(id) => get_department_by_id(conn.as_ref(), id)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to load department: {}", e)))?
+                .map(|item| item.name),
+            None => None,
+        };
+
+        (organization_name, department_name)
+    } else {
+        (None, None)
+    };
+
+    let display_name = user
+        .real_name
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| user.username.clone());
+    let permissions = effective_permissions(state, user).await;
+
+    Ok(CurrentUserInfoResponse {
+        id: user.id.clone(),
+        username: user.username.clone(),
+        real_name: user.real_name.clone(),
+        display_name,
+        email: user.email.clone(),
+        phone: user.phone.clone(),
+        role: user.role.clone(),
+        permissions: Some(permissions),
+        organization_id: user.organization_id,
+        organization_name,
+        department_id: user.department_id,
+        department_name,
+    })
 }
 
 /// Get all users
@@ -728,45 +795,67 @@ pub async fn get_current_user_info(
         .await
         .ok_or_else(|| ApiError::unauthorized("User not found"))?;
 
-    let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+    Ok(Json(build_current_user_info_response(&state, &user).await?))
+}
 
-    let organization_name = match user.organization_id {
-        Some(id) => get_organization_by_id(conn.as_ref(), id)
-            .await
-            .map_err(|e| ApiError::internal(format!("Failed to load organization: {}", e)))?
-            .map(|item| item.name),
-        None => None,
+/// Update current user profile
+#[utoipa::path(
+    put,
+    path = "/api/users/me",
+    request_body = UpdateCurrentUserProfileRequest,
+    responses(
+        (status = 200, description = "Current user profile updated", body = CurrentUserInfoResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Invalid profile data")
+    ),
+    security(
+        ("bearer_auth" = [])
+    ),
+    tag = "users"
+)]
+pub async fn update_current_user_profile(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<UpdateCurrentUserProfileRequest>,
+) -> Result<Json<CurrentUserInfoResponse>, ApiError> {
+    let mut user = get_current_user_from_auth(&auth_user, &state.users)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("User not found"))?;
+
+    let next_real_name = match req.real_name.clone() {
+        Some(value) => normalize_optional_input(Some(value)),
+        None => user.real_name.clone(),
     };
 
-    let department_name = match user.department_id {
-        Some(id) => get_department_by_id(conn.as_ref(), id)
-            .await
-            .map_err(|e| ApiError::internal(format!("Failed to load department: {}", e)))?
-            .map(|item| item.name),
-        None => None,
-    };
+    validate_user_binding(
+        &user.username,
+        next_real_name.as_deref(),
+        user.organization_id,
+        user.department_id,
+    )
+    .await?;
 
-    let display_name = user
-        .real_name
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| user.username.clone());
-    let permissions = effective_permissions(&state, &user).await;
+    if req.real_name.is_some() {
+        user.real_name = next_real_name;
+    }
+    if req.email.is_some() {
+        user.email = normalize_optional_input(req.email);
+    }
+    if req.phone.is_some() {
+        user.phone = normalize_optional_input(req.phone);
+    }
 
-    Ok(Json(CurrentUserInfoResponse {
-        id: user.id,
-        username: user.username,
-        real_name: user.real_name,
-        display_name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        permissions: Some(permissions),
-        organization_id: user.organization_id,
-        organization_name,
-        department_id: user.department_id,
-        department_name,
-    }))
+    persist_user(&state, &user).await?;
+
+    log_action(
+        &state.audit_logs,
+        &user,
+        "UPDATE_SELF_PROFILE",
+        &user.username,
+        "Updated current user profile",
+    );
+
+    Ok(Json(build_current_user_info_response(&state, &user).await?))
 }
 
 #[cfg(test)]

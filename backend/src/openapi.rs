@@ -25,6 +25,7 @@ use utoipa::OpenApi;
         crate::handlers::users::update_user_permissions,
         crate::handlers::users::change_password,
         crate::handlers::users::get_current_user_info,
+        crate::handlers::users::update_current_user_profile,
         // Roles
         crate::handlers::roles::get_roles,
         crate::handlers::roles::get_role,
@@ -52,6 +53,8 @@ use utoipa::OpenApi;
             shared::Role,
             shared::CustomRole,
             shared::Permissions,
+            crate::handlers::users::CurrentUserInfoResponse,
+            crate::handlers::users::UpdateCurrentUserProfileRequest,
             shared::CreateRoleRequest,
             shared::UpdateRoleRequest,
             shared::BusinessResource,

@@ -1,4 +1,5 @@
-use crate::config::users_url;
+use crate::app::AuthUser;
+use crate::config::{current_user_url, users_url};
 use crate::utils::storage::authorization_header;
 use gloo_net::http::{Request, RequestBuilder};
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,38 @@ pub struct UpdateUserPayload {
     pub department_id: Option<i32>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct UpdateCurrentUserProfilePayload {
+    pub real_name: Option<String>,
+    pub email: Option<String>,
+    pub phone: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct CurrentUserProfileResponse {
+    id: String,
+    username: String,
+    #[serde(default)]
+    real_name: Option<String>,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    phone: Option<String>,
+    role: Value,
+    #[serde(default)]
+    permissions: Value,
+    #[serde(default)]
+    organization_id: Option<i32>,
+    #[serde(default)]
+    organization_name: Option<String>,
+    #[serde(default)]
+    department_id: Option<i32>,
+    #[serde(default)]
+    department_name: Option<String>,
+}
+
 fn with_auth(mut request: RequestBuilder) -> RequestBuilder {
     if let Some(header) = authorization_header() {
         request = request.header("Authorization", &header);
@@ -92,6 +125,35 @@ fn parse_role(value: &Value) -> (String, String) {
             .unwrap_or_else(|| ("未知角色".to_string(), "Unknown".to_string())),
         _ => ("未知角色".to_string(), "Unknown".to_string()),
     }
+}
+
+fn parse_backend_role(value: &Value) -> String {
+    match value {
+        Value::String(raw) => raw.clone(),
+        Value::Object(map) => map
+            .get("Custom")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| "Custom".to_string()),
+        _ => "Unknown".to_string(),
+    }
+}
+
+fn permission_strings_from_value(value: &Value) -> Vec<String> {
+    value
+        .as_object()
+        .map(|permissions| {
+            let mut items = Vec::new();
+            for (key, raw_value) in permissions {
+                if raw_value.as_bool().is_some_and(|enabled| enabled) {
+                    items.push(key.clone());
+                } else if let Some(scope) = raw_value.as_str() {
+                    items.push(format!("{key}:{scope}"));
+                }
+            }
+            items
+        })
+        .unwrap_or_default()
 }
 
 async fn read_error_message(response: gloo_net::http::Response) -> String {
@@ -137,6 +199,29 @@ impl From<BackendUser> for UserRecord {
                 .map(format_timestamp)
                 .unwrap_or_else(|| "从未登录".to_string()),
             created_at: format_timestamp(&user.created_at),
+        }
+    }
+}
+
+impl From<CurrentUserProfileResponse> for AuthUser {
+    fn from(user: CurrentUserProfileResponse) -> Self {
+        Self {
+            id: user.id,
+            username: user.username.clone(),
+            real_name: user.real_name.clone().unwrap_or_default(),
+            display_name: user
+                .display_name
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| user.real_name.clone())
+                .unwrap_or_else(|| user.username.clone()),
+            email: user.email.unwrap_or_default(),
+            phone: user.phone.unwrap_or_default(),
+            role: parse_backend_role(&user.role),
+            permissions: permission_strings_from_value(&user.permissions),
+            organization_id: user.organization_id,
+            organization_name: user.organization_name.unwrap_or_default(),
+            department_id: user.department_id,
+            department_name: user.department_name.unwrap_or_default(),
         }
     }
 }
@@ -215,4 +300,27 @@ pub async fn update_user(id: &str, payload: &UpdateUserPayload) -> Result<UserRe
         .map_err(|e| format!("解析失败: {}", e))?;
 
     Ok(UserRecord::from(user))
+}
+
+pub async fn update_current_user_profile(
+    payload: &UpdateCurrentUserProfilePayload,
+) -> Result<AuthUser, String> {
+    let response =
+        with_auth(Request::put(&current_user_url()).credentials(RequestCredentials::Include))
+            .json(payload)
+            .map_err(|e| format!("构建请求失败: {}", e))?
+            .send()
+            .await
+            .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(read_error_message(response).await);
+    }
+
+    let user = response
+        .json::<CurrentUserProfileResponse>()
+        .await
+        .map_err(|e| format!("解析失败: {}", e))?;
+
+    Ok(AuthUser::from(user))
 }
