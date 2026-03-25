@@ -236,7 +236,7 @@ pub fn PermissionManagement() -> Element {
     let mut search_query = use_signal(String::new);
     let mut show_editor = use_signal(|| false);
     let mut editor_state = use_signal(RoleEditorState::default);
-    let mut delete_target = use_signal(|| Option::<(String, String)>::None);
+    let mut delete_target = use_signal(|| Option::<(String, String, usize)>::None);
     let loading = use_signal(|| true);
     let mut error = use_signal(String::new);
     let mut success = use_signal(String::new);
@@ -300,6 +300,10 @@ pub fn PermissionManagement() -> Element {
     }
     let permission_rows: Vec<(String, usize)> = permission_counts.into_iter().collect();
     let editor_snapshot = editor_state.read().clone();
+    let editing_role_summary = editor_snapshot
+        .id
+        .as_ref()
+        .and_then(|id| summaries.iter().find(|summary| summary.id == *id).cloned());
 
     rsx! {
         div { class: "space-y-6",
@@ -434,11 +438,17 @@ pub fn PermissionManagement() -> Element {
                                                 Icon { icon: FaPenToSquare, width: 16, height: 16 }
                                             }
                                             button {
-                                                class: "text-red-600 hover:text-red-800",
+                                                class: if role.user_count > 0 {
+                                                    "text-gray-300 cursor-not-allowed"
+                                                } else {
+                                                    "text-red-600 hover:text-red-800"
+                                                },
+                                                disabled: role.user_count > 0,
                                                 onclick: {
                                                     let role_id = role.id.clone();
                                                     let role_name = role.name.clone();
-                                                    move |_| delete_target.set(Some((role_id.clone(), role_name.clone())))
+                                                    let role_user_count = role.user_count;
+                                                    move |_| delete_target.set(Some((role_id.clone(), role_name.clone(), role_user_count)))
                                                 },
                                                 Icon { icon: FaTrash, width: 16, height: 16 }
                                             }
@@ -541,6 +551,15 @@ pub fn PermissionManagement() -> Element {
                     div { class: "rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700",
                         "系统角色保持内置策略不开放编辑；自定义角色支持按模块勾选权限。保存时会自动补齐必要的模块访问和查看权限，避免出现子权限已开但页面无法访问的配置。"
                     }
+                    if let Some(summary) = editing_role_summary.clone() {
+                        div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                            "当前有 {summary.user_count} 个用户绑定此角色。保存后，这些用户的有效权限、工单范围和前端可见页面会立即按新配置生效。"
+                        }
+                    } else {
+                        div { class: "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700",
+                            "新建角色后，可在用户管理里分配给具体账号；分配后该角色的数据范围和流程能力会立即影响对应用户。"
+                        }
+                    }
                     div { class: "grid grid-cols-1 md:grid-cols-2 gap-4",
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1", "角色名称" }
@@ -624,13 +643,28 @@ pub fn PermissionManagement() -> Element {
                 message: delete_target
                     .read()
                     .as_ref()
-                    .map(|(_, name)| format!("确定要删除角色“{}”吗？", name))
+                    .map(|(_, name, user_count)| {
+                        if *user_count > 0 {
+                            format!(
+                                "角色“{}”当前仍分配给 {} 个用户，需先把这些用户切换到其它角色后才能删除。",
+                                name, user_count
+                            )
+                        } else {
+                            format!("确定要删除角色“{}”吗？", name)
+                        }
+                    })
                     .unwrap_or_default(),
                 confirm_type: ConfirmType::Danger,
                 confirm_text: "删除".to_string(),
                 cancel_text: "取消".to_string(),
                 on_confirm: move |_| {
-                    if let Some((role_id, _)) = delete_target.read().clone() {
+                    let target = delete_target.read().clone();
+                    if let Some((role_id, _, user_count)) = target {
+                        if user_count > 0 {
+                            error.set("该角色仍绑定用户，请先迁移用户后再删除".to_string());
+                            delete_target.set(None);
+                            return;
+                        }
                         let mut roles = roles;
                         let mut delete_target = delete_target;
                         let mut error = error;

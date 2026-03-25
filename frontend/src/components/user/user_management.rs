@@ -81,6 +81,7 @@ pub fn UserManagement() -> Element {
         .cloned()
         .collect();
     let is_empty = filtered_users.is_empty();
+    let role_catalog = roles.read().clone();
 
     let total_count = users.read().len() as i32;
     let active_count = users
@@ -222,6 +223,21 @@ pub fn UserManagement() -> Element {
                                     td { class: "px-6 py-4 whitespace-nowrap",
                                         span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800",
                                             "{user.role_label}"
+                                        }
+                                        if let Some(role_scope) = user_role_scope(&role_catalog, &user) {
+                                            div { class: "mt-1 text-xs text-indigo-600", "工单范围: {role_scope}" }
+                                        }
+                                        {
+                                            let capability_summary = user_role_capability_summary(&role_catalog, &user);
+                                            if !capability_summary.is_empty() {
+                                                rsx! {
+                                                    div { class: "mt-1 text-xs text-gray-500",
+                                                        "{capability_summary}"
+                                                    }
+                                                }
+                                            } else {
+                                                rsx! {}
+                                            }
                                         }
                                     }
                                     td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
@@ -757,6 +773,33 @@ fn role_scope_label(role: &RoleRecord) -> Option<String> {
             "all" => "全部".to_string(),
             other => other.to_string(),
         })
+}
+
+fn user_role_record<'a>(roles: &'a [RoleRecord], user: &UserRecord) -> Option<&'a RoleRecord> {
+    roles.iter().find(|role| {
+        if role.is_system {
+            role.role
+                .as_deref()
+                .map(|value| value == user.role_value)
+                .unwrap_or(false)
+        } else {
+            role.name == user.role_value
+        }
+    })
+}
+
+fn user_role_scope(roles: &[RoleRecord], user: &UserRecord) -> Option<String> {
+    user_role_record(roles, user).and_then(role_scope_label)
+}
+
+fn user_role_capability_summary(roles: &[RoleRecord], user: &UserRecord) -> String {
+    user_role_record(roles, user)
+        .map(role_capabilities)
+        .unwrap_or_default()
+        .into_iter()
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" / ")
 }
 
 fn role_capabilities(role: &RoleRecord) -> Vec<String> {
