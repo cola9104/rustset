@@ -234,6 +234,9 @@ pub fn PermissionManagement() -> Element {
     let roles = use_signal(Vec::<RoleRecord>::new);
     let users = use_signal(Vec::<UserRecord>::new);
     let mut search_query = use_signal(String::new);
+    let mut role_type_filter = use_signal(|| "all".to_string());
+    let mut scope_filter = use_signal(|| "all".to_string());
+    let mut capability_filter = use_signal(|| "all".to_string());
     let mut show_editor = use_signal(|| false);
     let mut editor_state = use_signal(RoleEditorState::default);
     let mut delete_target = use_signal(|| Option::<(String, String, usize)>::None);
@@ -278,17 +281,28 @@ pub fn PermissionManagement() -> Element {
     let total_users = users.read().len() as i32;
 
     let query = search_query.read().to_lowercase();
+    let role_type_filter_value = role_type_filter.read().clone();
+    let scope_filter_value = scope_filter.read().clone();
+    let capability_filter_value = capability_filter.read().clone();
     let filtered_summaries: Vec<RoleSummary> = summaries
         .iter()
         .filter(|role| {
             query.is_empty()
                 || role.name.to_lowercase().contains(&query)
                 || role.description.to_lowercase().contains(&query)
+                || role.resource_ticket_scope.to_lowercase().contains(&query)
+                || role
+                    .workflow_permissions
+                    .iter()
+                    .any(|permission| permission.to_lowercase().contains(&query))
                 || role
                     .permissions
                     .iter()
                     .any(|permission| permission.to_lowercase().contains(&query))
         })
+        .filter(|role| role_type_matches(role, &role_type_filter_value))
+        .filter(|role| scope_matches(role, &scope_filter_value))
+        .filter(|role| capability_matches(role, &capability_filter_value))
         .cloned()
         .collect();
 
@@ -374,15 +388,51 @@ pub fn PermissionManagement() -> Element {
             }
 
             div { class: "bg-white rounded-lg shadow p-4",
-                div { class: "flex items-center",
-                    Icon { icon: FaMagnifyingGlass, width: 18, height: 18, class: "text-gray-400" }
-                    input {
-                        r#type: "text",
-                        class: "ml-2 w-full border-0 focus:outline-none",
-                        placeholder: "搜索角色名、描述或权限关键字...",
-                        value: search_query,
-                        oninput: move |e| search_query.set(e.value()),
+                div { class: "grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr),160px,180px,180px]",
+                    div { class: "flex items-center",
+                        Icon { icon: FaMagnifyingGlass, width: 18, height: 18, class: "text-gray-400" }
+                        input {
+                            r#type: "text",
+                            class: "ml-2 w-full border-0 focus:outline-none",
+                            placeholder: "搜索角色名、描述、范围或权限关键字...",
+                            value: search_query,
+                            oninput: move |e| search_query.set(e.value()),
+                        }
                     }
+                    select {
+                        class: "rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700",
+                        value: role_type_filter,
+                        onchange: move |e| role_type_filter.set(e.value()),
+                        option { value: "all", "全部角色" }
+                        option { value: "system", "系统角色" }
+                        option { value: "custom", "自定义角色" }
+                    }
+                    select {
+                        class: "rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700",
+                        value: scope_filter,
+                        onchange: move |e| scope_filter.set(e.value()),
+                        option { value: "all", "全部范围" }
+                        option { value: "仅自己", "仅自己" }
+                        option { value: "本部门", "本部门" }
+                        option { value: "本公司/组织", "本公司/组织" }
+                        option { value: "全部", "全部" }
+                    }
+                    select {
+                        class: "rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700",
+                        value: capability_filter,
+                        onchange: move |e| capability_filter.set(e.value()),
+                        option { value: "all", "全部流程能力" }
+                        option { value: "可提交", "可提交" }
+                        option { value: "可审批", "可审批" }
+                        option { value: "可配置", "可配置" }
+                        option { value: "可交付", "可交付" }
+                        option { value: "可删除工单", "可删除工单" }
+                        option { value: "全局只读", "全局只读" }
+                    }
+                }
+                div { class: "mt-3 flex flex-wrap gap-2 text-xs text-gray-500",
+                    span { class: "rounded-full bg-gray-100 px-3 py-1", "当前结果 {filtered_summaries.len()} 个角色" }
+                    span { class: "rounded-full bg-indigo-50 px-3 py-1 text-indigo-700", "搜索支持工单范围和流程能力关键字" }
                 }
             }
 
@@ -459,9 +509,15 @@ pub fn PermissionManagement() -> Element {
                                     span { class: "px-2 py-1 text-xs rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700",
                                         "工单范围: {role.resource_ticket_scope}"
                                     }
-                                    for capability in role.workflow_permissions.iter() {
-                                        span { class: "px-2 py-1 text-xs rounded-full border border-emerald-100 bg-emerald-50 text-emerald-700",
-                                            "{capability}"
+                                    if role.workflow_permissions.is_empty() {
+                                        span { class: "px-2 py-1 text-xs rounded-full border border-slate-200 bg-slate-50 text-slate-500",
+                                            "无工单流程能力"
+                                        }
+                                    } else {
+                                        for capability in role.workflow_permissions.iter() {
+                                            span { class: "px-2 py-1 text-xs rounded-full border border-emerald-100 bg-emerald-50 text-emerald-700",
+                                                "{capability}"
+                                            }
                                         }
                                     }
                                     for permission in role.permissions.iter().take(10) {
@@ -714,6 +770,31 @@ fn build_role_summary(role: &RoleRecord, users: &[UserRecord]) -> RoleSummary {
             .map(resource_ticket_scope_label)
             .unwrap_or_else(|| default_scope_for_role(role).to_string()),
         created_at: role.created_at.clone(),
+    }
+}
+
+fn role_type_matches(role: &RoleSummary, filter: &str) -> bool {
+    match filter {
+        "system" => role.is_system,
+        "custom" => !role.is_system,
+        _ => true,
+    }
+}
+
+fn scope_matches(role: &RoleSummary, filter: &str) -> bool {
+    match filter {
+        "all" => true,
+        value => role.resource_ticket_scope == value,
+    }
+}
+
+fn capability_matches(role: &RoleSummary, filter: &str) -> bool {
+    match filter {
+        "all" => true,
+        value => role
+            .workflow_permissions
+            .iter()
+            .any(|permission| permission == value),
     }
 }
 
