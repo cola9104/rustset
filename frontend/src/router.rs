@@ -23,6 +23,7 @@ use crate::components::security_product::SecurityProductManagement;
 use crate::components::service_provider::ServiceProviderManagement;
 use crate::components::task::TaskCenter;
 use crate::components::user::UserManagement;
+use crate::state::user_role::AuthState;
 
 /// 路由定义
 #[derive(Routable, Clone, PartialEq, Debug)]
@@ -114,6 +115,98 @@ pub enum Route {
     // 404 页面
     #[route("/:..route")]
     NotFound { route: Vec<String> },
+}
+
+pub fn can_access_route(route: &Route, auth: &AuthState) -> bool {
+    match route {
+        Route::Login {} | Route::NotFound { .. } => true,
+        Route::Dashboard {} => auth.has_permission("can_view_dashboard"),
+        Route::TaskCenter {} => auth.has_permission("can_view_tasks"),
+        Route::RiskCenter {} => auth.has_permission("can_view_risks"),
+        Route::AuditLogs {} => auth.has_permission("can_view_audit_logs"),
+        Route::BusinessApplication {} => has_any_permission(
+            auth,
+            &[
+                "can_view_business_process",
+                "can_view_business_applications",
+                "can_create_business_application",
+                "can_approve_business_application",
+                "can_supplement_business_application",
+                "can_delete_business_application",
+            ],
+        ),
+        Route::ResourceTicket {} => can_access_resource_tickets(auth),
+        Route::CloudServiceRequest {}
+        | Route::PhysicalServerRequest {}
+        | Route::NetworkPolicyRequest {} => auth.can_submit(),
+        Route::CloudPlatformManagement {} => has_any_permission(
+            auth,
+            &[
+                "can_access_cloud",
+                "can_view_cloud_providers",
+                "can_manage_cloud_providers",
+            ],
+        ),
+        Route::AssetManagement {}
+        | Route::ServiceProviderManagement {}
+        | Route::MachineRoomManagement {}
+        | Route::NetworkZoneManagement {}
+        | Route::SecurityProductManagement {} => has_any_permission(
+            auth,
+            &[
+                "can_access_assets_risks",
+                "can_view_cloud_assets",
+                "can_manage_operations",
+            ],
+        ),
+        Route::UserManagement {} => auth.has_permission("can_view_users"),
+        Route::OrganizationManagement {} | Route::DepartmentManagement {} => {
+            auth.has_permission("can_view_users") || auth.has_permission("can_manage_permissions")
+        }
+        Route::PermissionManagement {} => auth.has_permission("can_manage_permissions"),
+        Route::PasswordPolicy {} => {
+            auth.has_permission("can_view_password_policy")
+                || auth.has_permission("can_manage_password_policy")
+        }
+    }
+}
+
+pub fn first_accessible_route(auth: &AuthState) -> Option<Route> {
+    [
+        Route::Dashboard {},
+        Route::ResourceTicket {},
+        Route::TaskCenter {},
+        Route::RiskCenter {},
+        Route::AssetManagement {},
+        Route::BusinessApplication {},
+        Route::CloudPlatformManagement {},
+        Route::ServiceProviderManagement {},
+        Route::MachineRoomManagement {},
+        Route::NetworkZoneManagement {},
+        Route::SecurityProductManagement {},
+        Route::UserManagement {},
+        Route::OrganizationManagement {},
+        Route::DepartmentManagement {},
+        Route::PermissionManagement {},
+        Route::PasswordPolicy {},
+        Route::AuditLogs {},
+    ]
+    .into_iter()
+    .find(|route| can_access_route(route, auth))
+}
+
+fn can_access_resource_tickets(auth: &AuthState) -> bool {
+    auth.can_view_resource_tickets()
+        || auth.can_submit()
+        || auth.can_approve()
+        || auth.can_provision()
+        || auth.can_deliver()
+}
+
+fn has_any_permission(auth: &AuthState, permissions: &[&str]) -> bool {
+    permissions
+        .iter()
+        .any(|permission| auth.has_permission(permission))
 }
 
 /// 404 页面组件

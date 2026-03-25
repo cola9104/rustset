@@ -1,4 +1,4 @@
-use crate::router::Route;
+use crate::router::{can_access_route, Route};
 use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
@@ -14,25 +14,6 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
     let is_collapsed = *collapsed.read();
     let auth = use_auth();
     let current_auth = auth.read().clone();
-    let can_access_tickets = current_auth.can_view_resource_tickets()
-        || current_auth.can_submit()
-        || current_auth.can_approve()
-        || current_auth.can_provision()
-        || current_auth.can_deliver();
-    let can_access_business = current_auth.has_permission("can_view_business_process")
-        || current_auth.has_permission("can_view_business_applications")
-        || current_auth.has_permission("can_create_business_application")
-        || current_auth.has_permission("can_approve_business_application")
-        || current_auth.has_permission("can_supplement_business_application");
-    let can_access_asset_ops = current_auth.has_permission("can_access_assets_risks")
-        || current_auth.has_permission("can_view_cloud_assets")
-        || current_auth.has_permission("can_manage_operations");
-    let can_access_cloud_config = current_auth.has_permission("can_access_cloud")
-        || current_auth.has_permission("can_view_cloud_providers")
-        || current_auth.has_permission("can_manage_cloud_providers");
-    let can_access_user_admin = current_auth.has_permission("can_view_users");
-    let can_access_role_admin = current_auth.has_permission("can_manage_permissions");
-    let can_access_org_admin = can_access_user_admin || can_access_role_admin;
 
     rsx! {
         aside {
@@ -54,7 +35,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
             // 导航菜单
             nav { class: "mt-4 flex-1",
                 // 仪表板
-                if current_auth.has_permission("can_view_dashboard") {
+                if can_access_route(&Route::Dashboard {}, &current_auth) {
                     Link {
                         to: Route::Dashboard {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -65,7 +46,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 任务中心
-                if current_auth.has_permission("can_view_tasks") {
+                if can_access_route(&Route::TaskCenter {}, &current_auth) {
                     Link {
                         to: Route::TaskCenter {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -76,7 +57,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 风险中心
-                if current_auth.has_permission("can_view_risks") {
+                if can_access_route(&Route::RiskCenter {}, &current_auth) {
                     Link {
                         to: Route::RiskCenter {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -87,7 +68,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 资源工单
-                if can_access_tickets {
+                if can_access_route(&Route::ResourceTicket {}, &current_auth) {
                     Link {
                         to: Route::ResourceTicket {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -98,7 +79,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 资产管理
-                if can_access_asset_ops {
+                if can_access_route(&Route::AssetManagement {}, &current_auth) {
                     Link {
                         to: Route::AssetManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -109,7 +90,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 业务应用管理
-                if can_access_business {
+                if can_access_route(&Route::BusinessApplication {}, &current_auth) {
                     Link {
                         to: Route::BusinessApplication {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -120,7 +101,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 云平台管理
-                if can_access_cloud_config {
+                if can_access_route(&Route::CloudPlatformManagement {}, &current_auth) {
                     Link {
                         to: Route::CloudPlatformManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -131,7 +112,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 服务商管理
-                if can_access_asset_ops {
+                if can_access_route(&Route::ServiceProviderManagement {}, &current_auth) {
                     Link {
                         to: Route::ServiceProviderManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -142,7 +123,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 机房管理
-                if can_access_asset_ops {
+                if can_access_route(&Route::MachineRoomManagement {}, &current_auth) {
                     Link {
                         to: Route::MachineRoomManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -153,7 +134,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 网络区域管理
-                if can_access_asset_ops {
+                if can_access_route(&Route::NetworkZoneManagement {}, &current_auth) {
                     Link {
                         to: Route::NetworkZoneManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -164,7 +145,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 安全产品管理
-                if can_access_asset_ops {
+                if can_access_route(&Route::SecurityProductManagement {}, &current_auth) {
                     Link {
                         to: Route::SecurityProductManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -175,7 +156,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 用户管理
-                if can_access_user_admin {
+                if can_access_route(&Route::UserManagement {}, &current_auth) {
                     Link {
                         to: Route::UserManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -185,7 +166,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         }
                     }
                 }
-                if can_access_org_admin {
+                if can_access_route(&Route::OrganizationManagement {}, &current_auth) {
                     Link {
                         to: Route::OrganizationManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -195,7 +176,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                         }
                     }
                 }
-                if can_access_org_admin {
+                if can_access_route(&Route::DepartmentManagement {}, &current_auth) {
                     Link {
                         to: Route::DepartmentManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -206,7 +187,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 权限管理
-                if can_access_role_admin {
+                if can_access_route(&Route::PermissionManagement {}, &current_auth) {
                     Link {
                         to: Route::PermissionManagement {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -217,7 +198,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 密码策略
-                if current_auth.has_permission("can_view_password_policy") {
+                if can_access_route(&Route::PasswordPolicy {}, &current_auth) {
                     Link {
                         to: Route::PasswordPolicy {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",
@@ -228,7 +209,7 @@ pub fn Sidebar(collapsed: Signal<bool>) -> Element {
                     }
                 }
                 // 审计日志
-                if current_auth.has_permission("can_view_audit_logs") {
+                if can_access_route(&Route::AuditLogs {}, &current_auth) {
                     Link {
                         to: Route::AuditLogs {},
                         class: "flex items-center px-4 py-3 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors",

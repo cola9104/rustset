@@ -9,7 +9,7 @@ use web_sys::RequestCredentials;
 use crate::app::AuthUser;
 use crate::app::{AUTH_READY, AUTH_STATE};
 use crate::config::login_url;
-use crate::router::Route;
+use crate::router::{first_accessible_route, Route};
 use crate::state::user_role::{use_auth, AuthState as WorkflowAuthState};
 use crate::utils::storage::set_token;
 
@@ -134,12 +134,15 @@ pub fn Login() -> Element {
 
                                         // 转换用户数据并更新认证状态
                                         let auth_user = login_response.user.to_auth_user();
-                                        auth_state.set(WorkflowAuthState::from(&auth_user));
+                                        let workflow_auth = WorkflowAuthState::from(&auth_user);
+                                        auth_state.set(workflow_auth.clone());
                                         *AUTH_STATE.write() = Some(auth_user);
                                         *AUTH_READY.write() = true;
 
-                                        // 跳转到仪表板
-                                        nav.push(Route::Dashboard {});
+                                        nav.push(
+                                            first_accessible_route(&workflow_auth)
+                                                .unwrap_or(Route::Dashboard {}),
+                                        );
                                     }
                                     Err(e) => {
                                         error.set(format!("登录响应解析失败: {}", e));
