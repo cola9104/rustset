@@ -76,8 +76,7 @@ pub fn CloudServiceRequest() -> Element {
         .read()
         .iter()
         .filter(|ticket| {
-            ticket.ticket_status == TicketStatus::PendingProvision
-                || ticket.ticket_status == TicketStatus::Provisioning
+            ticket.ticket_status.is_pending_provision_stage()
                 || ticket.ticket_status == TicketStatus::PendingDelivery
         })
         .count() as i32;
@@ -183,9 +182,7 @@ pub fn CloudServiceRequest() -> Element {
                         onchange: move |e| status_filter.set(e.value()),
                         option { value: "", "全部状态" }
                         option { value: "pending_approval", "待审批" }
-                        option { value: "approved", "已通过" }
                         option { value: "pending_provision", "待配置" }
-                        option { value: "provisioning", "配置中" }
                         option { value: "pending_delivery", "待交付" }
                         option { value: "delivered", "已交付" }
                         option { value: "rejected", "已拒绝" }

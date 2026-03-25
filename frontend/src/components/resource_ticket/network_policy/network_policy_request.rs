@@ -105,9 +105,8 @@ fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
     // 映射状态
     let status = match ticket.ticket_status {
         TicketStatus::PendingApproval => NetworkPolicyStatus::Pending,
-        TicketStatus::Approved => NetworkPolicyStatus::Approved,
         TicketStatus::Rejected => NetworkPolicyStatus::Rejected,
-        TicketStatus::PendingProvision | TicketStatus::Provisioning => {
+        TicketStatus::Approved | TicketStatus::PendingProvision | TicketStatus::Provisioning => {
             NetworkPolicyStatus::Configuring
         }
         TicketStatus::PendingDelivery | TicketStatus::Delivered => NetworkPolicyStatus::Active,

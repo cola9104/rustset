@@ -53,15 +53,22 @@ pub enum TicketStatus {
 }
 
 impl TicketStatus {
+    pub fn is_pending_provision_stage(&self) -> bool {
+        matches!(
+            self,
+            TicketStatus::PendingProvision | TicketStatus::Approved | TicketStatus::Provisioning
+        )
+    }
+
     pub fn display_name(&self) -> &'static str {
         match self {
             TicketStatus::Draft => "草稿",
             TicketStatus::Submitted => "已提交",
             TicketStatus::PendingApproval => "待审批",
-            TicketStatus::Approved => "已通过",
+            TicketStatus::Approved
+            | TicketStatus::PendingProvision
+            | TicketStatus::Provisioning => "待配置",
             TicketStatus::Rejected => "已拒绝",
-            TicketStatus::PendingProvision => "待配置",
-            TicketStatus::Provisioning => "配置中",
             TicketStatus::PendingDelivery => "待交付",
             TicketStatus::Delivered => "已交付",
             TicketStatus::Archived => "已归档",
@@ -73,10 +80,10 @@ impl TicketStatus {
             TicketStatus::Draft => "bg-gray-100 text-gray-800",
             TicketStatus::Submitted => "bg-blue-100 text-blue-800",
             TicketStatus::PendingApproval => "bg-yellow-100 text-yellow-800",
-            TicketStatus::Approved => "bg-green-100 text-green-800",
+            TicketStatus::Approved
+            | TicketStatus::PendingProvision
+            | TicketStatus::Provisioning => "bg-purple-100 text-purple-800",
             TicketStatus::Rejected => "bg-red-100 text-red-800",
-            TicketStatus::PendingProvision => "bg-purple-100 text-purple-800",
-            TicketStatus::Provisioning => "bg-indigo-100 text-indigo-800",
             TicketStatus::PendingDelivery => "bg-orange-100 text-orange-800",
             TicketStatus::Delivered => "bg-teal-100 text-teal-800",
             TicketStatus::Archived => "bg-gray-100 text-gray-600",
@@ -89,10 +96,10 @@ impl TicketStatus {
             TicketStatus::Draft => "draft",
             TicketStatus::Submitted => "submitted",
             TicketStatus::PendingApproval => "pending_approval",
-            TicketStatus::Approved => "approved",
+            TicketStatus::Approved
+            | TicketStatus::PendingProvision
+            | TicketStatus::Provisioning => "pending_provision",
             TicketStatus::Rejected => "rejected",
-            TicketStatus::PendingProvision => "pending_provision",
-            TicketStatus::Provisioning => "provisioning",
             TicketStatus::PendingDelivery => "pending_delivery",
             TicketStatus::Delivered => "delivered",
             TicketStatus::Archived => "archived",
@@ -106,14 +113,11 @@ impl TicketStatus {
             "submitted" => TicketStatus::Submitted,
             "pending_approval" => TicketStatus::PendingApproval,
             "PendingApproval" => TicketStatus::PendingApproval,
-            "approved" => TicketStatus::Approved,
-            "Approved" => TicketStatus::Approved,
+            "approved" | "Approved" => TicketStatus::PendingProvision,
             "rejected" => TicketStatus::Rejected,
             "Rejected" => TicketStatus::Rejected,
-            "pending_provision" => TicketStatus::PendingProvision,
-            "PendingProvision" => TicketStatus::PendingProvision,
-            "provisioning" => TicketStatus::Provisioning,
-            "Provisioning" => TicketStatus::Provisioning,
+            "pending_provision" | "PendingProvision" => TicketStatus::PendingProvision,
+            "provisioning" | "Provisioning" => TicketStatus::PendingProvision,
             "pending_delivery" => TicketStatus::PendingDelivery,
             "PendingDelivery" => TicketStatus::PendingDelivery,
             "delivered" => TicketStatus::Delivered,
@@ -195,4 +199,34 @@ pub struct ResourceTicket {
     pub fw_direction: Option<String>,      // 访问方向 (入站/出站/双向)
     pub fw_valid_until: Option<String>,    // 有效期限
     pub fw_firewall_name: Option<String>,  // 防火墙设备名称
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TicketStatus;
+
+    #[test]
+    fn legacy_ticket_statuses_are_normalized_to_pending_provision() {
+        assert_eq!(
+            TicketStatus::from_api_str("approved"),
+            TicketStatus::PendingProvision
+        );
+        assert_eq!(
+            TicketStatus::from_api_str("provisioning"),
+            TicketStatus::PendingProvision
+        );
+        assert_eq!(
+            TicketStatus::PendingProvision.to_api_str(),
+            "pending_provision"
+        );
+        assert_eq!(TicketStatus::Approved.to_api_str(), "pending_provision");
+    }
+
+    #[test]
+    fn pending_provision_stage_helper_covers_legacy_variants() {
+        assert!(TicketStatus::PendingProvision.is_pending_provision_stage());
+        assert!(TicketStatus::Approved.is_pending_provision_stage());
+        assert!(TicketStatus::Provisioning.is_pending_provision_stage());
+        assert!(!TicketStatus::PendingDelivery.is_pending_provision_stage());
+    }
 }

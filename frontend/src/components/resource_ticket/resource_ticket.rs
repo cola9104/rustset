@@ -82,10 +82,7 @@ fn ticket_applicant_meta(ticket: &ResourceTicket) -> String {
 }
 
 fn is_pending_provision_status(status: TicketStatus) -> bool {
-    matches!(
-        status,
-        TicketStatus::PendingProvision | TicketStatus::Approved
-    )
+    status.is_pending_provision_stage()
 }
 
 /// 资源工单主页面 - 基于资源类型的标签页导航 + 工作流程
@@ -1504,8 +1501,7 @@ fn StatusTimeline(ticket: ResourceTicket) -> Element {
                     time: ticket.provision_time.clone().unwrap_or_else(|| "待配置".to_string()),
                     user: ticket.provisioner.clone().unwrap_or_else(|| "-".to_string()),
                     completed: ticket.provisioner.is_some(),
-                    current: ticket.ticket_status == TicketStatus::PendingProvision
-                        || ticket.ticket_status == TicketStatus::Provisioning,
+                    current: ticket.ticket_status.is_pending_provision_stage(),
                 }
                 TimelineItem {
                     icon_data: "fa-box-open",
