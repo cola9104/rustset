@@ -5,6 +5,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
 };
 use dioxus_free_icons::Icon;
 
+use crate::app::AUTH_STATE;
 use crate::app::CLOUD_PLATFORMS_STATE;
 use crate::app::MACHINE_ROOMS_STATE;
 use crate::app::PROVIDERS_STATE;
@@ -128,6 +129,11 @@ pub fn ResourceTicket() -> Element {
     }
 
     let current_auth = auth.read().clone();
+    let submit_profile_warning = AUTH_STATE
+        .read()
+        .as_ref()
+        .and_then(|user| user.ticket_profile_warning());
+    let submit_blocked = submit_profile_warning.is_some();
     let accessible_tabs = current_auth.accessible_tabs();
 
     // 计算各资源类型的待处理数量（待审批+待配置+待交付）
@@ -286,12 +292,27 @@ pub fn ResourceTicket() -> Element {
                     // 新建工单按钮
                     if current_auth.can_submit() {
                         button {
-                            class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm",
-                            onclick: move |_| show_new_form.set(true),
+                            class: if submit_blocked {
+                                "px-4 py-2 bg-gray-300 text-gray-600 rounded-lg cursor-not-allowed flex items-center gap-2 shadow-sm"
+                            } else {
+                                "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm"
+                            },
+                            disabled: submit_blocked,
+                            onclick: move |_| {
+                                if !submit_blocked {
+                                    show_new_form.set(true);
+                                }
+                            },
                             Icon { icon: FaPlus, class: "text-sm" }
                             "新建工单"
                         }
                     }
+                }
+            }
+
+            if let Some(message) = submit_profile_warning.clone() {
+                div { class: "mx-6 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "{message}"
                 }
             }
 

@@ -82,11 +82,14 @@ impl PhysicalServerFormData {
         if self.title.trim().is_empty() {
             return Err("申请标题不能为空".to_string());
         }
+        if self.organization.trim().is_empty() {
+            return Err("申请单位不能为空，请先完善当前账号资料".to_string());
+        }
         if self.applicant.trim().is_empty() {
-            return Err("申请人不能为空".to_string());
+            return Err("申请人不能为空，请先完善当前账号资料".to_string());
         }
         if self.department.trim().is_empty() {
-            return Err("申请部门不能为空".to_string());
+            return Err("申请部门不能为空，请先完善当前账号资料".to_string());
         }
         if self.server_count < 1 {
             return Err("服务器数量至少为1".to_string());
@@ -116,6 +119,10 @@ pub struct PhysicalServerFormProps {
 #[component]
 pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
     let current_user = AUTH_STATE.read().clone();
+    let profile_warning = current_user
+        .as_ref()
+        .and_then(|user| user.ticket_profile_warning());
+    let save_blocked = profile_warning.is_some();
 
     // 初始化表单数据
     let initial_data = props
@@ -129,7 +136,7 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                 .unwrap_or_default(),
             applicant: current_user
                 .as_ref()
-                .map(|user| user.display_name.clone())
+                .map(|user| user.requester_name())
                 .unwrap_or_default(),
             department: current_user
                 .as_ref()
@@ -211,8 +218,11 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                 ModalFooter {
                     save_text: props.mode.save_text().to_string(),
                     cancel_text: "取消".to_string(),
-                    save_disabled: false,
+                    save_disabled: save_blocked,
                     on_save: move |_| {
+                        if save_blocked {
+                            return;
+                        }
                         // 验证表单
                         let mut data = form_data.read().clone();
                         if let Err(e) = data.validate() {
@@ -251,6 +261,12 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                 // 错误提示
                 if !error_msg.read().is_empty() {
                     ErrorMessage { message: error_msg.read().clone() }
+                }
+
+                if let Some(message) = profile_warning.clone() {
+                    div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                        "{message}"
+                    }
                 }
 
                 // 基本信息

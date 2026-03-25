@@ -749,6 +749,7 @@ pub async fn get_current_user_info(
         .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| user.username.clone());
+    let permissions = effective_permissions(&state, &user).await;
 
     Ok(Json(CurrentUserInfoResponse {
         id: user.id,
@@ -756,7 +757,7 @@ pub async fn get_current_user_info(
         real_name: user.real_name,
         display_name,
         role: user.role,
-        permissions: user.permissions,
+        permissions: Some(permissions),
         organization_id: user.organization_id,
         organization_name,
         department_id: user.department_id,

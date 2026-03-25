@@ -77,6 +77,41 @@ pub struct AuthUser {
     pub department_name: String,
 }
 
+impl AuthUser {
+    pub fn requester_name(&self) -> String {
+        if !self.real_name.trim().is_empty() {
+            self.real_name.clone()
+        } else if !self.display_name.trim().is_empty() {
+            self.display_name.clone()
+        } else {
+            self.username.clone()
+        }
+    }
+
+    pub fn ticket_profile_warning(&self) -> Option<String> {
+        let mut missing = Vec::new();
+
+        if self.requester_name().trim().is_empty() {
+            missing.push("姓名");
+        }
+        if self.organization_id.is_none() || self.organization_name.trim().is_empty() {
+            missing.push("公司/组织");
+        }
+        if self.department_id.is_none() || self.department_name.trim().is_empty() {
+            missing.push("部门");
+        }
+
+        if missing.is_empty() {
+            None
+        } else {
+            Some(format!(
+                "当前账号缺少{}信息，暂时无法提交资源申请，请先由管理员完善用户资料。",
+                missing.join("、")
+            ))
+        }
+    }
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 struct CurrentUserResponse {
     id: String,

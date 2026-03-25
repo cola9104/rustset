@@ -15,9 +15,10 @@ use crate::database::{
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::{effective_permissions, get_current_user_from_auth, log_action_auth};
+use sea_orm::DatabaseConnection;
 use shared::{
     ApproveTicketRequest, CreateResourceTicketRequest, DataScope, DeliverTicketRequest,
-    ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, TicketStatus,
+    Permissions, ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, TicketStatus,
     UpdateResourceTicketRequest,
 };
 
@@ -30,19 +31,34 @@ pub async fn get_resource_tickets(
     let current_user = load_current_user(&state, &user).await?;
     let permissions = effective_permissions(&state, &current_user).await;
 
-    if !permissions.can_view_resource_tickets {
+    if !can_access_resource_ticket_module(&permissions) {
         return Err(ApiError::forbidden("Access denied"));
     }
 
     let mut tickets = db_get_resource_tickets()
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load resource tickets: {}", e)))?;
+    let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+
+    for ticket in &mut tickets {
+        prepare_ticket_for_response(conn.as_ref(), ticket).await?;
+    }
 
     tickets.retain(|t| {
         let scope_match = can_access_ticket(t, &current_user, permissions.resource_ticket_scope);
         let keyword_match = query.search_keyword.as_ref().is_none_or(|keyword| {
             let keyword = keyword.to_lowercase();
             t.ecs_name.to_lowercase().contains(&keyword)
+                || t.created_by.to_lowercase().contains(&keyword)
+                || t.applicant_name
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&keyword))
+                || t.organization_name
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&keyword))
+                || t.department_name
+                    .as_ref()
+                    .is_some_and(|v| v.to_lowercase().contains(&keyword))
                 || t.customer_name
                     .as_ref()
                     .is_some_and(|v| v.to_lowercase().contains(&keyword))
@@ -84,14 +100,16 @@ pub async fn get_resource_ticket(
     let current_user = load_current_user(&state, &user).await?;
     let permissions = effective_permissions(&state, &current_user).await;
 
-    if !permissions.can_view_resource_tickets {
+    if !can_access_resource_ticket_module(&permissions) {
         return Err(ApiError::forbidden("Access denied"));
     }
 
-    let ticket = db_get_resource_ticket(id)
+    let mut ticket = db_get_resource_ticket(id)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+    let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
+    prepare_ticket_for_response(conn.as_ref(), &mut ticket).await?;
 
     if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
         return Err(ApiError::forbidden("Access denied"));
@@ -117,6 +135,7 @@ pub async fn create_resource_ticket(
     let (provider_name, cloud_platform_name, machine_room_name) =
         resolve_related_names(req.provider_id, req.cloud_platform_id, req.machine_room_id).await?;
     let applicant_profile = resolve_ticket_user_profile(&state, &user).await?;
+    validate_ticket_user_profile_for_request(&current_user, &applicant_profile)?;
 
     let mut ticket = ResourceTicket {
         id: None,
@@ -152,11 +171,11 @@ pub async fn create_resource_ticket(
         created_at: created_at.clone(),
         updated_at: Some(created_at.clone()),
         created_by: user.username.clone(),
-        applicant_name: applicant_profile.display_name,
+        applicant_name: Some(applicant_profile.display_name.clone()),
         organization_id: applicant_profile.organization_id,
-        organization_name: applicant_profile.organization_name,
+        organization_name: optional_non_empty(&applicant_profile.organization_name),
         department_id: applicant_profile.department_id,
-        department_name: applicant_profile.department_name,
+        department_name: optional_non_empty(&applicant_profile.department_name),
         approver: None,
         approve_time: None,
         approve_comment: None,
@@ -176,6 +195,7 @@ pub async fn create_resource_ticket(
         fw_valid_until: req.fw_valid_until,
         fw_firewall_name: req.fw_firewall_name,
     };
+    normalize_ticket_fields(&mut ticket);
 
     let id = insert_resource_ticket_wrapper(&ticket)
         .await
@@ -223,6 +243,7 @@ pub async fn update_resource_ticket(
     if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
         return Err(ApiError::forbidden("Access denied"));
     }
+    normalize_ticket_fields(&mut ticket);
 
     if let Some(value) = req.ecs_name {
         ticket.ecs_name = value;
@@ -307,6 +328,7 @@ pub async fn update_resource_ticket(
     ticket.cloud_platform_name = cloud_platform_name;
     ticket.machine_room_name = machine_room_name;
     ticket.updated_at = Some(Utc::now().format("%Y-%m-%d %H:%M").to_string());
+    normalize_ticket_fields(&mut ticket);
 
     db_update_resource_ticket(id, &ticket)
         .await
@@ -389,6 +411,7 @@ pub async fn approve_ticket(
     if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
         return Err(ApiError::forbidden("Access denied"));
     }
+    normalize_ticket_fields(&mut ticket);
 
     if ticket.ticket_status != TicketStatus::PendingApproval {
         return Err(ApiError::bad_request("只能审批待审批状态的工单"));
@@ -405,6 +428,7 @@ pub async fn approve_ticket(
         TicketStatus::Rejected
     };
     ticket.updated_at = Some(now);
+    normalize_ticket_fields(&mut ticket);
 
     db_update_resource_ticket(id, &ticket)
         .await
@@ -451,6 +475,7 @@ pub async fn provision_ticket(
     if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
         return Err(ApiError::forbidden("Access denied"));
     }
+    normalize_ticket_fields(&mut ticket);
 
     if ticket.ticket_status != TicketStatus::PendingProvision
         && ticket.ticket_status != TicketStatus::Approved
@@ -465,6 +490,7 @@ pub async fn provision_ticket(
     ticket.provision_details = req.details.clone();
     ticket.ticket_status = TicketStatus::PendingDelivery;
     ticket.updated_at = Some(now);
+    normalize_ticket_fields(&mut ticket);
 
     db_update_resource_ticket(id, &ticket)
         .await
@@ -507,6 +533,7 @@ pub async fn deliver_ticket(
     if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
         return Err(ApiError::forbidden("Access denied"));
     }
+    normalize_ticket_fields(&mut ticket);
 
     if ticket.ticket_status != TicketStatus::PendingDelivery {
         return Err(ApiError::bad_request("只能交付待交付状态的工单"));
@@ -520,6 +547,7 @@ pub async fn deliver_ticket(
     ticket.ticket_status = TicketStatus::Delivered;
     ticket.delivery_status = Some("已交付".to_string());
     ticket.updated_at = Some(now);
+    normalize_ticket_fields(&mut ticket);
 
     db_update_resource_ticket(id, &ticket)
         .await
@@ -540,12 +568,13 @@ pub async fn deliver_ticket(
     .into_response())
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct TicketUserProfile {
-    display_name: Option<String>,
+    display_name: String,
     organization_id: Option<i32>,
-    organization_name: Option<String>,
+    organization_name: String,
     department_id: Option<i32>,
-    department_name: Option<String>,
+    department_name: String,
 }
 
 async fn resolve_ticket_user_profile(
@@ -575,11 +604,11 @@ async fn resolve_ticket_user_profile(
     };
 
     Ok(TicketUserProfile {
-        display_name: Some(display_name_for_user(&current_user)),
+        display_name: display_name_for_user(&current_user),
         organization_id: current_user.organization_id,
-        organization_name,
+        organization_name: organization_name.unwrap_or_default(),
         department_id: current_user.department_id,
-        department_name,
+        department_name: department_name.unwrap_or_default(),
     })
 }
 
@@ -616,6 +645,271 @@ fn can_access_ticket(ticket: &ResourceTicket, user: &shared::User, scope: DataSc
             user.organization_id.is_some() && ticket.organization_id == user.organization_id
         }
         DataScope::All => true,
+    }
+}
+
+fn can_access_resource_ticket_module(permissions: &Permissions) -> bool {
+    permissions.can_view_resource_tickets
+        || permissions.can_create_resource_tickets
+        || permissions.can_approve_resource_tickets
+        || permissions.can_provision_resource_tickets
+        || permissions.can_deliver_resource_tickets
+}
+
+fn is_system_account(username: &str) -> bool {
+    matches!(username, "admin" | "sec" | "audit")
+}
+
+fn optional_non_empty(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn normalize_ticket_status(status: TicketStatus) -> TicketStatus {
+    match status {
+        TicketStatus::Approved | TicketStatus::Provisioning => TicketStatus::PendingProvision,
+        other => other,
+    }
+}
+
+fn normalize_ticket_fields(ticket: &mut ResourceTicket) {
+    ticket.ticket_status = normalize_ticket_status(ticket.ticket_status);
+
+    if ticket
+        .applicant_name
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        ticket.applicant_name = Some(ticket.created_by.clone());
+    }
+
+    if ticket
+        .delivery_status
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        let next_status = if ticket.ticket_status == TicketStatus::Delivered {
+            "已交付"
+        } else {
+            "未交付"
+        };
+        ticket.delivery_status = Some(next_status.to_string());
+    }
+}
+
+async fn prepare_ticket_for_response(
+    conn: &DatabaseConnection,
+    ticket: &mut ResourceTicket,
+) -> Result<(), ApiError> {
+    if ticket
+        .organization_name
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        if let Some(id) = ticket.organization_id {
+            ticket.organization_name = get_organization_by_id(conn, id)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to load organization: {}", e)))?
+                .map(|item| item.name);
+        }
+    }
+
+    if ticket
+        .department_name
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        if let Some(id) = ticket.department_id {
+            ticket.department_name = get_department_by_id(conn, id)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to load department: {}", e)))?
+                .map(|item| item.name);
+        }
+    }
+
+    normalize_ticket_fields(ticket);
+    Ok(())
+}
+
+fn validate_ticket_user_profile_for_request(
+    current_user: &shared::User,
+    profile: &TicketUserProfile,
+) -> Result<(), ApiError> {
+    if profile.display_name.trim().is_empty() {
+        return Err(ApiError::bad_request("当前用户缺少姓名，请先完善用户资料"));
+    }
+
+    if is_system_account(&current_user.username) {
+        return Ok(());
+    }
+
+    if profile.organization_id.is_none() || profile.organization_name.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "当前用户缺少所属公司/组织，请先完善用户资料",
+        ));
+    }
+
+    if profile.department_id.is_none() || profile.department_name.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "当前用户缺少所属部门，请先完善用户资料",
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use shared::{Permissions, Role, User};
+
+    fn sample_user() -> User {
+        User {
+            id: "u-1".to_string(),
+            username: "alice".to_string(),
+            real_name: Some("Alice".to_string()),
+            password: "hashed".to_string(),
+            role: Role::Custom("申请人".to_string()),
+            permissions: None,
+            created_at: Utc::now(),
+            password_changed_at: None,
+            password_strength: None,
+            force_password_change: Some(false),
+            last_login_at: None,
+            email: None,
+            phone: None,
+            status: Some("active".to_string()),
+            organization_id: Some(10),
+            department_id: Some(20),
+            failed_login_attempts: Some(0),
+            locked_until: None,
+        }
+    }
+
+    fn sample_ticket() -> ResourceTicket {
+        ResourceTicket {
+            id: Some(1),
+            resource_type: shared::ResourceType::Cloud,
+            ecs_name: "ecs-1".to_string(),
+            ticket_status: TicketStatus::Approved,
+            provider_id: None,
+            provider_name: None,
+            cloud_platform_id: None,
+            cloud_platform_name: None,
+            machine_room_id: None,
+            machine_room_name: None,
+            cloud_region: None,
+            cloud_category: None,
+            zone_name: None,
+            zone_cabinet: None,
+            rack_units: 0,
+            customer_name: None,
+            application_name: Some("OA".to_string()),
+            contract_name: None,
+            ecs_type: None,
+            ecs_os: None,
+            cpu_cores: 0,
+            memory_gb: 0,
+            system_disk: None,
+            system_disk_size_gb: 0,
+            data_disk: None,
+            has_security_product: false,
+            security_products: None,
+            ip_address: None,
+            delivery_status: None,
+            remarks: None,
+            created_at: "2026-03-25 10:00".to_string(),
+            updated_at: Some("2026-03-25 10:00".to_string()),
+            created_by: "alice".to_string(),
+            applicant_name: None,
+            organization_id: Some(10),
+            organization_name: None,
+            department_id: Some(20),
+            department_name: None,
+            approver: None,
+            approve_time: None,
+            approve_comment: None,
+            provisioner: None,
+            provision_time: None,
+            provision_details: None,
+            deliverer: None,
+            deliver_time: None,
+            deliver_comment: None,
+            fw_source_zone: None,
+            fw_source_address: None,
+            fw_dest_zone: None,
+            fw_dest_address: None,
+            fw_protocol: None,
+            fw_port: None,
+            fw_direction: None,
+            fw_valid_until: None,
+            fw_firewall_name: None,
+        }
+    }
+
+    #[test]
+    fn resource_ticket_module_access_accepts_workflow_permissions() {
+        let mut permissions = Permissions::default();
+        permissions.can_approve_resource_tickets = true;
+        assert!(can_access_resource_ticket_module(&permissions));
+
+        let view_only = Permissions {
+            can_view_resource_tickets: true,
+            ..Default::default()
+        };
+        assert!(can_access_resource_ticket_module(&view_only));
+
+        assert!(!can_access_resource_ticket_module(&Permissions::default()));
+    }
+
+    #[test]
+    fn ticket_scope_respects_self_department_org_and_all() {
+        let user = sample_user();
+        let ticket = sample_ticket();
+
+        assert!(can_access_ticket(&ticket, &user, DataScope::SelfOnly));
+        assert!(can_access_ticket(&ticket, &user, DataScope::Department));
+        assert!(can_access_ticket(&ticket, &user, DataScope::Organization));
+        assert!(can_access_ticket(&ticket, &user, DataScope::All));
+    }
+
+    #[test]
+    fn ticket_normalization_aligns_legacy_status_and_defaults() {
+        let mut ticket = sample_ticket();
+        normalize_ticket_fields(&mut ticket);
+
+        assert_eq!(ticket.ticket_status, TicketStatus::PendingProvision);
+        assert_eq!(ticket.applicant_name.as_deref(), Some("alice"));
+        assert_eq!(ticket.delivery_status.as_deref(), Some("未交付"));
+    }
+
+    #[test]
+    fn normal_accounts_require_complete_profile_for_ticket_requests() {
+        let user = sample_user();
+        let incomplete = TicketUserProfile {
+            display_name: "Alice".to_string(),
+            organization_id: None,
+            organization_name: String::new(),
+            department_id: Some(20),
+            department_name: "研发部".to_string(),
+        };
+
+        assert!(validate_ticket_user_profile_for_request(&user, &incomplete).is_err());
+
+        let complete = TicketUserProfile {
+            display_name: "Alice".to_string(),
+            organization_id: Some(10),
+            organization_name: "示例公司".to_string(),
+            department_id: Some(20),
+            department_name: "研发部".to_string(),
+        };
+
+        assert!(validate_ticket_user_profile_for_request(&user, &complete).is_ok());
     }
 }
 
