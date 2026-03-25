@@ -14,10 +14,10 @@ use crate::database::{
 };
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{get_current_user_from_auth, log_action_auth};
+use crate::utils::{effective_permissions, get_current_user_from_auth, log_action_auth};
 use shared::{
     ApproveTicketRequest, CreateResourceTicketRequest, DataScope, DeliverTicketRequest,
-    Permissions, ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, Role, TicketStatus,
+    ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, TicketStatus,
     UpdateResourceTicketRequest,
 };
 
@@ -28,7 +28,7 @@ pub async fn get_resource_tickets(
     Query(query): Query<ResourceTicketQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
     if !permissions.can_view_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
@@ -82,7 +82,7 @@ pub async fn get_resource_ticket(
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
     if !permissions.can_view_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
@@ -107,7 +107,7 @@ pub async fn create_resource_ticket(
     Json(req): Json<CreateResourceTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
     if !permissions.can_create_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
@@ -209,7 +209,7 @@ pub async fn update_resource_ticket(
     Json(req): Json<UpdateResourceTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
     if !permissions.can_approve_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
@@ -333,8 +333,20 @@ pub async fn delete_resource_ticket(
     user: AuthUser,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if user.role != Role::SysAdmin {
-        return Err(ApiError::forbidden("Only SysAdmin can delete tickets"));
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&state, &current_user).await;
+
+    if !permissions.can_delete_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
+
+    let ticket = db_get_resource_ticket(id)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     db_delete_resource_ticket(id)
@@ -363,9 +375,9 @@ pub async fn approve_ticket(
     Json(req): Json<ApproveTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
-    if !permissions.can_provision_resource_tickets {
+    if !permissions.can_approve_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
     }
 
@@ -425,9 +437,9 @@ pub async fn provision_ticket(
     Json(req): Json<ProvisionTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
-    if !permissions.can_deliver_resource_tickets {
+    if !permissions.can_provision_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
     }
 
@@ -481,7 +493,7 @@ pub async fn deliver_ticket(
     Json(req): Json<DeliverTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let current_user = load_current_user(&state, &user).await?;
-    let permissions = effective_permissions(&current_user);
+    let permissions = effective_permissions(&state, &current_user).await;
 
     if !permissions.can_deliver_resource_tickets {
         return Err(ApiError::forbidden("Access denied"));
@@ -592,15 +604,6 @@ async fn load_current_user(state: &AppState, user: &AuthUser) -> Result<shared::
     get_current_user_from_auth(user, &state.users)
         .await
         .ok_or_else(|| ApiError::unauthorized("User not found"))
-}
-
-fn effective_permissions(user: &shared::User) -> Permissions {
-    user.permissions.clone().unwrap_or_else(|| match user.role {
-        Role::SysAdmin => Permissions::sys_admin(),
-        Role::SecAdmin => Permissions::sec_admin(),
-        Role::Auditor => Permissions::auditor(),
-        Role::Custom(_) => Permissions::default(),
-    })
 }
 
 fn can_access_ticket(ticket: &ResourceTicket, user: &shared::User, scope: DataScope) -> bool {

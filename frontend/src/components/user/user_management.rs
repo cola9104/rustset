@@ -1,5 +1,6 @@
 use crate::services::department_api::fetch_departments;
 use crate::services::organization_api::fetch_organizations;
+use crate::services::role_api::{fetch_roles, RoleRecord};
 use crate::services::user_api::{
     create_user, delete_user, fetch_users, update_user, CreateUserPayload, UpdateUserPayload,
     UserRecord,
@@ -12,10 +13,12 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaUsers,
 };
 use dioxus_free_icons::Icon;
+use serde_json::json;
 
 #[allow(non_snake_case)]
 pub fn UserManagement() -> Element {
     let mut users = use_signal(Vec::<UserRecord>::new);
+    let mut roles = use_signal(Vec::<RoleRecord>::new);
     let mut organizations = use_signal(Vec::<OrganizationRecord>::new);
     let mut departments = use_signal(Vec::<DepartmentRecord>::new);
     let mut search_query = use_signal(String::new);
@@ -28,16 +31,21 @@ pub fn UserManagement() -> Element {
         loading.set(true);
         match (
             fetch_users().await,
+            fetch_roles().await,
             fetch_organizations().await,
             fetch_departments().await,
         ) {
-            (Ok(users_data), Ok(organizations_data), Ok(departments_data)) => {
+            (Ok(users_data), Ok(role_data), Ok(organizations_data), Ok(departments_data)) => {
                 users.set(users_data);
+                roles.set(role_data);
                 organizations.set(organizations_data);
                 departments.set(departments_data);
                 error.set(String::new());
             }
-            (Err(err), _, _) | (_, Err(err), _) | (_, _, Err(err)) => error.set(err),
+            (Err(err), _, _, _)
+            | (_, Err(err), _, _)
+            | (_, _, Err(err), _)
+            | (_, _, _, Err(err)) => error.set(err),
         }
         loading.set(false);
     };
@@ -267,6 +275,7 @@ pub fn UserManagement() -> Element {
             UserModal {
                 mode: UserModalMode::Create,
                 user: None,
+                roles: roles.read().clone(),
                 organizations: organizations.read().clone(),
                 departments: departments.read().clone(),
                 on_close: move |_| creating.set(false),
@@ -295,6 +304,7 @@ pub fn UserManagement() -> Element {
             UserModal {
                 mode: UserModalMode::Edit,
                 user: Some(user),
+                roles: roles.read().clone(),
                 organizations: organizations.read().clone(),
                 departments: departments.read().clone(),
                 on_close: move |_| editing_user.set(None),
@@ -333,6 +343,7 @@ enum UserModalMode {
 fn UserModal(
     mode: UserModalMode,
     user: Option<UserRecord>,
+    roles: Vec<RoleRecord>,
     organizations: Vec<OrganizationRecord>,
     departments: Vec<DepartmentRecord>,
     on_close: EventHandler<()>,
@@ -469,6 +480,9 @@ fn UserModal(
                                 option { value: "SysAdmin", "系统管理员" }
                                 option { value: "SecAdmin", "安全管理员" }
                                 option { value: "Auditor", "审计员" }
+                                for role_item in roles.iter().filter(|item| !item.is_system) {
+                                    option { value: "{role_item.name}", "{role_item.name}" }
+                                }
                             }
                         }
                         div {
@@ -577,7 +591,7 @@ fn UserModal(
                                     username: username_value,
                                     real_name: real_name_value,
                                     password: password_value.unwrap_or_default(),
-                                    role: role.read().clone(),
+                                    role: role_request_value(&role.read(), &roles),
                                     email: optional_text(&email.read()),
                                     phone: optional_text(&phone.read()),
                                     status: Some(status.read().clone()),
@@ -588,7 +602,7 @@ fn UserModal(
                                 on_update.call((user.id.clone(), UpdateUserPayload {
                                     real_name: real_name_value,
                                     password: password_value,
-                                    role: Some(role.read().clone()),
+                                    role: Some(role_request_value(&role.read(), &roles)),
                                     email: optional_text(&email.read()),
                                     phone: optional_text(&phone.read()),
                                     status: Some(status.read().clone()),
@@ -646,5 +660,16 @@ fn status_label(status: &str) -> &str {
         "locked" => "锁定",
         "disabled" => "禁用",
         _ => "未知",
+    }
+}
+
+fn role_request_value(selected_role: &str, roles: &[RoleRecord]) -> serde_json::Value {
+    if roles
+        .iter()
+        .any(|role| !role.is_system && role.name == selected_role)
+    {
+        json!({ "Custom": selected_role })
+    } else {
+        json!(selected_role)
     }
 }

@@ -85,7 +85,7 @@ struct CurrentUserResponse {
     real_name: Option<String>,
     #[serde(default)]
     display_name: Option<String>,
-    role: String,
+    role: serde_json::Value,
     #[serde(default)]
     permissions: serde_json::Value,
     #[serde(default)]
@@ -100,6 +100,7 @@ struct CurrentUserResponse {
 
 impl CurrentUserResponse {
     fn to_auth_user(&self) -> AuthUser {
+        let role = parse_role_value(&self.role);
         let permissions = self
             .permissions
             .as_object()
@@ -126,13 +127,25 @@ impl CurrentUserResponse {
                 .filter(|value| !value.trim().is_empty())
                 .or_else(|| self.real_name.clone())
                 .unwrap_or_else(|| self.username.clone()),
-            role: self.role.clone(),
+            role,
             permissions,
             organization_id: self.organization_id,
             organization_name: self.organization_name.clone().unwrap_or_default(),
             department_id: self.department_id,
             department_name: self.department_name.clone().unwrap_or_default(),
         }
+    }
+}
+
+fn parse_role_value(role: &serde_json::Value) -> String {
+    match role {
+        serde_json::Value::String(value) => value.clone(),
+        serde_json::Value::Object(map) => map
+            .get("Custom")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| "Custom".to_string()),
+        _ => "Unknown".to_string(),
     }
 }
 

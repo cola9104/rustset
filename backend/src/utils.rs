@@ -1,8 +1,10 @@
+use crate::database::{db_custom_role_to_shared, get_custom_roles};
 use crate::middleware::AuthUser;
+use crate::state::AppState;
 use axum::http::{header::AUTHORIZATION, HeaderMap};
 use chrono::Utc;
 use ipnetwork::IpNetwork;
-use shared::{AuditLog, NetworkZone, User, ZoneConfig};
+use shared::{AuditLog, CustomRole, NetworkZone, Permissions, Role, User, ZoneConfig};
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
@@ -86,6 +88,68 @@ pub fn remove_cached_user(users: &Arc<RwLock<Vec<User>>>, user_id: &str) {
     if let Ok(mut users_guard) = users.write() {
         users_guard.retain(|user| user.id != user_id);
     }
+}
+
+pub fn builtin_permissions_for_role(role: &Role) -> Option<Permissions> {
+    match role {
+        Role::SysAdmin => Some(Permissions::sys_admin()),
+        Role::SecAdmin => Some(Permissions::sec_admin()),
+        Role::Auditor => Some(Permissions::auditor()),
+        Role::Custom(_) => None,
+    }
+}
+
+pub async fn find_custom_role_by_name(state: &AppState, role_name: &str) -> Option<CustomRole> {
+    if let Ok(db_roles) = get_custom_roles().await {
+        let roles: Vec<CustomRole> = db_roles.into_iter().map(db_custom_role_to_shared).collect();
+        if let Ok(mut cache) = state.custom_roles.write() {
+            *cache = roles.clone();
+        }
+        return roles.into_iter().find(|role| role.name == role_name);
+    }
+
+    state
+        .custom_roles
+        .read()
+        .ok()?
+        .iter()
+        .find(|role| role.name == role_name)
+        .cloned()
+}
+
+pub async fn permissions_for_role_assignment(
+    state: &AppState,
+    role: &Role,
+) -> Result<Option<Permissions>, String> {
+    if let Some(permissions) = builtin_permissions_for_role(role) {
+        return Ok(Some(permissions));
+    }
+
+    match role {
+        Role::Custom(role_name) => find_custom_role_by_name(state, role_name)
+            .await
+            .map(|role| Some(role.permissions))
+            .ok_or_else(|| format!("自定义角色“{}”不存在", role_name)),
+        _ => Ok(None),
+    }
+}
+
+pub async fn effective_permissions(state: &AppState, user: &User) -> Permissions {
+    if let Some(permissions) = user.permissions.clone() {
+        return permissions;
+    }
+
+    if let Some(permissions) = builtin_permissions_for_role(&user.role) {
+        return permissions;
+    }
+
+    if let Role::Custom(role_name) = &user.role {
+        if let Some(role) = find_custom_role_by_name(state, role_name).await {
+            return role.permissions;
+        }
+    }
+
+    Permissions::default()
 }
 
 pub fn log_action(

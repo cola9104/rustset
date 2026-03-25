@@ -3,6 +3,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{FaLock, FaUser};
 use dioxus_free_icons::Icon;
 use dioxus_router::navigator;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use web_sys::RequestCredentials;
 
 use crate::app::AuthUser;
@@ -31,124 +32,22 @@ struct LoginResponse {
 struct LoginUser {
     id: String,
     username: String,
-    role: LoginRole,
+    role: Value,
     #[serde(default)]
-    permissions: Option<LoginPermissions>,
-}
-
-/// 后端角色枚举 (对应后端 Role)
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-enum LoginRole {
-    #[serde(rename = "SysAdmin", alias = "sysadmin")]
-    SysAdmin,
-    #[serde(rename = "SecAdmin", alias = "secadmin")]
-    SecAdmin,
-    #[serde(rename = "Auditor", alias = "auditor")]
-    Auditor,
-    #[serde(rename = "Operator", alias = "operator")]
-    Operator,
-    #[serde(rename = "Custom", alias = "custom")]
-    Custom,
-}
-
-/// 后端权限结构 (对应后端 Permissions)
-#[derive(Debug, Clone, Deserialize, Default)]
-struct LoginPermissions {
-    #[serde(default)]
-    can_access_general: bool,
-    #[serde(default)]
-    can_view_dashboard: bool,
-    #[serde(default)]
-    can_view_tasks: bool,
-    #[serde(default)]
-    can_create_task: bool,
-    #[serde(default)]
-    can_delete_task: bool,
-    #[serde(default)]
-    can_update_task: bool,
-    #[serde(default)]
-    can_view_advanced_scan: bool,
-    #[serde(default)]
-    can_create_scan: bool,
-    #[serde(default)]
-    can_delete_scan: bool,
-    #[serde(default)]
-    can_export_scan: bool,
-    #[serde(default)]
-    can_access_assets_risks: bool,
-    #[serde(default)]
-    can_view_cloud_assets: bool,
-    #[serde(default)]
-    can_create_cloud_asset: bool,
-    #[serde(default)]
-    can_update_cloud_asset: bool,
-    #[serde(default)]
-    can_delete_cloud_asset: bool,
-    #[serde(default)]
-    can_view_users: bool,
-    #[serde(default)]
-    can_create_user: bool,
-    #[serde(default)]
-    can_update_user: bool,
-    #[serde(default)]
-    can_delete_user: bool,
-    #[serde(default)]
-    can_view_audit_logs: bool,
-    #[serde(default)]
-    can_view_roles: bool,
-    #[serde(default)]
-    can_create_role: bool,
-    #[serde(default)]
-    can_update_role: bool,
-    #[serde(default)]
-    can_delete_role: bool,
-    #[serde(default)]
-    can_view_service_providers: bool,
-    #[serde(default)]
-    can_view_machine_rooms: bool,
-    #[serde(default)]
-    can_view_cloud_platforms: bool,
-    #[serde(default)]
-    can_view_security_products: bool,
-    #[serde(default)]
-    can_view_network_zones: bool,
-    #[serde(default)]
-    can_view_resource_tickets: bool,
-    #[serde(default)]
-    can_create_resource_tickets: bool,
-    #[serde(default)]
-    can_approve_resource_tickets: bool,
-    #[serde(default)]
-    can_provision_resource_tickets: bool,
-    #[serde(default)]
-    can_deliver_resource_tickets: bool,
-    #[serde(default)]
-    can_delete_resource_tickets: bool,
-    #[serde(default)]
-    resource_ticket_scope: String,
-    #[serde(default)]
-    can_view_ip_zones: bool,
-    #[serde(default)]
-    can_view_scanners: bool,
-    #[serde(default)]
-    can_view_port_details: bool,
+    permissions: Option<Value>,
 }
 
 impl LoginUser {
     /// 将后端用户转换为前端 AuthUser
     fn to_auth_user(&self) -> AuthUser {
-        let permissions = self
-            .permissions
-            .as_ref()
-            .map(|p| p.to_permission_strings())
-            .unwrap_or_default();
+        let permissions = permission_strings_from_value(self.permissions.as_ref());
 
         AuthUser {
             id: self.id.clone(),
             username: self.username.clone(),
             real_name: String::new(),
             display_name: self.username.clone(),
-            role: self.role.to_string(),
+            role: parse_role_value(&self.role),
             permissions,
             organization_id: None,
             organization_name: String::new(),
@@ -158,147 +57,33 @@ impl LoginUser {
     }
 }
 
-impl LoginRole {}
-
-impl std::fmt::Display for LoginRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let value = match self {
-            LoginRole::SysAdmin => "SysAdmin",
-            LoginRole::SecAdmin => "SecAdmin",
-            LoginRole::Auditor => "Auditor",
-            LoginRole::Operator => "Operator",
-            LoginRole::Custom => "Custom",
-        };
-        f.write_str(value)
+fn parse_role_value(role: &Value) -> String {
+    match role {
+        Value::String(value) => value.clone(),
+        Value::Object(map) => map
+            .get("Custom")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| "Custom".to_string()),
+        _ => "Unknown".to_string(),
     }
 }
 
-impl LoginPermissions {
-    /// 将权限转换为字符串列表
-    fn to_permission_strings(&self) -> Vec<String> {
-        let mut perms = Vec::new();
-        if self.can_access_general {
-            perms.push("can_access_general".to_string());
-        }
-        if self.can_view_dashboard {
-            perms.push("can_view_dashboard".to_string());
-        }
-        if self.can_view_tasks {
-            perms.push("can_view_tasks".to_string());
-        }
-        if self.can_create_task {
-            perms.push("can_create_task".to_string());
-        }
-        if self.can_delete_task {
-            perms.push("can_delete_task".to_string());
-        }
-        if self.can_update_task {
-            perms.push("can_update_task".to_string());
-        }
-        if self.can_view_advanced_scan {
-            perms.push("can_view_advanced_scan".to_string());
-        }
-        if self.can_create_scan {
-            perms.push("can_create_scan".to_string());
-        }
-        if self.can_delete_scan {
-            perms.push("can_delete_scan".to_string());
-        }
-        if self.can_export_scan {
-            perms.push("can_export_scan".to_string());
-        }
-        if self.can_access_assets_risks {
-            perms.push("can_access_assets_risks".to_string());
-        }
-        if self.can_view_cloud_assets {
-            perms.push("can_view_cloud_assets".to_string());
-        }
-        if self.can_create_cloud_asset {
-            perms.push("can_create_cloud_asset".to_string());
-        }
-        if self.can_update_cloud_asset {
-            perms.push("can_update_cloud_asset".to_string());
-        }
-        if self.can_delete_cloud_asset {
-            perms.push("can_delete_cloud_asset".to_string());
-        }
-        if self.can_view_audit_logs {
-            perms.push("can_view_audit_logs".to_string());
-        }
-        if self.can_view_users {
-            perms.push("can_view_users".to_string());
-        }
-        if self.can_create_user {
-            perms.push("can_create_user".to_string());
-        }
-        if self.can_update_user {
-            perms.push("can_update_user".to_string());
-        }
-        if self.can_delete_user {
-            perms.push("can_delete_user".to_string());
-        }
-        if self.can_view_roles {
-            perms.push("can_view_roles".to_string());
-        }
-        if self.can_create_role {
-            perms.push("can_create_role".to_string());
-        }
-        if self.can_update_role {
-            perms.push("can_update_role".to_string());
-        }
-        if self.can_delete_role {
-            perms.push("can_delete_role".to_string());
-        }
-        if self.can_view_service_providers {
-            perms.push("can_view_service_providers".to_string());
-        }
-        if self.can_view_machine_rooms {
-            perms.push("can_view_machine_rooms".to_string());
-        }
-        if self.can_view_cloud_platforms {
-            perms.push("can_view_cloud_platforms".to_string());
-        }
-        if self.can_view_security_products {
-            perms.push("can_view_security_products".to_string());
-        }
-        if self.can_view_network_zones {
-            perms.push("can_view_network_zones".to_string());
-        }
-        if self.can_view_resource_tickets {
-            perms.push("can_view_resource_tickets".to_string());
-        }
-        if self.can_create_resource_tickets {
-            perms.push("can_create_resource_tickets".to_string());
-        }
-        if self.can_approve_resource_tickets {
-            perms.push("can_approve_resource_tickets".to_string());
-        }
-        if self.can_provision_resource_tickets {
-            perms.push("can_provision_resource_tickets".to_string());
-        }
-        if self.can_deliver_resource_tickets {
-            perms.push("can_deliver_resource_tickets".to_string());
-        }
-        if self.can_delete_resource_tickets {
-            perms.push("can_delete_resource_tickets".to_string());
-        }
-        if !self.resource_ticket_scope.trim().is_empty() {
-            perms.push(format!(
-                "resource_ticket_scope:{}",
-                self.resource_ticket_scope
-            ));
-        }
-        if self.can_view_ip_zones {
-            perms.push("can_view_ip_zones".to_string());
-        }
-        if self.can_view_scanners {
-            perms.push("can_view_scanners".to_string());
-        }
-        if self.can_view_port_details {
-            perms.push("can_view_port_details".to_string());
-        }
-        perms
-    }
+fn permission_strings_from_value(permissions: Option<&Value>) -> Vec<String> {
+    permissions
+        .and_then(Value::as_object)
+        .map(|permissions| {
+            let mut items = Vec::new();
+            for (key, value) in permissions {
+                if value.as_bool().is_some_and(|enabled| enabled) {
+                    items.push(key.clone());
+                } else if let Some(scope) = value.as_str() {
+                    items.push(format!("{key}:{scope}"));
+                }
+            }
+            items
+        })
+        .unwrap_or_default()
 }
 
 /// 登录页面

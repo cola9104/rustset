@@ -1,10 +1,10 @@
 use crate::database::{
-    db_custom_role_to_shared, delete_custom_role, get_custom_roles, insert_custom_role_wrapper,
-    update_custom_role,
+    db_custom_role_to_shared, delete_custom_role, get_custom_roles, get_users,
+    insert_custom_role_wrapper, update_custom_role, update_user as db_update_user,
 };
 use crate::middleware::ApiError;
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
+use crate::utils::{effective_permissions, get_current_user, log_action, sync_cached_user};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -29,8 +29,15 @@ pub async fn get_roles(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
-    let _current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_permissions
+    {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     // Try to load custom roles from database first
     let custom_roles = match get_custom_roles().await {
@@ -122,8 +129,15 @@ pub async fn get_role(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let _current_user = get_current_user(&headers, &state.users)
+    let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_permissions
+    {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     // 检查系统角色
     match id.as_str() {
@@ -228,8 +242,11 @@ pub async fn create_role(
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if current_user.role != shared::Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_permissions
+    {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     // 检查角色名称是否已存在
@@ -343,8 +360,11 @@ pub async fn update_role(
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if current_user.role != shared::Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_permissions
+    {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     // 不允许修改系统角色
@@ -390,6 +410,7 @@ pub async fn update_role(
     }
 
     // Build updated role
+    let old_role_name = current_role.name.clone();
     let mut updated_role = current_role.clone();
     if let Some(name) = req.name {
         updated_role.name = name;
@@ -418,6 +439,8 @@ pub async fn update_role(
             *role = updated_role.clone();
         }
     }
+
+    sync_users_for_custom_role(&state, &old_role_name, &updated_role).await?;
 
     // Audit log
     log_action(
@@ -459,8 +482,11 @@ pub async fn delete_role(
     let current_user = get_current_user(&headers, &state.users)
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if current_user.role != shared::Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_permissions
+    {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     // 不允许删除系统角色
@@ -475,18 +501,27 @@ pub async fn delete_role(
         .map_err(|_| ApiError::bad_request("Invalid role ID format"))?;
     let target_id = role_id;
 
-    // Check if role exists
-    {
+    let role_name = {
         let custom_roles = state
             .custom_roles
             .read()
             .map_err(|e| ApiError::internal(format!("Failed to read custom roles: {}", e)))?;
-        if !custom_roles.iter().any(|r| r.id == Some(target_id)) {
+        let Some(role) = custom_roles.iter().find(|r| r.id == Some(target_id)) else {
             return Err(ApiError::not_found(format!(
                 "Role with ID '{}' not found",
                 id
             )));
-        }
+        };
+        role.name.clone()
+    };
+
+    let assigned_users = load_users_assigned_to_custom_role(&state, &role_name).await?;
+    if !assigned_users.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "角色“{}”仍绑定了 {} 个用户，不能删除",
+            role_name,
+            assigned_users.len()
+        )));
     }
 
     // Remove from in-memory storage
@@ -515,4 +550,69 @@ pub async fn delete_role(
     Ok(Json(serde_json::json!({
         "message": "角色删除成功"
     })))
+}
+
+async fn sync_users_for_custom_role(
+    state: &AppState,
+    old_role_name: &str,
+    role: &CustomRole,
+) -> Result<(), ApiError> {
+    let all_users = load_users_for_role_sync(state).await?;
+
+    for mut user in all_users
+        .into_iter()
+        .filter(|user| matches!(&user.role, shared::Role::Custom(name) if name == old_role_name))
+    {
+        user.role = shared::Role::Custom(role.name.clone());
+        user.permissions = Some(role.permissions.clone());
+
+        if crate::database::get_db().is_some() {
+            db_update_user(&user.id, &user)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to sync role users: {}", e)))?;
+        }
+
+        sync_cached_user(&state.users, &user);
+    }
+
+    Ok(())
+}
+
+async fn load_users_assigned_to_custom_role(
+    state: &AppState,
+    role_name: &str,
+) -> Result<Vec<shared::User>, ApiError> {
+    load_users_for_role_sync_by_name(role_name, Some(state)).await
+}
+
+async fn load_users_for_role_sync(state: &AppState) -> Result<Vec<shared::User>, ApiError> {
+    if crate::database::get_db().is_some() {
+        return get_users()
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load users: {}", e)));
+    }
+
+    state
+        .users
+        .read()
+        .map(|users| users.clone())
+        .map_err(|e| ApiError::internal(format!("Failed to read users cache: {}", e)))
+}
+
+async fn load_users_for_role_sync_by_name(
+    role_name: &str,
+    state: Option<&AppState>,
+) -> Result<Vec<shared::User>, ApiError> {
+    let users = if let Some(state) = state {
+        load_users_for_role_sync(state).await?
+    } else {
+        get_users()
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to load users: {}", e)))?
+    };
+
+    Ok(users
+        .into_iter()
+        .filter(|user| matches!(&user.role, shared::Role::Custom(name) if name == role_name))
+        .collect())
 }

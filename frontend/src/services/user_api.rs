@@ -41,7 +41,7 @@ pub struct CreateUserPayload {
     pub username: String,
     pub real_name: Option<String>,
     pub password: String,
-    pub role: String,
+    pub role: Value,
     pub email: Option<String>,
     pub phone: Option<String>,
     pub status: Option<String>,
@@ -53,7 +53,7 @@ pub struct CreateUserPayload {
 pub struct UpdateUserPayload {
     pub real_name: Option<String>,
     pub password: Option<String>,
-    pub role: Option<String>,
+    pub role: Option<Value>,
     pub email: Option<String>,
     pub phone: Option<String>,
     pub status: Option<String>,

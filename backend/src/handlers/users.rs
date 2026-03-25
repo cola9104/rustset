@@ -8,8 +8,8 @@ use crate::middleware::ApiError;
 use crate::password;
 use crate::state::AppState;
 use crate::utils::{
-    get_current_user_from_auth, get_current_user_from_headers, log_action, remove_cached_user,
-    sync_cached_user, sync_cached_users,
+    effective_permissions, get_current_user_from_auth, get_current_user_from_headers, log_action,
+    permissions_for_role_assignment, remove_cached_user, sync_cached_user, sync_cached_users,
 };
 use axum::{
     extract::{Json, Path, State},
@@ -239,14 +239,14 @@ async fn validate_user_binding(
     Ok(())
 }
 
-/// Get all users (SysAdmin only)
+/// Get all users
 #[utoipa::path(
     get,
     path = "/api/users",
     responses(
         (status = 200, description = "List of users", body = Vec<User>),
         (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden - SysAdmin only")
+        (status = 403, description = "Forbidden")
     ),
     security(
         ("bearer_auth" = [])
@@ -261,14 +261,14 @@ pub async fn get_users(
         .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if user.role != Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &user).await.can_view_users {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     Ok(Json(load_all_users(&state).await?))
 }
 
-/// Create a new user (SysAdmin only)
+/// Create a new user
 #[utoipa::path(
     post,
     path = "/api/users",
@@ -293,8 +293,11 @@ pub async fn create_user(
         .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if current_user.role != Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_create_user
+    {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     if load_user_by_username(&state, &req.username).await.is_some() {
@@ -313,13 +316,9 @@ pub async fn create_user(
     let password_hash = password::hash_password(&req.password)
         .map_err(|e| ApiError::internal(format!("Failed to hash password: {}", e)))?;
 
-    // Set default permissions based on role
-    let permissions = match &req.role {
-        Role::SysAdmin => Some(shared::Permissions::sys_admin()),
-        Role::SecAdmin => Some(shared::Permissions::sec_admin()),
-        Role::Auditor => Some(shared::Permissions::auditor()),
-        Role::Custom(_) => None, // Custom roles need explicit permissions set later
-    };
+    let permissions = permissions_for_role_assignment(&state, &req.role)
+        .await
+        .map_err(ApiError::bad_request)?;
 
     let new_user = User {
         id: Uuid::new_v4().to_string(),
@@ -371,8 +370,11 @@ pub async fn update_user(
         .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if current_user.role != Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_update_user
+    {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let mut target_user = load_user_by_id(&state, &id)
@@ -398,7 +400,11 @@ pub async fn update_user(
         };
     }
     if let Some(value) = req.role {
+        let next_permissions = permissions_for_role_assignment(&state, &value)
+            .await
+            .map_err(ApiError::bad_request)?;
         target_user.role = value;
+        target_user.permissions = next_permissions;
     }
     if let Some(value) = req.email {
         target_user.email = if value.trim().is_empty() {
@@ -445,7 +451,7 @@ pub async fn update_user(
     Ok(Json(target_user))
 }
 
-/// Delete a user (SysAdmin only)
+/// Delete a user
 #[utoipa::path(
     delete,
     path = "/api/users/{id}",
@@ -472,8 +478,11 @@ pub async fn delete_user(
         .await
         .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
 
-    if current_user.role != Role::SysAdmin {
-        return Err(ApiError::forbidden("Access denied: SysAdmin only"));
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_delete_user
+    {
+        return Err(ApiError::forbidden("Access denied"));
     }
 
     let removed_user = load_user_by_id(&state, &id)
@@ -528,12 +537,10 @@ pub async fn update_user_permissions(
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
     // Check if current user has permission to manage permissions
-    let current_perms = current_user
-        .permissions
-        .as_ref()
-        .ok_or((StatusCode::FORBIDDEN, "No permissions set".to_string()))?;
-
-    if !current_perms.can_manage_permissions {
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_permissions
+    {
         return Err((StatusCode::FORBIDDEN, "Permission denied".to_string()));
     }
 
@@ -652,8 +659,10 @@ pub async fn get_password_policy(
         .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
-    // 只有 admin 可以查看密码策略
-    if user.role != Role::SysAdmin {
+    if !effective_permissions(&state, &user)
+        .await
+        .can_view_password_policy
+    {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
 
@@ -671,8 +680,10 @@ pub async fn update_password_policy(
         .await
         .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
 
-    // 只有 admin 可以修改密码策略
-    if current_user.role != Role::SysAdmin {
+    if !effective_permissions(&state, &current_user)
+        .await
+        .can_manage_password_policy
+    {
         return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
     }
 
