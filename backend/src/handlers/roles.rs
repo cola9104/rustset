@@ -168,7 +168,7 @@ fn normalize_role_permissions(permissions: &mut Permissions) {
 }
 
 fn validate_role_name(name: &str) -> Result<(), ApiError> {
-    if name.is_empty() {
+    if name.trim().is_empty() {
         return Err(ApiError::bad_request("角色名称不能为空"));
     }
 
@@ -796,4 +796,51 @@ async fn load_users_for_role_sync_by_name(
         .into_iter()
         .filter(|user| matches!(&user.role, shared::Role::Custom(name) if name == role_name))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared::DataScope;
+
+    #[test]
+    fn normalize_role_permissions_enables_parent_permissions() {
+        let mut permissions = Permissions {
+            can_manage_operations: true,
+            can_approve_resource_tickets: true,
+            can_manage_password_policy: true,
+            ..Default::default()
+        };
+
+        normalize_role_permissions(&mut permissions);
+
+        assert!(permissions.can_view_operations_management);
+        assert!(permissions.can_access_assets_risks);
+        assert!(permissions.can_view_resource_tickets);
+        assert!(permissions.can_view_password_policy);
+        assert!(permissions.can_access_user_management);
+    }
+
+    #[test]
+    fn validate_role_name_rejects_reserved_and_blank_names() {
+        assert!(validate_role_name("").is_err());
+        assert!(validate_role_name("  ").is_err());
+        assert!(validate_role_name("系统管理员").is_err());
+        assert!(validate_role_name("SecAdmin").is_err());
+        assert!(validate_role_name("运维管理员").is_ok());
+    }
+
+    #[test]
+    fn normalize_role_permissions_keeps_scope_intact() {
+        let mut permissions = Permissions {
+            can_deliver_resource_tickets: true,
+            resource_ticket_scope: DataScope::Organization,
+            ..Default::default()
+        };
+
+        normalize_role_permissions(&mut permissions);
+
+        assert!(permissions.can_view_resource_tickets);
+        assert_eq!(permissions.resource_ticket_scope, DataScope::Organization);
+    }
 }

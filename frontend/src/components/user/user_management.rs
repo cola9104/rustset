@@ -14,7 +14,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaUsers,
 };
 use dioxus_free_icons::Icon;
-use serde_json::json;
+use serde_json::{json, Value};
 
 #[allow(non_snake_case)]
 pub fn UserManagement() -> Element {
@@ -432,6 +432,19 @@ fn UserModal(
         .filter(|item| organization_id.read().parse::<i32>().ok() == Some(item.organization_id))
         .cloned()
         .collect::<Vec<_>>();
+    let selected_role_value = role.read().clone();
+    let selected_role_record = roles
+        .iter()
+        .find(|item| role_key(item) == selected_role_value)
+        .cloned();
+    let role_scope = selected_role_record
+        .as_ref()
+        .and_then(role_scope_label)
+        .unwrap_or_else(|| "仅自己".to_string());
+    let role_capabilities = selected_role_record
+        .as_ref()
+        .map(role_capabilities)
+        .unwrap_or_default();
 
     rsx! {
         div { class: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
@@ -503,6 +516,38 @@ fn UserModal(
                                 option { value: "Auditor", "审计员" }
                                 for role_item in roles.iter().filter(|item| !item.is_system) {
                                     option { value: "{role_item.name}", "{role_item.name}" }
+                                }
+                            }
+                            if let Some(role_item) = selected_role_record.clone() {
+                                div { class: "mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm",
+                                    div { class: "flex flex-wrap items-center gap-2",
+                                        span { class: "font-medium text-slate-800", "{role_item.name}" }
+                                        span {
+                                            class: if role_item.is_system {
+                                                "rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                                            } else {
+                                                "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+                                            },
+                                            if role_item.is_system { "系统角色" } else { "自定义角色" }
+                                        }
+                                        span { class: "rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700",
+                                            "工单范围: {role_scope}"
+                                        }
+                                    }
+                                    if !role_capabilities.is_empty() {
+                                        div { class: "mt-2 flex flex-wrap gap-2",
+                                            for capability in role_capabilities.iter() {
+                                                span { class: "rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700",
+                                                    "{capability}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if let Some(description) = role_item.description.as_deref() {
+                                        if !description.trim().is_empty() {
+                                            p { class: "mt-2 text-xs leading-5 text-slate-500", "{description}" }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -684,6 +729,10 @@ fn status_label(status: &str) -> &str {
     }
 }
 
+fn role_key(role: &RoleRecord) -> String {
+    role.role.clone().unwrap_or_else(|| role.name.clone())
+}
+
 fn role_request_value(selected_role: &str, roles: &[RoleRecord]) -> serde_json::Value {
     if roles
         .iter()
@@ -693,4 +742,78 @@ fn role_request_value(selected_role: &str, roles: &[RoleRecord]) -> serde_json::
     } else {
         json!(selected_role)
     }
+}
+
+fn role_scope_label(role: &RoleRecord) -> Option<String> {
+    role.permissions
+        .as_ref()
+        .and_then(Value::as_object)
+        .and_then(|map| map.get("resource_ticket_scope"))
+        .and_then(Value::as_str)
+        .map(|scope| match scope {
+            "self" => "仅自己".to_string(),
+            "department" => "本部门".to_string(),
+            "organization" => "本公司/组织".to_string(),
+            "all" => "全部".to_string(),
+            other => other.to_string(),
+        })
+}
+
+fn role_capabilities(role: &RoleRecord) -> Vec<String> {
+    let permissions = role.permissions.as_ref().and_then(Value::as_object);
+    let mut items = Vec::new();
+
+    if permission_enabled(permissions, "can_create_resource_tickets") {
+        items.push("可提交资源工单".to_string());
+    }
+    if permission_enabled(permissions, "can_approve_resource_tickets") {
+        items.push("可审批".to_string());
+    }
+    if permission_enabled(permissions, "can_provision_resource_tickets") {
+        items.push("可配置".to_string());
+    }
+    if permission_enabled(permissions, "can_deliver_resource_tickets") {
+        items.push("可交付".to_string());
+    }
+    if permission_enabled(permissions, "can_manage_permissions") {
+        items.push("可管理权限".to_string());
+    }
+    if permission_enabled(permissions, "can_view_users") {
+        items.push("可查看用户".to_string());
+    }
+    if permission_enabled(permissions, "can_manage_operations") {
+        items.push("可运维操作".to_string());
+    }
+
+    if items.is_empty() && role.is_system {
+        match role.role.as_deref().unwrap_or_default() {
+            "SysAdmin" => {
+                items.push("全局管理".to_string());
+                items.push("可提交资源工单".to_string());
+                items.push("可审批".to_string());
+                items.push("可配置".to_string());
+                items.push("可交付".to_string());
+            }
+            "SecAdmin" => {
+                items.push("资产与运维管理".to_string());
+                items.push("可提交资源工单".to_string());
+                items.push("可审批".to_string());
+                items.push("可配置".to_string());
+                items.push("可交付".to_string());
+            }
+            "Auditor" => {
+                items.push("全局审计只读".to_string());
+            }
+            _ => {}
+        }
+    }
+
+    items
+}
+
+fn permission_enabled(permissions: Option<&serde_json::Map<String, Value>>, key: &str) -> bool {
+    permissions
+        .and_then(|map| map.get(key))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
