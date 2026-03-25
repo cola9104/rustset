@@ -5,6 +5,7 @@ use crate::services::{
     fetch_machine_rooms, fetch_service_providers, update_cloud_platform_config,
 };
 use crate::state::cloud_platform::CloudPlatformConfig;
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaCheck, FaCloud, FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaPowerOff, FaTrash,
@@ -14,6 +15,8 @@ use dioxus_free_icons::Icon;
 /// 云平台管理页面
 #[allow(non_snake_case)]
 pub fn CloudPlatformManagement() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut search_query = use_signal(String::new);
     let mut status_filter = use_signal(|| "全部".to_string());
     let mut provider_filter = use_signal(|| "全部".to_string());
@@ -192,6 +195,7 @@ pub fn CloudPlatformManagement() -> Element {
     let viewing_config_clone = viewing_config.read().clone();
     let toggle_config_id = viewing_config_clone.as_ref().map(|c| c.id);
     let toggle_status = viewing_config_clone.as_ref().map(|c| c.status.clone());
+    let can_manage = current_auth.can_manage_cloud_providers();
 
     rsx! {
         div { class: "space-y-6",
@@ -201,11 +205,19 @@ pub fn CloudPlatformManagement() -> Element {
                     h1 { class: "text-2xl font-bold text-gray-800", "云平台管理" }
                     p { class: "text-sm text-gray-500 mt-1", "管理市级政务云平台配置" }
                 }
-                button {
-                    class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
-                    onclick: move |_| show_add_modal.set(true),
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    span { class: "ml-2", "添加平台" }
+                if can_manage {
+                    button {
+                        class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
+                        onclick: move |_| show_add_modal.set(true),
+                        Icon { icon: FaPlus, width: 16, height: 16 }
+                        span { class: "ml-2", "添加平台" }
+                    }
+                }
+            }
+
+            if !can_manage {
+                div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号仅可查看云平台配置，新增、编辑、删除和状态切换操作已禁用。"
                 }
             }
 
@@ -406,34 +418,36 @@ pub fn CloudPlatformManagement() -> Element {
                                                     },
                                                     Icon { icon: FaEye, width: 16, height: 16 }
                                                 }
-                                                button {
-                                                    class: "text-yellow-600 hover:text-yellow-900",
-                                                    onclick: {
-                                                        let config = config.clone();
-                                                        move |_| editing_config.set(Some(config.clone()))
-                                                    },
-                                                    Icon { icon: FaPenToSquare, width: 16, height: 16 }
-                                                }
-                                                button {
-                                                    class: "text-red-600 hover:text-red-900",
-                                                    onclick: {
-                                                        let config_id = config.id;
-                                                        // refresh_data
-                                                        move |_| {
+                                                if can_manage {
+                                                    button {
+                                                        class: "text-yellow-600 hover:text-yellow-900",
+                                                        onclick: {
+                                                            let config = config.clone();
+                                                            move |_| editing_config.set(Some(config.clone()))
+                                                        },
+                                                        Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                                    }
+                                                    button {
+                                                        class: "text-red-600 hover:text-red-900",
+                                                        onclick: {
+                                                            let config_id = config.id;
                                                             // refresh_data
-                                                            spawn(async move {
-                                                                match delete_cloud_platform_config(config_id).await {
-                                                                    Ok(()) => {
-                                                                        refresh_data();
+                                                            move |_| {
+                                                                // refresh_data
+                                                                spawn(async move {
+                                                                    match delete_cloud_platform_config(config_id).await {
+                                                                        Ok(()) => {
+                                                                            refresh_data();
+                                                                        }
+                                                                        Err(e) => {
+                                                                            tracing::error!("删除云平台失败: {}", e);
+                                                                        }
                                                                     }
-                                                                    Err(e) => {
-                                                                        tracing::error!("删除云平台失败: {}", e);
-                                                                    }
-                                                                }
-                                                            });
-                                                        }
-                                                    },
-                                                    Icon { icon: FaTrash, width: 16, height: 16 }
+                                                                });
+                                                            }
+                                                        },
+                                                        Icon { icon: FaTrash, width: 16, height: 16 }
+                                                    }
                                                 }
                                             }
                                         }
@@ -447,7 +461,7 @@ pub fn CloudPlatformManagement() -> Element {
         }
 
         // 添加平台模态框
-        if *show_add_modal.read() {
+        if can_manage && *show_add_modal.read() {
             PlatformForm {
                 mode: FormMode::New,
                 config: None,
@@ -470,25 +484,27 @@ pub fn CloudPlatformManagement() -> Element {
         }
 
         // 编辑平台模态框
-        if let Some(config) = editing_config.read().as_ref() {
-            PlatformForm {
-                mode: FormMode::Edit,
-                config: Some(config.clone()),
-                on_save: move |updated: CloudPlatformConfig| {
-                    // refresh_data
-                    spawn(async move {
-                        match update_cloud_platform_config(updated.id, &updated).await {
-                            Ok(_) => {
-                                refresh_data();
+        if can_manage {
+            if let Some(config) = editing_config.read().as_ref() {
+                PlatformForm {
+                    mode: FormMode::Edit,
+                    config: Some(config.clone()),
+                    on_save: move |updated: CloudPlatformConfig| {
+                        // refresh_data
+                        spawn(async move {
+                            match update_cloud_platform_config(updated.id, &updated).await {
+                                Ok(_) => {
+                                    refresh_data();
+                                }
+                                Err(e) => {
+                                    tracing::error!("更新云平台失败: {}", e);
+                                }
                             }
-                            Err(e) => {
-                                tracing::error!("更新云平台失败: {}", e);
-                            }
-                        }
-                    });
-                    editing_config.set(None);
-                },
-                on_close: move |_| editing_config.set(None)
+                        });
+                        editing_config.set(None);
+                    },
+                    on_close: move |_| editing_config.set(None)
+                }
             }
         }
 
@@ -496,10 +512,15 @@ pub fn CloudPlatformManagement() -> Element {
         if let Some(config) = viewing_config_clone.clone() {
             ConfigDetailModal {
                 config: config.clone(),
+                can_manage: can_manage,
                 on_close: move |_| viewing_config.set(None),
                 on_toggle_status: {
                     // refresh_data
                     move |_| {
+                        if !can_manage {
+                            viewing_config.set(None);
+                            return;
+                        }
                         if let Some(id) = toggle_config_id {
                             let status = toggle_status.as_deref().unwrap_or("inactive");
                             let new_status = if status == "active" { "inactive" } else { "active" };
@@ -532,6 +553,7 @@ pub fn CloudPlatformManagement() -> Element {
 #[component]
 fn ConfigDetailModal(
     config: CloudPlatformConfig,
+    can_manage: bool,
     on_close: EventHandler<()>,
     on_toggle_status: EventHandler<()>,
 ) -> Element {
@@ -661,18 +683,20 @@ fn ConfigDetailModal(
                 }
 
                 div { class: "flex justify-end space-x-3 p-4 border-t bg-gray-50",
-                    button {
-                        class: if config.status == "active" {
-                            "px-4 py-2 text-red-600 border border-red-300 rounded-md hover:bg-red-50"
-                        } else {
-                            "px-4 py-2 text-green-600 border border-green-300 rounded-md hover:bg-green-50"
-                        },
-                        onclick: move |_| on_toggle_status.call(()),
-                        Icon { icon: FaPowerOff, width: 16, height: 16, class: "mr-2 inline" }
-                        if config.status == "active" {
-                            "停用"
-                        } else {
-                            "启用"
+                    if can_manage {
+                        button {
+                            class: if config.status == "active" {
+                                "px-4 py-2 text-red-600 border border-red-300 rounded-md hover:bg-red-50"
+                            } else {
+                                "px-4 py-2 text-green-600 border border-green-300 rounded-md hover:bg-green-50"
+                            },
+                            onclick: move |_| on_toggle_status.call(()),
+                            Icon { icon: FaPowerOff, width: 16, height: 16, class: "mr-2 inline" }
+                            if config.status == "active" {
+                                "停用"
+                            } else {
+                                "启用"
+                            }
                         }
                     }
                     button {

@@ -7,6 +7,7 @@ use crate::services::{
 use crate::state::security_product::{
     SecurityProduct, SecurityProductCategory, SecurityProductStatus,
 };
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaShieldHalved, FaTrash,
@@ -16,6 +17,8 @@ use dioxus_free_icons::Icon;
 /// 安全产品管理页面
 #[component]
 pub fn SecurityProductManagement() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut search_query = use_signal(String::new);
     let mut category_filter = use_signal(|| String::from("all"));
     let mut status_filter = use_signal(|| String::from("all"));
@@ -131,6 +134,7 @@ pub fn SecurityProductManagement() -> Element {
         .collect();
 
     let is_empty = filtered_products.is_empty();
+    let can_manage = current_auth.can_manage_operations();
 
     rsx! {
         div { class: "p-6 space-y-6",
@@ -143,11 +147,19 @@ pub fn SecurityProductManagement() -> Element {
                         p { class: "text-sm text-gray-500 mt-1", "管理防火墙、WAF、IPS等安全设备" }
                     }
                 }
-                button {
-                    class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
-                    onclick: move |_| show_add_modal.set(true),
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    span { class: "ml-2", "添加产品" }
+                if can_manage {
+                    button {
+                        class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
+                        onclick: move |_| show_add_modal.set(true),
+                        Icon { icon: FaPlus, width: 16, height: 16 }
+                        span { class: "ml-2", "添加产品" }
+                    }
+                }
+            }
+
+            if !can_manage {
+                div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号仅可查看安全产品信息，新增、编辑、删除操作已禁用。"
                 }
             }
 
@@ -308,34 +320,36 @@ pub fn SecurityProductManagement() -> Element {
                                                         },
                                                         Icon { icon: FaEye, width: 16, height: 16 }
                                                     }
-                                                    button {
-                                                        class: "text-indigo-600 hover:text-indigo-900 mr-3",
-                                                        onclick: {
-                                                            let product = product.clone();
-                                                            move |_| editing_product.set(Some(product.clone()))
-                                                        },
-                                                        Icon { icon: FaPenToSquare, width: 16, height: 16 }
-                                                    }
-                                                    button {
-                                                        class: "text-red-600 hover:text-red-900",
-                                                        onclick: {
-                                                            let product_id = product.id;
-                                                            // refresh_data
-                                                            move |_| {
+                                                    if can_manage {
+                                                        button {
+                                                            class: "text-indigo-600 hover:text-indigo-900 mr-3",
+                                                            onclick: {
+                                                                let product = product.clone();
+                                                                move |_| editing_product.set(Some(product.clone()))
+                                                            },
+                                                            Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                                        }
+                                                        button {
+                                                            class: "text-red-600 hover:text-red-900",
+                                                            onclick: {
+                                                                let product_id = product.id;
                                                                 // refresh_data
-                                                                spawn(async move {
-                                                                    match delete_security_product(product_id).await {
-                                                                        Ok(()) => {
-                                                                            refresh_data();
+                                                                move |_| {
+                                                                    // refresh_data
+                                                                    spawn(async move {
+                                                                        match delete_security_product(product_id).await {
+                                                                            Ok(()) => {
+                                                                                refresh_data();
+                                                                            }
+                                                                            Err(e) => {
+                                                                                tracing::error!("删除安全产品失败: {}", e);
+                                                                            }
                                                                         }
-                                                                        Err(e) => {
-                                                                            tracing::error!("删除安全产品失败: {}", e);
-                                                                        }
-                                                                    }
-                                                                });
-                                                            }
-                                                        },
-                                                        Icon { icon: FaTrash, width: 16, height: 16 }
+                                                                    });
+                                                                }
+                                                            },
+                                                            Icon { icon: FaTrash, width: 16, height: 16 }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -350,7 +364,7 @@ pub fn SecurityProductManagement() -> Element {
         }
 
         // 添加产品模态框
-        if *show_add_modal.read() {
+        if can_manage && *show_add_modal.read() {
             ProductForm {
                 mode: FormMode::New,
                 product: None,
@@ -373,7 +387,8 @@ pub fn SecurityProductManagement() -> Element {
         }
 
         // 编辑产品模态框
-        if let Some(product) = editing_product.read().as_ref() {
+        if can_manage {
+            if let Some(product) = editing_product.read().as_ref() {
             ProductForm {
                 mode: FormMode::Edit,
                 product: Some(product.clone()),
@@ -393,6 +408,7 @@ pub fn SecurityProductManagement() -> Element {
                 },
                 on_close: move |_| editing_product.set(None)
             }
+        }
         }
 
         // 查看产品模态框

@@ -8,6 +8,7 @@ use crate::services::ip_zone_api::{
 use crate::services::machine_room_api::fetch_machine_rooms;
 use crate::state::cloud_platform::CloudPlatformConfig;
 use crate::state::machine_room::MachineRoomConfig;
+use crate::state::user_role::use_auth;
 use crate::utils::storage::authorization_header;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
@@ -30,6 +31,8 @@ fn zone_binding_label(zone: &ZoneConfig) -> (&'static str, String) {
 
 #[component]
 pub fn IpZonesPage() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut zones = use_signal(Vec::<ZoneConfig>::new);
     let mut cloud_platforms = use_signal(Vec::<CloudPlatformConfig>::new);
     let mut machine_rooms = use_signal(Vec::<MachineRoomConfig>::new);
@@ -255,6 +258,7 @@ pub fn IpZonesPage() -> Element {
         .iter()
         .filter(|zone| zone.machine_room_id.is_some())
         .count();
+    let can_manage = current_auth.can_manage_operations();
 
     rsx! {
         div { class: "flex flex-col gap-6",
@@ -317,7 +321,8 @@ pub fn IpZonesPage() -> Element {
 
             div { class: "grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)]",
                 div { class: "flex flex-col gap-6",
-                    div { class: "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm",
+                    if can_manage {
+                        div { class: "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm",
                         div { class: "flex items-center gap-3",
                             div { class: "flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700",
                                 Icon { icon: FaPlus, width: 16, height: 16 }
@@ -425,6 +430,19 @@ pub fn IpZonesPage() -> Element {
                             }
                         }
                     }
+                    } else {
+                        div { class: "rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm",
+                            div { class: "flex items-center gap-3",
+                                div { class: "flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700",
+                                    Icon { icon: FaTriangleExclamation, width: 16, height: 16 }
+                                }
+                                div {
+                                    h2 { class: "text-lg font-semibold text-amber-900", "当前为只读模式" }
+                                    p { class: "text-sm text-amber-800", "你可以查询和查看网络区域，但创建、删除操作已按权限关闭。" }
+                                }
+                            }
+                        }
+                    }
 
                     div { class: "rounded-2xl border border-slate-200 bg-white p-6 shadow-sm",
                         div { class: "flex items-center gap-3",
@@ -518,7 +536,9 @@ pub fn IpZonesPage() -> Element {
                                         th { class: "px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500", "绑定对象" }
                                         th { class: "px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500", "CIDR" }
                                         th { class: "px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500", "优先级" }
-                                        th { class: "px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500", "操作" }
+                                        if can_manage {
+                                            th { class: "px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500", "操作" }
+                                        }
                                     }
                                 }
                                 tbody { class: "divide-y divide-slate-100 bg-white",
@@ -543,15 +563,17 @@ pub fn IpZonesPage() -> Element {
                                                             "{zone.priority}"
                                                         }
                                                     }
-                                                    td { class: "px-6 py-4 text-right",
-                                                        button {
-                                                            class: "inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60",
-                                                            disabled: is_deleting,
-                                                            onclick: move |_| {
-                                                                spawn(delete_zone_action(zone_id.clone(), zone_name.clone()));
-                                                            },
-                                                            Icon { icon: FaTrash, width: 14, height: 14 }
-                                                            if is_deleting { "删除中..." } else { "删除" }
+                                                    if can_manage {
+                                                        td { class: "px-6 py-4 text-right",
+                                                            button {
+                                                                class: "inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60",
+                                                                disabled: is_deleting,
+                                                                onclick: move |_| {
+                                                                    spawn(delete_zone_action(zone_id.clone(), zone_name.clone()));
+                                                                },
+                                                                Icon { icon: FaTrash, width: 14, height: 14 }
+                                                                if is_deleting { "删除中..." } else { "删除" }
+                                                            }
                                                         }
                                                     }
                                                 }

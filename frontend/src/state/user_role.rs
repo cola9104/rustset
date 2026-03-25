@@ -119,6 +119,14 @@ impl AuthState {
         self.has_permission("can_delete_task")
     }
 
+    pub fn can_manage_operations(&self) -> bool {
+        self.has_permission("can_manage_operations")
+    }
+
+    pub fn can_manage_cloud_providers(&self) -> bool {
+        self.has_permission("can_manage_cloud_providers")
+    }
+
     pub fn can_view_users(&self) -> bool {
         self.has_permission("can_view_users")
     }

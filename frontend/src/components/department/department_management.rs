@@ -4,6 +4,7 @@ use crate::services::{
 };
 use crate::state::department::DepartmentRecord;
 use crate::state::organization::OrganizationRecord;
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaDiagramProject, FaMagnifyingGlass, FaPlus, FaTrash,
@@ -12,6 +13,8 @@ use dioxus_free_icons::Icon;
 
 #[allow(non_snake_case)]
 pub fn DepartmentManagement() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut departments = use_signal(Vec::<DepartmentRecord>::new);
     let mut organizations = use_signal(Vec::<OrganizationRecord>::new);
     let mut search_query = use_signal(String::new);
@@ -47,27 +50,36 @@ pub fn DepartmentManagement() -> Element {
         })
         .cloned()
         .collect::<Vec<_>>();
+    let can_manage = current_auth.can_manage_permissions();
 
     rsx! {
         div { class: "space-y-6",
             div { class: "flex items-center justify-between",
                 h1 { class: "text-2xl font-bold text-gray-800", "部门管理" }
-                button {
-                    class: "flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700",
-                    onclick: move |_| editing.set(Some(DepartmentRecord {
-                        id: 0,
-                        organization_id: organizations.read().first().map(|item| item.id).unwrap_or(0),
-                        name: String::new(),
-                        code: String::new(),
-                        parent_id: None,
-                        level: 1,
-                        status: "active".to_string(),
-                        remarks: None,
-                        created_at: String::new(),
-                        updated_at: None,
-                    })),
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    "新增部门"
+                if can_manage {
+                    button {
+                        class: "flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700",
+                        onclick: move |_| editing.set(Some(DepartmentRecord {
+                            id: 0,
+                            organization_id: organizations.read().first().map(|item| item.id).unwrap_or(0),
+                            name: String::new(),
+                            code: String::new(),
+                            parent_id: None,
+                            level: 1,
+                            status: "active".to_string(),
+                            remarks: None,
+                            created_at: String::new(),
+                            updated_at: None,
+                        })),
+                        Icon { icon: FaPlus, width: 16, height: 16 }
+                        "新增部门"
+                    }
+                }
+            }
+
+            if !can_manage {
+                div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号仅可查看部门数据，新增、编辑、删除操作已禁用。"
                 }
             }
 
@@ -116,24 +128,26 @@ pub fn DepartmentManagement() -> Element {
                                     td { class: "px-6 py-4 text-sm text-gray-600", "{item.code}" }
                                     td { class: "px-6 py-4 text-sm text-gray-600", "{item.level}" }
                                     td { class: "px-6 py-4 text-right text-sm",
-                                        button {
-                                            class: "mr-3 text-blue-600 hover:text-blue-800",
-                                            onclick: {
-                                                let item = item.clone();
-                                                move |_| editing.set(Some(item.clone()))
-                                            },
-                                            "编辑"
-                                        }
-                                        button {
-                                            class: "text-red-600 hover:text-red-800",
-                                            onclick: move |_| {
-                                                let id = item.id;
-                                                spawn(async move {
-                                                    let _ = delete_department(id).await;
-                                                    spawn(reload());
-                                                });
-                                            },
-                                            Icon { icon: FaTrash, width: 14, height: 14 }
+                                        if can_manage {
+                                            button {
+                                                class: "mr-3 text-blue-600 hover:text-blue-800",
+                                                onclick: {
+                                                    let item = item.clone();
+                                                    move |_| editing.set(Some(item.clone()))
+                                                },
+                                                "编辑"
+                                            }
+                                            button {
+                                                class: "text-red-600 hover:text-red-800",
+                                                onclick: move |_| {
+                                                    let id = item.id;
+                                                    spawn(async move {
+                                                        let _ = delete_department(id).await;
+                                                        spawn(reload());
+                                                    });
+                                                },
+                                                Icon { icon: FaTrash, width: 14, height: 14 }
+                                            }
                                         }
                                     }
                                 }
@@ -143,7 +157,8 @@ pub fn DepartmentManagement() -> Element {
                 }
             }
 
-            if let Some(item) = editing() {
+            if can_manage {
+                if let Some(item) = editing() {
                 DepartmentModal {
                     initial: item,
                     organizations: organizations.read().clone(),
@@ -166,6 +181,7 @@ pub fn DepartmentManagement() -> Element {
                         });
                     }
                 }
+            }
             }
         }
     }

@@ -4,6 +4,7 @@ use crate::services::{
     update_service_provider,
 };
 use crate::state::service_provider::ServiceProviderConfig;
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaBuilding, FaCircleCheck, FaCircleXmark, FaEnvelope, FaMagnifyingGlass, FaPhone, FaPlus,
@@ -13,6 +14,8 @@ use dioxus_free_icons::Icon;
 /// 服务商管理页面
 #[component]
 pub fn ServiceProviderManagement() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut search_query = use_signal(String::new);
     let mut status_filter = use_signal(|| String::from("all"));
 
@@ -73,6 +76,7 @@ pub fn ServiceProviderManagement() -> Element {
         .iter()
         .filter(|p| p.status == "inactive")
         .count() as i32;
+    let can_manage = current_auth.can_manage_operations();
 
     // 筛选逻辑
     let filtered_providers = providers
@@ -101,11 +105,19 @@ pub fn ServiceProviderManagement() -> Element {
             // 页面标题
             div { class: "flex justify-between items-center mb-6",
                 h1 { class: "text-2xl font-bold text-gray-800", "服务商管理" }
-                button {
-                    class: "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2",
-                    onclick: move |_| show_add_modal.set(true),
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    span { "添加服务商" }
+                if can_manage {
+                    button {
+                        class: "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2",
+                        onclick: move |_| show_add_modal.set(true),
+                        Icon { icon: FaPlus, width: 16, height: 16 }
+                        span { "添加服务商" }
+                    }
+                }
+            }
+
+            if !can_manage {
+                div { class: "mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号仅可查看服务商信息，新增、编辑、删除操作已禁用。"
                 }
             }
 
@@ -218,37 +230,39 @@ pub fn ServiceProviderManagement() -> Element {
                                                 },
                                                 "查看"
                                             }
-                                            button {
-                                                class: "text-indigo-600 hover:text-indigo-900 mr-3",
-                                                onclick: {
-                                                    let provider = provider.clone();
-                                                    move |_| {
-                                                        selected_provider.set(Some(provider.clone()));
-                                                        show_edit_modal.set(true);
-                                                    }
-                                                },
-                                                "编辑"
-                                            }
-                                            button {
-                                                class: "text-red-600 hover:text-red-900",
-                                                onclick: {
-                                                    let provider_id = provider.id;
-                                                    // refresh_data
-                                                    move |_| {
+                                            if can_manage {
+                                                button {
+                                                    class: "text-indigo-600 hover:text-indigo-900 mr-3",
+                                                    onclick: {
+                                                        let provider = provider.clone();
+                                                        move |_| {
+                                                            selected_provider.set(Some(provider.clone()));
+                                                            show_edit_modal.set(true);
+                                                        }
+                                                    },
+                                                    "编辑"
+                                                }
+                                                button {
+                                                    class: "text-red-600 hover:text-red-900",
+                                                    onclick: {
+                                                        let provider_id = provider.id;
                                                         // refresh_data
-                                                        spawn(async move {
-                                                            match delete_service_provider(provider_id).await {
-                                                                Ok(()) => {
-                                                                    refresh_data();
+                                                        move |_| {
+                                                            // refresh_data
+                                                            spawn(async move {
+                                                                match delete_service_provider(provider_id).await {
+                                                                    Ok(()) => {
+                                                                        refresh_data();
+                                                                    }
+                                                                    Err(e) => {
+                                                                        tracing::error!("删除服务商失败: {}", e);
+                                                                    }
                                                                 }
-                                                                Err(e) => {
-                                                                    tracing::error!("删除服务商失败: {}", e);
-                                                                }
-                                                            }
-                                                        });
-                                                    }
-                                                },
-                                                "删除"
+                                                            });
+                                                        }
+                                                    },
+                                                    "删除"
+                                                }
                                             }
                                         }
                                     }
@@ -261,7 +275,7 @@ pub fn ServiceProviderManagement() -> Element {
         }
 
         // 添加服务商模态框
-        if *show_add_modal.read() {
+        if can_manage && *show_add_modal.read() {
             ProviderForm {
                 mode: FormMode::New,
                 provider: None,
@@ -284,7 +298,7 @@ pub fn ServiceProviderManagement() -> Element {
         }
 
         // 编辑服务商模态框
-        if *show_edit_modal.read() {
+        if can_manage && *show_edit_modal.read() {
             if let Some(provider) = selected_provider.read().as_ref().cloned() {
                 ProviderForm {
                     mode: FormMode::Edit,

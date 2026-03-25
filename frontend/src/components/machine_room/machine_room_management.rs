@@ -5,6 +5,7 @@ use crate::services::{
     update_machine_room,
 };
 use crate::state::machine_room::MachineRoomConfig;
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaBuilding, FaEye, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaTrash,
@@ -14,6 +15,8 @@ use dioxus_free_icons::Icon;
 /// 机房管理页面
 #[component]
 pub fn MachineRoomManagement() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut show_add_modal = use_signal(|| false);
     let mut show_edit_modal = use_signal(|| false);
     let mut show_view_modal = use_signal(|| false);
@@ -135,6 +138,7 @@ pub fn MachineRoomManagement() -> Element {
             (room.clone(), provider_name)
         })
         .collect();
+    let can_manage = current_auth.can_manage_operations();
 
     rsx! {
         div { class: "p-6 bg-white min-h-screen",
@@ -144,13 +148,21 @@ pub fn MachineRoomManagement() -> Element {
                     Icon { icon: FaBuilding, width: 28, height: 28, class: "text-blue-600" }
                     h1 { class: "text-2xl font-bold text-gray-800", "机房管理" }
                 }
-                button {
-                    class: "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors",
-                    onclick: move |_| {
-                        show_add_modal.set(true);
-                    },
-                    Icon { icon: FaPlus, width: 16, height: 16 }
-                    span { "添加机房" }
+                if can_manage {
+                    button {
+                        class: "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors",
+                        onclick: move |_| {
+                            show_add_modal.set(true);
+                        },
+                        Icon { icon: FaPlus, width: 16, height: 16 }
+                        span { "添加机房" }
+                    }
+                }
+            }
+
+            if !can_manage {
+                div { class: "mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号仅可查看机房信息，新增、编辑、删除操作已禁用。"
                 }
             }
 
@@ -316,39 +328,41 @@ pub fn MachineRoomManagement() -> Element {
                                                         },
                                                         Icon { icon: FaEye, width: 16, height: 16 }
                                                     }
-                                                    button {
-                                                        class: "text-yellow-600 hover:text-yellow-800 transition-colors",
-                                                        title: "编辑",
-                                                        onclick: {
-                                                            let room = room.clone();
-                                                            move |_| {
-                                                                selected_room.set(Some(room.clone()));
-                                                                show_edit_modal.set(true);
-                                                            }
-                                                        },
-                                                        Icon { icon: FaPenToSquare, width: 16, height: 16 }
-                                                    }
-                                                    button {
-                                                        class: "text-red-600 hover:text-red-800 transition-colors",
-                                                        title: "删除",
-                                                        onclick: {
-                                                            let room_id = room.id;
-                                                            // refresh_data
-                                                            move |_| {
+                                                    if can_manage {
+                                                        button {
+                                                            class: "text-yellow-600 hover:text-yellow-800 transition-colors",
+                                                            title: "编辑",
+                                                            onclick: {
+                                                                let room = room.clone();
+                                                                move |_| {
+                                                                    selected_room.set(Some(room.clone()));
+                                                                    show_edit_modal.set(true);
+                                                                }
+                                                            },
+                                                            Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                                        }
+                                                        button {
+                                                            class: "text-red-600 hover:text-red-800 transition-colors",
+                                                            title: "删除",
+                                                            onclick: {
+                                                                let room_id = room.id;
                                                                 // refresh_data
-                                                                spawn(async move {
-                                                                    match delete_machine_room(room_id).await {
-                                                                        Ok(()) => {
-                                                                            refresh_data();
+                                                                move |_| {
+                                                                    // refresh_data
+                                                                    spawn(async move {
+                                                                        match delete_machine_room(room_id).await {
+                                                                            Ok(()) => {
+                                                                                refresh_data();
+                                                                            }
+                                                                            Err(e) => {
+                                                                                tracing::error!("删除机房失败: {}", e);
+                                                                            }
                                                                         }
-                                                                        Err(e) => {
-                                                                            tracing::error!("删除机房失败: {}", e);
-                                                                        }
-                                                                    }
-                                                                });
-                                                            }
-                                                        },
-                                                        Icon { icon: FaTrash, width: 16, height: 16 }
+                                                                    });
+                                                                }
+                                                            },
+                                                            Icon { icon: FaTrash, width: 16, height: 16 }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -363,7 +377,7 @@ pub fn MachineRoomManagement() -> Element {
         }
 
         // 添加机房模态框
-        if *show_add_modal.read() {
+        if can_manage && *show_add_modal.read() {
             RoomForm {
                 mode: FormMode::New,
                 room: None,
@@ -386,7 +400,7 @@ pub fn MachineRoomManagement() -> Element {
         }
 
         // 编辑机房模态框
-        if *show_edit_modal.read() {
+        if can_manage && *show_edit_modal.read() {
             if let Some(room) = selected_room.read().as_ref() {
                 RoomForm {
                     mode: FormMode::Edit,
