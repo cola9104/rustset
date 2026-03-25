@@ -37,6 +37,8 @@ impl UserRole {
 /// 应用状态标签页
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApplicationTab {
+    /// 范围内工单
+    VisibleTickets,
     /// 我的申请
     MyApplications,
     /// 待审批
@@ -54,6 +56,7 @@ pub enum ApplicationTab {
 impl ApplicationTab {
     pub fn display_name(&self) -> &'static str {
         match self {
+            ApplicationTab::VisibleTickets => "范围内工单",
             ApplicationTab::MyApplications => "我的申请",
             ApplicationTab::PendingApproval => "待审批",
             ApplicationTab::PendingProvision => "待配置",
@@ -65,6 +68,7 @@ impl ApplicationTab {
 
     pub fn icon_name(&self) -> &'static str {
         match self {
+            ApplicationTab::VisibleTickets => "fa-layer-group",
             ApplicationTab::MyApplications => "fa-list",
             ApplicationTab::PendingApproval => "fa-clock",
             ApplicationTab::PendingProvision => "fa-cog",
@@ -188,31 +192,39 @@ impl AuthState {
 
     pub fn accessible_tabs(&self) -> Vec<ApplicationTab> {
         let mut tabs = Vec::new();
+        let scope = self.scope_value("resource_ticket_scope");
 
-        if self.can_submit() {
-            tabs.push(ApplicationTab::MyApplications);
+        if self.can_view_resource_tickets() && scope != Some("self") {
+            push_tab(&mut tabs, ApplicationTab::VisibleTickets);
+        }
+        if self.can_submit() || (self.can_view_resource_tickets() && scope == Some("self")) {
+            push_tab(&mut tabs, ApplicationTab::MyApplications);
         }
         if self.can_approve() {
-            tabs.push(ApplicationTab::PendingApproval);
+            push_tab(&mut tabs, ApplicationTab::PendingApproval);
         }
         if self.can_provision() {
-            tabs.push(ApplicationTab::PendingProvision);
+            push_tab(&mut tabs, ApplicationTab::PendingProvision);
         }
         if self.can_deliver() {
-            tabs.push(ApplicationTab::PendingDelivery);
-            tabs.push(ApplicationTab::Delivered);
+            push_tab(&mut tabs, ApplicationTab::PendingDelivery);
         }
-        if self.has_permission("can_view_resource_tickets")
-            && self.scope_value("resource_ticket_scope") == Some("all")
-        {
-            tabs.push(ApplicationTab::Archived);
+        if self.can_view_resource_tickets() {
+            push_tab(&mut tabs, ApplicationTab::Delivered);
+            push_tab(&mut tabs, ApplicationTab::Archived);
         }
 
         if tabs.is_empty() && self.can_view_resource_tickets() {
-            tabs.push(ApplicationTab::MyApplications);
+            push_tab(&mut tabs, ApplicationTab::MyApplications);
         }
 
         tabs
+    }
+}
+
+fn push_tab(tabs: &mut Vec<ApplicationTab>, tab: ApplicationTab) {
+    if !tabs.contains(&tab) {
+        tabs.push(tab);
     }
 }
 

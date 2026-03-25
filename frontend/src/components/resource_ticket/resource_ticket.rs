@@ -95,6 +95,22 @@ fn scope_label(value: Option<&str>) -> &'static str {
     }
 }
 
+fn ticket_matches_workflow_tab(
+    ticket: &ResourceTicket,
+    workflow_tab: ApplicationTab,
+    current_username: &str,
+) -> bool {
+    match workflow_tab {
+        ApplicationTab::VisibleTickets => true,
+        ApplicationTab::MyApplications => is_my_ticket(ticket, current_username),
+        ApplicationTab::PendingApproval => ticket.ticket_status == TicketStatus::PendingApproval,
+        ApplicationTab::PendingProvision => is_pending_provision_status(ticket.ticket_status),
+        ApplicationTab::PendingDelivery => ticket.ticket_status == TicketStatus::PendingDelivery,
+        ApplicationTab::Delivered => ticket.ticket_status == TicketStatus::Delivered,
+        ApplicationTab::Archived => ticket.ticket_status == TicketStatus::Archived,
+    }
+}
+
 fn ticket_stage_guidance(
     ticket: &ResourceTicket,
     current_auth: &AuthState,
@@ -202,6 +218,8 @@ pub fn ResourceTicket() -> Element {
     }
 
     let current_auth = auth.read().clone();
+    let current_username = current_auth.username.clone();
+    let ticket_scope_label = scope_label(current_auth.scope_value("resource_ticket_scope"));
     let submit_profile_warning = AUTH_STATE
         .read()
         .as_ref()
@@ -248,6 +266,12 @@ pub fn ResourceTicket() -> Element {
         .filter(|t| t.resource_type == *resource_type_tab.read())
         .cloned()
         .collect::<Vec<_>>();
+    let current_tab_total = current_type_tickets
+        .iter()
+        .filter(|ticket| {
+            ticket_matches_workflow_tab(ticket, *workflow_tab.read(), &current_username)
+        })
+        .count();
 
     let total_count = current_type_tickets.len();
     let pending_count = current_type_tickets
@@ -282,6 +306,9 @@ pub fn ResourceTicket() -> Element {
                             h1 { class: "text-xl font-bold text-gray-800", "资源工单管理" }
                             p { class: "text-sm text-gray-500 mt-0.5",
                                 "当前角色: {current_auth.display_role_label()}"
+                            }
+                            p { class: "text-sm text-gray-500",
+                                "工单可见范围: {ticket_scope_label}"
                             }
                         }
                     }
@@ -491,7 +518,7 @@ pub fn ResourceTicket() -> Element {
                     div { class: "flex items-center gap-3",
                         // 统计信息
                         span { class: "text-sm text-gray-500 whitespace-nowrap",
-                            {format!("共 {} 条", total_count)}
+                            {format!("当前标签 {} 条 / 当前资源 {} 条", current_tab_total, total_count)}
                         }
                         // 搜索框
                         div { class: "relative w-40",
@@ -534,7 +561,7 @@ pub fn ResourceTicket() -> Element {
                         workflow_tab: *workflow_tab.read(),
                         tickets: tickets,
                         search_query: (*search_query.read()).clone(),
-                        current_username: auth.read().username.clone(),
+                        current_username: current_username.clone(),
                         on_select: move |id| selected_ticket.set(Some(id)),
                     }
                 }
@@ -860,23 +887,7 @@ fn TicketListViewByTypeAndWorkflow(
     let filtered_tickets: Vec<_> = all_tickets
         .into_iter()
         .filter(|ticket| ticket.resource_type == resource_type)
-        .filter(|ticket| {
-            // 工作流程筛选
-            match workflow_tab {
-                ApplicationTab::MyApplications => is_my_ticket(ticket, &current_username),
-                ApplicationTab::PendingApproval => {
-                    ticket.ticket_status == TicketStatus::PendingApproval
-                }
-                ApplicationTab::PendingProvision => {
-                    is_pending_provision_status(ticket.ticket_status)
-                }
-                ApplicationTab::PendingDelivery => {
-                    ticket.ticket_status == TicketStatus::PendingDelivery
-                }
-                ApplicationTab::Delivered => ticket.ticket_status == TicketStatus::Delivered,
-                ApplicationTab::Archived => ticket.ticket_status == TicketStatus::Archived,
-            }
-        })
+        .filter(|ticket| ticket_matches_workflow_tab(ticket, workflow_tab, &current_username))
         .filter(|ticket| {
             // 搜索查询筛选
             if search_query.is_empty() {
@@ -900,6 +911,15 @@ fn TicketListViewByTypeAndWorkflow(
                 div { class: "flex flex-col items-center justify-center py-16 text-gray-500",
                     Icon { icon: FaFile, class: "text-5xl text-gray-300 mb-4" }
                     p { class: "text-lg", "暂无数据" }
+                    p { class: "mt-2 text-sm text-gray-400",
+                        {
+                            match workflow_tab {
+                                ApplicationTab::VisibleTickets => "当前数据范围内没有匹配的工单",
+                                ApplicationTab::MyApplications => "当前账号还没有匹配的申请记录",
+                                _ => "当前标签页下没有匹配的工单",
+                            }
+                        }
+                    }
                 }
             } else {
                 div { class: "overflow-x-auto",
@@ -985,6 +1005,7 @@ fn TicketListView(
 ) -> Element {
     let all_tickets = tickets.read().clone();
     let filtered_tickets = match current_tab {
+        ApplicationTab::VisibleTickets => all_tickets.clone(),
         ApplicationTab::MyApplications => all_tickets
             .clone()
             .into_iter()
