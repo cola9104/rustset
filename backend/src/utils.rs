@@ -135,11 +135,11 @@ pub async fn permissions_for_role_assignment(
 }
 
 pub async fn effective_permissions(state: &AppState, user: &User) -> Permissions {
-    if let Some(permissions) = user.permissions.clone() {
+    if let Some(permissions) = builtin_permissions_for_role(&user.role) {
         return permissions;
     }
 
-    if let Some(permissions) = builtin_permissions_for_role(&user.role) {
+    if let Some(permissions) = user.permissions.clone() {
         return permissions;
     }
 
@@ -244,8 +244,31 @@ pub fn determine_zone(ip_str: &str, zones: &[ZoneConfig]) -> NetworkZone {
 mod tests {
     use super::*;
     use axum::http::HeaderMap;
-    use shared::Role;
+    use crate::handlers::port_details::PortDetail;
+    use crate::handlers::scanners::ScanResult;
+    use crate::state::AppState;
+    use shared::{PasswordPolicy, Role};
     use std::sync::{Arc, RwLock};
+    use tokio::sync::RwLock as TokioRwLock;
+
+    fn create_test_app_state() -> AppState {
+        AppState {
+            assets: Arc::new(RwLock::new(Vec::new())),
+            tasks: Arc::new(RwLock::new(Vec::new())),
+            risks: Arc::new(RwLock::new(Vec::new())),
+            zones: Arc::new(RwLock::new(Vec::new())),
+            users: Arc::new(RwLock::new(Vec::new())),
+            audit_logs: Arc::new(RwLock::new(Vec::new())),
+            advanced_tasks: Arc::new(RwLock::new(Vec::new())),
+            custom_roles: Arc::new(RwLock::new(Vec::new())),
+            scan_manager: Arc::new(TokioRwLock::new(None)),
+            password_policy: Arc::new(RwLock::new(PasswordPolicy::default())),
+            password_history: Arc::new(RwLock::new(Vec::new())),
+            port_details: Arc::new(RwLock::new(Vec::<PortDetail>::new())),
+            scanners: Arc::new(RwLock::new(Vec::new())),
+            scan_results: Arc::new(RwLock::new(Vec::<ScanResult>::new())),
+        }
+    }
 
     fn setup_jwt_secret() {
         std::env::set_var("JWT_SECRET", "test-jwt-secret");
@@ -328,6 +351,33 @@ mod tests {
 
         let result = get_current_user(&headers, &users);
         assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn effective_permissions_prefers_builtin_permissions_for_system_roles() {
+        let state = create_test_app_state();
+        let mut user = create_test_user();
+        user.role = Role::SysAdmin;
+        user.permissions = Some(Permissions {
+            can_view_resource_tickets: false,
+            can_create_resource_tickets: false,
+            can_approve_resource_tickets: false,
+            can_provision_resource_tickets: false,
+            can_deliver_resource_tickets: false,
+            can_delete_resource_tickets: false,
+            resource_ticket_scope: shared::DataScope::SelfOnly,
+            ..Permissions::default()
+        });
+
+        let permissions = effective_permissions(&state, &user).await;
+
+        assert!(permissions.can_view_resource_tickets);
+        assert!(permissions.can_create_resource_tickets);
+        assert!(permissions.can_approve_resource_tickets);
+        assert!(permissions.can_provision_resource_tickets);
+        assert!(permissions.can_deliver_resource_tickets);
+        assert!(permissions.can_delete_resource_tickets);
+        assert_eq!(permissions.resource_ticket_scope, shared::DataScope::All);
     }
 
     #[tokio::test]
