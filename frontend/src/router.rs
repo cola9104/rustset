@@ -120,8 +120,8 @@ pub enum Route {
 pub fn can_access_route(route: &Route, auth: &AuthState) -> bool {
     match route {
         Route::Login {} | Route::NotFound { .. } => true,
-        Route::Dashboard {} => auth.has_permission("can_view_dashboard"),
-        Route::TaskCenter {} => auth.has_permission("can_view_tasks"),
+        Route::Dashboard {} => auth.can_view_dashboard(),
+        Route::TaskCenter {} => auth.can_view_tasks(),
         Route::RiskCenter {} => auth.has_permission("can_view_risks"),
         Route::AuditLogs {} => auth.has_permission("can_view_audit_logs"),
         Route::BusinessApplication {} => has_any_permission(
@@ -159,14 +159,13 @@ pub fn can_access_route(route: &Route, auth: &AuthState) -> bool {
                 "can_manage_operations",
             ],
         ),
-        Route::UserManagement {} => auth.has_permission("can_view_users"),
+        Route::UserManagement {} => auth.can_view_users(),
         Route::OrganizationManagement {} | Route::DepartmentManagement {} => {
-            auth.has_permission("can_view_users") || auth.has_permission("can_manage_permissions")
+            auth.can_view_users() || auth.can_manage_permissions()
         }
-        Route::PermissionManagement {} => auth.has_permission("can_manage_permissions"),
+        Route::PermissionManagement {} => auth.can_manage_permissions(),
         Route::PasswordPolicy {} => {
-            auth.has_permission("can_view_password_policy")
-                || auth.has_permission("can_manage_password_policy")
+            auth.can_view_password_policy() || auth.can_manage_password_policy()
         }
     }
 }

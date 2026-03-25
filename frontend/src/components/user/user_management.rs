@@ -7,6 +7,7 @@ use crate::services::user_api::{
 };
 use crate::state::department::DepartmentRecord;
 use crate::state::organization::OrganizationRecord;
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaArrowRotateRight, FaKey, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaShield, FaTrash, FaUser,
@@ -17,6 +18,8 @@ use serde_json::json;
 
 #[allow(non_snake_case)]
 pub fn UserManagement() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let mut users = use_signal(Vec::<UserRecord>::new);
     let mut roles = use_signal(Vec::<RoleRecord>::new);
     let mut organizations = use_signal(Vec::<OrganizationRecord>::new);
@@ -95,6 +98,10 @@ pub fn UserManagement() -> Element {
         .iter()
         .filter(|u| matches!(u.role_value.as_str(), "SysAdmin" | "SecAdmin"))
         .count() as i32;
+    let can_create_user = current_auth.can_create_user();
+    let can_update_user = current_auth.can_update_user();
+    let can_delete_user = current_auth.can_delete_user();
+    let is_read_only = !can_create_user && !can_update_user && !can_delete_user;
 
     rsx! {
         div { class: "space-y-6",
@@ -107,12 +114,20 @@ pub fn UserManagement() -> Element {
                         Icon { icon: FaArrowRotateRight, width: 16, height: 16 }
                         span { class: "ml-2", "刷新" }
                     }
-                    button {
-                        class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
-                        onclick: move |_| creating.set(true),
-                        Icon { icon: FaPlus, width: 16, height: 16 }
-                        span { class: "ml-2", "添加用户" }
+                    if can_create_user {
+                        button {
+                            class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
+                            onclick: move |_| creating.set(true),
+                            Icon { icon: FaPlus, width: 16, height: 16 }
+                            span { class: "ml-2", "添加用户" }
+                        }
                     }
+                }
+            }
+
+            if is_read_only {
+                div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号只有用户查看权限，新增、编辑、删除操作已禁用。"
                 }
             }
 
@@ -232,31 +247,35 @@ pub fn UserManagement() -> Element {
                                     td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500", "{user.last_login}" }
                                     td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500", "{user.created_at}" }
                                     td { class: "px-6 py-4 whitespace-nowrap text-sm font-medium",
-                                        button {
-                                            class: "mr-3 text-blue-600 hover:text-blue-900",
-                                            onclick: {
-                                                let user = user.clone();
-                                                move |_| editing_user.set(Some(user.clone()))
-                                            },
-                                            Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                        if can_update_user {
+                                            button {
+                                                class: "mr-3 text-blue-600 hover:text-blue-900",
+                                                onclick: {
+                                                    let user = user.clone();
+                                                    move |_| editing_user.set(Some(user.clone()))
+                                                },
+                                                Icon { icon: FaPenToSquare, width: 16, height: 16 }
+                                            }
                                         }
-                                        button {
-                                            class: "text-red-600 hover:text-red-900",
-                                            onclick: {
-                                                let user_id = user.id.clone();
-                                                let mut users = users;
-                                                let mut error = error;
-                                                move |_| {
-                                                    let user_id = user_id.clone();
-                                                    spawn(async move {
-                                                        match delete_user(&user_id).await {
-                                                            Ok(()) => users.write().retain(|u| u.id != user_id),
-                                                            Err(err) => error.set(err),
-                                                        }
-                                                    });
-                                                }
-                                            },
-                                            Icon { icon: FaTrash, width: 16, height: 16 }
+                                        if can_delete_user {
+                                            button {
+                                                class: "text-red-600 hover:text-red-900",
+                                                onclick: {
+                                                    let user_id = user.id.clone();
+                                                    let mut users = users;
+                                                    let mut error = error;
+                                                    move |_| {
+                                                        let user_id = user_id.clone();
+                                                        spawn(async move {
+                                                            match delete_user(&user_id).await {
+                                                                Ok(()) => users.write().retain(|u| u.id != user_id),
+                                                                Err(err) => error.set(err),
+                                                            }
+                                                        });
+                                                    }
+                                                },
+                                                Icon { icon: FaTrash, width: 16, height: 16 }
+                                            }
                                         }
                                     }
                                 }
@@ -271,7 +290,7 @@ pub fn UserManagement() -> Element {
             }
         }
 
-        if *creating.read() {
+        if can_create_user && *creating.read() {
             UserModal {
                 mode: UserModalMode::Create,
                 user: None,
@@ -300,7 +319,8 @@ pub fn UserManagement() -> Element {
             }
         }
 
-        if let Some(user) = editing_user() {
+        if can_update_user {
+            if let Some(user) = editing_user() {
             UserModal {
                 mode: UserModalMode::Edit,
                 user: Some(user),
@@ -329,6 +349,7 @@ pub fn UserManagement() -> Element {
                     }
                 }
             }
+        }
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaCheck, FaClock, FaKey, FaLock, FaShield, FaUserShield,
@@ -87,9 +88,12 @@ impl Default for SecurityPolicy {
 #[allow(non_snake_case)]
 pub fn PasswordPolicy() -> Element {
     // 使用全局状态
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let policy = use_signal(|| SECURITY_POLICY_STATE.read().clone());
     let mut show_success = use_signal(|| false);
     let mut active_section = use_signal(|| "password".to_string());
+    let can_manage_policy = current_auth.can_manage_password_policy();
 
     rsx! {
         div { class: "space-y-6",
@@ -98,6 +102,12 @@ pub fn PasswordPolicy() -> Element {
                 div {
                     h1 { class: "text-2xl font-bold text-gray-800", "安全策略配置" }
                     p { class: "text-sm text-gray-500 mt-1", "配置系统的全局安全策略，适用于所有用户" }
+                }
+            }
+
+            if !can_manage_policy {
+                div { class: "rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800",
+                    "当前账号仅可查看密码策略，表单编辑和保存操作已禁用。"
                 }
             }
 
@@ -164,7 +174,7 @@ pub fn PasswordPolicy() -> Element {
                     }
                 }
 
-                div { class: "p-6",
+                fieldset { class: "p-6", disabled: !can_manage_policy,
                     // 密码策略部分
                     if *active_section.read() == "password" {
                         PasswordPolicySection { policy: policy }
@@ -189,15 +199,17 @@ pub fn PasswordPolicy() -> Element {
 
             // 保存按钮
             div { class: "flex justify-end",
-                button {
-                    class: "flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors",
-                    onclick: move |_| {
-                        // 保存到全局状态
-                        *SECURITY_POLICY_STATE.write() = policy.read().clone();
-                        show_success.set(true);
-                    },
-                    Icon { icon: FaCheck, width: 16, height: 16, class: "mr-2" }
-                    "保存配置"
+                if can_manage_policy {
+                    button {
+                        class: "flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors",
+                        onclick: move |_| {
+                            // 保存到全局状态
+                            *SECURITY_POLICY_STATE.write() = policy.read().clone();
+                            show_success.set(true);
+                        },
+                        Icon { icon: FaCheck, width: 16, height: 16, class: "mr-2" }
+                        "保存配置"
+                    }
                 }
                 // 添加关闭提示按钮
                 if *show_success.read() {

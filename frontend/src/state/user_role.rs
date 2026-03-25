@@ -103,6 +103,50 @@ impl AuthState {
         self.permissions.iter().any(|item| item == permission)
     }
 
+    pub fn can_view_dashboard(&self) -> bool {
+        self.has_permission("can_view_dashboard")
+    }
+
+    pub fn can_view_tasks(&self) -> bool {
+        self.has_permission("can_view_tasks")
+    }
+
+    pub fn can_create_task(&self) -> bool {
+        self.has_permission("can_create_task")
+    }
+
+    pub fn can_delete_task(&self) -> bool {
+        self.has_permission("can_delete_task")
+    }
+
+    pub fn can_view_users(&self) -> bool {
+        self.has_permission("can_view_users")
+    }
+
+    pub fn can_create_user(&self) -> bool {
+        self.has_permission("can_create_user")
+    }
+
+    pub fn can_update_user(&self) -> bool {
+        self.has_permission("can_update_user")
+    }
+
+    pub fn can_delete_user(&self) -> bool {
+        self.has_permission("can_delete_user")
+    }
+
+    pub fn can_manage_permissions(&self) -> bool {
+        self.has_permission("can_manage_permissions")
+    }
+
+    pub fn can_view_password_policy(&self) -> bool {
+        self.has_permission("can_view_password_policy")
+    }
+
+    pub fn can_manage_password_policy(&self) -> bool {
+        self.has_permission("can_manage_password_policy")
+    }
+
     pub fn scope_value(&self, key: &str) -> Option<&str> {
         let prefix = format!("{key}:");
         self.permissions

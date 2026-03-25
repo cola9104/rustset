@@ -2,6 +2,7 @@ use crate::components::common::VirtualScroller;
 use crate::services::task_api::{
     create_task, delete_task, fetch_tasks, CreateTaskPayload, TaskRecord,
 };
+use crate::state::user_role::use_auth;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaArrowRotateRight, FaCircleCheck, FaClock, FaList, FaPlus, FaSpinner, FaTrash,
@@ -10,10 +11,14 @@ use dioxus_free_icons::Icon;
 
 #[allow(non_snake_case)]
 pub fn TaskCenter() -> Element {
+    let auth = use_auth();
+    let current_auth = auth.read().clone();
     let tasks = use_signal(Vec::<TaskRecord>::new);
     let mut show_add_modal = use_signal(|| false);
     let loading = use_signal(|| true);
     let error = use_signal(String::new);
+    let can_create_task = current_auth.can_create_task();
+    let can_delete_task = current_auth.can_delete_task();
 
     {
         let mut tasks = tasks;
@@ -78,12 +83,20 @@ pub fn TaskCenter() -> Element {
                         Icon { icon: FaArrowRotateRight, width: 16, height: 16 }
                         span { class: "ml-2", "刷新" }
                     }
-                    button {
-                        class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
-                        onclick: move |_| show_add_modal.set(true),
-                        Icon { icon: FaPlus, width: 16, height: 16 }
-                        span { class: "ml-2", "新建任务" }
+                    if can_create_task {
+                        button {
+                            class: "flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors",
+                            onclick: move |_| show_add_modal.set(true),
+                            Icon { icon: FaPlus, width: 16, height: 16 }
+                            span { class: "ml-2", "新建任务" }
+                        }
                     }
+                }
+            }
+
+            if !can_create_task && !can_delete_task {
+                div { class: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800",
+                    "当前账号只有任务查看权限，新建和删除操作已禁用。"
                 }
             }
 
@@ -161,23 +174,25 @@ pub fn TaskCenter() -> Element {
                                 "{task.start_time.clone().or(task.end_time.clone()).unwrap_or_else(|| \"尚未开始\".to_string())}"
                             }
                             div {
-                                button {
-                                    class: "text-red-600 hover:text-red-900",
-                                    onclick: {
-                                        let task_id = task.id.clone();
-                                        let mut tasks = tasks;
-                                        let mut error = error;
-                                        move |_| {
-                                            let task_id = task_id.clone();
-                                            spawn(async move {
-                                                match delete_task(&task_id).await {
-                                                    Ok(()) => tasks.write().retain(|item| item.id != task_id),
-                                                    Err(err) => error.set(err),
-                                                }
-                                            });
-                                        }
-                                    },
-                                    Icon { icon: FaTrash, width: 16, height: 16 }
+                                if can_delete_task {
+                                    button {
+                                        class: "text-red-600 hover:text-red-900",
+                                        onclick: {
+                                            let task_id = task.id.clone();
+                                            let mut tasks = tasks;
+                                            let mut error = error;
+                                            move |_| {
+                                                let task_id = task_id.clone();
+                                                spawn(async move {
+                                                    match delete_task(&task_id).await {
+                                                        Ok(()) => tasks.write().retain(|item| item.id != task_id),
+                                                        Err(err) => error.set(err),
+                                                    }
+                                                });
+                                            }
+                                        },
+                                        Icon { icon: FaTrash, width: 16, height: 16 }
+                                    }
                                 }
                             }
                         }
@@ -186,7 +201,7 @@ pub fn TaskCenter() -> Element {
             }
         }
 
-        if *show_add_modal.read() {
+        if can_create_task && *show_add_modal.read() {
             AddTaskModal {
                 on_close: move |_| show_add_modal.set(false),
                 on_save: {
