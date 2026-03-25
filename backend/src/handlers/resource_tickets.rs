@@ -16,22 +16,30 @@ use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
 use crate::utils::{get_current_user_from_auth, log_action_auth};
 use shared::{
-    ApproveTicketRequest, CreateResourceTicketRequest, DeliverTicketRequest,
-    ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, Role, TicketStatus,
+    ApproveTicketRequest, CreateResourceTicketRequest, DataScope, DeliverTicketRequest,
+    Permissions, ProvisionTicketRequest, ResourceTicket, ResourceTicketQuery, Role, TicketStatus,
     UpdateResourceTicketRequest,
 };
 
 /// 获取资源工单列表
 pub async fn get_resource_tickets(
-    State(_state): State<AppState>,
-    _user: AuthUser,
+    State(state): State<AppState>,
+    user: AuthUser,
     Query(query): Query<ResourceTicketQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_view_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
+
     let mut tickets = db_get_resource_tickets()
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load resource tickets: {}", e)))?;
 
     tickets.retain(|t| {
+        let scope_match = can_access_ticket(t, &current_user, permissions.resource_ticket_scope);
         let keyword_match = query.search_keyword.as_ref().is_none_or(|keyword| {
             let keyword = keyword.to_lowercase();
             t.ecs_name.to_lowercase().contains(&keyword)
@@ -60,7 +68,7 @@ pub async fn get_resource_tickets(
             .provider_id
             .is_none_or(|provider_id| t.provider_id == Some(provider_id));
 
-        keyword_match && resource_type_match && status_match && provider_match
+        scope_match && keyword_match && resource_type_match && status_match && provider_match
     });
 
     tickets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -69,14 +77,25 @@ pub async fn get_resource_tickets(
 
 /// 获取单个资源工单
 pub async fn get_resource_ticket(
-    State(_state): State<AppState>,
-    _user: AuthUser,
+    State(state): State<AppState>,
+    user: AuthUser,
     Path(id): Path<i32>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_view_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
+
     let ticket = db_get_resource_ticket(id)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     Ok(Json(ticket).into_response())
 }
@@ -87,7 +106,12 @@ pub async fn create_resource_ticket(
     user: AuthUser,
     Json(req): Json<CreateResourceTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ensure_operator(&user)?;
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_create_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let created_at = Utc::now().format("%Y-%m-%d %H:%M").to_string();
     let (provider_name, cloud_platform_name, machine_room_name) =
@@ -184,12 +208,21 @@ pub async fn update_resource_ticket(
     Path(id): Path<i32>,
     Json(req): Json<UpdateResourceTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ensure_operator(&user)?;
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_approve_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let mut ticket = db_get_resource_ticket(id)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     if let Some(value) = req.ecs_name {
         ticket.ecs_name = value;
@@ -329,12 +362,21 @@ pub async fn approve_ticket(
     Path(id): Path<i32>,
     Json(req): Json<ApproveTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ensure_operator(&user)?;
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_provision_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let mut ticket = db_get_resource_ticket(id)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     if ticket.ticket_status != TicketStatus::PendingApproval {
         return Err(ApiError::bad_request("只能审批待审批状态的工单"));
@@ -382,12 +424,21 @@ pub async fn provision_ticket(
     Path(id): Path<i32>,
     Json(req): Json<ProvisionTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ensure_operator(&user)?;
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_deliver_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let mut ticket = db_get_resource_ticket(id)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     if ticket.ticket_status != TicketStatus::PendingProvision
         && ticket.ticket_status != TicketStatus::Approved
@@ -429,12 +480,21 @@ pub async fn deliver_ticket(
     Path(id): Path<i32>,
     Json(req): Json<DeliverTicketRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    ensure_operator(&user)?;
+    let current_user = load_current_user(&state, &user).await?;
+    let permissions = effective_permissions(&current_user);
+
+    if !permissions.can_deliver_resource_tickets {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     let mut ticket = db_get_resource_ticket(id)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load ticket: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Ticket not found"))?;
+
+    if !can_access_ticket(&ticket, &current_user, permissions.resource_ticket_scope) {
+        return Err(ApiError::forbidden("Access denied"));
+    }
 
     if ticket.ticket_status != TicketStatus::PendingDelivery {
         return Err(ApiError::bad_request("只能交付待交付状态的工单"));
@@ -466,13 +526,6 @@ pub async fn deliver_ticket(
         "data": ticket
     }))
     .into_response())
-}
-
-fn ensure_operator(user: &AuthUser) -> Result<(), ApiError> {
-    if user.role != Role::SysAdmin && user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied"));
-    }
-    Ok(())
 }
 
 struct TicketUserProfile {
@@ -533,6 +586,34 @@ fn display_name_for_user(user: &shared::User) -> String {
         .clone()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| user.username.clone())
+}
+
+async fn load_current_user(state: &AppState, user: &AuthUser) -> Result<shared::User, ApiError> {
+    get_current_user_from_auth(user, &state.users)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("User not found"))
+}
+
+fn effective_permissions(user: &shared::User) -> Permissions {
+    user.permissions.clone().unwrap_or_else(|| match user.role {
+        Role::SysAdmin => Permissions::sys_admin(),
+        Role::SecAdmin => Permissions::sec_admin(),
+        Role::Auditor => Permissions::auditor(),
+        Role::Custom(_) => Permissions::default(),
+    })
+}
+
+fn can_access_ticket(ticket: &ResourceTicket, user: &shared::User, scope: DataScope) -> bool {
+    match scope {
+        DataScope::SelfOnly => ticket.created_by == user.username,
+        DataScope::Department => {
+            user.department_id.is_some() && ticket.department_id == user.department_id
+        }
+        DataScope::Organization => {
+            user.organization_id.is_some() && ticket.organization_id == user.organization_id
+        }
+        DataScope::All => true,
+    }
 }
 
 async fn resolve_related_names(

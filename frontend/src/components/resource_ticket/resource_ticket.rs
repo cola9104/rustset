@@ -14,7 +14,7 @@ use crate::services::resource_ticket_api::{
     provision_ticket,
 };
 use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
-use crate::state::user_role::{use_auth, ApplicationTab, UserRole};
+use crate::state::user_role::{use_auth, ApplicationTab, AuthState};
 
 // 导入三个模块的表单组件和请求类型
 use crate::components::resource_ticket::cloud_service::cloud_service_request::CloudServiceRequest;
@@ -96,7 +96,6 @@ pub fn ResourceTicket() -> Element {
     let mut resource_type_tab = use_signal(|| ResourceType::Cloud);
     let mut workflow_tab = use_signal(|| {
         auth.read()
-            .role
             .accessible_tabs()
             .first()
             .copied()
@@ -128,8 +127,8 @@ pub fn ResourceTicket() -> Element {
         });
     }
 
-    let accessible_tabs = auth.read().role.accessible_tabs();
-    let current_role = auth.read().role;
+    let current_auth = auth.read().clone();
+    let accessible_tabs = current_auth.accessible_tabs();
 
     // 计算各资源类型的待处理数量（待审批+待配置+待交付）
     let all_tickets = tickets.read().clone();
@@ -203,7 +202,7 @@ pub fn ResourceTicket() -> Element {
                         div {
                             h1 { class: "text-xl font-bold text-gray-800", "资源工单管理" }
                             p { class: "text-sm text-gray-500 mt-0.5",
-                                "当前角色: {current_role.display_name()}"
+                                "当前角色: {current_auth.display_role_label()}"
                             }
                         }
                     }
@@ -285,7 +284,7 @@ pub fn ResourceTicket() -> Element {
                     }
 
                     // 新建工单按钮
-                    if current_role.can_submit() {
+                    if current_auth.can_submit() {
                         button {
                             class: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm",
                             onclick: move |_| show_new_form.set(true),
@@ -426,7 +425,7 @@ pub fn ResourceTicket() -> Element {
                                     ticket,
                                     tickets: tickets,
                                     workflow_tab: *workflow_tab.read(),
-                                    current_role,
+                                    current_auth: current_auth.clone(),
                                     on_back: move |_| selected_ticket.set(None),
                                 }
                             }
@@ -442,7 +441,6 @@ pub fn ResourceTicket() -> Element {
                         tickets: tickets,
                         search_query: (*search_query.read()).clone(),
                         current_username: auth.read().username.clone(),
-                        current_role,
                         on_select: move |id| selected_ticket.set(Some(id)),
                     }
                 }
@@ -760,7 +758,6 @@ fn TicketListViewByTypeAndWorkflow(
     tickets: Signal<Vec<ResourceTicket>>,
     search_query: String,
     current_username: String,
-    current_role: UserRole,
     on_select: Callback<i32>,
 ) -> Element {
     let all_tickets = tickets.read().clone();
@@ -890,7 +887,6 @@ fn TicketListView(
     search_query: String,
     resource_type_filter: String,
     current_username: String,
-    current_role: UserRole,
     on_select: Callback<i32>,
 ) -> Element {
     let all_tickets = tickets.read().clone();
@@ -1058,7 +1054,7 @@ fn TicketDetailView(
     ticket: ResourceTicket,
     tickets: Signal<Vec<ResourceTicket>>,
     workflow_tab: ApplicationTab,
-    current_role: UserRole,
+    current_auth: AuthState,
     on_back: Callback<()>,
 ) -> Element {
     let _ = workflow_tab;
@@ -1073,11 +1069,11 @@ fn TicketDetailView(
         || ticket.deliver_comment.is_some();
 
     let show_approval_section = approval_completed
-        || (ticket.ticket_status == TicketStatus::PendingApproval && current_role.can_approve());
+        || (ticket.ticket_status == TicketStatus::PendingApproval && current_auth.can_approve());
     let show_provision_section = provision_completed
-        || (is_pending_provision_status(ticket.ticket_status) && current_role.can_provision());
+        || (is_pending_provision_status(ticket.ticket_status) && current_auth.can_provision());
     let show_delivery_section = delivery_completed
-        || (ticket.ticket_status == TicketStatus::PendingDelivery && current_role.can_deliver());
+        || (ticket.ticket_status == TicketStatus::PendingDelivery && current_auth.can_deliver());
 
     rsx! {
         div { class: "space-y-6",

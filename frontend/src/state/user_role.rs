@@ -32,45 +32,6 @@ impl UserRole {
             UserRole::Admin => "管理员",
         }
     }
-
-    /// 检查是否可以提交申请
-    pub fn can_submit(&self) -> bool {
-        matches!(self, UserRole::Applicant | UserRole::Admin)
-    }
-
-    /// 检查是否可以审批
-    pub fn can_approve(&self) -> bool {
-        matches!(self, UserRole::Approver | UserRole::Admin)
-    }
-
-    /// 检查是否可以配置
-    pub fn can_provision(&self) -> bool {
-        matches!(self, UserRole::Operator | UserRole::Admin)
-    }
-
-    /// 检查是否可以交付
-    pub fn can_deliver(&self) -> bool {
-        matches!(self, UserRole::Deliverer | UserRole::Admin)
-    }
-
-    /// 获取所有可访问的标签页
-    pub fn accessible_tabs(&self) -> Vec<ApplicationTab> {
-        match self {
-            UserRole::Guest => vec![],
-            UserRole::Applicant => vec![ApplicationTab::MyApplications],
-            UserRole::Approver => vec![ApplicationTab::PendingApproval],
-            UserRole::Operator => vec![ApplicationTab::PendingProvision],
-            UserRole::Deliverer => vec![ApplicationTab::PendingDelivery, ApplicationTab::Delivered],
-            UserRole::Admin => vec![
-                ApplicationTab::MyApplications,
-                ApplicationTab::PendingApproval,
-                ApplicationTab::PendingProvision,
-                ApplicationTab::PendingDelivery,
-                ApplicationTab::Delivered,
-                ApplicationTab::Archived,
-            ],
-        }
-    }
 }
 
 /// 应用状态标签页
@@ -120,6 +81,7 @@ pub struct AuthState {
     pub username: String,
     pub role: UserRole,
     pub role_label: String,
+    pub permissions: Vec<String>,
 }
 
 impl AuthState {
@@ -129,11 +91,72 @@ impl AuthState {
             username: String::new(),
             role: UserRole::Guest,
             role_label: UserRole::Guest.display_name().to_string(),
+            permissions: Vec::new(),
         }
     }
 
     pub fn display_role_label(&self) -> &str {
         &self.role_label
+    }
+
+    pub fn has_permission(&self, permission: &str) -> bool {
+        self.permissions.iter().any(|item| item == permission)
+    }
+
+    pub fn scope_value(&self, key: &str) -> Option<&str> {
+        let prefix = format!("{key}:");
+        self.permissions
+            .iter()
+            .find_map(|item| item.strip_prefix(&prefix))
+    }
+
+    pub fn can_submit(&self) -> bool {
+        self.has_permission("can_create_resource_tickets")
+    }
+
+    pub fn can_approve(&self) -> bool {
+        self.has_permission("can_approve_resource_tickets")
+    }
+
+    pub fn can_provision(&self) -> bool {
+        self.has_permission("can_provision_resource_tickets")
+    }
+
+    pub fn can_deliver(&self) -> bool {
+        self.has_permission("can_deliver_resource_tickets")
+    }
+
+    pub fn can_view_resource_tickets(&self) -> bool {
+        self.has_permission("can_view_resource_tickets")
+    }
+
+    pub fn accessible_tabs(&self) -> Vec<ApplicationTab> {
+        let mut tabs = Vec::new();
+
+        if self.can_submit() {
+            tabs.push(ApplicationTab::MyApplications);
+        }
+        if self.can_approve() {
+            tabs.push(ApplicationTab::PendingApproval);
+        }
+        if self.can_provision() {
+            tabs.push(ApplicationTab::PendingProvision);
+        }
+        if self.can_deliver() {
+            tabs.push(ApplicationTab::PendingDelivery);
+            tabs.push(ApplicationTab::Delivered);
+        }
+        if self.has_permission("can_view_resource_tickets")
+            && self.scope_value("resource_ticket_scope") == Some("all")
+        {
+            tabs.push(ApplicationTab::Archived);
+        }
+
+        if tabs.is_empty() && self.can_view_resource_tickets() {
+            tabs.push(ApplicationTab::MyApplications);
+        }
+
+        tabs
     }
 }
 
@@ -162,6 +185,7 @@ impl From<&AuthUser> for AuthState {
             username: user.username.clone(),
             role: workflow_role_from_backend(&user.role),
             role_label: backend_role_label(&user.role),
+            permissions: user.permissions.clone(),
         }
     }
 }

@@ -104,15 +104,15 @@ impl CurrentUserResponse {
             .permissions
             .as_object()
             .map(|permissions| {
-                permissions
-                    .iter()
-                    .filter_map(|(key, value)| {
-                        value
-                            .as_bool()
-                            .filter(|enabled| *enabled)
-                            .map(|_| key.clone())
-                    })
-                    .collect::<Vec<_>>()
+                let mut items = Vec::new();
+                for (key, value) in permissions {
+                    if value.as_bool().is_some_and(|enabled| enabled) {
+                        items.push(key.clone());
+                    } else if let Some(scope) = value.as_str() {
+                        items.push(format!("{key}:{scope}"));
+                    }
+                }
+                items
             })
             .unwrap_or_default();
 

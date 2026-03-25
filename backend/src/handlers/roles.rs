@@ -10,7 +10,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use shared::{CreateRoleRequest, CustomRole, UpdateRoleRequest};
+use shared::{CreateRoleRequest, CustomRole, Permissions, UpdateRoleRequest};
 
 /// Get all roles (including system predefined roles and custom roles)
 #[utoipa::path(
@@ -63,21 +63,24 @@ pub async fn get_roles(
             "name": "系统管理员",
             "description": "系统内置角色,拥有所有权限",
             "is_system": true,
-            "role": "SysAdmin"
+            "role": "SysAdmin",
+            "permissions": Permissions::sys_admin()
         }),
         serde_json::json!({
             "id": "sec_admin",
             "name": "安全管理员",
             "description": "系统内置角色,负责资产、扫描和风险管理",
             "is_system": true,
-            "role": "SecAdmin"
+            "role": "SecAdmin",
+            "permissions": Permissions::sec_admin()
         }),
         serde_json::json!({
             "id": "auditor",
             "name": "审计员",
             "description": "系统内置角色,只能查看日志",
             "is_system": true,
-            "role": "Auditor"
+            "role": "Auditor",
+            "permissions": Permissions::auditor()
         }),
     ];
 
@@ -130,7 +133,8 @@ pub async fn get_role(
                 "name": "系统管理员",
                 "description": "系统内置角色,拥有所有权限",
                 "is_system": true,
-                "role": "SysAdmin"
+                "role": "SysAdmin",
+                "permissions": Permissions::sys_admin()
             })));
         }
         "sec_admin" => {
@@ -139,7 +143,8 @@ pub async fn get_role(
                 "name": "安全管理员",
                 "description": "系统内置角色,负责资产、扫描和风险管理",
                 "is_system": true,
-                "role": "SecAdmin"
+                "role": "SecAdmin",
+                "permissions": Permissions::sec_admin()
             })));
         }
         "auditor" => {
@@ -148,7 +153,8 @@ pub async fn get_role(
                 "name": "审计员",
                 "description": "系统内置角色,只能查看日志",
                 "is_system": true,
-                "role": "Auditor"
+                "role": "Auditor",
+                "permissions": Permissions::auditor()
             })));
         }
         _ => {}

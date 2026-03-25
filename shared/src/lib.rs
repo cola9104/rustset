@@ -701,6 +701,17 @@ pub enum Role {
     Custom(String), // Custom role with specific permissions
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DataScope {
+    #[serde(rename = "self")]
+    #[default]
+    SelfOnly,
+    Department,
+    Organization,
+    All,
+}
+
 /// 自定义角色数据结构
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct CustomRole {
@@ -730,6 +741,7 @@ pub struct UpdateRoleRequest {
 
 /// 细化权限位掩码
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, utoipa::ToSchema)]
+#[serde(default)]
 pub struct Permissions {
     // ========== 通用模块 ==========
     pub can_access_general: bool, // 顶级：访问通用模块
@@ -808,6 +820,15 @@ pub struct Permissions {
 
     // 审计日志
     pub can_view_audit_logs: bool, // 子级：查看审计日志
+
+    // ========== 资源工单 ==========
+    pub can_view_resource_tickets: bool,
+    pub can_create_resource_tickets: bool,
+    pub can_approve_resource_tickets: bool,
+    pub can_provision_resource_tickets: bool,
+    pub can_deliver_resource_tickets: bool,
+    pub can_delete_resource_tickets: bool,
+    pub resource_ticket_scope: DataScope,
 }
 
 impl Permissions {
@@ -856,6 +877,13 @@ impl Permissions {
             can_manage_password_policy: true,
             can_access_audit: true,
             can_view_audit_logs: true,
+            can_view_resource_tickets: true,
+            can_create_resource_tickets: true,
+            can_approve_resource_tickets: true,
+            can_provision_resource_tickets: true,
+            can_deliver_resource_tickets: true,
+            can_delete_resource_tickets: true,
+            resource_ticket_scope: DataScope::All,
         }
     }
 
@@ -896,6 +924,13 @@ impl Permissions {
             can_manage_cloud_providers: true,
             can_access_audit: true,
             can_view_audit_logs: true,
+            can_view_resource_tickets: true,
+            can_create_resource_tickets: true,
+            can_approve_resource_tickets: true,
+            can_provision_resource_tickets: true,
+            can_deliver_resource_tickets: true,
+            can_delete_resource_tickets: false,
+            resource_ticket_scope: DataScope::All,
             ..Default::default()
         }
     }
@@ -921,6 +956,13 @@ impl Permissions {
             can_view_password_policy: false,
             can_access_audit: true,
             can_view_audit_logs: true,
+            can_view_resource_tickets: true,
+            can_create_resource_tickets: false,
+            can_approve_resource_tickets: false,
+            can_provision_resource_tickets: false,
+            can_deliver_resource_tickets: false,
+            can_delete_resource_tickets: false,
+            resource_ticket_scope: DataScope::All,
             ..Default::default()
         }
     }

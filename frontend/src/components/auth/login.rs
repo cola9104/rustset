@@ -115,6 +115,18 @@ struct LoginPermissions {
     #[serde(default)]
     can_view_resource_tickets: bool,
     #[serde(default)]
+    can_create_resource_tickets: bool,
+    #[serde(default)]
+    can_approve_resource_tickets: bool,
+    #[serde(default)]
+    can_provision_resource_tickets: bool,
+    #[serde(default)]
+    can_deliver_resource_tickets: bool,
+    #[serde(default)]
+    can_delete_resource_tickets: bool,
+    #[serde(default)]
+    resource_ticket_scope: String,
+    #[serde(default)]
     can_view_ip_zones: bool,
     #[serde(default)]
     can_view_scanners: bool,
@@ -254,6 +266,27 @@ impl LoginPermissions {
         }
         if self.can_view_resource_tickets {
             perms.push("can_view_resource_tickets".to_string());
+        }
+        if self.can_create_resource_tickets {
+            perms.push("can_create_resource_tickets".to_string());
+        }
+        if self.can_approve_resource_tickets {
+            perms.push("can_approve_resource_tickets".to_string());
+        }
+        if self.can_provision_resource_tickets {
+            perms.push("can_provision_resource_tickets".to_string());
+        }
+        if self.can_deliver_resource_tickets {
+            perms.push("can_deliver_resource_tickets".to_string());
+        }
+        if self.can_delete_resource_tickets {
+            perms.push("can_delete_resource_tickets".to_string());
+        }
+        if !self.resource_ticket_scope.trim().is_empty() {
+            perms.push(format!(
+                "resource_ticket_scope:{}",
+                self.resource_ticket_scope
+            ));
         }
         if self.can_view_ip_zones {
             perms.push("can_view_ip_zones".to_string());

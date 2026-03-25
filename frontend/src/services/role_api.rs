@@ -1,7 +1,7 @@
 use crate::config::api_base;
 use crate::utils::storage::authorization_header;
 use gloo_net::http::{Request, RequestBuilder};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use web_sys::RequestCredentials;
 
@@ -20,6 +20,13 @@ pub struct RoleRecord {
     pub created_at: Option<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RolePayload {
+    pub name: String,
+    pub description: Option<String>,
+    pub permissions: Value,
 }
 
 fn with_auth(mut request: RequestBuilder) -> RequestBuilder {
@@ -45,4 +52,55 @@ pub async fn fetch_roles() -> Result<Vec<RoleRecord>, String> {
         .json::<Vec<RoleRecord>>()
         .await
         .map_err(|e| format!("解析失败: {}", e))
+}
+
+pub async fn create_role(payload: &RolePayload) -> Result<(), String> {
+    let response = with_auth(
+        Request::post(&format!("{}/roles", api_base())).credentials(RequestCredentials::Include),
+    )
+    .json(payload)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    Ok(())
+}
+
+pub async fn update_role(id: &str, payload: &RolePayload) -> Result<(), String> {
+    let response = with_auth(
+        Request::put(&format!("{}/roles/{}", api_base(), id))
+            .credentials(RequestCredentials::Include),
+    )
+    .json(payload)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    Ok(())
+}
+
+pub async fn delete_role(id: &str) -> Result<(), String> {
+    let response = with_auth(
+        Request::delete(&format!("{}/roles/{}", api_base(), id))
+            .credentials(RequestCredentials::Include),
+    )
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(format!("服务器错误: {}", response.status()));
+    }
+
+    Ok(())
 }
