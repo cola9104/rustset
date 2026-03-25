@@ -9,7 +9,7 @@ use dioxus_free_icons::icons::fa_solid_icons::{
     FaKey, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaShield, FaTrash, FaUserGear, FaUsers,
 };
 use dioxus_free_icons::Icon;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -23,19 +23,120 @@ struct RoleSummary {
     created_at: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+struct PermissionGroupConfig {
+    title: &'static str,
+    description: &'static str,
+    permissions: &'static [(&'static str, &'static str)],
+}
+
+const GENERAL_PERMISSION_ITEMS: &[(&str, &str)] = &[
+    ("can_access_general", "访问通用模块"),
+    ("can_view_dashboard", "查看仪表盘"),
+    ("can_view_tasks", "查看任务中心"),
+    ("can_create_task", "创建任务"),
+    ("can_update_task", "更新任务"),
+    ("can_delete_task", "删除任务"),
+    ("can_view_advanced_scan", "查看高级扫描"),
+    ("can_create_scan", "创建扫描"),
+    ("can_delete_scan", "删除扫描"),
+    ("can_export_scan", "导出扫描结果"),
+];
+
+const ASSET_RISK_PERMISSION_ITEMS: &[(&str, &str)] = &[
+    ("can_access_assets_risks", "访问资产与风险"),
+    ("can_view_cloud_assets", "查看云资产"),
+    ("can_create_cloud_asset", "创建云资产"),
+    ("can_update_cloud_asset", "更新云资产"),
+    ("can_delete_cloud_asset", "删除云资产"),
+    ("can_view_risks", "查看风险"),
+    ("can_resolve_risk", "处置风险"),
+    ("can_delete_risk", "删除风险"),
+    ("can_view_business_process", "查看业务流程"),
+    ("can_view_business_applications", "查看业务申请"),
+    ("can_create_business_application", "创建业务申请"),
+    ("can_approve_business_application", "审批业务申请"),
+    ("can_supplement_business_application", "补充业务申请"),
+    ("can_delete_business_application", "删除业务申请"),
+    ("can_view_operations_management", "查看运维管理"),
+    ("can_manage_operations", "执行运维管理"),
+    ("can_view_automation_orchestration", "查看自动化编排"),
+    ("can_execute_orchestration", "执行自动化编排"),
+    ("can_manage_orchestration", "管理自动化编排"),
+];
+
+const CLOUD_PERMISSION_ITEMS: &[(&str, &str)] = &[
+    ("can_access_cloud", "访问 Cloud 模块"),
+    ("can_view_cloud_providers", "查看云厂商配置"),
+    ("can_manage_cloud_providers", "管理云厂商配置"),
+];
+
+const USER_MANAGEMENT_PERMISSION_ITEMS: &[(&str, &str)] = &[
+    ("can_access_user_management", "访问用户管理"),
+    ("can_view_users", "查看用户"),
+    ("can_create_user", "创建用户"),
+    ("can_update_user", "更新用户"),
+    ("can_delete_user", "删除用户"),
+    ("can_manage_permissions", "管理权限"),
+    ("can_view_password_policy", "查看密码策略"),
+    ("can_manage_password_policy", "管理密码策略"),
+];
+
+const AUDIT_PERMISSION_ITEMS: &[(&str, &str)] = &[
+    ("can_access_audit", "访问审计模块"),
+    ("can_view_audit_logs", "查看审计日志"),
+];
+
+const RESOURCE_TICKET_PERMISSION_ITEMS: &[(&str, &str)] = &[
+    ("can_view_resource_tickets", "查看资源工单"),
+    ("can_create_resource_tickets", "创建资源工单"),
+    ("can_approve_resource_tickets", "审批资源工单"),
+    ("can_provision_resource_tickets", "配置资源工单"),
+    ("can_deliver_resource_tickets", "交付资源工单"),
+    ("can_delete_resource_tickets", "删除资源工单"),
+];
+
+const PERMISSION_GROUPS: &[PermissionGroupConfig] = &[
+    PermissionGroupConfig {
+        title: "通用模块",
+        description: "仪表盘、任务中心和扫描能力。",
+        permissions: GENERAL_PERMISSION_ITEMS,
+    },
+    PermissionGroupConfig {
+        title: "资产与风险",
+        description: "资产、风险、业务流程与运维编排。",
+        permissions: ASSET_RISK_PERMISSION_ITEMS,
+    },
+    PermissionGroupConfig {
+        title: "Cloud 模块",
+        description: "云厂商对接配置能力。",
+        permissions: CLOUD_PERMISSION_ITEMS,
+    },
+    PermissionGroupConfig {
+        title: "用户管理",
+        description: "用户、权限和密码策略配置。",
+        permissions: USER_MANAGEMENT_PERMISSION_ITEMS,
+    },
+    PermissionGroupConfig {
+        title: "审计模块",
+        description: "审计日志相关查看能力。",
+        permissions: AUDIT_PERMISSION_ITEMS,
+    },
+    PermissionGroupConfig {
+        title: "资源工单",
+        description: "资源申请、审批、交付及删除控制。",
+        permissions: RESOURCE_TICKET_PERMISSION_ITEMS,
+    },
+];
+
 #[derive(Clone, Debug, PartialEq)]
 struct RoleEditorState {
     id: Option<String>,
     name: String,
     description: String,
-    can_view_resource_tickets: bool,
-    can_create_resource_tickets: bool,
-    can_approve_resource_tickets: bool,
-    can_provision_resource_tickets: bool,
-    can_deliver_resource_tickets: bool,
-    can_delete_resource_tickets: bool,
+    permission_values: BTreeMap<String, bool>,
     resource_ticket_scope: String,
-    base_permissions: Value,
+    base_permissions: Map<String, Value>,
 }
 
 impl Default for RoleEditorState {
@@ -44,14 +145,9 @@ impl Default for RoleEditorState {
             id: None,
             name: String::new(),
             description: String::new(),
-            can_view_resource_tickets: true,
-            can_create_resource_tickets: false,
-            can_approve_resource_tickets: false,
-            can_provision_resource_tickets: false,
-            can_deliver_resource_tickets: false,
-            can_delete_resource_tickets: false,
+            permission_values: default_permission_values(),
             resource_ticket_scope: "self".to_string(),
-            base_permissions: Value::Object(Default::default()),
+            base_permissions: Map::new(),
         }
     }
 }
@@ -60,25 +156,25 @@ impl RoleEditorState {
     fn from_role(role: &RoleRecord) -> Self {
         let permissions = role
             .permissions
-            .clone()
-            .unwrap_or_else(|| Value::Object(Default::default()));
-        let get_bool = |key: &str| {
-            permissions
+            .as_ref()
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default();
+        let mut permission_values = default_permission_values();
+
+        for key in all_permission_keys() {
+            let enabled = permissions
                 .get(key)
                 .and_then(Value::as_bool)
-                .unwrap_or(false)
-        };
+                .unwrap_or(false);
+            permission_values.insert(key.to_string(), enabled);
+        }
 
         Self {
             id: Some(role_id(&role.id)),
             name: role.name.clone(),
             description: role.description.clone().unwrap_or_default(),
-            can_view_resource_tickets: get_bool("can_view_resource_tickets"),
-            can_create_resource_tickets: get_bool("can_create_resource_tickets"),
-            can_approve_resource_tickets: get_bool("can_approve_resource_tickets"),
-            can_provision_resource_tickets: get_bool("can_provision_resource_tickets"),
-            can_deliver_resource_tickets: get_bool("can_deliver_resource_tickets"),
-            can_delete_resource_tickets: get_bool("can_delete_resource_tickets"),
+            permission_values,
             resource_ticket_scope: permissions
                 .get("resource_ticket_scope")
                 .and_then(Value::as_str)
@@ -88,37 +184,36 @@ impl RoleEditorState {
         }
     }
 
-    fn to_payload(&self) -> RolePayload {
-        let mut permissions = self
-            .base_permissions
-            .as_object()
-            .cloned()
-            .unwrap_or_default();
+    fn permission_enabled(&self, key: &str) -> bool {
+        self.permission_values.get(key).copied().unwrap_or(false)
+    }
 
-        permissions.insert(
-            "can_view_resource_tickets".to_string(),
-            Value::Bool(self.can_view_resource_tickets),
-        );
-        permissions.insert(
-            "can_create_resource_tickets".to_string(),
-            Value::Bool(self.can_create_resource_tickets),
-        );
-        permissions.insert(
-            "can_approve_resource_tickets".to_string(),
-            Value::Bool(self.can_approve_resource_tickets),
-        );
-        permissions.insert(
-            "can_provision_resource_tickets".to_string(),
-            Value::Bool(self.can_provision_resource_tickets),
-        );
-        permissions.insert(
-            "can_deliver_resource_tickets".to_string(),
-            Value::Bool(self.can_deliver_resource_tickets),
-        );
-        permissions.insert(
-            "can_delete_resource_tickets".to_string(),
-            Value::Bool(self.can_delete_resource_tickets),
-        );
+    fn set_permission(&mut self, key: &str, enabled: bool) {
+        self.permission_values.insert(key.to_string(), enabled);
+    }
+
+    fn set_all_permissions(&mut self, enabled: bool) {
+        for key in all_permission_keys() {
+            self.permission_values.insert(key.to_string(), enabled);
+        }
+    }
+
+    fn selected_permission_count(&self) -> usize {
+        self.permission_values
+            .values()
+            .filter(|enabled| **enabled)
+            .count()
+    }
+
+    fn to_payload(&self) -> RolePayload {
+        let mut permissions = self.base_permissions.clone();
+        let mut normalized_permissions = self.permission_values.clone();
+        apply_permission_dependencies(&mut normalized_permissions);
+
+        for (key, enabled) in normalized_permissions {
+            permissions.insert(key, Value::Bool(enabled));
+        }
+
         permissions.insert(
             "resource_ticket_scope".to_string(),
             Value::String(self.resource_ticket_scope.clone()),
@@ -202,6 +297,7 @@ pub fn PermissionManagement() -> Element {
         }
     }
     let permission_rows: Vec<(String, usize)> = permission_counts.into_iter().collect();
+    let editor_snapshot = editor_state.read().clone();
 
     rsx! {
         div { class: "space-y-6",
@@ -384,12 +480,12 @@ pub fn PermissionManagement() -> Element {
 
             Modal {
                 show: *show_editor.read(),
-                title: if editor_state.read().id.is_some() { "编辑自定义角色".to_string() } else { "新建自定义角色".to_string() },
+                title: if editor_snapshot.id.is_some() { "编辑自定义角色".to_string() } else { "新建自定义角色".to_string() },
                 size: "xl".to_string(),
                 on_close: move |_| show_editor.set(false),
                 footer: rsx! {
                     ModalFooter {
-                        save_text: if editor_state.read().id.is_some() { "保存".to_string() } else { "创建".to_string() },
+                        save_text: if editor_snapshot.id.is_some() { "保存".to_string() } else { "创建".to_string() },
                         cancel_text: "取消".to_string(),
                         save_disabled: false,
                         on_save: move |_| {
@@ -432,12 +528,15 @@ pub fn PermissionManagement() -> Element {
                     if !error.read().is_empty() {
                         ErrorMessage { message: error.read().clone() }
                     }
+                    div { class: "rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700",
+                        "系统角色保持内置策略不开放编辑；自定义角色支持按模块勾选权限。保存时会自动补齐必要的模块访问和查看权限，避免出现子权限已开但页面无法访问的配置。"
+                    }
                     div { class: "grid grid-cols-1 md:grid-cols-2 gap-4",
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1", "角色名称" }
                             input {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg",
-                                value: "{editor_state.read().name}",
+                                value: "{editor_snapshot.name}",
                                 oninput: move |e| editor_state.write().name = e.value(),
                             }
                         }
@@ -445,7 +544,7 @@ pub fn PermissionManagement() -> Element {
                             label { class: "block text-sm font-medium text-gray-700 mb-1", "资源工单数据范围" }
                             select {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg",
-                                value: "{editor_state.read().resource_ticket_scope}",
+                                value: "{editor_snapshot.resource_ticket_scope}",
                                 onchange: move |e| editor_state.write().resource_ticket_scope = e.value(),
                                 option { value: "self", "仅自己" }
                                 option { value: "department", "本部门" }
@@ -459,41 +558,48 @@ pub fn PermissionManagement() -> Element {
                         textarea {
                             class: "w-full px-3 py-2 border border-gray-300 rounded-lg",
                             rows: "3",
-                            value: "{editor_state.read().description}",
+                            value: "{editor_snapshot.description}",
                             oninput: move |e| editor_state.write().description = e.value(),
                         }
                     }
-                    div { class: "space-y-3",
-                        h3 { class: "text-sm font-semibold text-gray-800", "资源工单权限" }
-                        PermissionCheckbox {
-                            checked: editor_state.read().can_view_resource_tickets,
-                            label: "查看资源工单".to_string(),
-                            on_toggle: move |value| editor_state.write().can_view_resource_tickets = value,
+                    div { class: "flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between",
+                        div {
+                            h3 { class: "text-sm font-semibold text-slate-800", "权限配置" }
+                            p { class: "text-sm text-slate-500", "已启用 {editor_snapshot.selected_permission_count()} 项布尔权限，资源工单范围单独控制。" }
                         }
-                        PermissionCheckbox {
-                            checked: editor_state.read().can_create_resource_tickets,
-                            label: "创建资源工单".to_string(),
-                            on_toggle: move |value| editor_state.write().can_create_resource_tickets = value,
+                        div { class: "flex gap-2",
+                            button {
+                                class: "px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-white",
+                                onclick: move |_| editor_state.write().set_all_permissions(true),
+                                "全部勾选"
+                            }
+                            button {
+                                class: "px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-700 hover:bg-white",
+                                onclick: move |_| editor_state.write().set_all_permissions(false),
+                                "全部清空"
+                            }
                         }
-                        PermissionCheckbox {
-                            checked: editor_state.read().can_approve_resource_tickets,
-                            label: "审批资源工单".to_string(),
-                            on_toggle: move |value| editor_state.write().can_approve_resource_tickets = value,
-                        }
-                        PermissionCheckbox {
-                            checked: editor_state.read().can_provision_resource_tickets,
-                            label: "配置资源工单".to_string(),
-                            on_toggle: move |value| editor_state.write().can_provision_resource_tickets = value,
-                        }
-                        PermissionCheckbox {
-                            checked: editor_state.read().can_deliver_resource_tickets,
-                            label: "交付资源工单".to_string(),
-                            on_toggle: move |value| editor_state.write().can_deliver_resource_tickets = value,
-                        }
-                        PermissionCheckbox {
-                            checked: editor_state.read().can_delete_resource_tickets,
-                            label: "删除资源工单".to_string(),
-                            on_toggle: move |value| editor_state.write().can_delete_resource_tickets = value,
+                    }
+                    div { class: "space-y-4",
+                        for group in PERMISSION_GROUPS.iter() {
+                            div { class: "rounded-lg border border-gray-200 bg-white p-4 shadow-sm",
+                                div { class: "mb-3",
+                                    h3 { class: "text-sm font-semibold text-gray-800", "{group.title}" }
+                                    p { class: "mt-1 text-xs text-gray-500", "{group.description}" }
+                                }
+                                div { class: "grid grid-cols-1 md:grid-cols-2 gap-3",
+                                    for (key, label) in group.permissions.iter().copied() {
+                                        PermissionCheckbox {
+                                            checked: editor_snapshot.permission_enabled(key),
+                                            label: label.to_string(),
+                                            on_toggle: {
+                                                let key = key.to_string();
+                                                move |value| editor_state.write().set_permission(&key, value)
+                                            },
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -560,7 +666,7 @@ fn build_role_summary(role: &RoleRecord, users: &[UserRecord]) -> RoleSummary {
 #[component]
 fn PermissionCheckbox(checked: bool, label: String, on_toggle: EventHandler<bool>) -> Element {
     rsx! {
-        label { class: "flex items-center gap-3 text-sm text-gray-700",
+        label { class: "flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:border-blue-300 hover:bg-blue-50",
             input {
                 r#type: "checkbox",
                 checked: checked,
@@ -568,6 +674,170 @@ fn PermissionCheckbox(checked: bool, label: String, on_toggle: EventHandler<bool
             }
             "{label}"
         }
+    }
+}
+
+fn default_permission_values() -> BTreeMap<String, bool> {
+    all_permission_keys()
+        .into_iter()
+        .map(|key| (key.to_string(), false))
+        .collect()
+}
+
+fn all_permission_keys() -> Vec<&'static str> {
+    PERMISSION_GROUPS
+        .iter()
+        .flat_map(|group| group.permissions.iter().map(|(key, _)| *key))
+        .collect()
+}
+
+fn apply_permission_dependencies(permission_values: &mut BTreeMap<String, bool>) {
+    enable_if_any(
+        permission_values,
+        "can_view_tasks",
+        &["can_create_task", "can_update_task", "can_delete_task"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_advanced_scan",
+        &["can_create_scan", "can_delete_scan", "can_export_scan"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_cloud_assets",
+        &[
+            "can_create_cloud_asset",
+            "can_update_cloud_asset",
+            "can_delete_cloud_asset",
+        ],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_risks",
+        &["can_resolve_risk", "can_delete_risk"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_business_applications",
+        &[
+            "can_create_business_application",
+            "can_approve_business_application",
+            "can_supplement_business_application",
+            "can_delete_business_application",
+        ],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_operations_management",
+        &["can_manage_operations"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_automation_orchestration",
+        &["can_execute_orchestration", "can_manage_orchestration"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_cloud_providers",
+        &["can_manage_cloud_providers"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_users",
+        &[
+            "can_create_user",
+            "can_update_user",
+            "can_delete_user",
+            "can_manage_permissions",
+        ],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_password_policy",
+        &["can_manage_password_policy"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_view_resource_tickets",
+        &[
+            "can_create_resource_tickets",
+            "can_approve_resource_tickets",
+            "can_provision_resource_tickets",
+            "can_deliver_resource_tickets",
+            "can_delete_resource_tickets",
+        ],
+    );
+
+    enable_if_any(
+        permission_values,
+        "can_access_general",
+        &[
+            "can_view_dashboard",
+            "can_view_tasks",
+            "can_create_task",
+            "can_update_task",
+            "can_delete_task",
+            "can_view_advanced_scan",
+            "can_create_scan",
+            "can_delete_scan",
+            "can_export_scan",
+        ],
+    );
+    enable_if_any(
+        permission_values,
+        "can_access_assets_risks",
+        &[
+            "can_view_cloud_assets",
+            "can_create_cloud_asset",
+            "can_update_cloud_asset",
+            "can_delete_cloud_asset",
+            "can_view_risks",
+            "can_resolve_risk",
+            "can_delete_risk",
+            "can_view_business_process",
+            "can_view_business_applications",
+            "can_create_business_application",
+            "can_approve_business_application",
+            "can_supplement_business_application",
+            "can_delete_business_application",
+            "can_view_operations_management",
+            "can_manage_operations",
+            "can_view_automation_orchestration",
+            "can_execute_orchestration",
+            "can_manage_orchestration",
+        ],
+    );
+    enable_if_any(
+        permission_values,
+        "can_access_cloud",
+        &["can_view_cloud_providers", "can_manage_cloud_providers"],
+    );
+    enable_if_any(
+        permission_values,
+        "can_access_user_management",
+        &[
+            "can_view_users",
+            "can_create_user",
+            "can_update_user",
+            "can_delete_user",
+            "can_manage_permissions",
+            "can_view_password_policy",
+            "can_manage_password_policy",
+        ],
+    );
+    enable_if_any(
+        permission_values,
+        "can_access_audit",
+        &["can_view_audit_logs"],
+    );
+}
+
+fn enable_if_any(permission_values: &mut BTreeMap<String, bool>, target: &str, sources: &[&str]) {
+    if sources
+        .iter()
+        .any(|key| permission_values.get(*key).copied().unwrap_or(false))
+    {
+        permission_values.insert(target.to_string(), true);
     }
 }
 
@@ -651,60 +921,23 @@ fn system_role_permissions(role: Option<&str>) -> Vec<String> {
 }
 
 fn permission_label(key: &str) -> String {
-    match key {
-        "can_access_general" => "访问通用模块".to_string(),
-        "can_view_dashboard" => "查看仪表盘".to_string(),
-        "can_view_tasks" => "查看任务中心".to_string(),
-        "can_create_task" => "创建任务".to_string(),
-        "can_delete_task" => "删除任务".to_string(),
-        "can_update_task" => "更新任务".to_string(),
-        "can_view_advanced_scan" => "查看高级扫描".to_string(),
-        "can_create_scan" => "创建扫描".to_string(),
-        "can_delete_scan" => "删除扫描".to_string(),
-        "can_export_scan" => "导出扫描结果".to_string(),
-        "can_access_assets_risks" => "访问资产与风险".to_string(),
-        "can_view_cloud_assets" => "查看云资产".to_string(),
-        "can_create_cloud_asset" => "创建云资产".to_string(),
-        "can_update_cloud_asset" => "更新云资产".to_string(),
-        "can_delete_cloud_asset" => "删除云资产".to_string(),
-        "can_view_risks" => "查看风险".to_string(),
-        "can_resolve_risk" => "处置风险".to_string(),
-        "can_delete_risk" => "删除风险".to_string(),
-        "can_view_business_process" => "查看业务流程".to_string(),
-        "can_view_business_applications" => "查看业务申请".to_string(),
-        "can_create_business_application" => "创建业务申请".to_string(),
-        "can_approve_business_application" => "审批业务申请".to_string(),
-        "can_supplement_business_application" => "补充业务申请".to_string(),
-        "can_delete_business_application" => "删除业务申请".to_string(),
-        "can_view_operations_management" => "查看运维管理".to_string(),
-        "can_manage_operations" => "执行运维管理".to_string(),
-        "can_view_automation_orchestration" => "查看自动化编排".to_string(),
-        "can_execute_orchestration" => "执行自动化编排".to_string(),
-        "can_manage_orchestration" => "管理自动化编排".to_string(),
-        "can_access_cloud" => "访问 Cloud 模块".to_string(),
-        "can_view_cloud_providers" => "查看云厂商配置".to_string(),
-        "can_manage_cloud_providers" => "管理云厂商配置".to_string(),
-        "can_access_user_management" => "访问用户管理".to_string(),
-        "can_view_users" => "查看用户".to_string(),
-        "can_create_user" => "创建用户".to_string(),
-        "can_update_user" => "更新用户".to_string(),
-        "can_delete_user" => "删除用户".to_string(),
-        "can_manage_permissions" => "管理权限".to_string(),
-        "can_view_password_policy" => "查看密码策略".to_string(),
-        "can_manage_password_policy" => "管理密码策略".to_string(),
-        "can_access_audit" => "访问审计模块".to_string(),
-        "can_view_audit_logs" => "查看审计日志".to_string(),
-        "can_view_resource_tickets" => "查看资源工单".to_string(),
-        "can_create_resource_tickets" => "创建资源工单".to_string(),
-        "can_approve_resource_tickets" => "审批资源工单".to_string(),
-        "can_provision_resource_tickets" => "配置资源工单".to_string(),
-        "can_deliver_resource_tickets" => "交付资源工单".to_string(),
-        "can_delete_resource_tickets" => "删除资源工单".to_string(),
-        other => other
-            .trim_start_matches("can_")
-            .replace('_', " ")
-            .to_uppercase(),
-    }
+    permission_label_text(key)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            key.trim_start_matches("can_")
+                .replace('_', " ")
+                .to_uppercase()
+        })
+}
+
+fn permission_label_text(key: &str) -> Option<&'static str> {
+    PERMISSION_GROUPS.iter().find_map(|group| {
+        group
+            .permissions
+            .iter()
+            .find(|(permission_key, _)| *permission_key == key)
+            .map(|(_, label)| *label)
+    })
 }
 
 fn permission_value_label(key: &str, value: &str) -> String {
