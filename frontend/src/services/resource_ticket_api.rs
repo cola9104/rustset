@@ -1,7 +1,9 @@
 use crate::config::api_base;
 use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
-use gloo_net::http::Request;
+use crate::utils::storage::authorization_header;
+use gloo_net::http::{Request, RequestBuilder};
 use serde::Serialize;
+use serde_json::Value;
 use web_sys::RequestCredentials;
 
 /// 创建资源工单请求
@@ -192,6 +194,35 @@ impl BackendResourceTicket {
     }
 }
 
+fn with_auth(mut request: RequestBuilder) -> RequestBuilder {
+    if let Some(header) = authorization_header() {
+        request = request.header("Authorization", &header);
+    }
+    request
+}
+
+async fn read_error_message(response: gloo_net::http::Response) -> String {
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+
+    serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|json| {
+            json.get("message")
+                .and_then(Value::as_str)
+                .or_else(|| json.get("error").and_then(Value::as_str))
+                .map(|msg| msg.to_string())
+        })
+        .filter(|msg| !msg.trim().is_empty())
+        .unwrap_or_else(|| {
+            if body.trim().is_empty() {
+                format!("服务器错误: {}", status)
+            } else {
+                body
+            }
+        })
+}
+
 impl From<&ResourceTicket> for CreateResourceTicketRequest {
     fn from(ticket: &ResourceTicket) -> Self {
         Self {
@@ -310,14 +341,16 @@ impl From<&ResourceTicket> for CreateResourceTicketRequest {
 
 /// 获取资源工单列表 (使用 Session Cookie 认证)
 pub async fn fetch_resource_tickets() -> Result<Vec<ResourceTicket>, String> {
-    let response = Request::get(&format!("{}/resource-tickets", api_base()))
-        .credentials(RequestCredentials::Include)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+    let response = with_auth(
+        Request::get(&format!("{}/resource-tickets", api_base()))
+            .credentials(RequestCredentials::Include),
+    )
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let backend_tickets: Vec<BackendResourceTicket> = response
@@ -338,16 +371,18 @@ pub async fn create_resource_ticket(ticket: &ResourceTicket) -> Result<ResourceT
 pub async fn create_resource_ticket_with_req(
     req: CreateResourceTicketRequest,
 ) -> Result<ResourceTicket, String> {
-    let response = Request::post(&format!("{}/resource-tickets", api_base()))
-        .credentials(RequestCredentials::Include)
-        .json(&req)
-        .map_err(|e| format!("构建请求失败: {}", e))?
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+    let response = with_auth(
+        Request::post(&format!("{}/resource-tickets", api_base()))
+            .credentials(RequestCredentials::Include),
+    )
+    .json(&req)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let json: serde_json::Value = response
@@ -366,16 +401,18 @@ pub async fn create_resource_ticket_with_req(
 
 /// 审批工单
 pub async fn approve_ticket(id: i32, req: ApproveTicketRequest) -> Result<ResourceTicket, String> {
-    let response = Request::post(&format!("{}/resource-tickets/{}/approve", api_base(), id))
-        .credentials(RequestCredentials::Include)
-        .json(&req)
-        .map_err(|e| format!("构建请求失败: {}", e))?
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+    let response = with_auth(
+        Request::post(&format!("{}/resource-tickets/{}/approve", api_base(), id))
+            .credentials(RequestCredentials::Include),
+    )
+    .json(&req)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let json: serde_json::Value = response
@@ -397,16 +434,18 @@ pub async fn provision_ticket(
     id: i32,
     req: ProvisionTicketRequest,
 ) -> Result<ResourceTicket, String> {
-    let response = Request::post(&format!("{}/resource-tickets/{}/provision", api_base(), id))
-        .credentials(RequestCredentials::Include)
-        .json(&req)
-        .map_err(|e| format!("构建请求失败: {}", e))?
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+    let response = with_auth(
+        Request::post(&format!("{}/resource-tickets/{}/provision", api_base(), id))
+            .credentials(RequestCredentials::Include),
+    )
+    .json(&req)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let json: serde_json::Value = response
@@ -425,16 +464,18 @@ pub async fn provision_ticket(
 
 /// 交付工单
 pub async fn deliver_ticket(id: i32, req: DeliverTicketRequest) -> Result<ResourceTicket, String> {
-    let response = Request::post(&format!("{}/resource-tickets/{}/deliver", api_base(), id))
-        .credentials(RequestCredentials::Include)
-        .json(&req)
-        .map_err(|e| format!("构建请求失败: {}", e))?
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+    let response = with_auth(
+        Request::post(&format!("{}/resource-tickets/{}/deliver", api_base(), id))
+            .credentials(RequestCredentials::Include),
+    )
+    .json(&req)
+    .map_err(|e| format!("构建请求失败: {}", e))?
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
 
     if !response.ok() {
-        return Err(format!("服务器错误: {}", response.status()));
+        return Err(read_error_message(response).await);
     }
 
     let json: serde_json::Value = response
@@ -449,4 +490,20 @@ pub async fn deliver_ticket(id: i32, req: DeliverTicketRequest) -> Result<Resour
     } else {
         Err("响应格式错误".to_string())
     }
+}
+
+pub async fn delete_resource_ticket(id: i32) -> Result<(), String> {
+    let response = with_auth(
+        Request::delete(&format!("{}/resource-tickets/{}", api_base(), id))
+            .credentials(RequestCredentials::Include),
+    )
+    .send()
+    .await
+    .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.ok() {
+        return Err(read_error_message(response).await);
+    }
+
+    Ok(())
 }

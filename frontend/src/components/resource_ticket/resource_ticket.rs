@@ -1,7 +1,9 @@
+use crate::components::common::confirm_dialog::{ConfirmDialog, ConfirmType};
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaArrowLeft, FaBoxOpen, FaCheck, FaCircleCheck, FaCircleXmark, FaClock, FaCloud, FaFile,
-    FaFileLines, FaGear, FaMagnifyingGlass, FaPlus, FaServer, FaShieldHalved, FaTicket, FaWrench,
+    FaFileLines, FaGear, FaMagnifyingGlass, FaPlus, FaServer, FaShieldHalved, FaTicket, FaTrash,
+    FaWrench,
 };
 use dioxus_free_icons::Icon;
 
@@ -11,8 +13,8 @@ use crate::app::MACHINE_ROOMS_STATE;
 use crate::app::PROVIDERS_STATE;
 use crate::app::SECURITY_PRODUCTS_STATE;
 use crate::services::resource_ticket_api::{
-    approve_ticket, create_resource_ticket, deliver_ticket, fetch_resource_tickets,
-    provision_ticket,
+    approve_ticket, create_resource_ticket, delete_resource_ticket, deliver_ticket,
+    fetch_resource_tickets, provision_ticket,
 };
 use crate::state::resource_ticket::{ResourceTicket, ResourceType, TicketStatus};
 use crate::state::user_role::{use_auth, ApplicationTab, AuthState};
@@ -115,7 +117,7 @@ fn ticket_stage_guidance(
     ticket: &ResourceTicket,
     current_auth: &AuthState,
 ) -> (&'static str, String) {
-    match ticket.ticket_status {
+    let (tone, message) = match ticket.ticket_status {
         TicketStatus::PendingApproval => {
             if current_auth.can_approve() {
                 (
@@ -174,6 +176,18 @@ fn ticket_stage_guidance(
             "neutral",
             "当前工单暂不需要新的流程动作，可在此查看完整申请和流转记录。".to_string(),
         ),
+    };
+
+    if current_auth.can_delete_resource_tickets() {
+        (
+            tone,
+            format!(
+                "{} 你还拥有“删除资源工单”权限；若发现误申请或无效工单，可直接在详情页删除。",
+                message
+            ),
+        )
+    } else {
+        (tone, message)
     }
 }
 
@@ -1173,6 +1187,7 @@ fn TicketDetailView(
     on_back: Callback<()>,
 ) -> Element {
     let _ = workflow_tab;
+    let ticket_id = ticket.id;
     let approval_completed = ticket.approver.is_some()
         || ticket.approve_time.is_some()
         || ticket.approve_comment.is_some();
@@ -1190,15 +1205,47 @@ fn TicketDetailView(
     let show_delivery_section = delivery_completed
         || (ticket.ticket_status == TicketStatus::PendingDelivery && current_auth.can_deliver());
     let (guidance_tone, guidance_message) = ticket_stage_guidance(&ticket, &current_auth);
+    let can_delete_ticket = current_auth.can_delete_resource_tickets();
+    let mut show_delete_confirm = use_signal(|| false);
+    let mut delete_error = use_signal(String::new);
+    let mut deleting = use_signal(|| false);
 
     rsx! {
         div { class: "space-y-6",
             // 返回按钮
-            button {
-                class: "flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4",
-                onclick: move |_| on_back.call(()),
-                Icon { icon: FaArrowLeft, class: "text-sm" }
-                "返回列表"
+            div { class: "mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                button {
+                    class: "flex items-center gap-2 text-gray-600 hover:text-gray-800",
+                    onclick: move |_| on_back.call(()),
+                    Icon { icon: FaArrowLeft, class: "text-sm" }
+                    "返回列表"
+                }
+                if can_delete_ticket {
+                    button {
+                        class: if *deleting.read() {
+                            "inline-flex items-center gap-2 rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-500"
+                        } else {
+                            "inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                        },
+                        disabled: *deleting.read(),
+                        onclick: move |_| {
+                            delete_error.set(String::new());
+                            show_delete_confirm.set(true);
+                        },
+                        Icon { icon: FaTrash, class: "text-sm" }
+                        if *deleting.read() {
+                            "删除中..."
+                        } else {
+                            "删除工单"
+                        }
+                    }
+                }
+            }
+
+            if !delete_error.read().is_empty() {
+                div { class: "rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700",
+                    "{delete_error.read()}"
+                }
             }
 
             div {
@@ -1208,6 +1255,38 @@ fn TicketDetailView(
                     _ => "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700",
                 },
                 "{guidance_message}"
+            }
+
+            ConfirmDialog {
+                show: *show_delete_confirm.read(),
+                title: "确认删除工单".to_string(),
+                message: format!(
+                    "确定要删除工单 #{}（{}）吗？此操作会直接移除该工单记录，且无法撤销。",
+                    ticket.id, ticket.application_name
+                ),
+                confirm_type: ConfirmType::Danger,
+                confirm_text: "删除工单".to_string(),
+                cancel_text: "取消".to_string(),
+                on_confirm: move |_| {
+                    let mut tickets = tickets;
+                    let on_back = on_back.clone();
+                    deleting.set(true);
+                    delete_error.set(String::new());
+                    show_delete_confirm.set(false);
+                    spawn(async move {
+                        match delete_resource_ticket(ticket_id).await {
+                            Ok(()) => {
+                                tickets.with_mut(|items| items.retain(|item| item.id != ticket_id));
+                                on_back.call(());
+                            }
+                            Err(err) => {
+                                delete_error.set(err);
+                            }
+                        }
+                        deleting.set(false);
+                    });
+                },
+                on_cancel: move |_| show_delete_confirm.set(false),
             }
 
             // 主要内容卡片

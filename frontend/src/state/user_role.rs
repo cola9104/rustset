@@ -190,6 +190,10 @@ impl AuthState {
         self.has_permission("can_view_resource_tickets")
     }
 
+    pub fn can_delete_resource_tickets(&self) -> bool {
+        self.has_permission("can_delete_resource_tickets")
+    }
+
     pub fn accessible_tabs(&self) -> Vec<ApplicationTab> {
         let mut tabs = Vec::new();
         let scope = self.scope_value("resource_ticket_scope");
