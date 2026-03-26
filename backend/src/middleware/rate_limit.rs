@@ -51,7 +51,10 @@ impl RateLimiter {
 
     /// Check if a client is allowed to make a request
     pub fn check(&self, client_id: &str) -> Result<(), String> {
-        let mut clients = self.clients.write().unwrap();
+        let mut clients = self
+            .clients
+            .write()
+            .map_err(|e| format!("Rate limiter lock poisoned: {}", e))?;
         let now = Instant::now();
 
         // Clean up old entries periodically

@@ -5,16 +5,12 @@
 //! - 端口风险评分
 //! - 批量端口绑定
 
-use axum::{
-    extract::{Json, Path, State},
-    http::HeaderMap,
-};
+use axum::extract::{Json, Path, State};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::middleware::ApiError;
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::get_current_user;
 
 /// 端口详细信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,7 +110,7 @@ pub fn get_port_risk(port: u16, service: Option<&str>) -> String {
 /// 获取所有端口详情
 pub async fn get_port_details(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    _auth_user: AuthUser,
 ) -> Result<Json<Vec<PortDetail>>, ApiError> {
     // 从内存中获取（实际应从数据库）
     let ports = state
@@ -127,7 +123,7 @@ pub async fn get_port_details(
 /// 获取单个端口详情
 pub async fn get_port_detail(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    _auth_user: AuthUser,
     Path(id): Path<i32>,
 ) -> Result<Json<PortDetail>, ApiError> {
     let ports = state
@@ -146,7 +142,7 @@ pub async fn get_port_detail(
 /// 创建端口详情
 pub async fn create_port_detail(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    _auth_user: AuthUser,
     Json(req): Json<CreatePortDetailRequest>,
 ) -> Result<Json<PortDetail>, ApiError> {
     let mut ports = state
@@ -189,7 +185,7 @@ pub async fn create_port_detail(
 /// 更新端口详情
 pub async fn update_port_detail(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    _auth_user: AuthUser,
     Path(id): Path<i32>,
     Json(req): Json<CreatePortDetailRequest>,
 ) -> Result<Json<PortDetail>, ApiError> {
@@ -218,7 +214,7 @@ pub async fn update_port_detail(
 /// 删除端口详情
 pub async fn delete_port_detail(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    _auth_user: AuthUser,
     Path(id): Path<i32>,
 ) -> Result<Json<String>, ApiError> {
     let mut ports = state
@@ -238,13 +234,10 @@ pub async fn delete_port_detail(
 
 /// 批量绑定端口到资产
 pub async fn batch_bind_ports(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<BatchBindPortsRequest>,
 ) -> Result<Json<Vec<shared::PortInfo>>, ApiError> {
-    let _user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
     let mut assets = state
         .assets
         .write()
@@ -272,7 +265,7 @@ pub async fn batch_bind_ports(
                 is_bound: true,
                 system_name: None,
                 middleware: None,
-                created_by: Some(_user.username.clone()),
+                created_by: Some(auth_user.username.clone()),
                 updated_by: None,
             }
         })

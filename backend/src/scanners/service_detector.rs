@@ -457,9 +457,7 @@ mod tests {
         if let Ok(stream) = TcpStream::connect("127.0.0.1:8080").await {
             drop(stream);
 
-            if let Some(info) = detector.detect_service("127.0.0.1", 8080).await {
-                println!("Detected service: {:?}", info);
-            }
+            let _ = detector.detect_service("127.0.0.1", 8080).await;
         }
     }
 }

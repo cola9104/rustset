@@ -3,6 +3,7 @@
 use axum::{
     body::Body,
     http::{header, Method, Request, StatusCode},
+    middleware::from_fn_with_state,
     Router,
 };
 use backend::auth::generate_token;
@@ -24,8 +25,8 @@ async fn create_test_app(state: AppState) -> Router {
         )
         .route("/api/ip-zones/{id}", axum::routing::delete(delete_ip_zone))
         .route("/api/ip-zones/find", axum::routing::get(find_zone_by_ip))
+        .layer(from_fn_with_state(state.clone(), auth_middleware))
         .with_state(state)
-        .layer(axum::middleware::from_fn(auth_middleware))
 }
 
 fn create_test_user() -> User {

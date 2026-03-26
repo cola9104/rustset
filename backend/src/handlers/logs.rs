@@ -1,8 +1,8 @@
 use crate::database::{get_audit_logs as db_get_audit_logs, get_db};
-use crate::middleware::ApiError;
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::get_current_user_from_headers;
-use axum::{extract::State, http::HeaderMap, Json};
+use crate::utils::{ensure_user_has_any_role, require_current_user_from_auth};
+use axum::{extract::State, Json};
 use shared::{AuditLog, Role};
 
 async fn load_audit_logs(state: &AppState) -> Result<Vec<AuditLog>, ApiError> {
@@ -39,19 +39,15 @@ async fn load_audit_logs(state: &AppState) -> Result<Vec<AuditLog>, ApiError> {
 }
 
 pub async fn get_audit_logs(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<Vec<AuditLog>>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    // SecAdmin、SysAdmin 和 Auditor 可以查看审计日志
-    if user.role != Role::SecAdmin && user.role != Role::SysAdmin && user.role != Role::Auditor {
-        return Err(ApiError::forbidden(
-            "Access denied: SecAdmin, SysAdmin, or Auditor only",
-        ));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(
+        &user,
+        &[Role::SecAdmin, Role::SysAdmin, Role::Auditor],
+        "Access denied: SecAdmin, SysAdmin, or Auditor only",
+    )?;
 
     Ok(Json(load_audit_logs(&state).await?))
 }

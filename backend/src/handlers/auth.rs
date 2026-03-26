@@ -1,8 +1,10 @@
-use crate::auth::{generate_token, verify_token};
-use crate::middleware::{auth_middleware::Claims, ApiError};
+use crate::auth::{claims_for_user, generate_token, verify_token, Claims};
+use crate::middleware::ApiError;
 use crate::password;
 use crate::state::AppState;
-use crate::utils::{get_current_user_from_auth, log_action, sync_cached_user};
+use crate::utils::{
+    effective_permissions, get_current_user_from_auth, log_action, sync_cached_user,
+};
 use axum::{
     extract::{Json, State},
     http::{header::AUTHORIZATION, HeaderMap},
@@ -10,6 +12,12 @@ use axum::{
 use chrono::Utc;
 use shared::{LoginRequest, LoginResponse};
 use tower_sessions::Session;
+
+async fn login_response_user(state: &AppState, user: &shared::User) -> shared::User {
+    let mut response_user = user.clone();
+    response_user.permissions = Some(effective_permissions(state, user).await);
+    response_user
+}
 
 async fn load_user_by_username(state: &AppState, username: &str) -> Option<shared::User> {
     if crate::database::get_db().is_some() {
@@ -40,6 +48,34 @@ async fn persist_user_state(state: &AppState, user: &shared::User) -> Result<(),
 
     sync_cached_user(&state.users, user);
     Ok(())
+}
+
+fn session_claims_for_user(user: &shared::User) -> Claims {
+    let claims = claims_for_user(user);
+    Claims {
+        user_id: claims.user_id,
+        username: claims.username,
+        role: claims.role,
+        exp: claims.exp,
+    }
+}
+
+fn bearer_token_from_headers(headers: &HeaderMap) -> Result<Option<String>, ApiError> {
+    let Some(auth_header) = headers.get(AUTHORIZATION) else {
+        return Ok(None);
+    };
+
+    let auth_header = auth_header
+        .to_str()
+        .map_err(|_| ApiError::unauthorized("Invalid authorization header"))?;
+
+    let token = auth_header
+        .trim()
+        .strip_prefix("Bearer ")
+        .or_else(|| auth_header.trim().strip_prefix("bearer "))
+        .ok_or_else(|| ApiError::unauthorized("Invalid authorization scheme"))?;
+
+    Ok(Some(token.to_string()))
 }
 
 /// User login endpoint
@@ -177,11 +213,16 @@ pub async fn login(
     }
 
     // 保存用户信息到 Session (在锁释放后)
+    session
+        .cycle_id()
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to rotate session id: {}", e)))?;
+
     let claims = Claims {
         user_id,
         username: username.clone(),
         role,
-        exp: (Utc::now().timestamp() + 24 * 3600) as usize, // 24小时
+        exp: claims_for_user(&user).exp,
     };
     session
         .insert("user", claims)
@@ -189,8 +230,12 @@ pub async fn login(
         .map_err(|e| ApiError::internal(format!("Failed to create session: {}", e)))?;
 
     let token = generate_token(&user)?;
+    let response_user = login_response_user(&state, &user).await;
 
-    Ok(Json(LoginResponse { token, user }))
+    Ok(Json(LoginResponse {
+        token,
+        user: response_user,
+    }))
 }
 
 /// User logout endpoint
@@ -256,20 +301,25 @@ pub async fn logout(
 )]
 pub async fn refresh_token(
     State(state): State<AppState>,
+    session: Session,
     headers: HeaderMap,
 ) -> Result<Json<LoginResponse>, ApiError> {
-    let auth_header = headers
-        .get(AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| ApiError::unauthorized("No authorization token"))?;
+    let claims = if let Some(token) = bearer_token_from_headers(&headers)? {
+        verify_token(&token)?
+    } else {
+        let session_claims = session
+            .get::<Claims>("user")
+            .await
+            .map_err(|e| ApiError::internal(format!("Failed to read session: {}", e)))?
+            .ok_or_else(|| ApiError::unauthorized("No authorization token"))?;
 
-    let token = auth_header
-        .trim()
-        .strip_prefix("Bearer ")
-        .or_else(|| auth_header.trim().strip_prefix("bearer "))
-        .ok_or_else(|| ApiError::unauthorized("Invalid authorization scheme"))?;
-
-    let claims = verify_token(token)?;
+        crate::auth::Claims {
+            user_id: session_claims.user_id,
+            username: session_claims.username,
+            role: session_claims.role,
+            exp: session_claims.exp,
+        }
+    };
 
     let auth_user = crate::middleware::AuthUser {
         user_id: claims.user_id,
@@ -293,18 +343,32 @@ pub async fn refresh_token(
         }
     }
 
+    session
+        .insert("user", session_claims_for_user(&user))
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to update session: {}", e)))?;
+
+    log_action(
+        &state.audit_logs,
+        &user,
+        "TOKEN_REFRESH",
+        &user.username,
+        "Authentication token refreshed",
+    );
+
     let token = generate_token(&user)?;
+    let response_user = login_response_user(&state, &user).await;
 
     Ok(Json(LoginResponse {
         token,
-        user: user.clone(),
+        user: response_user,
     }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::{generate_token, verify_token};
+    use crate::auth::{generate_token, token_expiration_hours, verify_token};
     use crate::password;
     use crate::state::AppState;
     use axum::http::HeaderMap;
@@ -391,15 +455,6 @@ mod tests {
         Session::new(None, Arc::new(MemoryStore::default()), None)
     }
 
-    fn session_claims_for_user(user: &User) -> Claims {
-        Claims {
-            user_id: user.id.clone(),
-            username: user.username.clone(),
-            role: user.role.clone(),
-            exp: (Utc::now().timestamp() + 24 * 3600) as usize,
-        }
-    }
-
     #[tokio::test]
     async fn test_login_success() {
         setup_jwt_secret();
@@ -425,6 +480,48 @@ mod tests {
         assert_eq!(response.user.username, "admin");
         assert_eq!(session_claims.user_id, "1");
         assert_eq!(session_claims.username, "admin");
+    }
+
+    #[tokio::test]
+    async fn test_login_response_uses_effective_permissions_for_system_roles() {
+        setup_jwt_secret();
+        let state = create_test_app_state();
+        {
+            let mut users = state.users.write().unwrap();
+            let admin = users
+                .iter_mut()
+                .find(|user| user.username == "admin")
+                .unwrap();
+            admin.permissions = Some(Permissions {
+                can_view_resource_tickets: false,
+                can_create_resource_tickets: false,
+                can_approve_resource_tickets: false,
+                can_provision_resource_tickets: false,
+                can_deliver_resource_tickets: false,
+                can_delete_resource_tickets: false,
+                resource_ticket_scope: shared::DataScope::SelfOnly,
+                ..Permissions::default()
+            });
+        }
+
+        let session = create_test_session();
+        let req = LoginRequest {
+            username: "admin".to_string(),
+            password: "admin123".to_string(),
+        };
+
+        let result = login(State(state), session, Json(req)).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        let permissions = response.user.permissions.clone().unwrap();
+        assert!(permissions.can_view_resource_tickets);
+        assert!(permissions.can_create_resource_tickets);
+        assert!(permissions.can_approve_resource_tickets);
+        assert!(permissions.can_provision_resource_tickets);
+        assert!(permissions.can_deliver_resource_tickets);
+        assert!(permissions.can_delete_resource_tickets);
+        assert_eq!(permissions.resource_ticket_scope, shared::DataScope::All);
     }
 
     #[tokio::test]
@@ -557,6 +654,7 @@ mod tests {
         let state = create_test_app_state();
         let admin_user = state.users.read().unwrap()[0].clone();
         let token = generate_token(&admin_user).unwrap();
+        let session = create_test_session();
 
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -564,7 +662,7 @@ mod tests {
             format!("Bearer {}", token).parse().unwrap(),
         );
 
-        let result = refresh_token(State(state), headers).await;
+        let result = refresh_token(State(state), session, headers).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -578,9 +676,10 @@ mod tests {
     #[tokio::test]
     async fn test_refresh_token_no_auth_header() {
         let state = create_test_app_state();
+        let session = create_test_session();
         let headers = HeaderMap::new();
 
-        let result = refresh_token(State(state), headers).await;
+        let result = refresh_token(State(state), session, headers).await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -595,6 +694,7 @@ mod tests {
     async fn test_refresh_token_invalid_user() {
         setup_jwt_secret();
         let state = create_test_app_state();
+        let session = create_test_session();
 
         let fake_user = User {
             id: "999".to_string(),
@@ -624,7 +724,7 @@ mod tests {
             format!("Bearer {}", token).parse().unwrap(),
         );
 
-        let result = refresh_token(State(state), headers).await;
+        let result = refresh_token(State(state), session, headers).await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -641,6 +741,7 @@ mod tests {
         let state = create_test_app_state();
         let disabled_user = state.users.read().unwrap()[1].clone();
         let token = generate_token(&disabled_user).unwrap();
+        let session = create_test_session();
 
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -648,7 +749,7 @@ mod tests {
             format!("Bearer {}", token).parse().unwrap(),
         );
 
-        let result = refresh_token(State(state), headers).await;
+        let result = refresh_token(State(state), session, headers).await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -657,5 +758,91 @@ mod tests {
             }
             _ => panic!("Expected Forbidden error"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_uses_session_when_header_missing() {
+        setup_jwt_secret();
+        let state = create_test_app_state();
+        let admin_user = state.users.read().unwrap()[0].clone();
+        let session = create_test_session();
+
+        session
+            .insert("user", session_claims_for_user(&admin_user))
+            .await
+            .unwrap();
+
+        let result = refresh_token(State(state), session.clone(), HeaderMap::new()).await;
+
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        let claims = verify_token(&response.token).unwrap();
+        let session_claims = session.get::<Claims>("user").await.unwrap().unwrap();
+
+        assert_eq!(claims.username, "admin");
+        assert_eq!(session_claims.username, "admin");
+        assert!(session_claims.exp > Utc::now().timestamp() as usize);
+    }
+
+    #[tokio::test]
+    async fn test_login_rotates_session_id() {
+        setup_jwt_secret();
+        let state = create_test_app_state();
+        let session = create_test_session();
+
+        session.insert("guest", true).await.unwrap();
+        session.save().await.unwrap();
+        let original_session_id = session.id();
+        assert!(original_session_id.is_some());
+
+        let req = LoginRequest {
+            username: "admin".to_string(),
+            password: "admin123".to_string(),
+        };
+
+        let result = login(State(state), session.clone(), Json(req)).await;
+        assert!(result.is_ok());
+
+        session.save().await.unwrap();
+        let rotated_session_id = session.id();
+
+        assert!(rotated_session_id.is_some());
+        assert_ne!(original_session_id, rotated_session_id);
+        assert!(session.get::<bool>("guest").await.unwrap().unwrap());
+        assert!(session.get::<Claims>("user").await.unwrap().is_some());
+    }
+
+    #[test]
+    fn test_login_claims_use_configured_expiration() {
+        let _guard = crate::auth::AUTH_ENV_LOCK.lock().unwrap();
+        std::env::set_var("JWT_EXPIRATION_HOURS", "2");
+
+        let user = User {
+            id: "1".to_string(),
+            username: "admin".to_string(),
+            real_name: None,
+            password: "hashed".to_string(),
+            role: Role::SysAdmin,
+            permissions: Some(Permissions::sys_admin()),
+            created_at: Utc::now(),
+            password_changed_at: Some(Utc::now()),
+            password_strength: Some("strong".to_string()),
+            force_password_change: Some(false),
+            last_login_at: None,
+            email: None,
+            phone: None,
+            status: Some("active".to_string()),
+            organization_id: None,
+            department_id: None,
+            failed_login_attempts: Some(0),
+            locked_until: None,
+        };
+
+        let claims = session_claims_for_user(&user);
+        let now = Utc::now().timestamp() as usize;
+
+        assert_eq!(token_expiration_hours(), 2);
+        assert!(claims.exp > now);
+        assert!(claims.exp < now + (3 * 3600));
     }
 }

@@ -7,13 +7,13 @@ RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫
 ### 使用启动脚本（推荐）
 
 ```bash
-# 启动所有服务
-./start.sh
+# 启动前后端
+./start.sh start
 
-# 查看服务状态
+# 查看状态
 ./start.sh status
 
-# 停止所有服务
+# 停止
 ./stop.sh
 ```
 
@@ -25,9 +25,9 @@ RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫
 # 后端
 cargo run -p backend
 
-# 前端（需要单独终端窗口）
+# 前端（单独终端）
 cd frontend
-dx serve
+VITE_API_BASE=http://127.0.0.1:3003/api dx serve --port 8080
 ```
 
 ## 系统架构
@@ -79,6 +79,8 @@ dx serve
 
 - Rust (cargo)
 - `dioxus-cli` (前端构建工具): `cargo install dioxus-cli`
+- 建议先复制 `.env.example` 或 `backend/.env.example` 为本地配置文件
+- 后端会自动读取项目根目录 `.env` 和 `backend/.env`
 
 ## 快速启动
 
@@ -88,26 +90,43 @@ cargo run -p backend
 ```
 服务将在 `http://127.0.0.1:3003` 启动
 
-默认登录账号:
-- 用户名: `admin`
-- 密码: `admin`
+健康检查:
+- `http://127.0.0.1:3003/api/health`
 
 ### 2. 启动前端服务
 ```bash
 cd frontend
-dx serve
+VITE_API_BASE=http://127.0.0.1:3003/api dx serve --port 8080
 ```
-应用将在浏览器中自动打开 `http://127.0.0.1:8080`
+应用将在 `http://127.0.0.1:8080` 可访问
 
 ### 3. 生产环境构建
 ```bash
 # 前端构建
 cd frontend
-dx build --release
+dx build --platform web --release
 
 # 后端构建
 cargo build --release -p backend
 ```
+
+### 4. 默认开发账号
+
+当数据库为空且 `BOOTSTRAP_DEFAULT_USERS=true` 时，会自动创建:
+
+- `admin / admin`
+- `sec / sec`
+- `audit / audit`
+
+生产环境建议关闭该开关，并通过正式初始化流程创建账号。
+
+### 5. Session / Cookie 行为
+
+- Session Cookie 名称默认是 `rustset.sid`
+- 默认 `HttpOnly`
+- 默认 `SameSite=Lax`
+- 默认空闲超时与 `JWT_EXPIRATION_HOURS` 对齐，默认 24 小时
+- 可通过 `SESSION_COOKIE_*` 和 `SESSION_IDLE_TIMEOUT_HOURS` 覆盖
 
 ## 技术架构
 

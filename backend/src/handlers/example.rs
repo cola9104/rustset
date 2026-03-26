@@ -87,7 +87,7 @@ pub async fn database_operation_example(
 
 /// 辅助函数：获取用户数量
 fn users_count(state: &AppState) -> i32 {
-    state.users.read().unwrap().len() as i32
+    state.users.read().map(|users| users.len() as i32).unwrap_or(0)
 }
 
 #[cfg(test)]

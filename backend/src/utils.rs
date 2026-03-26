@@ -1,29 +1,12 @@
 use crate::database::{db_custom_role_to_shared, get_custom_roles};
-use crate::middleware::AuthUser;
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use axum::http::{header::AUTHORIZATION, HeaderMap};
 use chrono::Utc;
 use ipnetwork::IpNetwork;
 use shared::{AuditLog, CustomRole, NetworkZone, Permissions, Role, User, ZoneConfig};
 use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
-
-pub fn get_current_user(headers: &HeaderMap, users: &Arc<RwLock<Vec<User>>>) -> Option<User> {
-    let auth_header = headers.get(AUTHORIZATION)?;
-    let auth_value = auth_header.to_str().ok()?.trim();
-    let token = auth_value
-        .strip_prefix("Bearer ")
-        .or_else(|| auth_value.strip_prefix("bearer "))?;
-
-    let claims = crate::auth::verify_token(token).ok()?;
-    let users_guard = users.read().ok()?;
-
-    users_guard
-        .iter()
-        .find(|u| u.id == claims.user_id && u.username == claims.username)
-        .cloned()
-}
 
 pub async fn get_current_user_from_auth(
     auth_user: &AuthUser,
@@ -44,25 +27,45 @@ pub async fn get_current_user_from_auth(
         .cloned()
 }
 
-pub async fn get_current_user_from_headers(
-    headers: &HeaderMap,
-    users: &Arc<RwLock<Vec<User>>>,
-) -> Option<User> {
-    let auth_header = headers.get(AUTHORIZATION)?;
-    let auth_value = auth_header.to_str().ok()?.trim();
-    let token = auth_value
-        .strip_prefix("Bearer ")
-        .or_else(|| auth_value.strip_prefix("bearer "))?;
+pub async fn require_current_user_from_auth(
+    auth_user: &AuthUser,
+    state: &AppState,
+) -> Result<User, ApiError> {
+    get_current_user_from_auth(auth_user, &state.users)
+        .await
+        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))
+}
 
-    let claims = crate::auth::verify_token(token).ok()?;
-    let auth_user = AuthUser {
-        user_id: claims.user_id,
-        username: claims.username,
-        role: claims.role,
-        exp: claims.exp,
-    };
+pub fn user_has_any_role(user: &User, allowed_roles: &[Role]) -> bool {
+    allowed_roles.contains(&user.role)
+}
 
-    get_current_user_from_auth(&auth_user, users).await
+pub fn role_has_any_role(role: &Role, allowed_roles: &[Role]) -> bool {
+    allowed_roles.iter().any(|allowed| role == allowed)
+}
+
+pub fn ensure_user_has_any_role(
+    user: &User,
+    allowed_roles: &[Role],
+    message: &str,
+) -> Result<(), ApiError> {
+    if user_has_any_role(user, allowed_roles) {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden(message))
+    }
+}
+
+pub fn ensure_role_has_any_role(
+    role: &Role,
+    allowed_roles: &[Role],
+    message: &str,
+) -> Result<(), ApiError> {
+    if role_has_any_role(role, allowed_roles) {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden(message))
+    }
 }
 
 pub fn sync_cached_user(users: &Arc<RwLock<Vec<User>>>, user: &User) {
@@ -170,9 +173,10 @@ pub fn log_action(
     };
 
     // Add to in-memory storage
-    {
-        let mut logs_guard = logs.write().unwrap();
+    if let Ok(mut logs_guard) = logs.write() {
         logs_guard.push(log_entry.clone());
+    } else {
+        tracing::error!("Failed to acquire audit log write lock");
     }
 
     // Try to persist to database asynchronously (don't block if it fails)
@@ -201,9 +205,10 @@ pub fn log_action_auth(
     };
 
     // Add to in-memory storage
-    {
-        let mut logs_guard = logs.write().unwrap();
+    if let Ok(mut logs_guard) = logs.write() {
         logs_guard.push(log_entry.clone());
+    } else {
+        tracing::error!("Failed to acquire audit log write lock");
     }
 
     // Try to persist to database asynchronously (don't block if it fails)
@@ -243,7 +248,6 @@ pub fn determine_zone(ip_str: &str, zones: &[ZoneConfig]) -> NetworkZone {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderMap;
     use crate::handlers::port_details::PortDetail;
     use crate::handlers::scanners::ScanResult;
     use crate::state::AppState;
@@ -270,10 +274,6 @@ mod tests {
         }
     }
 
-    fn setup_jwt_secret() {
-        std::env::set_var("JWT_SECRET", "test-jwt-secret");
-    }
-
     fn create_test_user() -> User {
         User {
             id: "test-id".to_string(),
@@ -295,62 +295,6 @@ mod tests {
             failed_login_attempts: Some(0),
             locked_until: None,
         }
-    }
-
-    #[test]
-    fn test_get_current_user_with_valid_token() {
-        setup_jwt_secret();
-        let user = create_test_user();
-        let users = Arc::new(RwLock::new(vec![user.clone()]));
-        let token = crate::auth::generate_token(&user).unwrap();
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            format!("Bearer {}", token).parse().unwrap(),
-        );
-
-        let result = get_current_user(&headers, &users);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().username, "testuser");
-    }
-
-    #[test]
-    fn test_get_current_user_with_whitespace_token() {
-        setup_jwt_secret();
-        let user = create_test_user();
-        let users = Arc::new(RwLock::new(vec![user.clone()]));
-        let token = crate::auth::generate_token(&user).unwrap();
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            format!("Bearer {}", token).parse().unwrap(),
-        );
-
-        let result = get_current_user(&headers, &users);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().username, "testuser");
-    }
-
-    #[test]
-    fn test_get_current_user_with_no_header() {
-        let users = Arc::new(RwLock::new(vec![create_test_user()]));
-        let headers = HeaderMap::new();
-
-        let result = get_current_user(&headers, &users);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_get_current_user_with_invalid_token() {
-        setup_jwt_secret();
-        let users = Arc::new(RwLock::new(vec![create_test_user()]));
-        let mut headers = HeaderMap::new();
-        headers.insert("Authorization", "Bearer invalid.jwt.token".parse().unwrap());
-
-        let result = get_current_user(&headers, &users);
-        assert!(result.is_none());
     }
 
     #[tokio::test]

@@ -4,13 +4,10 @@ use crate::database::{
     insert_risk, insert_task_wrapper as db_insert_task, update_asset as db_update_asset,
     update_task as db_update_task,
 };
-use crate::middleware::ApiError;
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{get_current_user_from_headers, log_action};
-use axum::{
-    extract::{Json, Path, State},
-    http::HeaderMap,
-};
+use crate::utils::{ensure_user_has_any_role, log_action, require_current_user_from_auth};
+use axum::extract::{Json, Path, State};
 use chrono::Utc;
 use shared::{CreateTaskRequest, PortInfo, Role, ScanRequest, Task, TaskStatus};
 use uuid::Uuid;
@@ -189,26 +186,19 @@ fn scan_target_ports(
 
 pub async fn get_tasks(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
 ) -> Result<Json<Vec<Task>>, ApiError> {
-    let _user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let _user = require_current_user_from_auth(&auth_user, &state).await?;
     Ok(Json(load_all_tasks(&state).await?))
 }
 
 pub async fn create_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<Task>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     let new_task = Task {
         id: Uuid::new_v4().to_string(),
@@ -247,17 +237,12 @@ pub async fn create_task(
 
 pub async fn update_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Path(id): Path<String>,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<Option<Task>>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     let mut updated_task = match load_task_by_id(&state, &id).await? {
         Some(task) => task,
@@ -291,16 +276,11 @@ pub async fn update_task(
 
 pub async fn delete_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     if load_task_by_id(&state, &id).await?.is_none() {
         return Err(ApiError::not_found(format!(
@@ -325,16 +305,11 @@ use std::net::SocketAddr;
 
 pub async fn trigger_scan(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Json(req): Json<ScanRequest>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     let target_ip = req.target_ip.clone();
     let ports_to_scan = if req.ports.is_empty() {

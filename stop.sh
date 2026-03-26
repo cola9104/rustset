@@ -1,40 +1,61 @@
 #!/bin/bash
 
-# 停止服务脚本 - rustset项目
+set -euo pipefail
 
-set -e
+BACKEND_PORT="${BACKEND_PORT:-3003}"
+FRONTEND_PORT="${FRONTEND_PORT:-8080}"
+BACKEND_PID_FILE="/tmp/rustset-backend.pid"
+FRONTEND_PID_FILE="/tmp/rustset-frontend.pid"
 
-# 颜色定义
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${YELLOW}🛑 停止 Rustset 服务...${NC}"
-echo ""
+pid_from_file() {
+    local pid_file="$1"
+    if [[ -f "$pid_file" ]]; then
+        cat "$pid_file"
+    fi
+}
 
-# 停止后端
-if pgrep -f "target/debug/backend" >/dev/null; then
-    BACKEND_PID=$(cat /tmp/rustset-backend.pid 2>/dev/null || echo "unknown")
-    echo -e "${YELLOW}停止后端 (PID: $BACKEND_PID)...${NC}"
-    pkill -f "target/debug/backend"
-    echo -e "${GREEN}✓ 后端已停止${NC}"
-else
-    echo -e "${YELLOW}⚠️  后端未运行${NC}"
-fi
+is_running() {
+    local pid="$1"
+    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
 
-# 停止前端
-if pgrep -f "python3 -m http.server.*8080" >/dev/null; then
-    FRONTEND_PID=$(cat /tmp/rustset-frontend.pid 2>/dev/null || echo "unknown")
-    echo -e "${YELLOW}停止前端 (PID: $FRONTEND_PID)...${NC}"
-    pkill -f "python3 -m http.server.*8080"
-    echo -e "${GREEN}✓ 前端已停止${NC}"
-else
-    echo -e "${YELLOW}⚠️  前端未运行${NC}"
-fi
+port_pid() {
+    local port="$1"
+    lsof -n -P -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 { print $2; exit }' || true
+}
 
-# 清理PID文件
-rm -f /tmp/rustset-backend.pid /tmp/rustset-frontend.pid
+stop_service() {
+    local name="$1"
+    local pid_file="$2"
+    local port="$3"
+    local pid
 
-echo ""
-echo -e "${GREEN}✓ 所有服务已停止${NC}"
+    pid="$(pid_from_file "$pid_file")"
+    if is_running "$pid"; then
+        echo -e "${YELLOW}停止${name} (PID: ${pid})...${NC}"
+        kill "$pid"
+        sleep 1
+    else
+        pid="$(port_pid "$port")"
+        if [[ -n "$pid" ]]; then
+            echo -e "${YELLOW}停止${name}端口占用进程 (PID: ${pid})...${NC}"
+            kill "$pid"
+            sleep 1
+        else
+            echo -e "${YELLOW}${name}未运行${NC}"
+        fi
+    fi
+
+    rm -f "$pid_file"
+}
+
+echo -e "${YELLOW}停止 RustSet 服务...${NC}"
+
+stop_service "后端" "$BACKEND_PID_FILE" "$BACKEND_PORT"
+stop_service "前端" "$FRONTEND_PID_FILE" "$FRONTEND_PORT"
+
+echo -e "${GREEN}✓ 已完成${NC}"

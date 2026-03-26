@@ -4,7 +4,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde_json::json;
-use std::sync::RwLock;
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::database::{
     delete_business_resource as db_delete_business_resource,
@@ -25,6 +25,19 @@ use shared::{
 
 // 业务资源存储 (内存缓存 + 数据库持久化)
 pub static BUSINESS_RESOURCES: RwLock<Vec<BusinessResource>> = RwLock::new(Vec::new());
+
+fn read_business_resources() -> Result<RwLockReadGuard<'static, Vec<BusinessResource>>, ApiError> {
+    BUSINESS_RESOURCES
+        .read()
+        .map_err(|e| ApiError::internal(format!("Failed to read business resources cache: {}", e)))
+}
+
+fn write_business_resources() -> Result<RwLockWriteGuard<'static, Vec<BusinessResource>>, ApiError>
+{
+    BUSINESS_RESOURCES
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write business resources cache: {}", e)))
+}
 
 /// 辅助函数：将 DbPhysicalMachine 转换为 PhysicalMachineInfo
 fn db_to_physical_machine_info(db: DbPhysicalMachine) -> PhysicalMachineInfo {
@@ -236,7 +249,7 @@ pub async fn get_business_resources(
                 }
 
                 // 更新内存缓存
-                *BUSINESS_RESOURCES.write().unwrap() = resources.clone();
+                *write_business_resources()? = resources.clone();
 
                 return Ok(Json(resources).into_response());
             }
@@ -247,7 +260,7 @@ pub async fn get_business_resources(
     }
 
     // 回退到内存缓存，也过滤已交付的资源
-    let resources = BUSINESS_RESOURCES.read().unwrap();
+    let resources = read_business_resources()?;
     let filtered: Vec<_> = resources
         .iter()
         .filter(|r| {
@@ -293,7 +306,7 @@ pub async fn create_business_resource(
     let db_id = match db_insert_business_resource(&req, &created_at_str, &user.username).await {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("Error inserting business resource to database: {}", e);
+            tracing::error!("Error inserting business resource to database: {}", e);
             return Err(ApiError::internal("数据库保存失败"));
         }
     };
@@ -411,7 +424,7 @@ pub async fn create_business_resource(
 
     // 添加到内存缓存
     {
-        let mut resources = BUSINESS_RESOURCES.write().unwrap();
+        let mut resources = write_business_resources()?;
         resources.push(new_resource.clone());
     }
 
@@ -465,7 +478,7 @@ pub async fn update_business_resource(
 
     // 检查资源是否存在
     let resource_exists = {
-        let resources = BUSINESS_RESOURCES.read().unwrap();
+        let resources = read_business_resources()?;
         resources.iter().any(|r| r.id == Some(id))
     };
 
@@ -479,7 +492,7 @@ pub async fn update_business_resource(
     // 更新内存缓存中的资源
     let now = Utc::now();
     let updated_resource = {
-        let mut resources = BUSINESS_RESOURCES.write().unwrap();
+        let mut resources = write_business_resources()?;
         if let Some(resource) = resources.iter_mut().find(|r| r.id == Some(id)) {
             // 应用更新 - 对于 String 类型的字段，直接赋值
             if let Some(v) = req.resource_type {
@@ -746,14 +759,14 @@ pub async fn delete_business_resource(
 
     // 检查资源是否存在
     let found = {
-        let resources = BUSINESS_RESOURCES.read().unwrap();
+        let resources = read_business_resources()?;
         resources.iter().position(|r| r.id == Some(id))
     };
 
     if let Some(pos) = found {
         // 从内存中删除
         {
-            let mut resources = BUSINESS_RESOURCES.write().unwrap();
+            let mut resources = write_business_resources()?;
             resources.remove(pos);
         }
 

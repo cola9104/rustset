@@ -6,11 +6,10 @@ use crate::database::{
 };
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{determine_zone, get_current_user_from_auth, log_action};
-use axum::{
-    extract::{Json, Path, State},
-    http::StatusCode,
+use crate::utils::{
+    determine_zone, ensure_user_has_any_role, log_action, require_current_user_from_auth,
 };
+use axum::extract::{Json, Path, State};
 use shared::{Asset, PortBindingRequest, PortInfo, Role, User, ZoneConfig};
 use std::net::IpAddr;
 
@@ -125,9 +124,7 @@ async fn load_zones(state: &AppState) -> Result<Vec<ZoneConfig>, ApiError> {
 }
 
 async fn require_current_user(auth_user: &AuthUser, state: &AppState) -> Result<User, ApiError> {
-    get_current_user_from_auth(auth_user, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))
+    require_current_user_from_auth(auth_user, state).await
 }
 
 pub async fn get_assets(
@@ -144,10 +141,7 @@ pub async fn add_asset(
     Json(mut asset): Json<Asset>,
 ) -> Result<Json<Asset>, ApiError> {
     let user = require_current_user(&auth_user, &state).await?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     if asset.ip.parse::<IpAddr>().is_err() {
         return Err(ApiError::bad_request("Invalid IP address format"));
@@ -197,10 +191,7 @@ pub async fn update_asset(
     Json(req): Json<Asset>,
 ) -> Result<Json<Option<Asset>>, ApiError> {
     let user = require_current_user(&auth_user, &state).await?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     if req.ip.parse::<IpAddr>().is_err() {
         return Err(ApiError::bad_request("Invalid IP address format"));
@@ -250,10 +241,7 @@ pub async fn delete_asset(
     Path(id): Path<i32>,
 ) -> Result<Json<String>, ApiError> {
     let user = require_current_user(&auth_user, &state).await?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     if load_asset_by_id(&state, id).await?.is_none() {
         return Err(ApiError::not_found(format!(
@@ -284,21 +272,11 @@ pub async fn add_asset_port(
     auth_user: AuthUser,
     Path(id): Path<i32>,
     Json(mut port_info): Json<PortInfo>,
-) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user_from_auth(&auth_user, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    if user.role != Role::SecAdmin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Access denied: SecAdmin only".to_string(),
-        ));
-    }
+) -> Result<Json<Option<Asset>>, ApiError> {
+    let user = require_current_user(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
-    let mut asset = match load_asset_by_id(&state, id)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    {
+    let mut asset = match load_asset_by_id(&state, id).await? {
         Some(asset) => asset,
         None => return Ok(Json(None)),
     };
@@ -311,15 +289,11 @@ pub async fn add_asset_port(
         asset.updated_by = Some(user.username.clone());
 
         if get_db().is_some() {
-            db_update_asset(id, &asset).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to add port: {}", e),
-                )
-            })?;
+            db_update_asset(id, &asset)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to add port: {}", e)))?;
         }
-        sync_asset_cache(&state, &asset)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        sync_asset_cache(&state, &asset)?;
 
         log_action(
             &state.audit_logs,
@@ -339,21 +313,11 @@ pub async fn update_asset_port(
     auth_user: AuthUser,
     Path((id, port)): Path<(i32, u16)>,
     Json(port_info): Json<PortInfo>,
-) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user_from_auth(&auth_user, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    if user.role != Role::SecAdmin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Access denied: SecAdmin only".to_string(),
-        ));
-    }
+) -> Result<Json<Option<Asset>>, ApiError> {
+    let user = require_current_user(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
-    let mut asset = match load_asset_by_id(&state, id)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    {
+    let mut asset = match load_asset_by_id(&state, id).await? {
         Some(asset) => asset,
         None => return Ok(Json(None)),
     };
@@ -365,15 +329,11 @@ pub async fn update_asset_port(
         asset.updated_by = Some(user.username.clone());
 
         if get_db().is_some() {
-            db_update_asset(id, &asset).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update port: {}", e),
-                )
-            })?;
+            db_update_asset(id, &asset)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to update port: {}", e)))?;
         }
-        sync_asset_cache(&state, &asset)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        sync_asset_cache(&state, &asset)?;
 
         log_action(
             &state.audit_logs,
@@ -390,21 +350,11 @@ pub async fn delete_asset_port(
     State(state): State<AppState>,
     auth_user: AuthUser,
     Path((id, port)): Path<(i32, u16)>,
-) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user_from_auth(&auth_user, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    if user.role != Role::SecAdmin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Access denied: SecAdmin only".to_string(),
-        ));
-    }
+) -> Result<Json<Option<Asset>>, ApiError> {
+    let user = require_current_user(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
-    let mut asset = match load_asset_by_id(&state, id)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    {
+    let mut asset = match load_asset_by_id(&state, id).await? {
         Some(asset) => asset,
         None => return Ok(Json(None)),
     };
@@ -414,15 +364,11 @@ pub async fn delete_asset_port(
     if asset.ports.len() != original_len {
         asset.updated_by = Some(user.username.clone());
         if get_db().is_some() {
-            db_update_asset(id, &asset).await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to delete port: {}", e),
-                )
-            })?;
+            db_update_asset(id, &asset)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to delete port: {}", e)))?;
         }
-        sync_asset_cache(&state, &asset)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        sync_asset_cache(&state, &asset)?;
         log_action(
             &state.audit_logs,
             &user,
@@ -439,21 +385,11 @@ pub async fn bind_port(
     auth_user: AuthUser,
     Path((ip, port)): Path<(String, u16)>,
     Json(req): Json<PortBindingRequest>,
-) -> Result<Json<Option<Asset>>, (StatusCode, String)> {
-    let user = get_current_user_from_auth(&auth_user, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
-    if user.role != Role::SecAdmin {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "Access denied: SecAdmin only".to_string(),
-        ));
-    }
+) -> Result<Json<Option<Asset>>, ApiError> {
+    let user = require_current_user(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
-    let mut asset = match load_asset_by_ip(&state, &ip)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    {
+    let mut asset = match load_asset_by_ip(&state, &ip).await? {
         Some(asset) => asset,
         None => return Ok(Json(None)),
     };
@@ -467,16 +403,12 @@ pub async fn bind_port(
 
         if let Some(id) = asset.id {
             if get_db().is_some() {
-                db_update_asset(id, &asset).await.map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to bind port: {}", e),
-                    )
-                })?;
+                db_update_asset(id, &asset)
+                    .await
+                    .map_err(|e| ApiError::internal(format!("Failed to bind port: {}", e)))?;
             }
         }
-        sync_asset_cache(&state, &asset)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        sync_asset_cache(&state, &asset)?;
 
         log_action(
             &state.audit_logs,

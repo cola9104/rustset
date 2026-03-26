@@ -38,7 +38,7 @@ pub async fn get_cloud_zones(
                 Ok(Json(zones).into_response())
             }
             Err(e) => {
-                eprintln!("Error loading cloud zones from database: {}", e);
+                tracing::error!("Error loading cloud zones from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -68,7 +68,7 @@ pub async fn get_cloud_zone(
             }
             Ok(None) => Err(ApiError::not_found("Operator/Manufacturer not found")),
             Err(e) => {
-                eprintln!("Error loading cloud zone from database: {}", e);
+                tracing::error!("Error loading cloud zone from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -98,7 +98,7 @@ pub async fn create_cloud_zone(
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error checking zone code: {}", e);
+                    tracing::error!("Error checking zone code: {}", e);
                     return Err(ApiError::internal("Database error"));
                 }
             }
@@ -139,7 +139,7 @@ pub async fn create_cloud_zone(
                     .into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error inserting cloud zone: {}", e);
+                    tracing::error!("Error inserting cloud zone: {}", e);
                     Err(ApiError::internal("Failed to create operator/manufacturer"))
                 }
             }
@@ -177,7 +177,7 @@ pub async fn update_cloud_zone(
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Error checking zone code: {}", e);
+                                tracing::error!("Error checking zone code: {}", e);
                                 return Err(ApiError::internal("Database error"));
                             }
                         }
@@ -187,7 +187,7 @@ pub async fn update_cloud_zone(
                     return Err(ApiError::not_found("Operator/Manufacturer not found"));
                 }
                 Err(e) => {
-                    eprintln!("Error checking zone existence: {}", e);
+                    tracing::error!("Error checking zone existence: {}", e);
                     return Err(ApiError::internal("Database error"));
                 }
             }
@@ -233,7 +233,7 @@ pub async fn update_cloud_zone(
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error updating cloud zone: {}", e);
+                    tracing::error!("Error updating cloud zone: {}", e);
                     Err(ApiError::internal("Failed to update operator/manufacturer"))
                 }
             }
@@ -273,14 +273,14 @@ pub async fn delete_cloud_zone(
                             Ok(Json(json!({ "message": "运营商/厂家删除成功" })).into_response())
                         }
                         Err(e) => {
-                            eprintln!("Error deleting cloud zone: {}", e);
+                            tracing::error!("Error deleting cloud zone: {}", e);
                             Err(ApiError::internal("Failed to delete operator/manufacturer"))
                         }
                     }
                 }
                 Ok(None) => Err(ApiError::not_found("Operator/Manufacturer not found")),
                 Err(e) => {
-                    eprintln!("Error checking zone existence: {}", e);
+                    tracing::error!("Error checking zone existence: {}", e);
                     Err(ApiError::internal("Database error"))
                 }
             }

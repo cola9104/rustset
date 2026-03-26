@@ -76,7 +76,7 @@ pub async fn get_machine_rooms(
         Some(conn) => match crate::database::get_all_machine_rooms(&conn).await {
             Ok(rooms) => Ok(Json(rooms).into_response()),
             Err(e) => {
-                eprintln!("Error loading machine rooms from database: {}", e);
+                tracing::error!("Error loading machine rooms from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -95,7 +95,7 @@ pub async fn get_machine_room(
             Ok(Some(room)) => Ok(Json(room).into_response()),
             Ok(None) => Err(ApiError::not_found("Machine room not found")),
             Err(e) => {
-                eprintln!("Error loading machine room from database: {}", e);
+                tracing::error!("Error loading machine room from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -172,7 +172,7 @@ pub async fn create_machine_room(
                     .into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error inserting machine room: {}", e);
+                    tracing::error!("Error inserting machine room: {}", e);
                     Err(ApiError::internal("Failed to create machine room"))
                 }
             }
@@ -235,14 +235,14 @@ pub async fn update_machine_room(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error updating machine room: {}", e);
+                        tracing::error!("Error updating machine room: {}", e);
                         Err(ApiError::internal("Failed to update machine room"))
                     }
                 }
             }
             Ok(None) => Err(ApiError::not_found("Machine room not found")),
             Err(e) => {
-                eprintln!("Error checking machine room existence: {}", e);
+                tracing::error!("Error checking machine room existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -275,13 +275,13 @@ pub async fn delete_machine_room(
                     Ok(Json(json!({ "message": "机房删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error deleting machine room: {}", e);
+                    tracing::error!("Error deleting machine room: {}", e);
                     Err(ApiError::internal("Failed to delete machine room"))
                 }
             },
             Ok(None) => Err(ApiError::not_found("Machine room not found")),
             Err(e) => {
-                eprintln!("Error checking machine room existence: {}", e);
+                tracing::error!("Error checking machine room existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },

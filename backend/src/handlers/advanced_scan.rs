@@ -6,7 +6,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Json},
 };
 use chrono::Utc;
@@ -18,18 +18,19 @@ use crate::database::{
     get_advanced_scan_tasks, get_quick_scan_results, insert_advanced_scan_task_wrapper,
     insert_quick_scan_result_wrapper, update_advanced_scan_task,
 };
+use crate::middleware::AuthUser;
 use crate::state::AppState;
-use crate::utils::{get_current_user_from_headers, log_action};
+use crate::utils::{get_current_user_from_auth, log_action};
 use shared::{AdvancedScanConfig, AdvancedScanTask, CreateAdvancedScanRequest, TaskStatus};
 
 /// Execute advanced scan
 pub async fn execute_advanced_scan(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<CreateAdvancedScanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user_from_headers(&headers, &state.users)
+    let current_user = get_current_user_from_auth(&auth_user, &state.users)
         .await
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
@@ -75,7 +76,11 @@ pub async fn execute_advanced_scan(
     let _ = insert_advanced_scan_task_wrapper(&task).await;
 
     // Store task in memory
-    state.advanced_tasks.write().unwrap().push(task.clone());
+    state
+        .advanced_tasks
+        .write()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .push(task.clone());
 
     // Audit log
     log_action(
@@ -91,7 +96,16 @@ pub async fn execute_advanced_scan(
     let task_id_clone = task_id.clone();
     tokio::task::spawn_blocking(move || {
         // Get scan manager inside blocking context
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                tracing::error!(
+                    "Failed to create Tokio runtime for advanced scan: {}",
+                    error
+                );
+                return;
+            }
+        };
 
         let result = rt.block_on(async {
             let scan_manager_guard = state_clone.scan_manager.write().await;
@@ -106,13 +120,23 @@ pub async fn execute_advanced_scan(
 
         // Handle result
         if let Ok(completed_task) = result {
-            let rt2 = tokio::runtime::Runtime::new().unwrap();
+            let rt2 = match tokio::runtime::Runtime::new() {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    tracing::error!(
+                        "Failed to create Tokio runtime for advanced scan persistence: {}",
+                        error
+                    );
+                    return;
+                }
+            };
             rt2.block_on(async {
-                {
-                    let mut tasks = state_clone.advanced_tasks.write().unwrap();
+                if let Ok(mut tasks) = state_clone.advanced_tasks.write() {
                     if let Some(t) = tasks.iter_mut().find(|t| t.id == task_id_clone) {
                         *t = completed_task.clone();
                     }
+                } else {
+                    tracing::error!("Failed to acquire advanced task write lock");
                 }
 
                 let _ = update_advanced_scan_task(&completed_task).await;
@@ -145,13 +169,23 @@ pub async fn get_advanced_tasks(State(state): State<AppState>) -> impl IntoRespo
                 tasks_with_results.push(task);
             }
             // Update in-memory cache
-            *state.advanced_tasks.write().unwrap() = tasks_with_results.clone();
+            if let Ok(mut tasks) = state.advanced_tasks.write() {
+                *tasks = tasks_with_results.clone();
+            } else {
+                tracing::error!("Failed to update advanced task cache");
+            }
             tasks_with_results
         }
         Err(e) => {
-            eprintln!("Error loading advanced scan tasks from database: {}", e);
+            tracing::warn!("Error loading advanced scan tasks from database: {}", e);
             // Fallback to memory cache
-            state.advanced_tasks.read().unwrap().clone()
+            match state.advanced_tasks.read() {
+                Ok(tasks) => tasks.clone(),
+                Err(error) => {
+                    tracing::error!("Failed to read advanced task cache: {}", error);
+                    Vec::new()
+                }
+            }
         }
     };
 
@@ -179,7 +213,10 @@ pub async fn get_advanced_task(
     }
 
     // Fallback to memory cache
-    let tasks = state.advanced_tasks.read().unwrap();
+    let tasks = state
+        .advanced_tasks
+        .read()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let task = tasks
         .iter()
         .find(|t| t.id == id)
@@ -190,24 +227,30 @@ pub async fn get_advanced_task(
 
 /// Delete advanced scan task
 pub async fn delete_advanced_scan(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user_from_headers(&headers, &state.users)
+    let current_user = get_current_user_from_auth(&auth_user, &state.users)
         .await
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Get task name for audit log before deletion
     let task_name = {
-        let tasks = state.advanced_tasks.read().unwrap();
+        let tasks = state
+            .advanced_tasks
+            .read()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         tasks.iter().find(|t| t.id == id).map(|t| t.name.clone())
     };
 
     // Remove from in-memory storage
     {
-        let mut tasks = state.advanced_tasks.write().unwrap();
+        let mut tasks = state
+            .advanced_tasks
+            .write()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let idx = tasks
             .iter()
             .position(|t| t.id == id)
@@ -233,18 +276,21 @@ pub async fn delete_advanced_scan(
 
 /// Cancel running advanced scan
 pub async fn cancel_advanced_scan(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // Get current user for audit logging
-    let current_user = get_current_user_from_headers(&headers, &state.users)
+    let current_user = get_current_user_from_auth(&auth_user, &state.users)
         .await
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Update task status
     let (found, task_to_update) = {
-        let mut tasks = state.advanced_tasks.write().unwrap();
+        let mut tasks = state
+            .advanced_tasks
+            .write()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         if let Some(task) = tasks.iter_mut().find(|t| t.id == id) {
             if task.status == TaskStatus::Running {
                 task.status = TaskStatus::Failed;
@@ -310,7 +356,10 @@ pub async fn export_scan_results(
             .collect(),
         Err(_) => {
             // Fallback to memory cache
-            let tasks = state.advanced_tasks.read().unwrap();
+            let tasks = state
+                .advanced_tasks
+                .read()
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
             let task = tasks
                 .iter()
                 .find(|t| t.id == id)
@@ -377,7 +426,11 @@ pub async fn scan_progress_stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let tasks = state.advanced_tasks.read().unwrap();
+    let Ok(tasks) = state.advanced_tasks.read() else {
+        return Json(serde_json::json!({
+            "error": "Failed to read task state"
+        }));
+    };
     let task = tasks.iter().find(|t| t.id == id);
 
     if let Some(task) = task {

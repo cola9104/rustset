@@ -2,12 +2,13 @@ use crate::database::{
     db_custom_role_to_shared, delete_custom_role, get_custom_roles, get_users,
     insert_custom_role_wrapper, update_custom_role, update_user as db_update_user,
 };
-use crate::middleware::ApiError;
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{effective_permissions, get_current_user, log_action, sync_cached_user};
+use crate::utils::{
+    effective_permissions, log_action, require_current_user_from_auth, sync_cached_user,
+};
 use axum::{
     extract::{Path, State},
-    http::HeaderMap,
     Json,
 };
 use shared::{CreateRoleRequest, CustomRole, DataScope, Permissions, UpdateRoleRequest};
@@ -310,11 +311,10 @@ fn role_name_exists(
     tag = "roles"
 )]
 pub async fn get_roles(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -335,7 +335,7 @@ pub async fn get_roles(
             roles
         }
         Err(e) => {
-            eprintln!("Error loading custom roles from database: {}", e);
+            tracing::error!("Error loading custom roles from database: {}", e);
             // Fallback to memory cache
             state
                 .custom_roles
@@ -409,12 +409,11 @@ pub async fn get_roles(
     tag = "roles"
 )]
 pub async fn get_role(
+    auth_user: AuthUser,
     State(state): State<AppState>,
     Path(id): Path<String>,
-    headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -476,7 +475,7 @@ pub async fn get_role(
                 }
             }
             Err(e) => {
-                eprintln!("Error loading custom roles from database: {}", e);
+                tracing::error!("Error loading custom roles from database: {}", e);
                 // Fallback to memory cache
                 let custom_roles = state.custom_roles.read().map_err(|e| {
                     ApiError::internal(format!("Failed to read custom roles: {}", e))
@@ -518,13 +517,12 @@ pub async fn get_role(
     tag = "roles"
 )]
 pub async fn create_role(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<CreateRoleRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -557,7 +555,7 @@ pub async fn create_role(
     let new_id = match insert_custom_role_wrapper(&new_role).await {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("Error inserting custom role to database: {}", e);
+            tracing::error!("Error inserting custom role to database: {}", e);
             // Fallback to in-memory with generated ID
             let mut custom_roles = state
                 .custom_roles
@@ -639,14 +637,13 @@ pub async fn create_role(
     tag = "roles"
 )]
 pub async fn update_role(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<UpdateRoleRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -719,7 +716,7 @@ pub async fn update_role(
 
     // Persist to database (after releasing lock)
     if let Err(e) = update_custom_role(target_id, &updated_role).await {
-        eprintln!("Error updating custom role in database: {}", e);
+        tracing::error!("Error updating custom role in database: {}", e);
     }
 
     // Update in-memory cache
@@ -775,13 +772,12 @@ pub async fn update_role(
     tag = "roles"
 )]
 pub async fn delete_role(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Get current user for audit logging
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -834,7 +830,7 @@ pub async fn delete_role(
 
     // Persist to database (after releasing lock)
     if let Err(e) = delete_custom_role(target_id).await {
-        eprintln!("Error deleting custom role from database: {}", e);
+        tracing::error!("Error deleting custom role from database: {}", e);
     }
 
     // Audit log

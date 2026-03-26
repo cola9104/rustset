@@ -22,7 +22,7 @@ pub async fn get_cloud_service_assets(
     let business_resources = match get_business_resources().await {
         Ok(resources) => resources,
         Err(e) => {
-            eprintln!("Error loading business resources: {}", e);
+            tracing::error!("Error loading business resources: {}", e);
             return Json(vec![]);
         }
     };
@@ -200,7 +200,7 @@ pub async fn get_cloud_service_stats(
     let business_resources = match get_business_resources().await {
         Ok(resources) => resources,
         Err(e) => {
-            eprintln!("Error loading business resources: {}", e);
+            tracing::error!("Error loading business resources: {}", e);
             return Json(CloudServiceAssetStats {
                 total_count: 0,
                 physical_count: 0,

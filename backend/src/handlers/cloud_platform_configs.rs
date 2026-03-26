@@ -71,7 +71,7 @@ pub async fn get_cloud_platform_configs(
         Some(conn) => match crate::database::get_all_cloud_platform_configs(&conn).await {
             Ok(configs) => Ok(Json(configs).into_response()),
             Err(e) => {
-                eprintln!("Error loading cloud platform configs from database: {}", e);
+                tracing::error!("Error loading cloud platform configs from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -90,7 +90,7 @@ pub async fn get_cloud_platform_config(
             Ok(Some(config)) => Ok(Json(config).into_response()),
             Ok(None) => Err(ApiError::not_found("Cloud platform config not found")),
             Err(e) => {
-                eprintln!("Error loading cloud platform config from database: {}", e);
+                tracing::error!("Error loading cloud platform config from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -163,7 +163,7 @@ pub async fn create_cloud_platform_config(
                     .into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error inserting cloud platform config: {}", e);
+                    tracing::error!("Error inserting cloud platform config: {}", e);
                     Err(ApiError::internal("Failed to create cloud platform config"))
                 }
             }
@@ -227,14 +227,14 @@ pub async fn update_cloud_platform_config(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error updating cloud platform config: {}", e);
+                        tracing::error!("Error updating cloud platform config: {}", e);
                         Err(ApiError::internal("Failed to update cloud platform config"))
                     }
                 }
             }
             Ok(None) => Err(ApiError::not_found("Cloud platform config not found")),
             Err(e) => {
-                eprintln!("Error checking cloud platform config existence: {}", e);
+                tracing::error!("Error checking cloud platform config existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -267,13 +267,13 @@ pub async fn delete_cloud_platform_config(
                     Ok(Json(json!({ "message": "云平台配置删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error deleting cloud platform config: {}", e);
+                    tracing::error!("Error deleting cloud platform config: {}", e);
                     Err(ApiError::internal("Failed to delete cloud platform config"))
                 }
             },
             Ok(None) => Err(ApiError::not_found("Cloud platform config not found")),
             Err(e) => {
-                eprintln!("Error checking cloud platform config existence: {}", e);
+                tracing::error!("Error checking cloud platform config existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },

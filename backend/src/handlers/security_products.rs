@@ -93,7 +93,7 @@ pub async fn get_security_products(
         Some(conn) => match crate::database::get_all_security_products(&conn).await {
             Ok(products) => Ok(Json(products).into_response()),
             Err(e) => {
-                eprintln!("Error loading security products from database: {}", e);
+                tracing::error!("Error loading security products from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -112,7 +112,7 @@ pub async fn get_security_product(
             Ok(Some(product)) => Ok(Json(product).into_response()),
             Ok(None) => Err(ApiError::not_found("Security product not found")),
             Err(e) => {
-                eprintln!("Error loading security product from database: {}", e);
+                tracing::error!("Error loading security product from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -204,7 +204,7 @@ pub async fn create_security_product(
                     .into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error inserting security product: {}", e);
+                    tracing::error!("Error inserting security product: {}", e);
                     Err(ApiError::internal("Failed to create security product"))
                 }
             }
@@ -276,14 +276,14 @@ pub async fn update_security_product(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error updating security product: {}", e);
+                        tracing::error!("Error updating security product: {}", e);
                         Err(ApiError::internal("Failed to update security product"))
                     }
                 }
             }
             Ok(None) => Err(ApiError::not_found("Security product not found")),
             Err(e) => {
-                eprintln!("Error checking security product existence: {}", e);
+                tracing::error!("Error checking security product existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -316,13 +316,13 @@ pub async fn delete_security_product(
                     Ok(Json(json!({ "message": "安全产品删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error deleting security product: {}", e);
+                    tracing::error!("Error deleting security product: {}", e);
                     Err(ApiError::internal("Failed to delete security product"))
                 }
             },
             Ok(None) => Err(ApiError::not_found("Security product not found")),
             Err(e) => {
-                eprintln!("Error checking security product existence: {}", e);
+                tracing::error!("Error checking security product existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },

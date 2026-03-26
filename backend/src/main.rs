@@ -2,7 +2,6 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use std::net::SocketAddr;
 use std::sync::{Arc, RwLock as StdRwLock};
 use tokio::sync::RwLock as TokioRwLock;
 use tower_cookies::CookieManagerLayer;
@@ -15,34 +14,151 @@ use uuid::Uuid;
 
 // 加载 .env 文件
 fn load_env() {
-    if std::path::Path::new(".env").exists() {
-        if let Ok(content) = std::fs::read_to_string(".env") {
-            for line in content.lines() {
-                if let Some((key, value)) = line.split_once('=') {
-                    if key.starts_with('#') {
-                        continue;
-                    }
-                    // 只有环境变量不存在时才设置
-                    if std::env::var(key).is_err() {
-                        std::env::set_var(key.trim(), value.trim());
-                    }
-                }
+    let _ = dotenvy::from_filename(".env");
+    let _ = dotenvy::from_filename("backend/.env");
+}
+
+fn bool_env(name: &str, default: bool) -> bool {
+    match std::env::var(name) {
+        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => true,
+            "0" | "false" | "no" | "off" => false,
+            _ => default,
+        },
+        Err(_) => default,
+    }
+}
+
+fn should_seed_default_users() -> bool {
+    bool_env("BOOTSTRAP_DEFAULT_USERS", cfg!(debug_assertions))
+}
+
+fn build_default_users() -> Vec<User> {
+    vec![
+        {
+            let admin_password = "admin";
+            let password_hash = password::hash_password(admin_password).unwrap_or_else(|e| {
+                tracing::error!("Failed to hash admin password: {}", e);
+                admin_password.to_string()
+            });
+            User {
+                id: Uuid::new_v4().to_string(),
+                username: "admin".to_string(),
+                password: password_hash,
+                role: Role::SysAdmin,
+                permissions: Some(shared::Permissions::sys_admin()),
+                created_at: Utc::now(),
+                password_changed_at: Some(Utc::now()),
+                password_strength: Some(
+                    password::get_strength_label(password::check_password_strength(admin_password))
+                        .to_string(),
+                ),
+                force_password_change: Some(true),
+                last_login_at: None,
+                email: Some("admin@rustset.local".to_string()),
+                phone: Some("".to_string()),
+                status: Some("active".to_string()),
+                real_name: Some("系统管理员".to_string()),
+                organization_id: None,
+                department_id: None,
+                failed_login_attempts: Some(0),
+                locked_until: None,
             }
+        },
+        {
+            let sec_password = "sec";
+            let password_hash = password::hash_password(sec_password).unwrap_or_else(|e| {
+                tracing::error!("Failed to hash sec password: {}", e);
+                sec_password.to_string()
+            });
+            User {
+                id: Uuid::new_v4().to_string(),
+                username: "sec".to_string(),
+                password: password_hash,
+                role: Role::SecAdmin,
+                permissions: Some(shared::Permissions::sec_admin()),
+                created_at: Utc::now(),
+                password_changed_at: Some(Utc::now()),
+                password_strength: Some(
+                    password::get_strength_label(password::check_password_strength(sec_password))
+                        .to_string(),
+                ),
+                force_password_change: Some(true),
+                last_login_at: None,
+                email: Some("sec@rustset.local".to_string()),
+                phone: Some("".to_string()),
+                status: Some("active".to_string()),
+                real_name: Some("安全管理员".to_string()),
+                organization_id: None,
+                department_id: None,
+                failed_login_attempts: Some(0),
+                locked_until: None,
+            }
+        },
+        {
+            let audit_password = "audit";
+            let password_hash = password::hash_password(audit_password).unwrap_or_else(|e| {
+                tracing::error!("Failed to hash audit password: {}", e);
+                audit_password.to_string()
+            });
+            User {
+                id: Uuid::new_v4().to_string(),
+                username: "audit".to_string(),
+                password: password_hash,
+                role: Role::Auditor,
+                permissions: Some(shared::Permissions::auditor()),
+                created_at: Utc::now(),
+                password_changed_at: Some(Utc::now()),
+                password_strength: Some(
+                    password::get_strength_label(password::check_password_strength(audit_password))
+                        .to_string(),
+                ),
+                force_password_change: Some(true),
+                last_login_at: None,
+                email: Some("audit@rustset.local".to_string()),
+                phone: Some("".to_string()),
+                status: Some("active".to_string()),
+                real_name: Some("审计员".to_string()),
+                organization_id: None,
+                department_id: None,
+                failed_login_attempts: Some(0),
+                locked_until: None,
+            }
+        },
+    ]
+}
+
+async fn load_users_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::User> {
+    match database::get_users_with_conn(conn).await {
+        Ok(users) => users,
+        Err(e) => {
+            tracing::warn!("Error loading users from database: {}", e);
+            vec![]
         }
     }
-    // 也检查 backend/.env
-    if std::path::Path::new("backend/.env").exists() {
-        if let Ok(content) = std::fs::read_to_string("backend/.env") {
-            for line in content.lines() {
-                if let Some((key, value)) = line.split_once('=') {
-                    if key.starts_with('#') {
-                        continue;
-                    }
-                    if std::env::var(key).is_err() {
-                        std::env::set_var(key.trim(), value.trim());
-                    }
-                }
-            }
+}
+
+async fn load_audit_logs_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::AuditLog> {
+    use crate::database::get_audit_logs_with_conn as get_audit_logs_db;
+
+    match get_audit_logs_db(conn, Some(1000)).await {
+        Ok(logs) => logs
+            .into_iter()
+            .map(|db_log| shared::AuditLog {
+                id: db_log.id,
+                user_id: db_log.user_id,
+                username: db_log.username,
+                action: db_log.action,
+                target: db_log.target,
+                details: db_log.details,
+                timestamp: chrono::DateTime::parse_from_rfc3339(&db_log.timestamp)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!("Error loading audit logs from database: {}", e);
+            vec![]
         }
     }
 }
@@ -149,118 +265,21 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
-    // Bootstrap users (with password hashing)
-    let initial_users = vec![
-        {
-            let admin_password = "admin";
-            let password_hash = password::hash_password(admin_password).unwrap_or_else(|e| {
-                eprintln!("Failed to hash admin password: {}", e);
-                // Fallback to plain text (not recommended for production)
-                admin_password.to_string()
-            });
-            User {
-                id: Uuid::new_v4().to_string(),
-                username: "admin".to_string(),
-                password: password_hash, // ✅ Store hashed password
-                role: Role::SysAdmin,
-                permissions: Some(shared::Permissions::sys_admin()),
-                created_at: Utc::now(),
-                password_changed_at: Some(Utc::now()),
-                password_strength: Some(
-                    password::get_strength_label(password::check_password_strength(admin_password))
-                        .to_string(),
-                ),
-                force_password_change: Some(true), // Force change on first login for security
-                last_login_at: None,
-                email: Some("admin@rustset.local".to_string()),
-                phone: Some("".to_string()),
-                status: Some("active".to_string()),
-                real_name: Some("系统管理员".to_string()),
-                organization_id: None,
-                department_id: None,
-                failed_login_attempts: Some(0),
-                locked_until: None,
-            }
-        },
-        {
-            let sec_password = "sec";
-            let password_hash = password::hash_password(sec_password).unwrap_or_else(|e| {
-                eprintln!("Failed to hash sec password: {}", e);
-                sec_password.to_string()
-            });
-            User {
-                id: Uuid::new_v4().to_string(),
-                username: "sec".to_string(),
-                password: password_hash, // ✅ Store hashed password
-                role: Role::SecAdmin,
-                permissions: Some(shared::Permissions::sec_admin()),
-                created_at: Utc::now(),
-                password_changed_at: Some(Utc::now()),
-                password_strength: Some(
-                    password::get_strength_label(password::check_password_strength(sec_password))
-                        .to_string(),
-                ),
-                force_password_change: Some(true), // Force change on first login for security
-                last_login_at: None,
-                email: Some("sec@rustset.local".to_string()),
-                phone: Some("".to_string()),
-                status: Some("active".to_string()),
-                real_name: Some("安全管理员".to_string()),
-                organization_id: None,
-                department_id: None,
-                failed_login_attempts: Some(0),
-                locked_until: None,
-            }
-        },
-        {
-            let audit_password = "audit";
-            let password_hash = password::hash_password(audit_password).unwrap_or_else(|e| {
-                eprintln!("Failed to hash audit password: {}", e);
-                audit_password.to_string()
-            });
-            User {
-                id: Uuid::new_v4().to_string(),
-                username: "audit".to_string(),
-                password: password_hash, // ✅ Store hashed password
-                role: Role::Auditor,
-                permissions: Some(shared::Permissions::auditor()),
-                created_at: Utc::now(),
-                password_changed_at: Some(Utc::now()),
-                password_strength: Some(
-                    password::get_strength_label(password::check_password_strength(audit_password))
-                        .to_string(),
-                ),
-                force_password_change: Some(true), // Force change on first login for security
-                last_login_at: None,
-                email: Some("audit@rustset.local".to_string()),
-                phone: Some("".to_string()),
-                status: Some("active".to_string()),
-                real_name: Some("审计员".to_string()),
-                organization_id: None,
-                department_id: None,
-                failed_login_attempts: Some(0),
-                locked_until: None,
-            }
-        },
-    ];
+    let default_users = build_default_users();
 
     // 初始化数据库 (使用 SeaORM)
     let db_config = config::DatabaseConfig::from_env();
-    database::init_db(&db_config.connection_string)
-        .await
-        .expect("Failed to initialize database");
-    println!(
-        "Database initialized: type={}, url={}",
-        db_config.db_type,
-        db_config
-            .connection_string
-            .chars()
-            .take(50)
-            .collect::<String>() // 只显示前50个字符避免泄露密码
-    );
+    if let Err(error) = database::init_db(&db_config.connection_string).await {
+        tracing::error!("Failed to initialize database: {}", error);
+        return;
+    }
+    tracing::info!("Database initialized: type={}", db_config.db_type);
 
     // 获取数据库连接
-    let db_conn = database::get_db().expect("Database not initialized");
+    let Some(db_conn) = database::get_db() else {
+        tracing::error!("Database initialization completed without a shared connection");
+        return;
+    };
 
     // 添加新的申请与交付状态字段（如果不存在）
     // 注意：这些 SQL 语句会在表已存在时执行，用于升级现有数据库
@@ -275,40 +294,42 @@ async fn main() {
         // 使用 execute_unprepared 执行原生 SQL
         match db_conn.execute_unprepared(sql).await {
             Ok(result) => {
-                println!("Added new column(s), result: {:?}", result);
+                tracing::info!("Added new column(s), result: {:?}", result);
             }
             Err(e) => {
                 // 字段可能已存在，忽略错误
-                println!("Note: Column might already exist: {}", e);
+                tracing::debug!("Column migration note: {}", e);
             }
         }
     }
 
-    // 从数据库加载数据 (使用 SeaORM)
     let loaded_users = load_users_from_db(&db_conn).await;
-    println!("Loaded {} users from database", loaded_users.len());
+    tracing::info!("Loaded {} users from database", loaded_users.len());
 
-    // 如果数据库为空，插入初始用户到数据库
-    let initial_users = if loaded_users.is_empty() {
-        println!("Database empty, inserting initial users...");
-        for user in &initial_users {
-            // 确保 last_login_at 有默认值
+    // 仅在显式启用或 debug 构建时，向空库注入默认账号。
+    let initial_users = if loaded_users.is_empty() && should_seed_default_users() {
+        tracing::info!("Database empty, seeding default users");
+        for user in &default_users {
             let user_with_defaults = shared::User {
                 last_login_at: Some(Utc::now()),
                 ..user.clone()
             };
             if let Err(e) = database::insert_user_with_conn(&db_conn, &user_with_defaults).await {
-                eprintln!("Failed to insert initial user {}: {}", user.username, e);
+                tracing::error!("Failed to insert initial user {}: {}", user.username, e);
             }
         }
-        // 重新加载用户
         load_users_from_db(&db_conn).await
+    } else if loaded_users.is_empty() {
+        tracing::warn!(
+            "Database is empty and BOOTSTRAP_DEFAULT_USERS is disabled; no default users were created."
+        );
+        loaded_users
     } else {
         loaded_users
     };
 
     let loaded_audit_logs = load_audit_logs_from_db(&db_conn).await;
-    println!(
+    tracing::info!(
         "Loaded {} audit logs from database",
         loaded_audit_logs.len()
     );
@@ -322,9 +343,10 @@ async fn main() {
         block_duration_seconds: 60, // 超限后阻塞60秒
     };
     init_rate_limiter(rate_limit_config.clone());
-    println!(
+    tracing::info!(
         "Rate limiter initialized: {} requests/minute, {}s block duration",
-        rate_limit_config.requests_per_minute, rate_limit_config.block_duration_seconds
+        rate_limit_config.requests_per_minute,
+        rate_limit_config.block_duration_seconds
     );
 
     let state = AppState {
@@ -344,43 +366,10 @@ async fn main() {
         scan_results: Arc::new(StdRwLock::new(vec![])),
     };
 
-    // 数据加载辅助函数 (使用 SeaORM)
-    async fn load_users_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::User> {
-        match database::get_users_with_conn(conn).await {
-            Ok(users) => users,
-            Err(e) => {
-                eprintln!("Error loading users from database: {}", e);
-                vec![]
-            }
-        }
-    }
-
-    async fn load_audit_logs_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::AuditLog> {
-        use crate::database::get_audit_logs_with_conn as get_audit_logs_db;
-        match get_audit_logs_db(conn, Some(1000)).await {
-            Ok(logs) => logs
-                .into_iter()
-                .map(|db_log| shared::AuditLog {
-                    id: db_log.id,
-                    user_id: db_log.user_id,
-                    username: db_log.username,
-                    action: db_log.action,
-                    target: db_log.target,
-                    details: db_log.details,
-                    timestamp: chrono::DateTime::parse_from_rfc3339(&db_log.timestamp)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|_| Utc::now()),
-                })
-                .collect(),
-            Err(e) => {
-                eprintln!("Error loading audit logs from database: {}", e);
-                vec![]
-            }
-        }
-    }
-
     // 不需要创建 session layer，使用中间件方式
     // session 会通过 session_middleware 中间件注入
+
+    let auth_state = state.clone();
 
     let app = Router::new()
         // Health & Metrics
@@ -660,7 +649,10 @@ async fn main() {
         // - CookieManager
         // - SessionManager
         // - Auth middleware (innermost, runs first)
-        .layer(axum::middleware::from_fn(auth_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            auth_state,
+            auth_middleware,
+        ))
         .layer(create_session_layer_sync())
         .layer(CookieManagerLayer::new())
         .layer(axum::middleware::from_fn(rate_limit_middleware))
@@ -668,8 +660,27 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .layer(create_cors_layer());
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3003));
-    println!("Backend listening on {}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(3003);
+    let bind_addr = format!("{}:{}", host, port);
+
+    tracing::info!("Backend listening on {}", bind_addr);
+    let listener = match tokio::net::TcpListener::bind(&bind_addr).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            tracing::error!(
+                "Failed to bind backend listener on {}: {}",
+                bind_addr,
+                error
+            );
+            return;
+        }
+    };
+
+    if let Err(error) = axum::serve(listener, app).await {
+        tracing::error!("Backend server exited with error: {}", error);
+    }
 }

@@ -84,7 +84,7 @@ pub async fn get_cloud_provider_configs(
             Ok(Json(configs).into_response())
         }
         Err(e) => {
-            eprintln!("Error loading cloud provider configs from database: {}", e);
+            tracing::error!("Error loading cloud provider configs from database: {}", e);
             Err(ApiError::internal("Database error"))
         }
     }
@@ -157,7 +157,7 @@ pub async fn get_cloud_provider_config(
         }
         Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
         Err(e) => {
-            eprintln!("Error loading cloud provider config from database: {}", e);
+            tracing::error!("Error loading cloud provider config from database: {}", e);
             Err(ApiError::internal("Database error"))
         }
     }
@@ -227,7 +227,7 @@ pub async fn create_cloud_provider_config(
             .into_response())
         }
         Err(e) => {
-            eprintln!("Error creating cloud provider config: {}", e);
+            tracing::error!("Error creating cloud provider config: {}", e);
             Err(ApiError::internal("Failed to create cloud provider config"))
         }
     }
@@ -255,7 +255,7 @@ pub async fn update_cloud_provider_config(
         Ok(Some(config)) => config,
         Ok(None) => return Err(ApiError::not_found("Cloud provider config not found")),
         Err(e) => {
-            eprintln!("Error checking cloud provider config existence: {}", e);
+            tracing::error!("Error checking cloud provider config existence: {}", e);
             return Err(ApiError::internal("Database error"));
         }
     };
@@ -357,13 +357,13 @@ pub async fn update_cloud_provider_config(
                     "Failed to load updated cloud provider config",
                 )),
                 Err(e) => {
-                    eprintln!("Error loading updated cloud provider config: {}", e);
+                    tracing::error!("Error loading updated cloud provider config: {}", e);
                     Err(ApiError::internal("Database error"))
                 }
             }
         }
         Err(e) => {
-            eprintln!("Error updating cloud provider config: {}", e);
+            tracing::error!("Error updating cloud provider config: {}", e);
             Err(ApiError::internal("Failed to update cloud provider config"))
         }
     }
@@ -402,14 +402,14 @@ pub async fn delete_cloud_provider_config(
                     Ok(Json(json!({ "message": "配置删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error deleting cloud provider config: {}", e);
+                    tracing::error!("Error deleting cloud provider config: {}", e);
                     Err(ApiError::internal("Failed to delete cloud provider config"))
                 }
             }
         }
         Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
         Err(e) => {
-            eprintln!("Error checking cloud provider config existence: {}", e);
+            tracing::error!("Error checking cloud provider config existence: {}", e);
             Err(ApiError::internal("Database error"))
         }
     }
@@ -446,7 +446,7 @@ pub async fn test_cloud_provider_connection(
             )
             .await
             {
-                eprintln!("Error updating cloud provider test result: {}", e);
+                tracing::error!("Error updating cloud provider test result: {}", e);
                 return Err(ApiError::internal("Failed to persist test result"));
             }
 
@@ -462,7 +462,7 @@ pub async fn test_cloud_provider_connection(
         }
         Ok(None) => Err(ApiError::not_found("Cloud provider config not found")),
         Err(e) => {
-            eprintln!("Error testing cloud provider connection: {}", e);
+            tracing::error!("Error testing cloud provider connection: {}", e);
             Err(ApiError::internal("Database error"))
         }
     }
@@ -555,7 +555,7 @@ pub async fn get_active_cloud_provider_configs(
             Ok(Json(configs).into_response())
         }
         Err(e) => {
-            eprintln!(
+            tracing::error!(
                 "Error loading active cloud provider configs from database: {}",
                 e
             );

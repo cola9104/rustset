@@ -4,7 +4,7 @@ use crate::database::{
 };
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::log_action_auth;
+use crate::utils::{ensure_role_has_any_role, log_action_auth};
 use axum::extract::{Json, Path, State};
 use shared::{Role, ZoneConfig};
 use uuid::Uuid;
@@ -26,7 +26,7 @@ pub async fn get_zones(
             Ok(Json(zones))
         }
         Err(e) => {
-            eprintln!("Error loading zones from database: {}", e);
+            tracing::error!("Error loading zones from database: {}", e);
             // Fallback to memory cache
             let zones = state
                 .zones
@@ -42,9 +42,11 @@ pub async fn create_zone(
     user: AuthUser,
     Json(req): Json<ZoneConfig>,
 ) -> Result<Json<ZoneConfig>, ApiError> {
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    ensure_role_has_any_role(
+        &user.role,
+        &[Role::SecAdmin],
+        "Access denied: SecAdmin only",
+    )?;
 
     let mut new_zone = req;
     if new_zone.id.is_empty() {
@@ -79,9 +81,11 @@ pub async fn update_zone(
     Path(id): Path<String>,
     Json(req): Json<ZoneConfig>,
 ) -> Result<Json<Option<ZoneConfig>>, ApiError> {
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    ensure_role_has_any_role(
+        &user.role,
+        &[Role::SecAdmin],
+        "Access denied: SecAdmin only",
+    )?;
 
     // Find and update zone, then release lock before async operations
     let (found, updated_zone) = {
@@ -121,9 +125,11 @@ pub async fn delete_zone(
     user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    ensure_role_has_any_role(
+        &user.role,
+        &[Role::SecAdmin],
+        "Access denied: SecAdmin only",
+    )?;
 
     let zone_name = {
         let zones = state

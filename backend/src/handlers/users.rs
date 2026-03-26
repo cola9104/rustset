@@ -8,13 +8,10 @@ use crate::middleware::ApiError;
 use crate::password;
 use crate::state::AppState;
 use crate::utils::{
-    effective_permissions, get_current_user_from_auth, get_current_user_from_headers, log_action,
-    permissions_for_role_assignment, remove_cached_user, sync_cached_user, sync_cached_users,
+    effective_permissions, get_current_user_from_auth, log_action, permissions_for_role_assignment,
+    remove_cached_user, require_current_user_from_auth, sync_cached_user, sync_cached_users,
 };
-use axum::{
-    extract::{Json, Path, State},
-    http::{HeaderMap, StatusCode},
-};
+use axum::extract::{Json, Path, State};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use shared::{CreateUserRequest, PasswordPolicy, Permissions, Role, UpdateUserRequest, User};
@@ -323,12 +320,10 @@ async fn build_current_user_info_response(
     tag = "users"
 )]
 pub async fn get_users(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<Vec<User>>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &user).await.can_view_users {
         return Err(ApiError::forbidden("Access denied"));
@@ -354,13 +349,11 @@ pub async fn get_users(
     tag = "users"
 )]
 pub async fn create_user(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<CreateUserRequest>,
 ) -> Result<Json<User>, ApiError> {
-    let current_user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -430,14 +423,12 @@ pub async fn create_user(
 }
 
 pub async fn update_user(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<User>, ApiError> {
-    let current_user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -539,13 +530,11 @@ pub async fn update_user(
     tag = "users"
 )]
 pub async fn delete_user(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let current_user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
@@ -596,31 +585,27 @@ pub async fn delete_user(
     tag = "users"
 )]
 pub async fn update_user_permissions(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(id): Path<String>,
     Json(permissions): Json<Permissions>,
-) -> Result<Json<User>, (StatusCode, String)> {
-    let current_user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+) -> Result<Json<User>, ApiError> {
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     // Check if current user has permission to manage permissions
     if !effective_permissions(&state, &current_user)
         .await
         .can_manage_permissions
     {
-        return Err((StatusCode::FORBIDDEN, "Permission denied".to_string()));
+        return Err(ApiError::forbidden("Permission denied"));
     }
 
     let mut target_user = load_user_by_id(&state, &id)
         .await
-        .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+        .ok_or_else(|| ApiError::not_found("User not found"))?;
     target_user.permissions = Some(permissions.clone());
 
-    persist_user(&state, &target_user)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    persist_user(&state, &target_user).await?;
 
     log_action(
         &state.audit_logs,
@@ -649,20 +634,22 @@ pub async fn update_user_permissions(
     tag = "users"
 )]
 pub async fn change_password(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<ChangePasswordRequest>,
-) -> Result<Json<String>, (StatusCode, String)> {
-    let current_user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+) -> Result<Json<String>, ApiError> {
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     // 获取密码策略
-    let policy = state.password_policy.read().unwrap().clone();
+    let policy = state
+        .password_policy
+        .read()
+        .map_err(|e| ApiError::internal(format!("Failed to read password policy: {}", e)))?
+        .clone();
 
     // 验证新密码是否符合策略
     if let Err(e) = validate_password_policy(&req.new_password, &policy) {
-        return Err((StatusCode::BAD_REQUEST, e));
+        return Err(ApiError::bad_request(e));
     }
 
     // 计算密码强度
@@ -670,43 +657,30 @@ pub async fn change_password(
 
     let mut target_user = load_user_by_id(&state, &current_user.id)
         .await
-        .ok_or((StatusCode::NOT_FOUND, "User not found".to_string()))?;
+        .ok_or_else(|| ApiError::not_found("User not found"))?;
     let username = target_user.username.clone();
 
     let password_valid = password::verify_password(&req.current_password, &target_user.password)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Password verification failed: {}", e),
-            )
-        })?;
+        .map_err(|e| ApiError::internal(format!("Password verification failed: {}", e)))?;
 
     if !password_valid {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Current password is incorrect".to_string(),
-        ));
+        return Err(ApiError::bad_request("Current password is incorrect"));
     }
 
-    let new_password_hash = password::hash_password(&req.new_password).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to hash password: {}", e),
-        )
-    })?;
+    let new_password_hash = password::hash_password(&req.new_password)
+        .map_err(|e| ApiError::internal(format!("Failed to hash password: {}", e)))?;
     target_user.password = new_password_hash.clone();
     target_user.password_changed_at = Some(Utc::now());
     target_user.password_strength = Some(strength.clone());
 
-    persist_user(&state, &target_user)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    persist_user(&state, &target_user).await?;
 
     // 记录密码历史
-    {
-        let mut history = state.password_history.write().unwrap();
-        history.push((target_user.id.clone(), new_password_hash, Utc::now()));
-    }
+    state
+        .password_history
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write password history: {}", e)))?
+        .push((target_user.id.clone(), new_password_hash, Utc::now()));
 
     log_action(
         &state.audit_logs,
@@ -721,42 +695,44 @@ pub async fn change_password(
 
 // 获取密码策略
 pub async fn get_password_policy(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+) -> Result<Json<PasswordPolicy>, ApiError> {
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &user)
         .await
         .can_view_password_policy
     {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(ApiError::forbidden("Access denied"));
     }
 
-    let policy = state.password_policy.read().unwrap();
+    let policy = state
+        .password_policy
+        .read()
+        .map_err(|e| ApiError::internal(format!("Failed to read password policy: {}", e)))?;
     Ok(Json(policy.clone()))
 }
 
 // 更新密码策略
 pub async fn update_password_policy(
+    auth_user: AuthUser,
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(policy): Json<PasswordPolicy>,
-) -> Result<Json<PasswordPolicy>, (StatusCode, String)> {
-    let current_user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))?;
+) -> Result<Json<PasswordPolicy>, ApiError> {
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     if !effective_permissions(&state, &current_user)
         .await
         .can_manage_password_policy
     {
-        return Err((StatusCode::FORBIDDEN, "Access denied".to_string()));
+        return Err(ApiError::forbidden("Access denied"));
     }
 
-    let mut policy_state = state.password_policy.write().unwrap();
+    let mut policy_state = state
+        .password_policy
+        .write()
+        .map_err(|e| ApiError::internal(format!("Failed to write password policy: {}", e)))?;
     *policy_state = policy.clone();
 
     log_action(

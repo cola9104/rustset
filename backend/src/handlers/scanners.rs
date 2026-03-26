@@ -6,18 +6,15 @@
 //! - 扫描结果查询
 #![allow(dead_code)]
 
-use axum::{
-    extract::{Json, Path, Query, State},
-    http::HeaderMap,
-};
+use axum::extract::{Json, Path, Query, State};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{get_current_user, log_action};
-use shared::{CreateScannerRequest, ScannerConfig, UpdateScannerRequest};
+use crate::utils::{ensure_user_has_any_role, log_action, require_current_user_from_auth};
+use shared::{CreateScannerRequest, Role, ScannerConfig, UpdateScannerRequest};
 
 /// 有效的扫描器类型
 const VALID_SCANNER_TYPES: &[&str] = &["rustscan", "nmap", "basic_tcp"];
@@ -270,10 +267,9 @@ fn get_service_name(port: u16) -> Option<String> {
 )]
 pub async fn get_scanners(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
 ) -> Result<Json<Vec<ScannerConfig>>, ApiError> {
-    let _current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let _current_user = require_current_user_from_auth(&auth_user, &state).await?;
 
     let scanners = state
         .scanners
@@ -302,16 +298,15 @@ pub async fn get_scanners(
 /// 创建扫描器配置
 pub async fn create_scanner(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Json(req): Json<CreateScannerRequest>,
 ) -> Result<Json<ScannerConfig>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    // 只有安全管理员和系统管理员可以创建扫描器配置
-    if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
-        return Err(ApiError::forbidden("只有管理员可以创建扫描器配置"));
-    }
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(
+        &current_user,
+        &[Role::SysAdmin, Role::SecAdmin],
+        "只有管理员可以创建扫描器配置",
+    )?;
 
     // 校验扫描器类型
     validate_scanner_type(&req.scanner_type)?;
@@ -372,17 +367,16 @@ pub async fn create_scanner(
 /// 更新扫描器配置
 pub async fn update_scanner(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateScannerRequest>,
 ) -> Result<Json<ScannerConfig>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    // 只有安全管理员和系统管理员可以修改扫描器配置
-    if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
-        return Err(ApiError::forbidden("只有管理员可以修改扫描器配置"));
-    }
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(
+        &current_user,
+        &[Role::SysAdmin, Role::SecAdmin],
+        "只有管理员可以修改扫描器配置",
+    )?;
 
     // 校验扫描器类型（如果提供）
     if let Some(ref scanner_type) = req.scanner_type {
@@ -454,16 +448,15 @@ pub async fn update_scanner(
 /// 删除扫描器配置
 pub async fn delete_scanner(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let current_user = get_current_user(&headers, &state.users)
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    // 只有安全管理员和系统管理员可以删除扫描器配置
-    if current_user.role != shared::Role::SysAdmin && current_user.role != shared::Role::SecAdmin {
-        return Err(ApiError::forbidden("只有管理员可以删除扫描器配置"));
-    }
+    let current_user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(
+        &current_user,
+        &[Role::SysAdmin, Role::SecAdmin],
+        "只有管理员可以删除扫描器配置",
+    )?;
 
     let removed_scanner = {
         let mut scanners = state

@@ -2,13 +2,10 @@ use crate::database::{
     db_risk_to_shared, get_db, get_risk_by_id as db_get_risk_by_id, get_risks as db_get_risks,
     update_risk as db_update_risk,
 };
-use crate::middleware::ApiError;
+use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{get_current_user_from_headers, log_action};
-use axum::{
-    extract::{Json, Path, State},
-    http::HeaderMap,
-};
+use crate::utils::{ensure_user_has_any_role, log_action, require_current_user_from_auth};
+use axum::extract::{Json, Path, State};
 use chrono::Utc;
 use shared::{Risk, RiskStatus, Role};
 
@@ -86,27 +83,20 @@ async fn persist_risk(state: &AppState, risk: &Risk) -> Result<(), ApiError> {
 
 pub async fn get_risks(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
 ) -> Result<Json<Vec<Risk>>, ApiError> {
-    let _user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
+    let _user = require_current_user_from_auth(&auth_user, &state).await?;
 
     Ok(Json(load_all_risks(&state).await?))
 }
 
 pub async fn update_risk_status(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Path((id, status_str)): Path<(String, String)>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     let new_status = match status_str.as_str() {
         "verified" => RiskStatus::Verified,
@@ -139,16 +129,11 @@ pub async fn update_risk_status(
 
 pub async fn resolve_risk(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<String>, ApiError> {
-    let user = get_current_user_from_headers(&headers, &state.users)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("Unauthorized"))?;
-
-    if user.role != Role::SecAdmin {
-        return Err(ApiError::forbidden("Access denied: SecAdmin only"));
-    }
+    let user = require_current_user_from_auth(&auth_user, &state).await?;
+    ensure_user_has_any_role(&user, &[Role::SecAdmin], "Access denied: SecAdmin only")?;
 
     let mut risk = load_risk_by_id(&state, &id)
         .await?

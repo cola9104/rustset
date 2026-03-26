@@ -3,29 +3,32 @@
 use axum::{
     body::Body,
     http::{header, Method, Request, StatusCode},
+    middleware::from_fn_with_state,
     Router,
 };
+use backend::auth::generate_token;
+use backend::middleware::auth_middleware::auth_middleware;
 use backend::state::AppState;
+use chrono::Utc;
+use shared::{Role, User};
 use tower::ServiceExt;
 
 /// 创建测试用的 Router
 async fn create_test_app(state: AppState) -> Router {
+    std::env::set_var("JWT_SECRET", "test-jwt-secret");
+
     Router::new()
         .route(
             "/api/port-details",
             axum::routing::get(backend::handlers::port_details::get_port_details)
                 .post(backend::handlers::port_details::create_port_detail),
         )
+        .layer(from_fn_with_state(state.clone(), auth_middleware))
         .with_state(state)
 }
 
-/// 创建测试用的 AppState
-async fn create_test_state() -> AppState {
-    use chrono::Utc;
-    use shared::{Role, User};
-    use std::sync::{Arc, RwLock};
-
-    let test_users = vec![User {
+fn create_test_user() -> User {
+    User {
         id: "test_user_1".to_string(),
         username: "admin".to_string(),
         real_name: None,
@@ -44,7 +47,19 @@ async fn create_test_state() -> AppState {
         department_id: None,
         failed_login_attempts: Some(0),
         locked_until: None,
-    }];
+    }
+}
+
+fn auth_header_value() -> String {
+    std::env::set_var("JWT_SECRET", "test-jwt-secret");
+    format!("Bearer {}", generate_token(&create_test_user()).unwrap())
+}
+
+/// 创建测试用的 AppState
+async fn create_test_state() -> AppState {
+    use std::sync::{Arc, RwLock};
+
+    let test_users = vec![create_test_user()];
 
     AppState {
         assets: Arc::new(RwLock::new(vec![])),
@@ -72,7 +87,7 @@ async fn test_get_port_details() {
     let request = Request::builder()
         .method(Method::GET)
         .uri("/api/port-details")
-        .header("Authorization", "admin")
+        .header(header::AUTHORIZATION, auth_header_value())
         .body(Body::empty())
         .unwrap();
 
@@ -89,7 +104,7 @@ async fn test_create_port_detail_with_service_detection() {
     let request = Request::builder()
         .method(Method::POST)
         .uri("/api/port-details")
-        .header("Authorization", "admin")
+        .header(header::AUTHORIZATION, auth_header_value())
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(r#"{"port":22,"protocol":"tcp"}"#))
         .unwrap();
@@ -115,7 +130,7 @@ async fn test_create_port_detail_http() {
     let request = Request::builder()
         .method(Method::POST)
         .uri("/api/port-details")
-        .header("Authorization", "admin")
+        .header(header::AUTHORIZATION, auth_header_value())
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(r#"{"port":443,"protocol":"tcp"}"#))
         .unwrap();

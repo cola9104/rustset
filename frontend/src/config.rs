@@ -3,10 +3,17 @@
 //!
 //! 集中管理后端 API 的 URL 配置
 
+fn compiled_api_base() -> Option<String> {
+    option_env!("VITE_API_BASE")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 /// 获取后端 API 基础 URL
 pub fn api_base() -> String {
-    // 优先从环境变量读取
-    if let Ok(url) = std::env::var("VITE_API_BASE") {
+    // 优先使用编译期注入，适用于 dx serve / dx build。
+    if let Some(url) = compiled_api_base() {
         return url;
     }
 

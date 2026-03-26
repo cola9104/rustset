@@ -43,7 +43,7 @@ pub async fn get_cloud_platforms(
                 Ok(Json(platforms).into_response())
             }
             Err(e) => {
-                eprintln!("Error loading cloud platforms from database: {}", e);
+                tracing::error!("Error loading cloud platforms from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -74,7 +74,7 @@ pub async fn get_cloud_platform(
             }
             Ok(None) => Err(ApiError::not_found("Cloud service not found")),
             Err(e) => {
-                eprintln!("Error loading cloud platform from database: {}", e);
+                tracing::error!("Error loading cloud platform from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -107,7 +107,7 @@ pub async fn get_platforms_by_zone(
                 Ok(Json(platforms).into_response())
             }
             Err(e) => {
-                eprintln!("Error loading cloud platforms by zone from database: {}", e);
+                tracing::error!("Error loading cloud platforms by zone from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -137,7 +137,7 @@ pub async fn create_cloud_platform(
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error checking zone existence: {}", e);
+                    tracing::error!("Error checking zone existence: {}", e);
                     return Err(ApiError::internal("Database error"));
                 }
             }
@@ -155,7 +155,7 @@ pub async fn create_cloud_platform(
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error checking platform code: {}", e);
+                    tracing::error!("Error checking platform code: {}", e);
                     return Err(ApiError::internal("Database error"));
                 }
             }
@@ -201,7 +201,7 @@ pub async fn create_cloud_platform(
                     .into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error inserting cloud platform: {}", e);
+                    tracing::error!("Error inserting cloud platform: {}", e);
                     Err(ApiError::internal("Failed to create cloud service"))
                 }
             }
@@ -231,7 +231,7 @@ pub async fn update_cloud_platform(
                     return Err(ApiError::not_found("Cloud service not found"));
                 }
                 Err(e) => {
-                    eprintln!("Error checking platform existence: {}", e);
+                    tracing::error!("Error checking platform existence: {}", e);
                     return Err(ApiError::internal("Database error"));
                 }
             };
@@ -246,7 +246,7 @@ pub async fn update_cloud_platform(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error checking zone existence: {}", e);
+                        tracing::error!("Error checking zone existence: {}", e);
                     }
                 }
             }
@@ -264,7 +264,7 @@ pub async fn update_cloud_platform(
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error checking platform code: {}", e);
+                        tracing::error!("Error checking platform code: {}", e);
                     }
                 }
             }
@@ -312,7 +312,7 @@ pub async fn update_cloud_platform(
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error updating cloud platform: {}", e);
+                    tracing::error!("Error updating cloud platform: {}", e);
                     Err(ApiError::internal("Failed to update cloud service"))
                 }
             }
@@ -352,14 +352,14 @@ pub async fn delete_cloud_platform(
                             Ok(Json(json!({ "message": "云服务删除成功" })).into_response())
                         }
                         Err(e) => {
-                            eprintln!("Error deleting cloud platform: {}", e);
+                            tracing::error!("Error deleting cloud platform: {}", e);
                             Err(ApiError::internal("Failed to delete cloud service"))
                         }
                     }
                 }
                 Ok(None) => Err(ApiError::not_found("Cloud service not found")),
                 Err(e) => {
-                    eprintln!("Error checking platform existence: {}", e);
+                    tracing::error!("Error checking platform existence: {}", e);
                     Err(ApiError::internal("Database error"))
                 }
             }

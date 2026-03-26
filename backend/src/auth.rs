@@ -5,7 +5,11 @@ use shared::{Role, User};
 
 use crate::middleware::ApiError;
 
-const TOKEN_EXPIRATION_HOURS: i64 = 24;
+const DEFAULT_TOKEN_EXPIRATION_HOURS: i64 = 24;
+
+#[cfg(test)]
+pub(crate) static AUTH_ENV_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
@@ -28,20 +32,33 @@ fn jwt_secret() -> Result<String, ApiError> {
     Ok(secret)
 }
 
-pub fn generate_token(user: &User) -> Result<String, ApiError> {
-    let exp = (Utc::now() + Duration::hours(TOKEN_EXPIRATION_HOURS)).timestamp() as usize;
-    let claims = Claims {
+pub fn token_expiration_hours() -> i64 {
+    std::env::var("JWT_EXPIRATION_HOURS")
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .filter(|hours| *hours > 0)
+        .unwrap_or(DEFAULT_TOKEN_EXPIRATION_HOURS)
+}
+
+pub fn token_expiration_timestamp() -> usize {
+    (Utc::now() + Duration::hours(token_expiration_hours())).timestamp() as usize
+}
+
+pub fn claims_for_user(user: &User) -> Claims {
+    Claims {
         user_id: user.id.clone(),
         username: user.username.clone(),
         role: user.role.clone(),
-        exp,
-    };
+        exp: token_expiration_timestamp(),
+    }
+}
 
+pub fn generate_token(user: &User) -> Result<String, ApiError> {
     let secret = jwt_secret()?;
 
     encode(
         &Header::default(),
-        &claims,
+        &claims_for_user(user),
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|e| ApiError::internal(format!("Failed to generate JWT token: {}", e)))
@@ -68,6 +85,7 @@ mod tests {
 
     #[test]
     fn test_generate_and_verify_token() {
+        let _guard = super::AUTH_ENV_LOCK.lock().unwrap();
         std::env::set_var("JWT_SECRET", "test-jwt-secret");
 
         let user = User {
@@ -101,6 +119,7 @@ mod tests {
 
     #[test]
     fn test_verify_invalid_token() {
+        let _guard = super::AUTH_ENV_LOCK.lock().unwrap();
         std::env::set_var("JWT_SECRET", "test-jwt-secret");
 
         let result = verify_token("invalid.jwt.token");
@@ -109,7 +128,9 @@ mod tests {
 
     #[test]
     fn test_token_expiration() {
+        let _guard = super::AUTH_ENV_LOCK.lock().unwrap();
         std::env::set_var("JWT_SECRET", "test-jwt-secret");
+        std::env::remove_var("JWT_EXPIRATION_HOURS");
 
         let user = User {
             id: "123".to_string(),
@@ -139,5 +160,40 @@ mod tests {
         let now = Utc::now().timestamp() as usize;
         assert!(claims.exp > now);
         assert!(claims.exp < now + (25 * 3600)); // 25 hours in seconds
+    }
+
+    #[test]
+    fn test_token_expiration_uses_env_override() {
+        let _guard = super::AUTH_ENV_LOCK.lock().unwrap();
+        std::env::set_var("JWT_SECRET", "test-jwt-secret");
+        std::env::set_var("JWT_EXPIRATION_HOURS", "1");
+
+        let user = User {
+            id: "123".to_string(),
+            username: "testuser".to_string(),
+            real_name: None,
+            password: "hashed".to_string(),
+            role: Role::Auditor,
+            permissions: Some(Permissions::auditor()),
+            created_at: Utc::now(),
+            password_changed_at: Some(Utc::now()),
+            password_strength: Some("medium".to_string()),
+            force_password_change: Some(false),
+            last_login_at: None,
+            email: None,
+            phone: None,
+            status: Some("active".to_string()),
+            organization_id: None,
+            department_id: None,
+            failed_login_attempts: Some(0),
+            locked_until: None,
+        };
+
+        let token = generate_token(&user).unwrap();
+        let claims = verify_token(&token).unwrap();
+        let now = Utc::now().timestamp() as usize;
+
+        assert!(claims.exp > now);
+        assert!(claims.exp < now + (2 * 3600));
     }
 }

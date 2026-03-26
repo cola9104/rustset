@@ -445,8 +445,6 @@ mod tests {
         let result = scanner.scan_target("127.0.0.1", &[22, 80, 443, 8080]).await;
 
         assert!(result.is_alive);
-        println!("Scan duration: {}ms", result.scan_duration_ms);
-        println!("Open ports: {:?}", result.open_ports);
     }
 
     #[test]

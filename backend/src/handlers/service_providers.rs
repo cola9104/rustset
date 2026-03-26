@@ -74,7 +74,7 @@ pub async fn get_service_providers(
         Some(conn) => match crate::database::get_all_service_providers(&conn).await {
             Ok(providers) => Ok(Json(providers).into_response()),
             Err(e) => {
-                eprintln!("Error loading service providers from database: {}", e);
+                tracing::error!("Error loading service providers from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -93,7 +93,7 @@ pub async fn get_service_provider(
             Ok(Some(provider)) => Ok(Json(provider).into_response()),
             Ok(None) => Err(ApiError::not_found("Service provider not found")),
             Err(e) => {
-                eprintln!("Error loading service provider from database: {}", e);
+                tracing::error!("Error loading service provider from database: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },
@@ -168,7 +168,7 @@ pub async fn create_service_provider(
                     .into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error inserting service provider: {}", e);
+                    tracing::error!("Error inserting service provider: {}", e);
                     Err(ApiError::internal("Failed to create service provider"))
                 }
             }
@@ -235,14 +235,14 @@ pub async fn update_service_provider(
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error updating service provider: {}", e);
+                            tracing::error!("Error updating service provider: {}", e);
                             Err(ApiError::internal("Failed to update service provider"))
                         }
                     }
                 }
                 Ok(None) => Err(ApiError::not_found("Service provider not found")),
                 Err(e) => {
-                    eprintln!("Error checking service provider existence: {}", e);
+                    tracing::error!("Error checking service provider existence: {}", e);
                     Err(ApiError::internal("Database error"))
                 }
             }
@@ -276,13 +276,13 @@ pub async fn delete_service_provider(
                     Ok(Json(json!({ "message": "服务商删除成功" })).into_response())
                 }
                 Err(e) => {
-                    eprintln!("Error deleting service provider: {}", e);
+                    tracing::error!("Error deleting service provider: {}", e);
                     Err(ApiError::internal("Failed to delete service provider"))
                 }
             },
             Ok(None) => Err(ApiError::not_found("Service provider not found")),
             Err(e) => {
-                eprintln!("Error checking service provider existence: {}", e);
+                tracing::error!("Error checking service provider existence: {}", e);
                 Err(ApiError::internal("Database error"))
             }
         },

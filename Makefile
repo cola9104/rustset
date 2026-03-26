@@ -1,15 +1,43 @@
-.PHONY: all build run test clean docker docker-up docker-down migrate
+.PHONY: all build start stop restart status dev run backend frontend test clean docker docker-up docker-down migrate fmt check
 
 # 默认目标
 all: build
 
+# 启动前后端
+start:
+	./start.sh start
+
+# 停止前后端
+stop:
+	./stop.sh
+
+# 重启前后端
+restart:
+	./start.sh restart
+
+# 查看状态
+status:
+	./start.sh status
+
 # 构建项目
 build:
-	cargo build --release
+	cargo build --release -p backend
+	cd frontend && dx build --platform web --release
 
-# 运行后端
+# 开发模式
+dev: start
+
+# 兼容旧入口
 run:
-	cd backend && cargo run
+	./start.sh start
+
+# 仅运行后端
+backend:
+	cargo run -p backend
+
+# 仅运行前端
+frontend:
+	cd frontend && VITE_API_BASE=http://127.0.0.1:3003/api dx serve --port 8080
 
 # 运行测试
 test:
@@ -36,18 +64,9 @@ docker-down:
 migrate:
 	cd backend && cargo run -- --migrate
 
-# 开发模式
-dev:
-	cargo watch -x "run -p backend"
-
-# 前端开发
-frontend:
-	cd frontend && dx serve --port 8080
-
 # 格式化代码
 fmt:
 	cargo fmt --all
-	cargo clippy --fix --allow-dirty
 
 # 检查代码
 check:
