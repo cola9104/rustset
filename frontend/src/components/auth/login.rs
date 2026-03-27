@@ -255,7 +255,7 @@ pub fn Login() -> Element {
 
                 // 底部信息
                 div { class: "mt-6 text-center text-sm text-gray-500",
-                    "默认账号: admin / admin123"
+                    "默认账号: admin / admin，sec / sec，audit / audit"
                 }
             }
         }

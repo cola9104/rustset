@@ -8,6 +8,7 @@ use crate::services::user_api::{
 use crate::state::department::DepartmentRecord;
 use crate::state::organization::OrganizationRecord;
 use crate::state::user_role::use_auth;
+use crate::utils::auth::is_builtin_system_account;
 use dioxus::prelude::*;
 use dioxus_free_icons::icons::fa_solid_icons::{
     FaArrowRotateRight, FaKey, FaMagnifyingGlass, FaPenToSquare, FaPlus, FaShield, FaTrash, FaUser,
@@ -486,12 +487,16 @@ fn UserModal(
     let mut form_error = use_signal(String::new);
 
     let username_value = username.read().clone();
-    let builtin = is_builtin_username(&username_value);
+    let builtin = is_builtin_system_account(&username_value);
     let filtered_departments = departments
         .iter()
         .filter(|item| organization_id.read().parse::<i32>().ok() == Some(item.organization_id))
         .cloned()
         .collect::<Vec<_>>();
+    let selected_organization_name =
+        organization_name(&organizations, organization_id.read().parse::<i32>().ok());
+    let selected_department_name =
+        department_name(&departments, department_id.read().parse::<i32>().ok());
     let selected_role_value = role.read().clone();
     let selected_role_record = roles
         .iter()
@@ -642,37 +647,56 @@ fn UserModal(
                         }
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1", "组织/单位" }
-                            select {
-                                disabled: builtin,
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100",
-                                value: organization_id,
-                                onchange: move |e| {
-                                    organization_id.set(e.value());
-                                    department_id.set(String::new());
-                                },
-                                option { value: "", if builtin { "系统内置账号可不绑定" } else { "请选择组织/单位" } }
-                                for item in organizations.iter() {
-                                    option { value: "{item.id}", "{item.name}" }
+                            if builtin {
+                                input {
+                                    r#type: "text",
+                                    class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-600 rounded-md cursor-not-allowed",
+                                    value: "{selected_organization_name}",
+                                    readonly: true,
+                                    disabled: true,
+                                }
+                            } else {
+                                select {
+                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500",
+                                    value: organization_id,
+                                    onchange: move |e| {
+                                        organization_id.set(e.value());
+                                        department_id.set(String::new());
+                                    },
+                                    option { value: "", "请选择组织/单位" }
+                                    for item in organizations.iter() {
+                                        option { value: "{item.id}", "{item.name}" }
+                                    }
                                 }
                             }
                         }
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1", "部门" }
-                            select {
-                                disabled: builtin || organization_id.read().is_empty(),
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100",
-                                value: department_id,
-                                onchange: move |e| department_id.set(e.value()),
-                                option { value: "", if builtin { "系统内置账号可不绑定" } else { "请选择部门" } }
-                                for item in filtered_departments.iter() {
-                                    option { value: "{item.id}", "{item.name}" }
+                            if builtin {
+                                input {
+                                    r#type: "text",
+                                    class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-600 rounded-md cursor-not-allowed",
+                                    value: "{selected_department_name}",
+                                    readonly: true,
+                                    disabled: true,
+                                }
+                            } else {
+                                select {
+                                    disabled: organization_id.read().is_empty(),
+                                    class: "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100",
+                                    value: department_id,
+                                    onchange: move |e| department_id.set(e.value()),
+                                    option { value: "", "请选择部门" }
+                                    for item in filtered_departments.iter() {
+                                        option { value: "{item.id}", "{item.name}" }
+                                    }
                                 }
                             }
                         }
                     }
                     if builtin {
                         div { class: "rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700",
-                            "默认系统账号 admin / sec / audit 允许不绑定组织和部门。"
+                            "默认系统账号 admin / sec / audit 会自动绑定默认组织和部门。"
                         }
                     }
                 }
@@ -700,7 +724,7 @@ fn UserModal(
                                 form_error.set("密码不能为空".to_string());
                                 return;
                             }
-                            if !is_builtin_username(&username_value) {
+                            if !is_builtin_system_account(&username_value) {
                                 if real_name_value.is_none() {
                                     form_error.set("普通账号必须填写姓名".to_string());
                                     return;
@@ -743,10 +767,6 @@ fn UserModal(
             }
         }
     }
-}
-
-fn is_builtin_username(username: &str) -> bool {
-    matches!(username, "admin" | "sec" | "audit")
 }
 
 fn optional_text(value: &str) -> Option<String> {

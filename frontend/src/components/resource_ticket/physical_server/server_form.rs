@@ -17,14 +17,17 @@ pub struct PhysicalServerFormData {
     pub title: String,
     pub organization: String,
     pub applicant: String,
+    pub applicant_account: String,
     pub department: String,
     pub provider_id: Option<i32>,
     pub machine_room_id: Option<i32>,
-    pub server_type: String,
     pub cpu_cores: String,
-    pub memory: String,
-    pub storage: String,
+    pub memory_gb: String,
+    pub system_disk: String,
+    pub data_disk: String,
+    pub ecs_os: String,
     pub server_count: i32,
+    pub expire_at: String,
     pub purpose: String,
     pub security_products: SelectedSecurityProducts,
 }
@@ -35,14 +38,17 @@ impl From<&PhysicalServerRequest> for PhysicalServerFormData {
             title: req.title.clone(),
             organization: req.organization.clone(),
             applicant: req.applicant.clone(),
+            applicant_account: req.applicant_account.clone(),
             department: req.department.clone(),
             provider_id: req.provider_id,
             machine_room_id: req.machine_room_id,
-            server_type: req.server_type.clone(),
             cpu_cores: req.cpu_cores.clone(),
-            memory: req.memory.clone(),
-            storage: req.storage.clone(),
+            memory_gb: req.memory_gb.clone(),
+            system_disk: req.system_disk.clone(),
+            data_disk: req.data_disk.clone(),
+            ecs_os: req.ecs_os.clone(),
             server_count: req.server_count,
+            expire_at: req.expire_at.clone(),
             purpose: req.purpose.clone(),
             security_products: req.security_products.clone(),
         }
@@ -62,14 +68,17 @@ impl PhysicalServerFormData {
             title: self.title.clone(),
             organization: self.organization.clone(),
             applicant: self.applicant.clone(),
+            applicant_account: self.applicant_account.clone(),
             department: self.department.clone(),
             provider_id: self.provider_id,
             machine_room_id: self.machine_room_id,
-            server_type: self.server_type.clone(),
             cpu_cores: self.cpu_cores.clone(),
-            memory: self.memory.clone(),
-            storage: self.storage.clone(),
+            memory_gb: self.memory_gb.clone(),
+            system_disk: self.system_disk.clone(),
+            data_disk: self.data_disk.clone(),
+            ecs_os: self.ecs_os.clone(),
             server_count: self.server_count,
+            expire_at: self.expire_at.clone(),
             purpose: self.purpose.clone(),
             security_products: self.security_products.clone(),
             status,
@@ -91,8 +100,32 @@ impl PhysicalServerFormData {
         if self.department.trim().is_empty() {
             return Err("申请部门不能为空，请先完善当前账号资料".to_string());
         }
+        if self.provider_id.is_none() {
+            return Err("请选择服务商".to_string());
+        }
+        if self.machine_room_id.is_none() {
+            return Err("请选择机房".to_string());
+        }
+        if self.cpu_cores.trim().is_empty() {
+            return Err("CPU 不能为空".to_string());
+        }
+        if self.memory_gb.trim().is_empty() {
+            return Err("内存不能为空".to_string());
+        }
+        if self.system_disk.trim().is_empty() {
+            return Err("系统盘不能为空".to_string());
+        }
+        if self.data_disk.trim().is_empty() {
+            return Err("存储盘不能为空".to_string());
+        }
+        if self.ecs_os.trim().is_empty() {
+            return Err("系统不能为空".to_string());
+        }
         if self.server_count < 1 {
             return Err("服务器数量至少为1".to_string());
+        }
+        if self.expire_at.trim().is_empty() {
+            return Err("到期时间不能为空".to_string());
         }
         if self.purpose.trim().is_empty() {
             return Err("用途说明不能为空".to_string());
@@ -138,10 +171,15 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                 .as_ref()
                 .map(|user| user.requester_name())
                 .unwrap_or_default(),
+            applicant_account: current_user
+                .as_ref()
+                .map(|user| user.username.clone())
+                .unwrap_or_default(),
             department: current_user
                 .as_ref()
                 .map(|user| user.department_name.clone())
                 .unwrap_or_default(),
+            server_count: 1,
             ..Default::default()
         });
 
@@ -303,20 +341,6 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                         // 申请人
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
-                                "申请人 "
-                                span { class: "text-red-500", "*" }
-                            }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
-                                value: "{form_data.read().applicant}",
-                                readonly: true,
-                                disabled: true,
-                            }
-                        }
-                        // 申请部门
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1",
                                 "申请部门 "
                                 span { class: "text-red-500", "*" }
                             }
@@ -328,18 +352,31 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                                 disabled: true,
                             }
                         }
-                        // 服务器数量
+                        // 申请人
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务器数量" }
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "申请人 "
+                                span { class: "text-red-500", "*" }
+                            }
                             input {
-                                r#type: "number",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
-                                min: "1",
-                                value: "{form_data.read().server_count}",
-                                oninput: move |e| {
-                                    let mut data = form_data.write();
-                                    data.server_count = e.value().parse::<i32>().unwrap_or(1);
-                                },
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().applicant}",
+                                readonly: true,
+                                disabled: true,
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "申请账户 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().applicant_account}",
+                                readonly: true,
+                                disabled: true,
                             }
                         }
                     }
@@ -351,7 +388,10 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                     div { class: "grid grid-cols-2 gap-4",
                         // 服务商
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商" }
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "服务商 "
+                                span { class: "text-red-500", "*" }
+                            }
                             select {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
                                 value: "{form_data.read().provider_id.unwrap_or(-1)}",
@@ -387,7 +427,10 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                         }
                         // 机房
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "机房" }
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "机房 "
+                                span { class: "text-red-500", "*" }
+                            }
                             select {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
                                 value: "{form_data.read().machine_room_id.unwrap_or(-1)}",
@@ -406,80 +449,117 @@ pub fn PhysicalServerForm(props: PhysicalServerFormProps) -> Element {
                                 }
                             }
                         }
-                        // 服务器类型
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "服务器类型" }
-                            select {
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
-                                value: "{form_data.read().server_type}",
-                                onchange: move |e| {
-                                    let mut data = form_data.write();
-                                    data.server_type = e.value();
-                                },
-                                option { value: "", "请选择服务器类型" }
-                                option { value: "机架式服务器", "机架式服务器" }
-                                option { value: "刀片服务器", "刀片服务器" }
-                                option { value: "塔式服务器", "塔式服务器" }
-                                option { value: "高密度服务器", "高密度服务器" }
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "CPU "
+                                span { class: "text-red-500", "*" }
                             }
-                        }
-                        // CPU核数
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "CPU核数" }
-                            select {
+                            input {
+                                r#type: "number",
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
+                                min: "1",
+                                placeholder: "如：16",
                                 value: "{form_data.read().cpu_cores}",
-                                onchange: move |e| {
+                                oninput: move |e| {
                                     let mut data = form_data.write();
                                     data.cpu_cores = e.value();
                                 },
-                                option { value: "", "请选择CPU核数" }
-                                option { value: "8核", "8核" }
-                                option { value: "16核", "16核" }
-                                option { value: "24核", "24核" }
-                                option { value: "32核", "32核" }
-                                option { value: "48核", "48核" }
-                                option { value: "64核", "64核" }
                             }
                         }
-                        // 内存
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "内存" }
-                            select {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "内存(GB) "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "number",
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
-                                value: "{form_data.read().memory}",
-                                onchange: move |e| {
+                                min: "1",
+                                placeholder: "如：64",
+                                value: "{form_data.read().memory_gb}",
+                                oninput: move |e| {
                                     let mut data = form_data.write();
-                                    data.memory = e.value();
+                                    data.memory_gb = e.value();
                                 },
-                                option { value: "", "请选择内存大小" }
-                                option { value: "32GB", "32GB" }
-                                option { value: "64GB", "64GB" }
-                                option { value: "96GB", "96GB" }
-                                option { value: "128GB", "128GB" }
-                                option { value: "192GB", "192GB" }
-                                option { value: "256GB", "256GB" }
-                                option { value: "512GB", "512GB" }
                             }
                         }
-                        // 存储
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "存储" }
-                            select {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "系统盘 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
-                                value: "{form_data.read().storage}",
-                                onchange: move |e| {
+                                placeholder: "如：SSD 480GB",
+                                value: "{form_data.read().system_disk}",
+                                oninput: move |e| {
                                     let mut data = form_data.write();
-                                    data.storage = e.value();
+                                    data.system_disk = e.value();
                                 },
-                                option { value: "", "请选择存储配置" }
-                                option { value: "512GB SSD", "512GB SSD" }
-                                option { value: "1TB SSD", "1TB SSD" }
-                                option { value: "2TB SSD", "2TB SSD" }
-                                option { value: "4TB SSD", "4TB SSD" }
-                                option { value: "4TB HDD", "4TB HDD" }
-                                option { value: "8TB HDD", "8TB HDD" }
-                                option { value: "16TB HDD", "16TB HDD" }
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "存储盘 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
+                                placeholder: "如：SAS 2TB",
+                                value: "{form_data.read().data_disk}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.data_disk = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "系统 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
+                                placeholder: "如：CentOS 7.9 / Windows Server 2019",
+                                value: "{form_data.read().ecs_os}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.ecs_os = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "服务器数量 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "number",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
+                                min: "1",
+                                value: "{form_data.read().server_count}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.server_count = e.value().parse::<i32>().unwrap_or(1);
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "到期时间 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "date",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent",
+                                value: "{form_data.read().expire_at}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.expire_at = e.value();
+                                },
                             }
                         }
                     }

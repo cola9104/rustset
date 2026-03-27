@@ -4,8 +4,10 @@
 //! Each entity corresponds to a database table.
 
 pub mod advanced_scan_task;
+pub mod application_endpoint;
 pub mod asset;
 pub mod audit_log;
+pub mod business_application;
 pub mod business_resource;
 pub mod cloud_platform;
 pub mod cloud_platform_config;
@@ -29,8 +31,10 @@ pub mod task;
 pub mod user;
 
 pub use advanced_scan_task::Entity as AdvancedScanTask;
+pub use application_endpoint::Entity as ApplicationEndpoint;
 pub use asset::Entity as Asset;
 pub use audit_log::Entity as AuditLog;
+pub use business_application::Entity as BusinessApplication;
 pub use business_resource::Entity as BusinessResource;
 pub use cloud_provider_config::Entity as CloudProviderConfig;
 pub use cloud_service::Entity as CloudService;

@@ -25,14 +25,17 @@ pub struct PhysicalServerRequest {
     pub title: String,
     pub organization: String,
     pub applicant: String,
+    pub applicant_account: String,
     pub department: String,
     pub provider_id: Option<i32>,
     pub machine_room_id: Option<i32>,
-    pub server_type: String,
     pub cpu_cores: String,
-    pub memory: String,
-    pub storage: String,
+    pub memory_gb: String,
+    pub system_disk: String,
+    pub data_disk: String,
+    pub ecs_os: String,
     pub server_count: i32,
+    pub expire_at: String,
     pub purpose: String,
     pub security_products: SelectedSecurityProducts,
     pub status: PhysicalServerStatus,
@@ -203,7 +206,7 @@ pub fn PhysicalServerRequest() -> Element {
                         div { class: "grid grid-cols-1 lg:grid-cols-6 gap-4 px-6 py-4 border-b border-gray-100 items-center",
                             div {
                                 p { class: "text-sm font-medium text-gray-900", "{ticket.ecs_name}" }
-                                p { class: "text-xs text-gray-500", "{ticket.customer_name}" }
+                                p { class: "text-xs text-gray-500", "{ticket.application_name}" }
                             }
                             div {
                                 p { class: "text-sm text-gray-700", "{ticket.machine_room_name}" }
@@ -220,7 +223,7 @@ pub fn PhysicalServerRequest() -> Element {
                             }
                             div {
                                 p { class: "text-sm text-gray-700", "{ticket.provider_name}" }
-                                p { class: "text-xs text-gray-500", "{rack_label(&ticket)}" }
+                                p { class: "text-xs text-gray-500", "{resource_summary(&ticket)}" }
                             }
                             div {
                                 p { class: "text-sm text-gray-700",
@@ -237,11 +240,29 @@ pub fn PhysicalServerRequest() -> Element {
 }
 
 fn rack_label(ticket: &ResourceTicket) -> String {
-    if ticket.zone_cabinet.is_empty() && ticket.rack_units == 0 {
-        "未填写机柜信息".to_string()
-    } else {
-        format!("{} / {}U", ticket.zone_cabinet, ticket.rack_units)
+    let mut parts = Vec::new();
+
+    if ticket.resource_count > 0 {
+        parts.push(format!("{} 台", ticket.resource_count));
     }
+
+    if let Some(expire_at) = ticket
+        .expire_at
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        parts.push(format!("到期: {expire_at}"));
+    }
+
+    if parts.is_empty() {
+        "未填写数量/到期".to_string()
+    } else {
+        parts.join(" / ")
+    }
+}
+
+fn resource_summary(ticket: &ResourceTicket) -> String {
+    rack_label(ticket)
 }
 
 fn format_time(value: &str) -> String {

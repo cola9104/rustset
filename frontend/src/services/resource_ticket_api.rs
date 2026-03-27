@@ -21,14 +21,18 @@ pub struct CreateResourceTicketRequest {
     pub rack_units: Option<i32>,
     pub customer_name: Option<String>,
     pub application_name: Option<String>,
+    pub application_endpoint_id: Option<i32>,
+    pub application_domain: Option<String>,
     pub contract_name: Option<String>,
     pub ecs_type: Option<String>,
     pub ecs_os: Option<String>,
+    pub resource_count: Option<i32>,
     pub cpu_cores: Option<i32>,
     pub memory_gb: Option<i32>,
     pub system_disk: Option<String>,
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
+    pub expire_at: Option<String>,
     pub has_security_product: Option<bool>,
     pub security_products: Option<String>,
     pub ip_address: Option<String>,
@@ -36,8 +40,10 @@ pub struct CreateResourceTicketRequest {
     // 网络策略专用字段
     pub fw_source_zone: Option<String>,
     pub fw_source_address: Option<String>,
+    pub fw_source_port: Option<String>,
     pub fw_dest_zone: Option<String>,
     pub fw_dest_address: Option<String>,
+    pub fw_dest_port: Option<String>,
     pub fw_protocol: Option<String>,
     pub fw_port: Option<String>,
     pub fw_direction: Option<String>,
@@ -84,14 +90,18 @@ struct BackendResourceTicket {
     rack_units: i32,
     customer_name: Option<String>,
     application_name: Option<String>,
+    application_endpoint_id: Option<i32>,
+    application_domain: Option<String>,
     contract_name: Option<String>,
     ecs_type: Option<String>,
     ecs_os: Option<String>,
+    resource_count: i32,
     cpu_cores: i32,
     memory_gb: i32,
     system_disk: Option<String>,
     system_disk_size_gb: i32,
     data_disk: Option<String>,
+    expire_at: Option<String>,
     has_security_product: bool,
     security_products: Option<String>,
     ip_address: Option<String>,
@@ -116,8 +126,10 @@ struct BackendResourceTicket {
     deliver_comment: Option<String>,
     fw_source_zone: Option<String>,
     fw_source_address: Option<String>,
+    fw_source_port: Option<String>,
     fw_dest_zone: Option<String>,
     fw_dest_address: Option<String>,
+    fw_dest_port: Option<String>,
     fw_protocol: Option<String>,
     fw_port: Option<String>,
     fw_direction: Option<String>,
@@ -145,14 +157,18 @@ impl BackendResourceTicket {
             rack_units: self.rack_units,
             customer_name: self.customer_name.clone().unwrap_or_default(),
             application_name: self.application_name.clone().unwrap_or_default(),
+            application_endpoint_id: self.application_endpoint_id,
+            application_domain: self.application_domain.clone(),
             contract_name: self.contract_name.clone().unwrap_or_default(),
             ecs_type: self.ecs_type.clone().unwrap_or_default(),
             ecs_os: self.ecs_os.clone().unwrap_or_default(),
+            resource_count: self.resource_count,
             cpu_cores: self.cpu_cores,
             memory_gb: self.memory_gb,
             system_disk: self.system_disk.clone().unwrap_or_default(),
             system_disk_size_gb: self.system_disk_size_gb,
             data_disk: self.data_disk.clone().unwrap_or_default(),
+            expire_at: self.expire_at.clone(),
             has_security_product: self.has_security_product,
             security_products: self.security_products.clone().unwrap_or_default(),
             ip_address: self.ip_address.clone().unwrap_or_default(),
@@ -183,8 +199,13 @@ impl BackendResourceTicket {
             deliver_comment: self.deliver_comment.clone(),
             fw_source_zone: self.fw_source_zone.clone(),
             fw_source_address: self.fw_source_address.clone(),
+            fw_source_port: self.fw_source_port.clone(),
             fw_dest_zone: self.fw_dest_zone.clone(),
             fw_dest_address: self.fw_dest_address.clone(),
+            fw_dest_port: self
+                .fw_dest_port
+                .clone()
+                .or_else(|| self.fw_port.clone()),
             fw_protocol: self.fw_protocol.clone(),
             fw_port: self.fw_port.clone(),
             fw_direction: self.fw_direction.clone(),
@@ -266,6 +287,8 @@ impl From<&ResourceTicket> for CreateResourceTicketRequest {
             } else {
                 Some(ticket.application_name.clone())
             },
+            application_endpoint_id: ticket.application_endpoint_id,
+            application_domain: ticket.application_domain.clone(),
             contract_name: if ticket.contract_name.is_empty() {
                 None
             } else {
@@ -280,6 +303,11 @@ impl From<&ResourceTicket> for CreateResourceTicketRequest {
                 None
             } else {
                 Some(ticket.ecs_os.clone())
+            },
+            resource_count: if ticket.resource_count == 0 {
+                None
+            } else {
+                Some(ticket.resource_count)
             },
             cpu_cores: if ticket.cpu_cores == 0 {
                 None
@@ -306,6 +334,7 @@ impl From<&ResourceTicket> for CreateResourceTicketRequest {
             } else {
                 Some(ticket.data_disk.clone())
             },
+            expire_at: ticket.expire_at.clone(),
             has_security_product: if !ticket.has_security_product {
                 None
             } else {
@@ -328,8 +357,13 @@ impl From<&ResourceTicket> for CreateResourceTicketRequest {
             },
             fw_source_zone: ticket.fw_source_zone.clone(),
             fw_source_address: ticket.fw_source_address.clone(),
+            fw_source_port: ticket.fw_source_port.clone(),
             fw_dest_zone: ticket.fw_dest_zone.clone(),
             fw_dest_address: ticket.fw_dest_address.clone(),
+            fw_dest_port: ticket
+                .fw_dest_port
+                .clone()
+                .or_else(|| ticket.fw_port.clone()),
             fw_protocol: ticket.fw_protocol.clone(),
             fw_port: ticket.fw_port.clone(),
             fw_direction: ticket.fw_direction.clone(),

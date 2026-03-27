@@ -4,17 +4,18 @@
 #![allow(clippy::too_many_arguments)]
 
 use crate::entities::{
-    advanced_scan_task, asset, audit_log, business_resource, cloud_provider_config, cloud_service,
-    cloud_virtual_machine, cloud_zone, custom_role, department, network_zone, organization,
-    physical_machine, quick_scan_result, resource_ticket, risk, task, user, AdvancedScanTask,
-    Asset, AuditLog, BusinessResource, CloudProviderConfig, CloudService, CloudVirtualMachine,
-    CloudZone, CustomRole, NetworkZone, PhysicalMachine, Risk, Task, User,
+    advanced_scan_task, application_endpoint, asset, audit_log, business_application,
+    business_resource, cloud_provider_config, cloud_service, cloud_virtual_machine, cloud_zone,
+    custom_role, department, network_zone, organization, physical_machine, quick_scan_result,
+    resource_ticket, risk, task, user, AdvancedScanTask, ApplicationEndpoint, Asset, AuditLog,
+    BusinessApplication, BusinessResource, CloudProviderConfig, CloudService,
+    CloudVirtualMachine, CloudZone, CustomRole, NetworkZone, PhysicalMachine, Risk, Task, User,
 };
 use chrono::Utc;
 use sea_orm::Database as SeaDatabase;
 pub use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, NotSet,
-    QueryFilter, QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr,
+    EntityTrait, NotSet, QueryFilter, QueryOrder, QuerySelect, Set,
 };
 use shared::{
     Department as SharedDepartment, Organization as SharedOrganization, User as SharedUser,
@@ -43,6 +44,7 @@ pub async fn init_db(connection_string: &str) -> Result<(), DbErr> {
     Migrator::up(&conn, None).await?;
     ensure_resource_ticket_schema(&conn).await?;
     ensure_network_zone_schema(&conn).await?;
+    ensure_business_application_schema(&conn).await?;
 
     DB.set(Arc::new(conn))
         .map_err(|_| DbErr::Custom("Database already initialized".to_string()))?;
@@ -79,14 +81,18 @@ async fn ensure_resource_ticket_schema(conn: &DatabaseConnection) -> Result<(), 
             rack_units INTEGER DEFAULT 0,
             customer_name TEXT NULL,
             application_name TEXT NULL,
+            application_endpoint_id INTEGER NULL,
+            application_domain TEXT NULL,
             contract_name TEXT NULL,
             ecs_type TEXT NULL,
             ecs_os TEXT NULL,
+            resource_count INTEGER DEFAULT 0,
             cpu_cores INTEGER DEFAULT 0,
             memory_gb INTEGER DEFAULT 0,
             system_disk TEXT NULL,
             system_disk_size_gb INTEGER DEFAULT 0,
             data_disk TEXT NULL,
+            expire_at TEXT NULL,
             has_security_product INTEGER DEFAULT 0,
             security_products TEXT NULL,
             ip_address TEXT NULL,
@@ -111,8 +117,10 @@ async fn ensure_resource_ticket_schema(conn: &DatabaseConnection) -> Result<(), 
             deliver_comment TEXT NULL,
             fw_source_zone TEXT NULL,
             fw_source_address TEXT NULL,
+            fw_source_port TEXT NULL,
             fw_dest_zone TEXT NULL,
             fw_dest_address TEXT NULL,
+            fw_dest_port TEXT NULL,
             fw_protocol TEXT NULL,
             fw_port TEXT NULL,
             fw_direction TEXT NULL,
@@ -167,6 +175,116 @@ async fn ensure_resource_ticket_schema(conn: &DatabaseConnection) -> Result<(), 
         r#"
         ALTER TABLE resource_tickets
         ADD COLUMN IF NOT EXISTS department_name TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS resource_count INTEGER DEFAULT 0
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS expire_at TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS application_endpoint_id INTEGER NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS application_domain TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS fw_source_port TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE resource_tickets
+        ADD COLUMN IF NOT EXISTS fw_dest_port TEXT NULL
+        "#,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn ensure_business_application_schema(conn: &DatabaseConnection) -> Result<(), DbErr> {
+    conn.execute_unprepared(
+        r#"
+        CREATE TABLE IF NOT EXISTS business_applications (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NULL,
+            created_by TEXT NULL
+        )
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        CREATE TABLE IF NOT EXISTS application_endpoints (
+            id SERIAL PRIMARY KEY,
+            business_application_id INTEGER NOT NULL,
+            protocol TEXT NOT NULL,
+            dest_ip TEXT NOT NULL,
+            nat_ip TEXT NULL,
+            dest_port TEXT NOT NULL,
+            domain TEXT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NULL,
+            created_by TEXT NULL
+        )
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        ALTER TABLE application_endpoints
+        ADD COLUMN IF NOT EXISTS nat_ip TEXT NULL
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_application_endpoints_l4_unique
+        ON application_endpoints(dest_ip, protocol, dest_port)
+        WHERE domain IS NULL OR TRIM(domain) = ''
+        "#,
+    )
+    .await?;
+
+    conn.execute_unprepared(
+        r#"
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_application_endpoints_l7_unique
+        ON application_endpoints(domain, protocol, dest_port)
+        WHERE domain IS NOT NULL AND TRIM(domain) <> ''
         "#,
     )
     .await?;
@@ -472,14 +590,18 @@ pub fn db_resource_ticket_to_shared(db: resource_ticket::Model) -> shared::Resou
         rack_units: db.rack_units,
         customer_name: db.customer_name,
         application_name: db.application_name,
+        application_endpoint_id: db.application_endpoint_id,
+        application_domain: db.application_domain,
         contract_name: db.contract_name,
         ecs_type: db.ecs_type,
         ecs_os: db.ecs_os,
+        resource_count: db.resource_count,
         cpu_cores: db.cpu_cores,
         memory_gb: db.memory_gb,
         system_disk: db.system_disk,
         system_disk_size_gb: db.system_disk_size_gb,
         data_disk: db.data_disk,
+        expire_at: db.expire_at,
         has_security_product: db.has_security_product != 0,
         security_products: db.security_products,
         ip_address: db.ip_address,
@@ -504,8 +626,10 @@ pub fn db_resource_ticket_to_shared(db: resource_ticket::Model) -> shared::Resou
         deliver_comment: db.deliver_comment,
         fw_source_zone: db.fw_source_zone,
         fw_source_address: db.fw_source_address,
+        fw_source_port: db.fw_source_port,
         fw_dest_zone: db.fw_dest_zone,
         fw_dest_address: db.fw_dest_address,
+        fw_dest_port: db.fw_dest_port,
         fw_protocol: db.fw_protocol,
         fw_port: db.fw_port,
         fw_direction: db.fw_direction,
@@ -536,14 +660,18 @@ pub fn shared_to_db_resource_ticket(
         rack_units: Set(ticket.rack_units),
         customer_name: Set(ticket.customer_name.clone()),
         application_name: Set(ticket.application_name.clone()),
+        application_endpoint_id: Set(ticket.application_endpoint_id),
+        application_domain: Set(ticket.application_domain.clone()),
         contract_name: Set(ticket.contract_name.clone()),
         ecs_type: Set(ticket.ecs_type.clone()),
         ecs_os: Set(ticket.ecs_os.clone()),
+        resource_count: Set(ticket.resource_count),
         cpu_cores: Set(ticket.cpu_cores),
         memory_gb: Set(ticket.memory_gb),
         system_disk: Set(ticket.system_disk.clone()),
         system_disk_size_gb: Set(ticket.system_disk_size_gb),
         data_disk: Set(ticket.data_disk.clone()),
+        expire_at: Set(ticket.expire_at.clone()),
         has_security_product: Set(ticket.has_security_product as i32),
         security_products: Set(ticket.security_products.clone()),
         ip_address: Set(ticket.ip_address.clone()),
@@ -568,8 +696,10 @@ pub fn shared_to_db_resource_ticket(
         deliver_comment: Set(ticket.deliver_comment.clone()),
         fw_source_zone: Set(ticket.fw_source_zone.clone()),
         fw_source_address: Set(ticket.fw_source_address.clone()),
+        fw_source_port: Set(ticket.fw_source_port.clone()),
         fw_dest_zone: Set(ticket.fw_dest_zone.clone()),
         fw_dest_address: Set(ticket.fw_dest_address.clone()),
+        fw_dest_port: Set(ticket.fw_dest_port.clone()),
         fw_protocol: Set(ticket.fw_protocol.clone()),
         fw_port: Set(ticket.fw_port.clone()),
         fw_direction: Set(ticket.fw_direction.clone()),
@@ -1882,6 +2012,219 @@ pub async fn update_resource_ticket(id: i32, ticket: &shared::ResourceTicket) ->
 pub async fn delete_resource_ticket(id: i32) -> Result<(), DbErr> {
     let conn = require_db()?;
     delete_resource_ticket_by_id(&conn, id).await
+}
+
+pub async fn get_all_business_applications_with_conn(
+    conn: &DatabaseConnection,
+) -> Result<Vec<business_application::Model>, DbErr> {
+    BusinessApplication::find()
+        .order_by_asc(business_application::Column::Name)
+        .all(conn)
+        .await
+}
+
+pub async fn get_business_application_by_id_with_conn(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<business_application::Model>, DbErr> {
+    BusinessApplication::find_by_id(id).one(conn).await
+}
+
+pub async fn get_business_application_by_name_with_conn(
+    conn: &DatabaseConnection,
+    name: &str,
+) -> Result<Option<business_application::Model>, DbErr> {
+    BusinessApplication::find()
+        .filter(business_application::Column::Name.eq(name))
+        .one(conn)
+        .await
+}
+
+pub async fn insert_business_application_with_conn(
+    conn: &DatabaseConnection,
+    name: &str,
+    description: Option<&str>,
+    created_by: Option<&str>,
+) -> Result<business_application::Model, DbErr> {
+    let now = Utc::now().to_rfc3339();
+    business_application::ActiveModel {
+        id: NotSet,
+        name: Set(name.to_string()),
+        description: Set(description.map(|value| value.to_string())),
+        created_at: Set(now),
+        updated_at: Set(None),
+        created_by: Set(created_by.map(|value| value.to_string())),
+    }
+    .insert(conn)
+    .await
+}
+
+pub async fn update_business_application_with_conn(
+    conn: &DatabaseConnection,
+    id: i32,
+    name: &str,
+    description: Option<&str>,
+) -> Result<Option<business_application::Model>, DbErr> {
+    let Some(model) = BusinessApplication::find_by_id(id).one(conn).await? else {
+        return Ok(None);
+    };
+
+    let now = Utc::now().to_rfc3339();
+    let mut active: business_application::ActiveModel = model.into();
+    active.name = Set(name.to_string());
+    active.description = Set(description.map(|value| value.to_string()));
+    active.updated_at = Set(Some(now));
+
+    active.update(conn).await.map(Some)
+}
+
+pub async fn delete_business_application_with_conn(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<bool, DbErr> {
+    let Some(model) = BusinessApplication::find_by_id(id).one(conn).await? else {
+        return Ok(false);
+    };
+
+    model.delete(conn).await?;
+    Ok(true)
+}
+
+pub async fn get_application_endpoints_by_application_ids_with_conn(
+    conn: &DatabaseConnection,
+    application_ids: &[i32],
+) -> Result<Vec<application_endpoint::Model>, DbErr> {
+    if application_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    ApplicationEndpoint::find()
+        .filter(application_endpoint::Column::BusinessApplicationId.is_in(application_ids.to_vec()))
+        .order_by_asc(application_endpoint::Column::Id)
+        .all(conn)
+        .await
+}
+
+pub async fn find_application_endpoint_l4_with_conn(
+    conn: &DatabaseConnection,
+    protocol: &str,
+    dest_ip: &str,
+    dest_port: &str,
+) -> Result<Option<application_endpoint::Model>, DbErr> {
+    ApplicationEndpoint::find()
+        .filter(application_endpoint::Column::Protocol.eq(protocol))
+        .filter(application_endpoint::Column::DestIp.eq(dest_ip))
+        .filter(application_endpoint::Column::DestPort.eq(dest_port))
+        .filter(
+            Condition::any()
+                .add(application_endpoint::Column::Domain.is_null())
+                .add(application_endpoint::Column::Domain.eq("")),
+        )
+        .one(conn)
+        .await
+}
+
+pub async fn find_application_endpoint_l7_with_conn(
+    conn: &DatabaseConnection,
+    protocol: &str,
+    dest_port: &str,
+    domain: &str,
+) -> Result<Option<application_endpoint::Model>, DbErr> {
+    ApplicationEndpoint::find()
+        .filter(application_endpoint::Column::Protocol.eq(protocol))
+        .filter(application_endpoint::Column::DestPort.eq(dest_port))
+        .filter(application_endpoint::Column::Domain.eq(domain))
+        .one(conn)
+        .await
+}
+
+pub async fn insert_application_endpoint_with_conn(
+    conn: &DatabaseConnection,
+    business_application_id: i32,
+    protocol: &str,
+    dest_ip: &str,
+    nat_ip: Option<&str>,
+    dest_port: &str,
+    domain: Option<&str>,
+    created_by: Option<&str>,
+) -> Result<application_endpoint::Model, DbErr> {
+    let now = Utc::now().to_rfc3339();
+    application_endpoint::ActiveModel {
+        id: NotSet,
+        business_application_id: Set(business_application_id),
+        protocol: Set(protocol.to_string()),
+        dest_ip: Set(dest_ip.to_string()),
+        nat_ip: Set(nat_ip.map(|value| value.to_string())),
+        dest_port: Set(dest_port.to_string()),
+        domain: Set(domain.map(|value| value.to_string())),
+        created_at: Set(now),
+        updated_at: Set(None),
+        created_by: Set(created_by.map(|value| value.to_string())),
+    }
+    .insert(conn)
+    .await
+}
+
+pub async fn get_application_endpoint_by_id_with_conn(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<Option<application_endpoint::Model>, DbErr> {
+    ApplicationEndpoint::find_by_id(id).one(conn).await
+}
+
+pub async fn update_application_endpoint_with_conn(
+    conn: &DatabaseConnection,
+    id: i32,
+    business_application_id: i32,
+    protocol: &str,
+    dest_ip: &str,
+    nat_ip: Option<&str>,
+    dest_port: &str,
+    domain: Option<&str>,
+) -> Result<Option<application_endpoint::Model>, DbErr> {
+    let Some(model) = ApplicationEndpoint::find_by_id(id).one(conn).await? else {
+        return Ok(None);
+    };
+
+    let now = Utc::now().to_rfc3339();
+    let mut active: application_endpoint::ActiveModel = model.into();
+    active.business_application_id = Set(business_application_id);
+    active.protocol = Set(protocol.to_string());
+    active.dest_ip = Set(dest_ip.to_string());
+    active.nat_ip = Set(nat_ip.map(|value| value.to_string()));
+    active.dest_port = Set(dest_port.to_string());
+    active.domain = Set(domain.map(|value| value.to_string()));
+    active.updated_at = Set(Some(now));
+
+    active.update(conn).await.map(Some)
+}
+
+pub async fn delete_application_endpoint_with_conn(
+    conn: &DatabaseConnection,
+    id: i32,
+) -> Result<bool, DbErr> {
+    let Some(model) = ApplicationEndpoint::find_by_id(id).one(conn).await? else {
+        return Ok(false);
+    };
+
+    model.delete(conn).await?;
+    Ok(true)
+}
+
+pub async fn delete_application_endpoints_by_application_id_with_conn(
+    conn: &DatabaseConnection,
+    application_id: i32,
+) -> Result<(), DbErr> {
+    let endpoints = ApplicationEndpoint::find()
+        .filter(application_endpoint::Column::BusinessApplicationId.eq(application_id))
+        .all(conn)
+        .await?;
+
+    for endpoint in endpoints {
+        endpoint.delete(conn).await?;
+    }
+
+    Ok(())
 }
 
 // Risk wrappers

@@ -12,6 +12,11 @@ use sea_orm::ConnectionTrait;
 use shared::{PasswordPolicy, Role, User};
 use uuid::Uuid;
 
+const DEFAULT_BOOTSTRAP_ORG_NAME: &str = "RustSet 默认组织";
+const DEFAULT_BOOTSTRAP_ORG_CODE: &str = "RUSTSET_DEFAULT";
+const DEFAULT_BOOTSTRAP_DEPT_NAME: &str = "默认运维部";
+const DEFAULT_BOOTSTRAP_DEPT_CODE: &str = "DEFAULT_OPS";
+
 // 加载 .env 文件
 fn load_env() {
     let _ = dotenvy::from_filename(".env");
@@ -128,6 +133,125 @@ fn build_default_users() -> Vec<User> {
     ]
 }
 
+#[derive(Clone, Copy)]
+struct DefaultUserBinding {
+    organization_id: i32,
+    department_id: i32,
+}
+
+async fn ensure_default_org_department(
+    conn: &sea_orm::DatabaseConnection,
+) -> Result<DefaultUserBinding, sea_orm::DbErr> {
+    let organization_id = match database::get_all_organizations(conn)
+        .await?
+        .into_iter()
+        .find(|item| item.code == DEFAULT_BOOTSTRAP_ORG_CODE)
+    {
+        Some(item) => item.id,
+        None => {
+            let now = Utc::now().to_rfc3339();
+            database::insert_organization(
+                conn,
+                DEFAULT_BOOTSTRAP_ORG_NAME,
+                DEFAULT_BOOTSTRAP_ORG_CODE,
+                "active",
+                Some("开发环境默认组织"),
+                &now,
+            )
+            .await?
+        }
+    };
+
+    let department_id = match database::get_all_departments(conn)
+        .await?
+        .into_iter()
+        .find(|item| {
+            item.organization_id == organization_id && item.code == DEFAULT_BOOTSTRAP_DEPT_CODE
+        }) {
+        Some(item) => item.id,
+        None => {
+            let now = Utc::now().to_rfc3339();
+            database::insert_department(
+                conn,
+                organization_id,
+                DEFAULT_BOOTSTRAP_DEPT_NAME,
+                DEFAULT_BOOTSTRAP_DEPT_CODE,
+                None,
+                1,
+                "active",
+                Some("开发环境默认部门"),
+                &now,
+            )
+            .await?
+        }
+    };
+
+    Ok(DefaultUserBinding {
+        organization_id,
+        department_id,
+    })
+}
+
+async fn ensure_builtin_user_bindings(
+    conn: &sea_orm::DatabaseConnection,
+    users: Vec<User>,
+) -> Result<Vec<User>, sea_orm::DbErr> {
+    if !users
+        .iter()
+        .any(|user| crate::utils::is_builtin_system_account(&user.username))
+    {
+        return Ok(users);
+    }
+
+    let default_binding = ensure_default_org_department(conn).await?;
+    let mut next_users = Vec::with_capacity(users.len());
+
+    for mut user in users {
+        if !crate::utils::is_builtin_system_account(&user.username) {
+            next_users.push(user);
+            continue;
+        }
+
+        match (user.organization_id, user.department_id) {
+            (None, None) => {
+                user.organization_id = Some(default_binding.organization_id);
+                user.department_id = Some(default_binding.department_id);
+                database::update_user_by_id(conn, &user).await?;
+                tracing::info!(
+                    "Bound builtin account {} to default organization/department",
+                    user.username
+                );
+            }
+            (Some(org_id), None) if org_id == default_binding.organization_id => {
+                user.department_id = Some(default_binding.department_id);
+                database::update_user_by_id(conn, &user).await?;
+                tracing::info!(
+                    "Bound builtin account {} to default department",
+                    user.username
+                );
+            }
+            (None, Some(_)) => {
+                tracing::warn!(
+                    "Builtin account {} is missing organization but already has a department; leaving unchanged",
+                    user.username
+                );
+            }
+            (Some(org_id), None) => {
+                tracing::warn!(
+                    "Builtin account {} is missing department under non-default organization {}; leaving unchanged",
+                    user.username,
+                    org_id
+                );
+            }
+            (Some(_), Some(_)) => {}
+        }
+
+        next_users.push(user);
+    }
+
+    Ok(next_users)
+}
+
 async fn load_users_from_db(conn: &sea_orm::DatabaseConnection) -> Vec<shared::User> {
     match database::get_users_with_conn(conn).await {
         Ok(users) => users,
@@ -186,6 +310,11 @@ use handlers::{
         update_asset, update_asset_port,
     },
     auth::{login, logout, refresh_token},
+    business_applications::{
+        create_application_endpoint, create_business_application, delete_application_endpoint,
+        delete_business_application, get_business_applications, update_application_endpoint,
+        update_business_application,
+    },
     business_resources::{
         create_business_resource, delete_business_resource, get_business_resources,
         update_business_resource,
@@ -328,6 +457,18 @@ async fn main() {
         loaded_users
     };
 
+    let initial_users = if should_seed_default_users() {
+        match ensure_builtin_user_bindings(&db_conn, initial_users).await {
+            Ok(users) => users,
+            Err(error) => {
+                tracing::error!("Failed to ensure builtin user bindings: {}", error);
+                load_users_from_db(&db_conn).await
+            }
+        }
+    } else {
+        initial_users
+    };
+
     let loaded_audit_logs = load_audit_logs_from_db(&db_conn).await;
     tracing::info!(
         "Loaded {} audit logs from database",
@@ -448,6 +589,22 @@ async fn main() {
         .route(
             "/api/business-resources/{id}",
             put(update_business_resource).delete(delete_business_resource),
+        )
+        .route(
+            "/api/business-applications",
+            get(get_business_applications).post(create_business_application),
+        )
+        .route(
+            "/api/business-applications/{id}",
+            put(update_business_application).delete(delete_business_application),
+        )
+        .route(
+            "/api/business-applications/endpoints",
+            post(create_application_endpoint),
+        )
+        .route(
+            "/api/business-applications/endpoints/{id}",
+            put(update_application_endpoint).delete(delete_application_endpoint),
         )
         // Advanced Scanning (新增高级扫描 API)
         .route("/api/scan/advanced", post(execute_advanced_scan))

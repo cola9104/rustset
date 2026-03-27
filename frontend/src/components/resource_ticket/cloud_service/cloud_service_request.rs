@@ -24,12 +24,17 @@ pub struct CloudServiceRequest {
     pub title: String,
     pub organization: String,
     pub applicant: String,
+    pub applicant_account: String,
     pub department: String,
     pub provider_id: Option<i32>,
     pub cloud_platform: String,
-    pub instance_type: String,
-    pub instance_count: i32,
-    pub duration: String,
+    pub cpu_cores: String,
+    pub memory_gb: String,
+    pub system_disk: String,
+    pub data_disk: String,
+    pub ecs_os: String,
+    pub server_count: i32,
+    pub expire_at: String,
     pub purpose: String,
     pub security_products: SelectedSecurityProducts,
     pub status: CloudServiceStatus,
@@ -210,8 +215,8 @@ pub fn CloudServiceRequest() -> Element {
                                 p { class: "text-xs text-gray-500", "{ticket.cloud_platform_name}" }
                             }
                             div {
-                                p { class: "text-sm text-gray-700", "{ticket.cloud_region}" }
-                                p { class: "text-xs text-gray-500", "{ticket.ecs_type} / {ticket.ecs_os}" }
+                                p { class: "text-sm text-gray-700", "{ticket.cpu_cores}C / {ticket.memory_gb}GB" }
+                                p { class: "text-xs text-gray-500", "{disk_label(&ticket)} / {ticket.ecs_os}" }
                             }
                             div {
                                 span { class: "px-2 inline-flex text-xs leading-5 font-semibold rounded-full {ticket.ticket_status.color_class()}",
@@ -219,8 +224,8 @@ pub fn CloudServiceRequest() -> Element {
                                 }
                             }
                             div {
-                                p { class: "text-sm text-gray-700", "{ticket.customer_name}" }
-                                p { class: "text-xs text-gray-500", "{security_label(ticket.has_security_product)}" }
+                                p { class: "text-sm text-gray-700", "{resource_count_label(ticket.resource_count)}" }
+                                p { class: "text-xs text-gray-500", "{expire_label(ticket.expire_at.as_deref())}" }
                             }
                             div {
                                 p { class: "text-sm text-gray-700",
@@ -236,14 +241,6 @@ pub fn CloudServiceRequest() -> Element {
     }
 }
 
-fn security_label(enabled: bool) -> &'static str {
-    if enabled {
-        "已绑定安全产品"
-    } else {
-        "未绑定安全产品"
-    }
-}
-
 fn format_time(value: &str) -> String {
     value
         .split('.')
@@ -251,4 +248,28 @@ fn format_time(value: &str) -> String {
         .unwrap_or(value)
         .replace('T', " ")
         .replace("+00:00", " UTC")
+}
+
+fn disk_label(ticket: &ResourceTicket) -> String {
+    match (ticket.system_disk.trim(), ticket.system_disk_size_gb) {
+        ("", 0) => "未填写系统盘".to_string(),
+        ("", size) => format!("{size}GB"),
+        (disk, 0) => disk.to_string(),
+        (disk, size) => format!("{disk} {size}GB"),
+    }
+}
+
+fn resource_count_label(count: i32) -> String {
+    if count > 0 {
+        format!("{count} 台")
+    } else {
+        "未填写数量".to_string()
+    }
+}
+
+fn expire_label(value: Option<&str>) -> String {
+    value
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| format!("到期: {v}"))
+        .unwrap_or_else(|| "未填写到期时间".to_string())
 }

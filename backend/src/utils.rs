@@ -87,6 +87,10 @@ pub fn sync_cached_users(users: &Arc<RwLock<Vec<User>>>, next_users: Vec<User>) 
     }
 }
 
+pub fn is_builtin_system_account(username: &str) -> bool {
+    matches!(username, "admin" | "sec" | "audit")
+}
+
 pub fn remove_cached_user(users: &Arc<RwLock<Vec<User>>>, user_id: &str) {
     if let Ok(mut users_guard) = users.write() {
         users_guard.retain(|user| user.id != user_id);

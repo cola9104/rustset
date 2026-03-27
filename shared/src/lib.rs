@@ -520,6 +520,64 @@ pub struct BusinessResourceQuery {
     pub contract_name: Option<String>,  // 合同名称筛选
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplicationEndpointRecord {
+    pub id: Option<i32>,
+    pub business_application_id: i32,
+    pub business_application_name: String,
+    pub protocol: String,
+    pub dest_ip: String,
+    pub nat_ip: Option<String>,
+    pub dest_port: String,
+    pub domain: Option<String>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+    pub created_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BusinessApplicationRecord {
+    pub id: Option<i32>,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: String,
+    pub updated_at: Option<String>,
+    pub created_by: Option<String>,
+    pub endpoints: Vec<ApplicationEndpointRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateBusinessApplicationRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateBusinessApplicationRequest {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateApplicationEndpointRequest {
+    pub business_application_id: i32,
+    pub protocol: String,
+    pub dest_ip: String,
+    pub nat_ip: String,
+    pub dest_port: String,
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateApplicationEndpointRequest {
+    pub business_application_id: i32,
+    pub protocol: String,
+    pub dest_ip: String,
+    pub nat_ip: String,
+    pub dest_port: String,
+    pub domain: Option<String>,
+}
+
 /// 业务资源统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessResourceStats {
@@ -1667,14 +1725,18 @@ pub struct ResourceTicket {
     // 基本信息
     pub customer_name: Option<String>,
     pub application_name: Option<String>,
+    pub application_endpoint_id: Option<i32>,
+    pub application_domain: Option<String>,
     pub contract_name: Option<String>,
     pub ecs_type: Option<String>,
     pub ecs_os: Option<String>,
+    pub resource_count: i32,
     pub cpu_cores: i32,
     pub memory_gb: i32,
     pub system_disk: Option<String>,
     pub system_disk_size_gb: i32,
     pub data_disk: Option<String>,
+    pub expire_at: Option<String>,
     pub has_security_product: bool,
     pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
@@ -1709,8 +1771,10 @@ pub struct ResourceTicket {
     // 网络策略专用字段
     pub fw_source_zone: Option<String>,
     pub fw_source_address: Option<String>,
+    pub fw_source_port: Option<String>,
     pub fw_dest_zone: Option<String>,
     pub fw_dest_address: Option<String>,
+    pub fw_dest_port: Option<String>,
     pub fw_protocol: Option<String>,
     pub fw_port: Option<String>,
     pub fw_direction: Option<String>,
@@ -1739,14 +1803,18 @@ pub struct CreateResourceTicketRequest {
     // 基本信息
     pub customer_name: Option<String>,
     pub application_name: Option<String>,
+    pub application_endpoint_id: Option<i32>,
+    pub application_domain: Option<String>,
     pub contract_name: Option<String>,
     pub ecs_type: Option<String>,
     pub ecs_os: Option<String>,
+    pub resource_count: Option<i32>,
     pub cpu_cores: Option<i32>,
     pub memory_gb: Option<i32>,
     pub system_disk: Option<String>,
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
+    pub expire_at: Option<String>,
     pub has_security_product: Option<bool>,
     pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
@@ -1755,8 +1823,10 @@ pub struct CreateResourceTicketRequest {
     // 网络策略专用字段
     pub fw_source_zone: Option<String>,
     pub fw_source_address: Option<String>,
+    pub fw_source_port: Option<String>,
     pub fw_dest_zone: Option<String>,
     pub fw_dest_address: Option<String>,
+    pub fw_dest_port: Option<String>,
     pub fw_protocol: Option<String>,
     pub fw_port: Option<String>,
     pub fw_direction: Option<String>,
@@ -1778,19 +1848,34 @@ pub struct UpdateResourceTicketRequest {
     pub rack_units: Option<i32>,
     pub customer_name: Option<String>,
     pub application_name: Option<String>,
+    pub application_endpoint_id: Option<i32>,
+    pub application_domain: Option<String>,
     pub contract_name: Option<String>,
     pub ecs_type: Option<String>,
     pub ecs_os: Option<String>,
+    pub resource_count: Option<i32>,
     pub cpu_cores: Option<i32>,
     pub memory_gb: Option<i32>,
     pub system_disk: Option<String>,
     pub system_disk_size_gb: Option<i32>,
     pub data_disk: Option<String>,
+    pub expire_at: Option<String>,
     pub has_security_product: Option<bool>,
     pub security_products: Option<String>, // 选中的安全产品名称，逗号分隔
     pub ip_address: Option<String>,
     pub delivery_status: Option<String>,
     pub remarks: Option<String>,
+    pub fw_source_zone: Option<String>,
+    pub fw_source_address: Option<String>,
+    pub fw_source_port: Option<String>,
+    pub fw_dest_zone: Option<String>,
+    pub fw_dest_address: Option<String>,
+    pub fw_dest_port: Option<String>,
+    pub fw_protocol: Option<String>,
+    pub fw_port: Option<String>,
+    pub fw_direction: Option<String>,
+    pub fw_valid_until: Option<String>,
+    pub fw_firewall_name: Option<String>,
 }
 
 /// 工单审批请求

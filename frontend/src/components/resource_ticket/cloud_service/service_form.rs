@@ -17,12 +17,17 @@ pub struct CloudServiceFormData {
     pub title: String,
     pub organization: String,
     pub applicant: String,
+    pub applicant_account: String,
     pub department: String,
     pub provider_id: Option<i32>,
     pub cloud_platform: String,
-    pub instance_type: String,
-    pub instance_count: i32,
-    pub duration: String,
+    pub cpu_cores: String,
+    pub memory_gb: String,
+    pub system_disk: String,
+    pub data_disk: String,
+    pub ecs_os: String,
+    pub server_count: i32,
+    pub expire_at: String,
     pub purpose: String,
     pub security_products: SelectedSecurityProducts,
 }
@@ -33,12 +38,17 @@ impl From<&CloudServiceRequest> for CloudServiceFormData {
             title: req.title.clone(),
             organization: req.organization.clone(),
             applicant: req.applicant.clone(),
+            applicant_account: req.applicant_account.clone(),
             department: req.department.clone(),
             provider_id: req.provider_id,
             cloud_platform: req.cloud_platform.clone(),
-            instance_type: req.instance_type.clone(),
-            instance_count: req.instance_count,
-            duration: req.duration.clone(),
+            cpu_cores: req.cpu_cores.clone(),
+            memory_gb: req.memory_gb.clone(),
+            system_disk: req.system_disk.clone(),
+            data_disk: req.data_disk.clone(),
+            ecs_os: req.ecs_os.clone(),
+            server_count: req.server_count,
+            expire_at: req.expire_at.clone(),
             purpose: req.purpose.clone(),
             security_products: req.security_products.clone(),
         }
@@ -58,12 +68,17 @@ impl CloudServiceFormData {
             title: self.title.clone(),
             organization: self.organization.clone(),
             applicant: self.applicant.clone(),
+            applicant_account: self.applicant_account.clone(),
             department: self.department.clone(),
             provider_id: self.provider_id,
             cloud_platform: self.cloud_platform.clone(),
-            instance_type: self.instance_type.clone(),
-            instance_count: self.instance_count,
-            duration: self.duration.clone(),
+            cpu_cores: self.cpu_cores.clone(),
+            memory_gb: self.memory_gb.clone(),
+            system_disk: self.system_disk.clone(),
+            data_disk: self.data_disk.clone(),
+            ecs_os: self.ecs_os.clone(),
+            server_count: self.server_count,
+            expire_at: self.expire_at.clone(),
             purpose: self.purpose.clone(),
             security_products: self.security_products.clone(),
             status,
@@ -85,11 +100,32 @@ impl CloudServiceFormData {
         if self.department.trim().is_empty() {
             return Err("申请部门不能为空，请先完善当前账号资料".to_string());
         }
+        if self.provider_id.is_none() {
+            return Err("请选择服务商".to_string());
+        }
         if self.cloud_platform.trim().is_empty() {
             return Err("请选择云平台".to_string());
         }
-        if self.instance_count < 1 {
-            return Err("实例数量至少为1".to_string());
+        if self.cpu_cores.trim().is_empty() {
+            return Err("CPU 不能为空".to_string());
+        }
+        if self.memory_gb.trim().is_empty() {
+            return Err("内存不能为空".to_string());
+        }
+        if self.system_disk.trim().is_empty() {
+            return Err("系统盘不能为空".to_string());
+        }
+        if self.data_disk.trim().is_empty() {
+            return Err("存储盘不能为空".to_string());
+        }
+        if self.ecs_os.trim().is_empty() {
+            return Err("系统不能为空".to_string());
+        }
+        if self.server_count < 1 {
+            return Err("服务器数量至少为1".to_string());
+        }
+        if self.expire_at.trim().is_empty() {
+            return Err("到期时间不能为空".to_string());
         }
         if self.purpose.trim().is_empty() {
             return Err("用途说明不能为空".to_string());
@@ -135,10 +171,15 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                 .as_ref()
                 .map(|user| user.requester_name())
                 .unwrap_or_default(),
+            applicant_account: current_user
+                .as_ref()
+                .map(|user| user.username.clone())
+                .unwrap_or_default(),
             department: current_user
                 .as_ref()
                 .map(|user| user.department_name.clone())
                 .unwrap_or_default(),
+            server_count: 1,
             ..Default::default()
         });
 
@@ -304,20 +345,6 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                         // 申请人
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
-                                "申请人 "
-                                span { class: "text-red-500", "*" }
-                            }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
-                                value: "{form_data.read().applicant}",
-                                readonly: true,
-                                disabled: true,
-                            }
-                        }
-                        // 申请部门
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1",
                                 "申请部门 "
                                 span { class: "text-red-500", "*" }
                             }
@@ -329,6 +356,40 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                                 disabled: true,
                             }
                         }
+                        // 申请人
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "申请人 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().applicant}",
+                                readonly: true,
+                                disabled: true,
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "申请账户 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().applicant_account}",
+                                readonly: true,
+                                disabled: true,
+                            }
+                        }
+                    }
+                }
+
+                // 云资源配置
+                div { class: "border-b border-gray-200 pb-4",
+                    h4 { class: "text-sm font-semibold text-gray-800 mb-3", "云资源配置" }
+                    div { class: "grid grid-cols-2 gap-4",
                         // 服务商
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1", "服务商" }
@@ -366,13 +427,6 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                                 }
                             }
                         }
-                    }
-                }
-
-                // 云资源配置
-                div { class: "border-b border-gray-200 pb-4",
-                    h4 { class: "text-sm font-semibold text-gray-800 mb-3", "云资源配置" }
-                    div { class: "grid grid-cols-2 gap-4",
                         // 云平台
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
@@ -396,50 +450,117 @@ pub fn CloudServiceForm(props: CloudServiceFormProps) -> Element {
                                 }
                             }
                         }
-                        // 实例类型
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "实例类型" }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                placeholder: "如：ecs.g6.xlarge",
-                                value: "{form_data.read().instance_type}",
-                                oninput: move |e| {
-                                    let mut data = form_data.write();
-                                    data.instance_type = e.value();
-                                },
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "CPU "
+                                span { class: "text-red-500", "*" }
                             }
-                        }
-                        // 实例数量
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "实例数量" }
                             input {
                                 r#type: "number",
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                                 min: "1",
-                                value: "{form_data.read().instance_count}",
+                                placeholder: "如：8",
+                                value: "{form_data.read().cpu_cores}",
                                 oninput: move |e| {
                                     let mut data = form_data.write();
-                                    data.instance_count = e.value().parse::<i32>().unwrap_or(1);
+                                    data.cpu_cores = e.value();
                                 },
                             }
                         }
-                        // 使用时长
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "使用时长" }
-                            select {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "内存(GB) "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "number",
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
-                                value: "{form_data.read().duration}",
-                                onchange: move |e| {
+                                min: "1",
+                                placeholder: "如：32",
+                                value: "{form_data.read().memory_gb}",
+                                oninput: move |e| {
                                     let mut data = form_data.write();
-                                    data.duration = e.value();
+                                    data.memory_gb = e.value();
                                 },
-                                option { value: "1个月", "1个月" }
-                                option { value: "3个月", "3个月" }
-                                option { value: "6个月", "6个月" }
-                                option { value: "1年", "1年" }
-                                option { value: "2年", "2年" }
-                                option { value: "3年", "3年" }
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "系统盘 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                placeholder: "如：ESSD 200GB",
+                                value: "{form_data.read().system_disk}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.system_disk = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "存储盘 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                placeholder: "如：ESSD 500GB",
+                                value: "{form_data.read().data_disk}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.data_disk = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "系统 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                placeholder: "如：Ubuntu 22.04 / Windows Server 2022",
+                                value: "{form_data.read().ecs_os}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.ecs_os = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "服务器数量 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "number",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                min: "1",
+                                value: "{form_data.read().server_count}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.server_count = e.value().parse::<i32>().unwrap_or(1);
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "到期时间 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "date",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                                value: "{form_data.read().expire_at}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.expire_at = e.value();
+                                },
                             }
                         }
                     }

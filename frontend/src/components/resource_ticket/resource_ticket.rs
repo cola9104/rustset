@@ -27,35 +27,40 @@ use crate::components::resource_ticket::network_policy::NetworkPolicyForm;
 use crate::components::resource_ticket::physical_server::physical_server_request::PhysicalServerRequest;
 use crate::components::resource_ticket::physical_server::PhysicalServerForm;
 
-fn parse_number_with_suffix(value: &str, suffix: &str) -> i32 {
-    value
-        .trim()
-        .strip_suffix(suffix)
-        .unwrap_or(value.trim())
-        .trim()
-        .parse::<i32>()
-        .unwrap_or(0)
+fn parse_int_input(value: &str) -> i32 {
+    value.trim().parse::<i32>().unwrap_or(0)
 }
 
-fn parse_storage_config(value: &str) -> (String, i32) {
+fn parse_disk_config(value: &str) -> (String, i32) {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return (String::new(), 0);
     }
 
-    let mut parts = trimmed.split_whitespace();
-    let size_part = parts.next().unwrap_or_default().to_uppercase();
-    let disk_type = parts.collect::<Vec<_>>().join(" ");
+    let mut size_gb = 0;
+    let mut disk_parts = Vec::new();
 
-    let size_gb = if let Some(size) = size_part.strip_suffix("TB") {
-        size.parse::<i32>().unwrap_or(0) * 1024
-    } else if let Some(size) = size_part.strip_suffix("GB") {
-        size.parse::<i32>().unwrap_or(0)
-    } else {
-        0
-    };
+    for part in trimmed.split_whitespace() {
+        let upper = part.trim().to_uppercase();
+        if let Some(size) = upper.strip_suffix("TB") {
+            size_gb = size.parse::<i32>().unwrap_or(0) * 1024;
+        } else if let Some(size) = upper.strip_suffix("GB") {
+            size_gb = size.parse::<i32>().unwrap_or(0);
+        } else {
+            disk_parts.push(part.trim().to_string());
+        }
+    }
 
-    (disk_type, size_gb)
+    (disk_parts.join(" "), size_gb)
+}
+
+fn format_disk_label(disk_type: &str, size_gb: i32) -> String {
+    match (disk_type.trim(), size_gb) {
+        ("", 0) => "未填写".to_string(),
+        ("", size) => format!("{size}GB"),
+        (disk, 0) => disk.to_string(),
+        (disk, size) => format!("{disk} {size}GB"),
+    }
 }
 
 fn is_my_ticket(ticket: &ResourceTicket, current_username: &str) -> bool {
@@ -81,6 +86,30 @@ fn ticket_applicant_meta(ticket: &ResourceTicket) -> String {
     }
 
     parts.join(" / ")
+}
+
+fn ticket_request_title(ticket: &ResourceTicket) -> String {
+    ticket.ecs_name.clone()
+}
+
+fn network_value_or_any(value: Option<&String>) -> String {
+    value
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .unwrap_or("any")
+        .to_string()
+}
+
+fn network_port_display(ticket: &ResourceTicket) -> String {
+    format!(
+        "SRC {} / DST {}",
+        network_value_or_any(ticket.fw_source_port.as_ref()),
+        ticket
+            .fw_dest_port
+            .as_ref()
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| network_value_or_any(ticket.fw_port.as_ref()))
+    )
 }
 
 fn is_pending_provision_status(status: TicketStatus) -> bool {
@@ -591,6 +620,8 @@ pub fn ResourceTicket() -> Element {
                                 mode: crate::components::common::FormMode::New,
                                 request: None,
                                 on_save: move |req: CloudServiceRequest| {
+                                    let (system_disk, system_disk_size_gb) =
+                                        parse_disk_config(&req.system_disk);
                                     // 获取服务商名称
                                     let provider_name = req.provider_id
                                         .and_then(|pid| {
@@ -636,14 +667,18 @@ pub fn ResourceTicket() -> Element {
                                         rack_units: 0,
                                         customer_name: String::new(),
                                         application_name: req.title.clone(),
+                                        application_endpoint_id: None,
+                                        application_domain: None,
                                         contract_name: String::new(),
-                                        ecs_type: req.instance_type.clone(),
-                                        ecs_os: String::new(),
-                                        cpu_cores: 0,
-                                        memory_gb: 0,
-                                        system_disk: String::new(),
-                                        system_disk_size_gb: 0,
-                                        data_disk: String::new(),
+                                        ecs_type: String::new(),
+                                        ecs_os: req.ecs_os.clone(),
+                                        resource_count: req.server_count,
+                                        cpu_cores: parse_int_input(&req.cpu_cores),
+                                        memory_gb: parse_int_input(&req.memory_gb),
+                                        system_disk,
+                                        system_disk_size_gb,
+                                        data_disk: req.data_disk.clone(),
+                                        expire_at: Some(req.expire_at.clone()),
                                         has_security_product: !req.security_products.is_empty(),
                                         security_products: req.security_products.to_names_string(&SECURITY_PRODUCTS_STATE.read()),
                                         ip_address: String::new(),
@@ -668,8 +703,10 @@ pub fn ResourceTicket() -> Element {
                                         deliver_comment: None,
                                         fw_source_zone: None,
                                         fw_source_address: None,
+                                        fw_source_port: None,
                                         fw_dest_zone: None,
                                         fw_dest_address: None,
+                                        fw_dest_port: None,
                                         fw_protocol: None,
                                         fw_port: None,
                                         fw_direction: None,
@@ -698,10 +735,8 @@ pub fn ResourceTicket() -> Element {
                                 mode: crate::components::common::FormMode::New,
                                 request: None,
                                 on_save: move |req: PhysicalServerRequest| {
-                                    let cpu_cores = parse_number_with_suffix(&req.cpu_cores, "核");
-                                    let memory_gb = parse_number_with_suffix(&req.memory, "GB");
                                     let (system_disk, system_disk_size_gb) =
-                                        parse_storage_config(&req.storage);
+                                        parse_disk_config(&req.system_disk);
 
                                     // 获取服务商名称
                                     let provider_name = req.provider_id
@@ -738,14 +773,18 @@ pub fn ResourceTicket() -> Element {
                                         rack_units: 0,
                                         customer_name: String::new(),
                                         application_name: req.title.clone(),
+                                        application_endpoint_id: None,
+                                        application_domain: None,
                                         contract_name: String::new(),
-                                        ecs_type: req.server_type.clone(),
-                                        ecs_os: String::new(),
-                                        cpu_cores,
-                                        memory_gb,
+                                        ecs_type: String::new(),
+                                        ecs_os: req.ecs_os.clone(),
+                                        resource_count: req.server_count,
+                                        cpu_cores: parse_int_input(&req.cpu_cores),
+                                        memory_gb: parse_int_input(&req.memory_gb),
                                         system_disk,
                                         system_disk_size_gb,
-                                        data_disk: String::new(),
+                                        data_disk: req.data_disk.clone(),
+                                        expire_at: Some(req.expire_at.clone()),
                                         has_security_product: !req.security_products.is_empty(),
                                         security_products: req.security_products.to_names_string(&SECURITY_PRODUCTS_STATE.read()),
                                         ip_address: String::new(),
@@ -770,8 +809,10 @@ pub fn ResourceTicket() -> Element {
                                         deliver_comment: None,
                                         fw_source_zone: None,
                                         fw_source_address: None,
+                                        fw_source_port: None,
                                         fw_dest_zone: None,
                                         fw_dest_address: None,
+                                        fw_dest_port: None,
                                         fw_protocol: None,
                                         fw_port: None,
                                         fw_direction: None,
@@ -800,6 +841,17 @@ pub fn ResourceTicket() -> Element {
                                 mode: crate::components::common::FormMode::New,
                                 request: None,
                                 on_save: move |req: NetworkPolicyRequest| {
+                                    let source_address = if req.source_address.trim().is_empty() {
+                                        "any".to_string()
+                                    } else {
+                                        req.source_address.clone()
+                                    };
+                                    let destination_address =
+                                        if req.destination_address.trim().is_empty() {
+                                            "any".to_string()
+                                        } else {
+                                            req.destination_address.clone()
+                                        };
                                     // 转换为 ResourceTicket 并添加
                                     let new_ticket = ResourceTicket {
                                         id: (tickets.read().len() + 1) as i32,
@@ -818,20 +870,24 @@ pub fn ResourceTicket() -> Element {
                                         zone_cabinet: String::new(),
                                         rack_units: 0,
                                         customer_name: String::new(),
-                                        application_name: req.title.clone(),
+                                        application_name: String::new(),
+                                        application_endpoint_id: None,
+                                        application_domain: None,
                                         contract_name: String::new(),
                                         ecs_type: String::new(),
                                         ecs_os: String::new(),
+                                        resource_count: 0,
                                         cpu_cores: 0,
                                         memory_gb: 0,
                                         system_disk: String::new(),
                                         system_disk_size_gb: 0,
                                         data_disk: String::new(),
+                                        expire_at: None,
                                         has_security_product: false,
                                         security_products: String::new(),
-                                        ip_address: String::new(),
+                                        ip_address: destination_address.clone(),
                                         delivery_status: "未交付".to_string(),
-                                        remarks: String::new(),
+                                        remarks: req.description.clone(),
                                         created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
                                         updated_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
                                         created_by: auth.read().username.clone(),
@@ -850,11 +906,13 @@ pub fn ResourceTicket() -> Element {
                                         deliver_time: None,
                                         deliver_comment: None,
                                         fw_source_zone: Some(req.source_zone.clone()),
-                                        fw_source_address: None,
+                                        fw_source_address: Some(source_address),
+                                        fw_source_port: Some(req.source_port.clone()),
                                         fw_dest_zone: Some(req.destination_zone.clone()),
-                                        fw_dest_address: None,
+                                        fw_dest_address: Some(destination_address),
+                                        fw_dest_port: Some(req.destination_port.clone()),
                                         fw_protocol: Some(req.protocol.display_name().to_string()),
-                                        fw_port: Some(req.port_range.clone()),
+                                        fw_port: Some(req.destination_port.clone()),
                                         fw_direction: Some(req.direction.display_name().to_string()),
                                         fw_valid_until: Some(req.valid_until.clone()),
                                         fw_firewall_name: None,
@@ -956,16 +1014,18 @@ fn TicketListViewByTypeAndWorkflow(
                                     onclick: move |_| on_select.call(ticket.id),
                                     td { class: "px-6 py-4 text-sm text-gray-900", "{ticket.id}" }
                                     td { class: "px-6 py-4",
-                                        div { class: "text-sm font-medium text-gray-900", {ticket.application_name.clone()} }
-                                        div { class: "text-sm text-gray-500", {ticket.contract_name.clone()} }
+                                        div { class: "text-sm font-medium text-gray-900", {ticket.ecs_name.clone()} }
+                                        div { class: "text-sm text-gray-500",
+                                            {if ticket.application_name.is_empty() { ticket.contract_name.clone() } else { ticket.application_name.clone() }}
+                                        }
                                     }
                                     td { class: "px-6 py-4 text-sm text-gray-600",
                                         if resource_type == ResourceType::Network {
                                             div { class: "text-xs",
-                                                "{ticket.fw_source_zone.as_ref().unwrap_or(&String::new())} → {ticket.fw_dest_zone.as_ref().unwrap_or(&String::new())}"
+                                                "{network_value_or_any(ticket.fw_source_zone.as_ref())} → {network_value_or_any(ticket.fw_dest_zone.as_ref())}"
                                             }
                                             div { class: "text-xs text-gray-400",
-                                                "{ticket.fw_protocol.as_ref().unwrap_or(&String::new())} / {ticket.fw_port.as_ref().unwrap_or(&String::new())}"
+                                                "{network_value_or_any(ticket.fw_protocol.as_ref())} / {network_port_display(&ticket)}"
                                             }
                                         } else {
                                             div { {ticket.ecs_type.clone()} }
@@ -1111,8 +1171,10 @@ fn TicketListView(
                                     onclick: move |_| on_select.call(ticket.id),
                                     td { class: "px-6 py-4 text-sm text-gray-900", "{ticket.id}" }
                                     td { class: "px-6 py-4",
-                                        div { class: "text-sm font-medium text-gray-900", {ticket.application_name.clone()} }
-                                        div { class: "text-sm text-gray-500", {ticket.contract_name.clone()} }
+                                        div { class: "text-sm font-medium text-gray-900", {ticket.ecs_name.clone()} }
+                                        div { class: "text-sm text-gray-500",
+                                            {if ticket.application_name.is_empty() { ticket.contract_name.clone() } else { ticket.application_name.clone() }}
+                                        }
                                     }
                                     td { class: "px-6 py-4",
                                         div { class: "flex items-center gap-2",
@@ -1301,15 +1363,11 @@ fn TicketDetailView(
                         }
                         div { class: "grid grid-cols-2 gap-4",
                             InfoRow { label: "申请ID", value: ticket.id }
-                            InfoRow { label: "申请名称", value: ticket.application_name.clone() }
-                            InfoRow { label: "合同名称", value: ticket.contract_name.clone() }
-                            InfoRow { label: "客户名称", value: ticket.customer_name.clone() }
+                            InfoRow { label: "申请标题", value: ticket_request_title(&ticket) }
                             InfoRow { label: "资源类型", value: ticket.resource_type.display_name() }
-                            InfoRow { label: "云平台", value: ticket.cloud_platform_name.clone() }
-                            InfoRow { label: "云服务商", value: ticket.provider_name.clone() }
-                            InfoRow { label: "申请人", value: ticket_applicant_name(&ticket) }
                             InfoRow { label: "申请单位", value: ticket.organization_name.clone() }
                             InfoRow { label: "申请部门", value: ticket.department_name.clone() }
+                            InfoRow { label: "申请人", value: ticket_applicant_name(&ticket) }
                             InfoRow { label: "申请账号", value: ticket.created_by.clone() }
                             InfoRowElement { label: "申请状态",
                                 value: rsx! {
@@ -1337,25 +1395,31 @@ fn TicketDetailView(
                         div { class: "grid grid-cols-2 gap-4",
                             // 网络策略专用字段
                             if ticket.resource_type == ResourceType::Network {
-                                InfoRow { label: "策略名称", value: ticket.ecs_name.clone() }
-                                InfoRow { label: "源区域", value: ticket.fw_source_zone.clone().unwrap_or_default() }
-                                InfoRow { label: "源地址", value: ticket.fw_source_address.clone().unwrap_or_default() }
-                                InfoRow { label: "目标区域", value: ticket.fw_dest_zone.clone().unwrap_or_default() }
-                                InfoRow { label: "目标地址", value: ticket.fw_dest_address.clone().unwrap_or_default() }
-                                InfoRow { label: "协议", value: ticket.fw_protocol.clone().unwrap_or_default() }
-                                InfoRow { label: "端口", value: ticket.fw_port.clone().unwrap_or_default() }
-                                InfoRow { label: "访问方向", value: ticket.fw_direction.clone().unwrap_or_default() }
                                 InfoRow { label: "有效期至", value: ticket.fw_valid_until.clone().unwrap_or_default() }
+                                InfoRow { label: "源网络区域", value: network_value_or_any(ticket.fw_source_zone.as_ref()) }
+                                InfoRow { label: "源IP", value: network_value_or_any(ticket.fw_source_address.as_ref()) }
+                                InfoRow { label: "源端口", value: network_value_or_any(ticket.fw_source_port.as_ref()) }
+                                InfoRow { label: "目的网络区域", value: network_value_or_any(ticket.fw_dest_zone.as_ref()) }
+                                InfoRow { label: "目的IP", value: network_value_or_any(ticket.fw_dest_address.as_ref()) }
+                                InfoRow { label: "目的端口", value: ticket.fw_dest_port.clone().unwrap_or_else(|| network_value_or_any(ticket.fw_port.as_ref())) }
+                                InfoRow { label: "协议", value: network_value_or_any(ticket.fw_protocol.as_ref()) }
+                                InfoRow { label: "访问方向", value: ticket.fw_direction.clone().unwrap_or_default() }
                                 InfoRow { label: "防火墙设备", value: ticket.fw_firewall_name.clone().unwrap_or_default() }
                             }
                             // 云资源和物理资源字段
                             if ticket.resource_type != ResourceType::Network {
-                                InfoRow { label: "实例名称", value: ticket.ecs_name.clone() }
-                                InfoRow { label: "实例类型", value: ticket.ecs_type.clone() }
+                                InfoRow { label: "服务商", value: ticket.provider_name.clone() }
+                                if ticket.resource_type == ResourceType::Cloud {
+                                    InfoRow { label: "云平台", value: ticket.cloud_platform_name.clone() }
+                                } else {
+                                    InfoRow { label: "机房", value: ticket.machine_room_name.clone() }
+                                }
                                 InfoRow { label: "操作系统", value: ticket.ecs_os.clone() }
+                                InfoRow { label: "服务器数量", value: if ticket.resource_count > 0 { format!("{} 台", ticket.resource_count) } else { "未填写".to_string() } }
+                                InfoRow { label: "到期时间", value: ticket.expire_at.clone().unwrap_or_default() }
                                 InfoRow { label: "CPU", value: format!("{} 核", ticket.cpu_cores) }
                                 InfoRow { label: "内存", value: format!("{} GB", ticket.memory_gb) }
-                                InfoRow { label: "系统盘", value: format!("{} {}GB", ticket.system_disk, ticket.system_disk_size_gb) }
+                                InfoRow { label: "系统盘", value: format_disk_label(&ticket.system_disk, ticket.system_disk_size_gb) }
                                 InfoRow { label: "数据盘", value: ticket.data_disk.clone() }
                                 InfoRow { label: "IP地址", value: if ticket.ip_address.is_empty() { "未分配".to_string() } else { ticket.ip_address.clone() } }
                                 InfoRow { label: "安全产品",

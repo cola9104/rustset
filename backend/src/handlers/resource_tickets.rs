@@ -14,7 +14,9 @@ use crate::database::{
 };
 use crate::middleware::{ApiError, AuthUser};
 use crate::state::AppState;
-use crate::utils::{effective_permissions, get_current_user_from_auth, log_action_auth};
+use crate::utils::{
+    effective_permissions, get_current_user_from_auth, is_builtin_system_account, log_action_auth,
+};
 use sea_orm::DatabaseConnection;
 use shared::{
     ApproveTicketRequest, CreateResourceTicketRequest, DataScope, DeliverTicketRequest,
@@ -155,14 +157,18 @@ pub async fn create_resource_ticket(
         rack_units: req.rack_units.unwrap_or(0),
         customer_name: req.customer_name,
         application_name: req.application_name,
+        application_endpoint_id: req.application_endpoint_id,
+        application_domain: req.application_domain,
         contract_name: req.contract_name,
         ecs_type: req.ecs_type,
         ecs_os: req.ecs_os,
+        resource_count: req.resource_count.unwrap_or(0),
         cpu_cores: req.cpu_cores.unwrap_or(0),
         memory_gb: req.memory_gb.unwrap_or(0),
         system_disk: req.system_disk,
         system_disk_size_gb: req.system_disk_size_gb.unwrap_or(0),
         data_disk: req.data_disk,
+        expire_at: req.expire_at,
         has_security_product: req.has_security_product.unwrap_or(false),
         security_products: req.security_products,
         ip_address: req.ip_address,
@@ -187,8 +193,10 @@ pub async fn create_resource_ticket(
         deliver_comment: None,
         fw_source_zone: req.fw_source_zone,
         fw_source_address: req.fw_source_address,
+        fw_source_port: req.fw_source_port,
         fw_dest_zone: req.fw_dest_zone,
         fw_dest_address: req.fw_dest_address,
+        fw_dest_port: req.fw_dest_port,
         fw_protocol: req.fw_protocol,
         fw_port: req.fw_port,
         fw_direction: req.fw_direction,
@@ -196,7 +204,6 @@ pub async fn create_resource_ticket(
         fw_firewall_name: req.fw_firewall_name,
     };
     normalize_ticket_fields(&mut ticket);
-
     let id = insert_resource_ticket_wrapper(&ticket)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to create ticket: {}", e)))?;
@@ -278,6 +285,12 @@ pub async fn update_resource_ticket(
     if let Some(value) = req.application_name {
         ticket.application_name = Some(value);
     }
+    if let Some(value) = req.application_endpoint_id {
+        ticket.application_endpoint_id = Some(value);
+    }
+    if let Some(value) = req.application_domain {
+        ticket.application_domain = Some(value);
+    }
     if let Some(value) = req.contract_name {
         ticket.contract_name = Some(value);
     }
@@ -286,6 +299,9 @@ pub async fn update_resource_ticket(
     }
     if let Some(value) = req.ecs_os {
         ticket.ecs_os = Some(value);
+    }
+    if let Some(value) = req.resource_count {
+        ticket.resource_count = value;
     }
     if let Some(value) = req.cpu_cores {
         ticket.cpu_cores = value;
@@ -302,6 +318,9 @@ pub async fn update_resource_ticket(
     if let Some(value) = req.data_disk {
         ticket.data_disk = Some(value);
     }
+    if let Some(value) = req.expire_at {
+        ticket.expire_at = Some(value);
+    }
     if let Some(value) = req.has_security_product {
         ticket.has_security_product = value;
     }
@@ -317,6 +336,39 @@ pub async fn update_resource_ticket(
     if let Some(value) = req.remarks {
         ticket.remarks = Some(value);
     }
+    if let Some(value) = req.fw_source_zone {
+        ticket.fw_source_zone = Some(value);
+    }
+    if let Some(value) = req.fw_source_address {
+        ticket.fw_source_address = Some(value);
+    }
+    if let Some(value) = req.fw_source_port {
+        ticket.fw_source_port = Some(value);
+    }
+    if let Some(value) = req.fw_dest_zone {
+        ticket.fw_dest_zone = Some(value);
+    }
+    if let Some(value) = req.fw_dest_address {
+        ticket.fw_dest_address = Some(value);
+    }
+    if let Some(value) = req.fw_dest_port {
+        ticket.fw_dest_port = Some(value);
+    }
+    if let Some(value) = req.fw_protocol {
+        ticket.fw_protocol = Some(value);
+    }
+    if let Some(value) = req.fw_port {
+        ticket.fw_port = Some(value);
+    }
+    if let Some(value) = req.fw_direction {
+        ticket.fw_direction = Some(value);
+    }
+    if let Some(value) = req.fw_valid_until {
+        ticket.fw_valid_until = Some(value);
+    }
+    if let Some(value) = req.fw_firewall_name {
+        ticket.fw_firewall_name = Some(value);
+    }
 
     let (provider_name, cloud_platform_name, machine_room_name) = resolve_related_names(
         ticket.provider_id,
@@ -329,7 +381,6 @@ pub async fn update_resource_ticket(
     ticket.machine_room_name = machine_room_name;
     ticket.updated_at = Some(Utc::now().format("%Y-%m-%d %H:%M").to_string());
     normalize_ticket_fields(&mut ticket);
-
     db_update_resource_ticket(id, &ticket)
         .await
         .map_err(|e| ApiError::internal(format!("Failed to update ticket: {}", e)))?;
@@ -656,10 +707,6 @@ fn can_access_resource_ticket_module(permissions: &Permissions) -> bool {
         || permissions.can_deliver_resource_tickets
 }
 
-fn is_system_account(username: &str) -> bool {
-    matches!(username, "admin" | "sec" | "audit")
-}
-
 fn optional_non_empty(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -678,6 +725,32 @@ fn normalize_ticket_status(status: TicketStatus) -> TicketStatus {
 
 fn normalize_ticket_fields(ticket: &mut ResourceTicket) {
     ticket.ticket_status = normalize_ticket_status(ticket.ticket_status);
+
+    if ticket
+        .fw_dest_port
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        ticket.fw_dest_port = ticket.fw_port.clone();
+    }
+
+    if ticket
+        .fw_port
+        .as_ref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        ticket.fw_port = ticket.fw_dest_port.clone();
+    }
+
+    if ticket.resource_type == shared::ResourceType::Network {
+        clear_network_ticket_application_fields(ticket);
+    } else {
+        ticket.application_domain = ticket
+            .application_domain
+            .as_deref()
+            .map(normalize_domain)
+            .filter(|value| !value.is_empty());
+    }
 
     if ticket
         .applicant_name
@@ -705,6 +778,14 @@ async fn prepare_ticket_for_response(
     conn: &DatabaseConnection,
     ticket: &mut ResourceTicket,
 ) -> Result<(), ApiError> {
+    if clear_network_ticket_application_fields(ticket) {
+        if let Some(id) = ticket.id {
+            db_update_resource_ticket(id, ticket)
+                .await
+                .map_err(|e| ApiError::internal(format!("Failed to cleanup network ticket: {}", e)))?;
+        }
+    }
+
     if ticket
         .organization_name
         .as_ref()
@@ -735,6 +816,35 @@ async fn prepare_ticket_for_response(
     Ok(())
 }
 
+fn clear_network_ticket_application_fields(ticket: &mut ResourceTicket) -> bool {
+    if ticket.resource_type != shared::ResourceType::Network {
+        return false;
+    }
+
+    let had_values = ticket
+        .application_name
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty())
+        || ticket.application_endpoint_id.is_some()
+        || ticket
+            .application_domain
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty());
+
+    ticket.application_name = None;
+    ticket.application_endpoint_id = None;
+    ticket.application_domain = None;
+
+    had_values
+}
+
+fn normalize_domain(value: &str) -> String {
+    value
+        .trim()
+        .trim_matches('.')
+        .to_ascii_lowercase()
+}
+
 fn validate_ticket_user_profile_for_request(
     current_user: &shared::User,
     profile: &TicketUserProfile,
@@ -743,7 +853,7 @@ fn validate_ticket_user_profile_for_request(
         return Err(ApiError::bad_request("当前用户缺少姓名，请先完善用户资料"));
     }
 
-    if is_system_account(&current_user.username) {
+    if is_builtin_system_account(&current_user.username) {
         return Ok(());
     }
 
@@ -810,14 +920,18 @@ mod tests {
             rack_units: 0,
             customer_name: None,
             application_name: Some("OA".to_string()),
+            application_endpoint_id: None,
+            application_domain: None,
             contract_name: None,
             ecs_type: None,
             ecs_os: None,
+            resource_count: 0,
             cpu_cores: 0,
             memory_gb: 0,
             system_disk: None,
             system_disk_size_gb: 0,
             data_disk: None,
+            expire_at: None,
             has_security_product: false,
             security_products: None,
             ip_address: None,
@@ -842,8 +956,10 @@ mod tests {
             deliver_comment: None,
             fw_source_zone: None,
             fw_source_address: None,
+            fw_source_port: None,
             fw_dest_zone: None,
             fw_dest_address: None,
+            fw_dest_port: None,
             fw_protocol: None,
             fw_port: None,
             fw_direction: None,

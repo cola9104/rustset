@@ -11,6 +11,7 @@ use crate::state::{
     network_policy::NetworkPolicyConfig, security_product::SecurityProduct,
     service_provider::ServiceProviderConfig,
 };
+use crate::utils::auth::is_builtin_system_account;
 use crate::utils::storage::{authorization_header, clear_token};
 
 /// 全局安全产品数据状态
@@ -96,11 +97,14 @@ impl AuthUser {
         if self.requester_name().trim().is_empty() {
             missing.push("姓名");
         }
-        if self.organization_id.is_none() || self.organization_name.trim().is_empty() {
-            missing.push("公司/组织");
-        }
-        if self.department_id.is_none() || self.department_name.trim().is_empty() {
-            missing.push("部门");
+
+        if !is_builtin_system_account(&self.username) {
+            if self.organization_id.is_none() || self.organization_name.trim().is_empty() {
+                missing.push("公司/组织");
+            }
+            if self.department_id.is_none() || self.department_name.trim().is_empty() {
+                missing.push("部门");
+            }
         }
 
         if missing.is_empty() {

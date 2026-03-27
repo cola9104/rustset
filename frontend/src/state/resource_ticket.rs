@@ -152,14 +152,18 @@ pub struct ResourceTicket {
     pub rack_units: i32,      // 机位(U数)（物理机）
     pub customer_name: String,
     pub application_name: String,
+    pub application_endpoint_id: Option<i32>,
+    pub application_domain: Option<String>,
     pub contract_name: String,
     pub ecs_type: String,
     pub ecs_os: String,
+    pub resource_count: i32,
     pub cpu_cores: i32,
     pub memory_gb: i32,
     pub system_disk: String,
     pub system_disk_size_gb: i32,
     pub data_disk: String,
+    pub expire_at: Option<String>,
     pub has_security_product: bool,
     pub security_products: String, // 选中的安全产品名称，逗号分隔
     pub ip_address: String,
@@ -192,8 +196,10 @@ pub struct ResourceTicket {
     // 网络策略工单专用字段（防火墙端口开放申请）
     pub fw_source_zone: Option<String>,    // 源区域
     pub fw_source_address: Option<String>, // 源地址/IP段
+    pub fw_source_port: Option<String>,    // 源端口
     pub fw_dest_zone: Option<String>,      // 目标区域
     pub fw_dest_address: Option<String>,   // 目标地址/IP
+    pub fw_dest_port: Option<String>,      // 目标端口
     pub fw_protocol: Option<String>,       // 协议类型 (TCP/UDP/ICMP/ANY)
     pub fw_port: Option<String>,           // 端口 (单个端口或范围，如 "80" 或 "8080-8090")
     pub fw_direction: Option<String>,      // 访问方向 (入站/出站/双向)

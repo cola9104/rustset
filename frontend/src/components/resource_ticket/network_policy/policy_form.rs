@@ -12,12 +12,16 @@ pub struct NetworkPolicyFormData {
     pub title: String,
     pub organization: String,
     pub applicant: String,
+    pub applicant_account: String,
     pub department: String,
     pub source_zone: String,
+    pub source_address: String,
+    pub source_port: String,
     pub destination_zone: String,
+    pub destination_address: String,
+    pub destination_port: String,
     pub direction: AccessDirection,
     pub protocol: PolicyProtocol,
-    pub port_range: String,
     pub description: String,
     pub valid_until: String,
 }
@@ -28,12 +32,16 @@ impl Default for NetworkPolicyFormData {
             title: String::new(),
             organization: String::new(),
             applicant: String::new(),
+            applicant_account: String::new(),
             department: String::new(),
-            source_zone: String::new(),
-            destination_zone: String::new(),
+            source_zone: "any".to_string(),
+            source_address: String::new(),
+            source_port: "any".to_string(),
+            destination_zone: "any".to_string(),
+            destination_address: String::new(),
+            destination_port: "any".to_string(),
             direction: AccessDirection::Outbound,
             protocol: PolicyProtocol::Tcp,
-            port_range: String::new(),
             description: String::new(),
             valid_until: chrono::Local::now().format("%Y-%m-%d").to_string(),
         }
@@ -46,12 +54,16 @@ impl From<&NetworkPolicyRequest> for NetworkPolicyFormData {
             title: req.title.clone(),
             organization: req.organization.clone(),
             applicant: req.applicant.clone(),
+            applicant_account: req.applicant_account.clone(),
             department: req.department.clone(),
             source_zone: req.source_zone.clone(),
+            source_address: req.source_address.clone(),
+            source_port: req.source_port.clone(),
             destination_zone: req.destination_zone.clone(),
+            destination_address: req.destination_address.clone(),
+            destination_port: req.destination_port.clone(),
             direction: req.direction.clone(),
             protocol: req.protocol.clone(),
-            port_range: req.port_range.clone(),
             description: req.description.clone(),
             valid_until: req.valid_until.clone(),
         }
@@ -71,12 +83,16 @@ impl NetworkPolicyFormData {
             title: self.title.clone(),
             organization: self.organization.clone(),
             applicant: self.applicant.clone(),
+            applicant_account: self.applicant_account.clone(),
             department: self.department.clone(),
             source_zone: self.source_zone.clone(),
+            source_address: self.source_address.clone(),
+            source_port: self.source_port.clone(),
             destination_zone: self.destination_zone.clone(),
+            destination_address: self.destination_address.clone(),
+            destination_port: self.destination_port.clone(),
             direction: self.direction.clone(),
             protocol: self.protocol.clone(),
-            port_range: self.port_range.clone(),
             description: self.description.clone(),
             valid_until: self.valid_until.clone(),
             status,
@@ -99,13 +115,19 @@ impl NetworkPolicyFormData {
             return Err("申请部门不能为空，请先完善当前账号资料".to_string());
         }
         if self.source_zone.trim().is_empty() {
-            return Err("请选择源网络区域".to_string());
+            return Err("源网络区域不能为空".to_string());
         }
         if self.destination_zone.trim().is_empty() {
-            return Err("请选择目标网络区域".to_string());
+            return Err("目的网络区域不能为空".to_string());
         }
-        if self.port_range.trim().is_empty() {
-            return Err("端口范围不能为空".to_string());
+        if self.source_port.trim().is_empty() {
+            return Err("源端口不能为空".to_string());
+        }
+        if self.destination_port.trim().is_empty() {
+            return Err("目的端口不能为空".to_string());
+        }
+        if self.valid_until.trim().is_empty() {
+            return Err("到期时间不能为空".to_string());
         }
         if self.description.trim().is_empty() {
             return Err("描述不能为空".to_string());
@@ -150,6 +172,10 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
             applicant: current_user
                 .as_ref()
                 .map(|user| user.requester_name())
+                .unwrap_or_default(),
+            applicant_account: current_user
+                .as_ref()
+                .map(|user| user.username.clone())
                 .unwrap_or_default(),
             department: current_user
                 .as_ref()
@@ -282,20 +308,6 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                         // 申请人
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
-                                "申请人 "
-                                span { class: "text-red-500", "*" }
-                            }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
-                                value: "{form_data.read().applicant}",
-                                readonly: true,
-                                disabled: true,
-                            }
-                        }
-                        // 申请部门
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1",
                                 "申请部门 "
                                 span { class: "text-red-500", "*" }
                             }
@@ -307,9 +319,46 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                 disabled: true,
                             }
                         }
+                        // 申请人
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "申请人 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().applicant}",
+                                readonly: true,
+                                disabled: true,
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "申请账户 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed",
+                                value: "{form_data.read().applicant_account}",
+                                readonly: true,
+                                disabled: true,
+                            }
+                        }
+                    }
+                }
+
+                // 网络配置
+                div { class: "border-b border-gray-200 pb-4",
+                    h4 { class: "text-sm font-semibold text-gray-800 mb-3", "网络配置" }
+                    div { class: "grid grid-cols-2 gap-4",
                         // 有效期
                         div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1", "有效期至" }
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "到期时间 "
+                                span { class: "text-red-500", "*" }
+                            }
                             input {
                                 r#type: "date",
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
@@ -320,18 +369,10 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                 },
                             }
                         }
-                    }
-                }
-
-                // 网络配置
-                div { class: "border-b border-gray-200 pb-4",
-                    h4 { class: "text-sm font-semibold text-gray-800 mb-3", "网络配置" }
-                    div { class: "grid grid-cols-2 gap-4",
                         // 源网络区域
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
-                                "源网络区域 "
-                                span { class: "text-red-500", "*" }
+                                "源网络区域"
                             }
                             select {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
@@ -340,7 +381,7 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                     let mut data = form_data.write();
                                     data.source_zone = e.value();
                                 },
-                                option { value: "", "请选择源网络区域" }
+                                option { value: "any", "any" }
                                 for zone_name in network_zones.read().iter() {
                                     option {
                                         value: "{zone_name}",
@@ -350,11 +391,39 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                 }
                             }
                         }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "源IP" }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
+                                placeholder: "如：10.0.0.1/32，留空可填 any",
+                                value: "{form_data.read().source_address}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.source_address = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "源端口 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
+                                placeholder: "如：any、443、1024-65535",
+                                value: "{form_data.read().source_port}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.source_port = e.value();
+                                },
+                            }
+                        }
                         // 目标网络区域
                         div {
                             label { class: "block text-sm font-medium text-gray-700 mb-1",
-                                "目标网络区域 "
-                                span { class: "text-red-500", "*" }
+                                "目的网络区域"
                             }
                             select {
                                 class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
@@ -363,7 +432,7 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                     let mut data = form_data.write();
                                     data.destination_zone = e.value();
                                 },
-                                option { value: "", "请选择目标网络区域" }
+                                option { value: "any", "any" }
                                 for zone_name in network_zones.read().iter() {
                                     option {
                                         value: "{zone_name}",
@@ -371,6 +440,35 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                         "{zone_name}"
                                     }
                                 }
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1", "目的IP" }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
+                                placeholder: "如：172.16.0.10/32，留空可填 any",
+                                value: "{form_data.read().destination_address}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.destination_address = e.value();
+                                },
+                            }
+                        }
+                        div {
+                            label { class: "block text-sm font-medium text-gray-700 mb-1",
+                                "目的端口 "
+                                span { class: "text-red-500", "*" }
+                            }
+                            input {
+                                r#type: "text",
+                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
+                                placeholder: "如：any、80、8080-8090",
+                                value: "{form_data.read().destination_port}",
+                                oninput: move |e| {
+                                    let mut data = form_data.write();
+                                    data.destination_port = e.value();
+                                },
                             }
                         }
                         // 访问方向
@@ -420,23 +518,6 @@ pub fn NetworkPolicyForm(props: NetworkPolicyFormProps) -> Element {
                                 option { value: "udp", "UDP" }
                                 option { value: "icmp", "ICMP" }
                                 option { value: "any", "ANY" }
-                            }
-                        }
-                        // 端口范围
-                        div {
-                            label { class: "block text-sm font-medium text-gray-700 mb-1",
-                                "端口范围 "
-                                span { class: "text-red-500", "*" }
-                            }
-                            input {
-                                r#type: "text",
-                                class: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent",
-                                placeholder: "如：443, 80 或 8000-9000",
-                                value: "{form_data.read().port_range}",
-                                oninput: move |e| {
-                                    let mut data = form_data.write();
-                                    data.port_range = e.value();
-                                },
                             }
                         }
                     }

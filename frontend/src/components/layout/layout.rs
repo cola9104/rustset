@@ -19,20 +19,27 @@ pub fn Layout() -> Element {
     let mut auth_state = use_auth();
     let nav = navigator();
     let current_route: Route = use_route();
-    let auth_ready = *AUTH_READY.read();
 
     use_effect(move || {
+        let auth_ready = *AUTH_READY.read();
+
         if auth_ready && !is_authenticated() {
             nav.push(Route::Login {});
         }
     });
+
+    let auth_ready = *AUTH_READY.read();
 
     if !auth_ready {
         return rsx! { div { class: "flex h-screen items-center justify-center bg-gray-100 text-sm text-gray-500", "正在恢复会话..." } };
     }
 
     if !is_authenticated() {
-        return rsx! { div {} };
+        return rsx! {
+            div { class: "flex h-screen items-center justify-center bg-gray-100 text-sm text-gray-500",
+                "正在跳转到登录页..."
+            }
+        };
     }
 
     let current_auth = auth_state.read().clone();

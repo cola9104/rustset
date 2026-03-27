@@ -1,6 +1,7 @@
 pub mod advanced_scan;
 pub mod assets;
 pub mod auth;
+pub mod business_applications;
 pub mod business_resources;
 pub mod cloud_platform_configs;
 pub mod cloud_platforms;

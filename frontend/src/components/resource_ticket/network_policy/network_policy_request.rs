@@ -88,12 +88,16 @@ pub struct NetworkPolicyRequest {
     pub title: String,
     pub organization: String,
     pub applicant: String,
+    pub applicant_account: String,
     pub department: String,
     pub source_zone: String,
+    pub source_address: String,
+    pub source_port: String,
     pub destination_zone: String,
+    pub destination_address: String,
+    pub destination_port: String,
     pub direction: AccessDirection,
     pub protocol: PolicyProtocol,
-    pub port_range: String,
     pub description: String,
     pub valid_until: String,
     pub status: NetworkPolicyStatus,
@@ -147,12 +151,35 @@ fn ticket_to_policy_request(ticket: &ResourceTicket) -> NetworkPolicyRequest {
         } else {
             ticket.applicant_name.clone()
         },
+        applicant_account: ticket.created_by.clone(),
         department: ticket.department_name.clone(),
-        source_zone: ticket.fw_source_zone.clone().unwrap_or_default(),
-        destination_zone: ticket.fw_dest_zone.clone().unwrap_or_default(),
+        source_zone: ticket
+            .fw_source_zone
+            .clone()
+            .unwrap_or_else(|| "any".to_string()),
+        source_address: ticket
+            .fw_source_address
+            .clone()
+            .unwrap_or_else(|| "any".to_string()),
+        source_port: ticket
+            .fw_source_port
+            .clone()
+            .unwrap_or_else(|| "any".to_string()),
+        destination_zone: ticket
+            .fw_dest_zone
+            .clone()
+            .unwrap_or_else(|| "any".to_string()),
+        destination_address: ticket
+            .fw_dest_address
+            .clone()
+            .unwrap_or_else(|| "any".to_string()),
+        destination_port: ticket
+            .fw_dest_port
+            .clone()
+            .or_else(|| ticket.fw_port.clone())
+            .unwrap_or_else(|| "any".to_string()),
         direction,
         protocol,
-        port_range: ticket.fw_port.clone().unwrap_or_default(),
         description: ticket.remarks.clone(),
         valid_until: ticket.fw_valid_until.clone().unwrap_or_default(),
         status,
@@ -359,8 +386,7 @@ pub fn NetworkPolicyRequest() -> Element {
                             th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "策略名称" }
                             th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "申请人" }
                             th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "网络流向" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "协议" }
-                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "端口" }
+                            th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "协议/端口" }
                             th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "有效期至" }
                             th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "状态" }
                             th { class: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider", "申请时间" }
@@ -370,7 +396,7 @@ pub fn NetworkPolicyRequest() -> Element {
                     tbody { class: "bg-white divide-y divide-gray-200",
                         if filtered_requests.is_empty() {
                             tr {
-                                td { colspan: "9", class: "px-6 py-12 text-center text-gray-500",
+                                td { colspan: "8", class: "px-6 py-12 text-center text-gray-500",
                                     "没有找到匹配的策略"
                                 }
                             }
@@ -403,16 +429,18 @@ pub fn NetworkPolicyRequest() -> Element {
                                             }
                                             span { class: "text-gray-700", {req.destination_zone.clone()} }
                                         }
-                                        div { class: "text-xs text-gray-500", {req.direction.display_name()} }
+                                        div { class: "text-xs text-gray-500",
+                                            "{req.source_address} -> {req.destination_address} / {req.direction.display_name()}"
+                                        }
+                                    }
+                                    td { class: "px-6 py-4 text-sm text-gray-500",
+                                        div { "{req.protocol.display_name()}" }
+                                        div { class: "font-mono text-xs bg-gray-100 px-2 py-1 rounded inline-block mt-1",
+                                            "SRC {req.source_port} / DST {req.destination_port}"
+                                        }
                                     }
                                     td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                        {req.protocol.display_name()}
-                                    }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                        span { class: "font-mono text-xs bg-gray-100 px-2 py-1 rounded", {req.port_range.clone()} }
-                                    }
-                                    td { class: "px-6 py-4 whitespace-nowrap text-sm text-gray-500",
-                                        {req.valid_until.clone()}
+                                        div { "{req.valid_until.clone()}" }
                                     }
                                     td { class: "px-6 py-4 whitespace-nowrap",
                                         span {

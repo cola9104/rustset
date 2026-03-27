@@ -8,8 +8,9 @@ use crate::middleware::ApiError;
 use crate::password;
 use crate::state::AppState;
 use crate::utils::{
-    effective_permissions, get_current_user_from_auth, log_action, permissions_for_role_assignment,
-    remove_cached_user, require_current_user_from_auth, sync_cached_user, sync_cached_users,
+    effective_permissions, get_current_user_from_auth, is_builtin_system_account, log_action,
+    permissions_for_role_assignment, remove_cached_user, require_current_user_from_auth,
+    sync_cached_user, sync_cached_users,
 };
 use axum::extract::{Json, Path, State};
 use chrono::Utc;
@@ -213,10 +214,6 @@ fn normalize_optional_input(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
-}
-
-fn is_builtin_system_account(username: &str) -> bool {
-    matches!(username, "admin" | "sec" | "audit")
 }
 
 async fn validate_user_binding(
