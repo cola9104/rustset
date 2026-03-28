@@ -152,6 +152,7 @@ pub fn OrganizationManagement() -> Element {
             if can_manage {
                 if let Some(item) = editing() {
                 OrganizationModal {
+                    key: "{item.id}",
                     initial: item,
                     on_close: move |_| editing.set(None),
                     on_save: move |payload: (i32, OrganizationPayload)| {

@@ -10,6 +10,7 @@ pub mod handlers;
 pub mod middleware;
 pub mod migration;
 pub mod password;
+pub mod redis;
 pub mod scanners;
 pub mod state;
 pub mod utils;

@@ -479,6 +479,7 @@ pub fn BusinessApplication() -> Element {
 
             if let Some(application) = editing_application.read().clone() {
                 BusinessApplicationModal {
+                    key: "business-application-edit-{application.id.unwrap_or_default()}",
                     initial: Some(application),
                     on_close: move |_| editing_application.set(None),
                     on_save: move |submit: BusinessApplicationFormSubmit| {
@@ -513,6 +514,7 @@ pub fn BusinessApplication() -> Element {
 
             if *show_create_endpoint.read() {
                 ApplicationEndpointModal {
+                    key: "application-endpoint-new-{selected_application_id.read().unwrap_or_default()}",
                     applications: applications.read().clone(),
                     initial: None,
                     selected_application_id: *selected_application_id.read(),
@@ -554,6 +556,7 @@ pub fn BusinessApplication() -> Element {
 
             if let Some(endpoint) = editing_endpoint.read().clone() {
                 ApplicationEndpointModal {
+                    key: "application-endpoint-edit-{endpoint.id.unwrap_or_default()}",
                     applications: applications.read().clone(),
                     initial: Some(endpoint),
                     selected_application_id: *selected_application_id.read(),

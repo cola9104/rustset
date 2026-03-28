@@ -1,5 +1,5 @@
-use crate::auth::token_expiration_hours;
-use tower_sessions::{cookie::SameSite, Expiry, MemoryStore, SessionManagerLayer};
+use crate::{auth::token_expiration_hours, redis::{session_store, AppSessionStore}};
+use tower_sessions::{cookie::SameSite, Expiry, SessionManagerLayer};
 
 fn bool_env(name: &str, default: bool) -> bool {
     match std::env::var(name) {
@@ -53,12 +53,8 @@ fn session_expiry() -> Expiry {
 
 /// 同步版本的 Session Layer 创建
 /// 用于在非 async 上下文中使用
-pub fn create_session_layer_sync() -> SessionManagerLayer<MemoryStore> {
-    // 注意：这会在第一次调用时初始化 store
-    // 后续调用会复用同一个 store
-    static STORE: std::sync::OnceLock<MemoryStore> = std::sync::OnceLock::new();
-    let store = STORE.get_or_init(MemoryStore::default);
-    SessionManagerLayer::new(store.clone())
+pub fn create_session_layer_sync() -> SessionManagerLayer<AppSessionStore> {
+    SessionManagerLayer::new(session_store())
         .with_name(session_cookie_name())
         .with_http_only(true)
         .with_same_site(session_cookie_same_site())

@@ -1,7 +1,7 @@
 # RustSet - 网络安全资产管理平台
 
 RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫描、监控安全合规，以及混合云多云资产管理。
-**技术栈**: Dioxus（前端/WASM） + Axum（后端 API） + SeaORM（数据库） + Tokio（异步运行时） + Tonic（gRPC） + Tower（中间件）
+**技术栈**: Dioxus（前端/WASM） + Axum（后端 API） + SeaORM（数据库） + Redis（Session / 事件流） + Tokio（异步运行时） + Tonic（gRPC） + Tower（中间件）
 ## 🚀 快速启动
 
 ### 使用启动脚本（推荐）
@@ -22,6 +22,9 @@ RustSet 是一个全栈 Rust 应用，用于管理网络资产、执行端口扫
 ### 手动启动
 
 ```bash
+# 可选：先启动 PostgreSQL / Redis
+docker compose up -d db redis
+
 # 后端
 cargo run -p backend
 
@@ -34,6 +37,7 @@ VITE_API_BASE=http://127.0.0.1:3003/api dx serve --port 8080
 
 - **frontend**: Dioxus (Rust + WASM) 前端应用
 - **backend**: Axum (Rust) REST API 服务器
+- **redis**: 分布式 Session、限流、热点缓存与业务事件流（Redis Stream）
 - **shared**: 前后端共享的 Rust 类型定义
 
 ## 核心功能
@@ -127,11 +131,40 @@ cargo build --release -p backend
 - 默认 `SameSite=Lax`
 - 默认空闲超时与 `JWT_EXPIRATION_HOURS` 对齐，默认 24 小时
 - 可通过 `SESSION_COOKIE_*` 和 `SESSION_IDLE_TIMEOUT_HOURS` 覆盖
+- 启用 Redis 后，Session 会从内存切换为 Redis 持久化存储
+
+### 6. Redis 集成
+
+- `REDIS_ENABLED=true` 时，后端会在启动时连接 Redis；连接失败会直接终止启动，避免看起来“已启用”但实际上没生效。
+- `REDIS_SESSION_STORE_ENABLED=true` 时，登录 Session 使用 Redis 存储，适合多实例部署。
+- `REDIS_EVENT_STREAM_ENABLED=true` 时，审计/业务动作会写入 Redis Stream，默认流名为 `rustset:events:audit`。
+- `REDIS_RATE_LIMIT_ENABLED=true` 时，请求限流会切到 Redis 计数器，支持多实例共享限流状态。
+- `REDIS_CACHE_ENABLED=true` 时，仪表盘汇总和审计日志列表会走 Redis 短 TTL 缓存。
+- Redis 健康状态会出现在 `GET /api/health`、`GET /api/ready` 和 `GET /api/metrics` 里。
+
+常用环境变量：
+
+```bash
+REDIS_ENABLED=true
+REDIS_URL=redis://127.0.0.1:6379/0
+REDIS_POOL_SIZE=8
+REDIS_CONNECTION_TIMEOUT_MS=3000
+REDIS_SESSION_STORE_ENABLED=true
+REDIS_EVENT_STREAM_ENABLED=true
+REDIS_EVENT_STREAM_NAME=rustset:events:audit
+REDIS_EVENT_STREAM_MAX_LEN=10000
+REDIS_RATE_LIMIT_ENABLED=true
+REDIS_RATE_LIMIT_PREFIX=rustset:rate_limit
+REDIS_CACHE_ENABLED=true
+REDIS_DASHBOARD_CACHE_TTL_SECS=15
+REDIS_AUDIT_LOGS_CACHE_TTL_SECS=10
+```
 
 ## 技术架构
 
 - **前端**: Dioxus 通过 `gloo-net` 调用后端 API，使用 `use_signal` 管理状态
 - **后端**: Axum 处理 HTTP 请求，使用 SeaORM 进行数据库操作
+- **Redis**: 提供分布式 Session、分布式限流、热点缓存和 Redis Stream 事件队列入口
 - **扫描器**: Tokio 后台任务定期运行，模拟网络扫描
 
 ## 更新到 Gitee

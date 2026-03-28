@@ -118,12 +118,33 @@ pub fn init_rate_limiter(config: RateLimitConfig) {
     RATE_LIMITER.set(Arc::new(RateLimiter::new(config))).ok();
 }
 
-/// Check rate limit for a client
-pub fn check_rate_limit(client_id: &str) -> Result<(), String> {
+/// Check in-memory rate limit for a client
+pub fn check_rate_limit_in_memory(client_id: &str) -> Result<(), String> {
     RATE_LIMITER
         .get()
         .ok_or("Rate limiter not initialized")?
         .check(client_id)
+}
+
+/// Check rate limit with Redis first, then fallback to local memory limiter
+pub async fn check_rate_limit(client_id: &str) -> Result<(), String> {
+    let config = RATE_LIMITER
+        .get()
+        .ok_or_else(|| "Rate limiter not initialized".to_string())?
+        .config
+        .clone();
+
+    match crate::redis::check_rate_limit(
+        client_id,
+        config.requests_per_minute,
+        config.block_duration_seconds,
+    )
+    .await
+    {
+        Ok(Some(())) => Ok(()),
+        Ok(None) => check_rate_limit_in_memory(client_id),
+        Err(error) => Err(error),
+    }
 }
 
 /// Extract client IP from headers
@@ -159,7 +180,7 @@ pub async fn rate_limit_middleware(req: Request, next: Next) -> Result<Response,
     let client_ip = extract_client_ip(headers);
 
     // Check rate limit
-    match check_rate_limit(&client_ip) {
+    match check_rate_limit(&client_ip).await {
         Ok(()) => {
             // Rate limit check passed, proceed with request
             Ok(next.run(req).await)

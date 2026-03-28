@@ -487,6 +487,7 @@ pub fn CloudPlatformManagement() -> Element {
         if can_manage {
             if let Some(config) = editing_config.read().as_ref() {
                 PlatformForm {
+                    key: "cloud-platform-edit-{config.id}",
                     mode: FormMode::Edit,
                     config: Some(config.clone()),
                     on_save: move |updated: CloudPlatformConfig| {

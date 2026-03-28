@@ -27,11 +27,19 @@ services:
     container_name: rustset-backend
     environment:
       DATABASE_URL: postgres://rustset:rustset_password@db:5432/rustset
+      REDIS_ENABLED: "true"
+      REDIS_URL: redis://redis:6379/0
+      REDIS_SESSION_STORE_ENABLED: "true"
+      REDIS_EVENT_STREAM_ENABLED: "true"
+      REDIS_RATE_LIMIT_ENABLED: "true"
+      REDIS_CACHE_ENABLED: "true"
       RUST_LOG: info
     ports:
       - "3003:3003"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - rustset-network
@@ -45,6 +53,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - rustset-network
     restart: unless-stopped

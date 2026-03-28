@@ -296,6 +296,7 @@ mod middleware;
 mod migration;
 mod openapi;
 mod password;
+mod redis;
 mod scanners;
 mod state;
 mod utils;
@@ -385,6 +386,7 @@ use middleware::cors::create_cors_layer;
 use middleware::performance::performance_monitoring;
 use middleware::rate_limit::{init_rate_limiter, rate_limit_middleware, RateLimitConfig};
 use middleware::session::create_session_layer_sync;
+use redis::init_redis_runtime;
 use state::AppState;
 
 #[tokio::main]
@@ -403,6 +405,12 @@ async fn main() {
         return;
     }
     tracing::info!("Database initialized: type={}", db_config.db_type);
+
+    let redis_config = config::RedisRuntimeConfig::from_env();
+    if let Err(error) = init_redis_runtime(redis_config).await {
+        tracing::error!("Failed to initialize Redis: {}", error);
+        return;
+    }
 
     // 获取数据库连接
     let Some(db_conn) = database::get_db() else {

@@ -96,6 +96,84 @@ impl DatabaseConfig {
     }
 }
 
+/// Redis 运行时配置
+#[derive(Debug, Clone)]
+pub struct RedisRuntimeConfig {
+    pub enabled: bool,
+    pub url: String,
+    pub pool_size: usize,
+    pub connection_timeout_ms: u64,
+    pub session_store_enabled: bool,
+    pub event_stream_enabled: bool,
+    pub event_stream_name: String,
+    pub event_stream_max_len: i64,
+    pub rate_limit_enabled: bool,
+    pub rate_limit_prefix: String,
+    pub cache_enabled: bool,
+    pub dashboard_cache_ttl_secs: u64,
+    pub audit_logs_cache_ttl_secs: u64,
+}
+
+impl RedisRuntimeConfig {
+    pub fn from_env() -> Self {
+        let enabled = env_bool("REDIS_ENABLED", false);
+
+        RedisRuntimeConfig {
+            enabled,
+            url: env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://127.0.0.1:6379/0".to_string()),
+            pool_size: env_usize("REDIS_POOL_SIZE", 8),
+            connection_timeout_ms: env_u64("REDIS_CONNECTION_TIMEOUT_MS", 3_000),
+            session_store_enabled: env_bool("REDIS_SESSION_STORE_ENABLED", enabled),
+            event_stream_enabled: env_bool("REDIS_EVENT_STREAM_ENABLED", enabled),
+            event_stream_name: env::var("REDIS_EVENT_STREAM_NAME")
+                .unwrap_or_else(|_| "rustset:events:audit".to_string()),
+            event_stream_max_len: env_i64("REDIS_EVENT_STREAM_MAX_LEN", 10_000),
+            rate_limit_enabled: env_bool("REDIS_RATE_LIMIT_ENABLED", enabled),
+            rate_limit_prefix: env::var("REDIS_RATE_LIMIT_PREFIX")
+                .unwrap_or_else(|_| "rustset:rate_limit".to_string()),
+            cache_enabled: env_bool("REDIS_CACHE_ENABLED", enabled),
+            dashboard_cache_ttl_secs: env_u64("REDIS_DASHBOARD_CACHE_TTL_SECS", 15),
+            audit_logs_cache_ttl_secs: env_u64("REDIS_AUDIT_LOGS_CACHE_TTL_SECS", 10),
+        }
+    }
+}
+
+fn env_bool(name: &str, default: bool) -> bool {
+    match env::var(name) {
+        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => true,
+            "0" | "false" | "no" | "off" => false,
+            _ => default,
+        },
+        Err(_) => default,
+    }
+}
+
+fn env_usize(name: &str, default: usize) -> usize {
+    env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
+fn env_u64(name: &str, default: u64) -> u64 {
+    env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
+fn env_i64(name: &str, default: i64) -> i64 {
+    env::var(name)
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +195,25 @@ mod tests {
         let config = DatabaseConfig::default_postgres();
         assert_eq!(config.db_type, "postgresql");
         assert!(config.connection_string.starts_with("postgres://"));
+    }
+
+    #[test]
+    fn test_redis_runtime_config_defaults() {
+        std::env::remove_var("REDIS_ENABLED");
+        std::env::remove_var("REDIS_URL");
+        std::env::remove_var("REDIS_SESSION_STORE_ENABLED");
+        std::env::remove_var("REDIS_EVENT_STREAM_ENABLED");
+
+        let config = RedisRuntimeConfig::from_env();
+        assert!(!config.enabled);
+        assert_eq!(config.url, "redis://127.0.0.1:6379/0");
+        assert!(!config.session_store_enabled);
+        assert!(!config.event_stream_enabled);
+        assert_eq!(config.event_stream_name, "rustset:events:audit");
+        assert!(!config.rate_limit_enabled);
+        assert!(!config.cache_enabled);
+        assert_eq!(config.rate_limit_prefix, "rustset:rate_limit");
+        assert_eq!(config.dashboard_cache_ttl_secs, 15);
+        assert_eq!(config.audit_logs_cache_ttl_secs, 10);
     }
 }

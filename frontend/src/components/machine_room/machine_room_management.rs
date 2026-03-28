@@ -403,6 +403,7 @@ pub fn MachineRoomManagement() -> Element {
         if can_manage && *show_edit_modal.read() {
             if let Some(room) = selected_room.read().as_ref() {
                 RoomForm {
+                    key: "room-edit-{room.id}",
                     mode: FormMode::Edit,
                     room: Some(room.clone()),
                     on_save: move |updated: MachineRoomConfig| {

@@ -301,6 +301,7 @@ pub fn ServiceProviderManagement() -> Element {
         if can_manage && *show_edit_modal.read() {
             if let Some(provider) = selected_provider.read().as_ref().cloned() {
                 ProviderForm {
+                    key: "provider-edit-{provider.id}",
                     mode: FormMode::Edit,
                     provider: Some(provider.clone()),
                     on_save: move |provider: ServiceProviderConfig| {

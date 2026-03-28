@@ -390,6 +390,7 @@ pub fn SecurityProductManagement() -> Element {
         if can_manage {
             if let Some(product) = editing_product.read().as_ref() {
             ProductForm {
+                key: "security-product-edit-{product.id}",
                 mode: FormMode::Edit,
                 product: Some(product.clone()),
                 on_save: move |updated: SecurityProduct| {

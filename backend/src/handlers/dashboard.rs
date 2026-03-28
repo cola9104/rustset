@@ -4,7 +4,9 @@ use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter};
 use crate::database::get_db;
 use crate::middleware::{ApiError, AuthUser};
 
-#[derive(Debug, serde::Serialize)]
+const DASHBOARD_SUMMARY_CACHE_KEY: &str = "rustset:cache:dashboard_summary";
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DashboardSummary {
     pub asset_count: u64,
     pub scanned_asset_count: u64,
@@ -15,10 +17,20 @@ pub struct DashboardSummary {
     pub user_count: u64,
     pub active_user_count: u64,
     pub database_connected: bool,
-    pub version: &'static str,
+    pub version: String,
 }
 
 pub async fn get_dashboard_summary(_user: AuthUser) -> Result<impl IntoResponse, ApiError> {
+    let redis_config = crate::redis::redis_config();
+    if let Some(cached) = crate::redis::cache_get_json::<DashboardSummary>(
+        DASHBOARD_SUMMARY_CACHE_KEY,
+    )
+    .await
+    .map_err(ApiError::internal)?
+    {
+        return Ok(Json(cached));
+    }
+
     let conn = get_db().ok_or_else(|| ApiError::internal("Database not available"))?;
 
     let asset_count = crate::entities::asset::Entity::find()
@@ -65,7 +77,7 @@ pub async fn get_dashboard_summary(_user: AuthUser) -> Result<impl IntoResponse,
         .await
         .map_err(|e| ApiError::internal(format!("Failed to load active user count: {}", e)))?;
 
-    Ok(Json(DashboardSummary {
+    let summary = DashboardSummary {
         asset_count,
         scanned_asset_count,
         task_count,
@@ -75,6 +87,16 @@ pub async fn get_dashboard_summary(_user: AuthUser) -> Result<impl IntoResponse,
         user_count,
         active_user_count,
         database_connected: true,
-        version: env!("CARGO_PKG_VERSION"),
-    }))
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    };
+
+    crate::redis::cache_set_json(
+        DASHBOARD_SUMMARY_CACHE_KEY,
+        &summary,
+        redis_config.dashboard_cache_ttl_secs,
+    )
+    .await
+    .map_err(ApiError::internal)?;
+
+    Ok(Json(summary))
 }

@@ -10,6 +10,7 @@ use crate::database::{
     get_assets as db_get_assets, get_audit_logs as db_get_audit_logs, get_db,
     get_risks as db_get_risks, get_tasks as db_get_tasks, get_users as db_get_users,
 };
+use crate::redis::RedisHealth;
 use crate::state::AppState;
 
 /// 健康检查响应
@@ -20,6 +21,7 @@ pub struct HealthResponse {
     pub version: String,
     pub uptime_seconds: u64,
     pub database: DatabaseHealth,
+    pub redis: RedisHealth,
     pub memory: MemoryHealth,
 }
 
@@ -94,9 +96,15 @@ async fn collect_runtime_counts(state: &AppState) -> RuntimeCounts {
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
     // 检查数据库连接
     let db_connected = get_db().is_some();
+    let redis = crate::redis::redis_health();
     let counts = collect_runtime_counts(&state).await;
 
-    let status = if db_connected { "healthy" } else { "degraded" };
+    let redis_ok = !redis.enabled || redis.connected;
+    let status = if db_connected && redis_ok {
+        "healthy"
+    } else {
+        "degraded"
+    };
 
     Json(HealthResponse {
         status: status.to_string(),
@@ -106,6 +114,7 @@ pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse>
         database: DatabaseHealth {
             connected: db_connected,
         },
+        redis,
         memory: MemoryHealth {
             users_count: counts.users,
             assets_count: counts.assets,
@@ -123,12 +132,15 @@ pub async fn readiness_check(State(state): State<AppState>) -> Json<serde_json::
     } else {
         false
     };
+    let redis = crate::redis::redis_health();
+    let redis_ready = !redis.enabled || redis.connected;
 
     Json(serde_json::json!({
-        "ready": db_ready || cache_ready,
+        "ready": (db_ready || cache_ready) && redis_ready,
         "checks": {
             "database": db_ready,
-            "memory": cache_ready
+            "memory": cache_ready,
+            "redis": redis_ready
         }
     }))
 }
@@ -145,6 +157,8 @@ pub async fn liveness_check() -> Json<serde_json::Value> {
 pub async fn metrics(State(state): State<AppState>) -> String {
     let counts = collect_runtime_counts(&state).await;
     let uptime = get_start_time().elapsed().as_secs();
+    let redis = crate::redis::redis_health();
+    let redis_connected = if redis.connected { 1 } else { 0 };
 
     format!(
         r#"# HELP rustset_users_total Total number of users
@@ -170,7 +184,17 @@ rustset_audit_logs_total {}
 # HELP rustset_uptime_seconds Uptime in seconds
 # TYPE rustset_uptime_seconds counter
 rustset_uptime_seconds {}
+
+# HELP rustset_redis_connected Redis connectivity status
+# TYPE rustset_redis_connected gauge
+rustset_redis_connected {}
 "#,
-        counts.users, counts.assets, counts.tasks, counts.risks, counts.audit_logs, uptime
+        counts.users,
+        counts.assets,
+        counts.tasks,
+        counts.risks,
+        counts.audit_logs,
+        uptime,
+        redis_connected
     )
 }

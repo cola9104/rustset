@@ -160,6 +160,7 @@ pub fn DepartmentManagement() -> Element {
             if can_manage {
                 if let Some(item) = editing() {
                 DepartmentModal {
+                    key: "{item.id}",
                     initial: item,
                     organizations: organizations.read().clone(),
                     on_close: move |_| editing.set(None),
@@ -202,12 +203,24 @@ fn DepartmentModal(
     on_close: EventHandler<()>,
     on_save: EventHandler<(i32, DepartmentPayload)>,
 ) -> Element {
-    let mut organization_id = use_signal(|| initial.organization_id.to_string());
-    let mut name = use_signal(|| initial.name.clone());
-    let mut code = use_signal(|| initial.code.clone());
-    let mut level = use_signal(|| initial.level.to_string());
-    let mut status = use_signal(|| initial.status.clone());
-    let mut remarks = use_signal(|| initial.remarks.unwrap_or_default());
+    #[derive(Clone)]
+    struct DepartmentFormState {
+        organization_id: String,
+        name: String,
+        code: String,
+        level: String,
+        status: String,
+        remarks: String,
+    }
+
+    let mut form_state = use_signal(|| DepartmentFormState {
+        organization_id: initial.organization_id.to_string(),
+        name: initial.name.clone(),
+        code: initial.code.clone(),
+        level: initial.level.to_string(),
+        status: initial.status.clone(),
+        remarks: initial.remarks.clone().unwrap_or_default(),
+    });
 
     rsx! {
         div { class: "fixed inset-0 z-50 flex items-center justify-center bg-black/50",
@@ -220,10 +233,14 @@ fn DepartmentModal(
                         label { class: "mb-1 block text-sm font-medium text-gray-700", "所属组织" }
                         select {
                             class: "w-full rounded-md border border-gray-300 px-3 py-2",
-                            value: organization_id,
-                            onchange: move |e| organization_id.set(e.value()),
+                            value: "{form_state.read().organization_id}",
+                            onchange: move |e| form_state.with_mut(|state| state.organization_id = e.value()),
                             for item in organizations.iter() {
-                                option { value: "{item.id}", "{item.name}" }
+                                option {
+                                    value: "{item.id}",
+                                    selected: form_state.read().organization_id == item.id.to_string(),
+                                    "{item.name}"
+                                }
                             }
                         }
                     }
@@ -231,32 +248,32 @@ fn DepartmentModal(
                         label { class: "mb-1 block text-sm font-medium text-gray-700", "部门名称" }
                         input {
                             class: "w-full rounded-md border border-gray-300 px-3 py-2",
-                            value: name,
-                            oninput: move |e| name.set(e.value()),
+                            value: "{form_state.read().name}",
+                            oninput: move |e| form_state.with_mut(|state| state.name = e.value()),
                         }
                     }
                     div {
                         label { class: "mb-1 block text-sm font-medium text-gray-700", "部门编码" }
                         input {
                             class: "w-full rounded-md border border-gray-300 px-3 py-2",
-                            value: code,
-                            oninput: move |e| code.set(e.value()),
+                            value: "{form_state.read().code}",
+                            oninput: move |e| form_state.with_mut(|state| state.code = e.value()),
                         }
                     }
                     div {
                         label { class: "mb-1 block text-sm font-medium text-gray-700", "层级" }
                         input {
                             class: "w-full rounded-md border border-gray-300 px-3 py-2",
-                            value: level,
-                            oninput: move |e| level.set(e.value()),
+                            value: "{form_state.read().level}",
+                            oninput: move |e| form_state.with_mut(|state| state.level = e.value()),
                         }
                     }
                     div {
                         label { class: "mb-1 block text-sm font-medium text-gray-700", "状态" }
                         select {
                             class: "w-full rounded-md border border-gray-300 px-3 py-2",
-                            value: status,
-                            onchange: move |e| status.set(e.value()),
+                            value: "{form_state.read().status}",
+                            onchange: move |e| form_state.with_mut(|state| state.status = e.value()),
                             option { value: "active", "启用" }
                             option { value: "inactive", "停用" }
                         }
@@ -266,8 +283,8 @@ fn DepartmentModal(
                         textarea {
                             class: "w-full rounded-md border border-gray-300 px-3 py-2",
                             rows: 3,
-                            value: remarks,
-                            oninput: move |e| remarks.set(e.value()),
+                            value: "{form_state.read().remarks}",
+                            oninput: move |e| form_state.with_mut(|state| state.remarks = e.value()),
                         }
                     }
                 }
@@ -280,13 +297,17 @@ fn DepartmentModal(
                     button {
                         class: "rounded-md bg-blue-600 px-4 py-2 text-white",
                         onclick: move |_| on_save.call((initial.id, DepartmentPayload {
-                            organization_id: organization_id.read().parse::<i32>().unwrap_or(0),
-                            name: name.read().trim().to_string(),
-                            code: code.read().trim().to_string(),
+                            organization_id: form_state.read().organization_id.parse::<i32>().unwrap_or(0),
+                            name: form_state.read().name.trim().to_string(),
+                            code: form_state.read().code.trim().to_string(),
                             parent_id: initial.parent_id,
-                            level: level.read().parse::<u32>().unwrap_or(1),
-                            status: status.read().clone(),
-                            remarks: if remarks.read().trim().is_empty() { None } else { Some(remarks.read().trim().to_string()) },
+                            level: form_state.read().level.parse::<u32>().unwrap_or(1),
+                            status: form_state.read().status.clone(),
+                            remarks: if form_state.read().remarks.trim().is_empty() {
+                                None
+                            } else {
+                                Some(form_state.read().remarks.trim().to_string())
+                            },
                         })),
                         "保存"
                     }

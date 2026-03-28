@@ -185,8 +185,13 @@ pub fn log_action(
 
     // Try to persist to database asynchronously (don't block if it fails)
     let log_entry_for_db = log_entry;
+    let log_entry_for_stream = log_entry_for_db.clone();
     tokio::spawn(async move {
         let _ = crate::database::insert_audit_log_wrapper(&log_entry_for_db).await;
+    });
+    crate::redis::publish_audit_event(log_entry_for_stream);
+    tokio::spawn(async {
+        let _ = crate::redis::cache_delete("rustset:cache:audit_logs").await;
     });
 }
 
@@ -217,8 +222,13 @@ pub fn log_action_auth(
 
     // Try to persist to database asynchronously (don't block if it fails)
     let log_entry_for_db = log_entry;
+    let log_entry_for_stream = log_entry_for_db.clone();
     tokio::spawn(async move {
         let _ = crate::database::insert_audit_log_wrapper(&log_entry_for_db).await;
+    });
+    crate::redis::publish_audit_event(log_entry_for_stream);
+    tokio::spawn(async {
+        let _ = crate::redis::cache_delete("rustset:cache:audit_logs").await;
     });
 }
 
