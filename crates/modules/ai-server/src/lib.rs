@@ -17,14 +17,14 @@ use axum::{
     middleware::from_fn_with_state,
     routing::{delete, get, post, put},
 };
-use rust_toon_ai_api::{
+use rustset_ai_api::{
     AiModelType, AiPlatform, ChatMessage, ChatRequest, EmbeddingRequest, ImageRequest, ModelConfig,
     SpeechRequest,
 };
-use rust_toon_framework_common::ApiResponse;
-use rust_toon_framework_database::PgPool;
-use rust_toon_framework_security::{CurrentUser, Permission, TokenService, authenticate};
-use rust_toon_framework_web::AppError;
+use rustset_framework_common::ApiResponse;
+use rustset_framework_database::PgPool;
+use rustset_framework_security::{CurrentUser, Permission, TokenService, authenticate};
+use rustset_framework_web::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;

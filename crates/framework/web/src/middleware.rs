@@ -93,6 +93,31 @@ mod tests {
         assert_eq!(response.headers()["x-request-id"], "client-id");
     }
 
+    #[tokio::test]
+    async fn permissive_cors_handles_browser_preflight() {
+        let app = apply_web_layers(
+            Router::new().route("/login", get(|| async { "ok" })),
+            WebConfig::development(),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/login")
+                    .header("origin", "http://127.0.0.1:3000")
+                    .header("access-control-request-method", "POST")
+                    .header("access-control-request-headers", "content-type")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()["access-control-allow-origin"], "*");
+    }
+
     #[test]
     fn development_enables_permissive_cors() {
         assert!(WebConfig::development().permissive_cors);

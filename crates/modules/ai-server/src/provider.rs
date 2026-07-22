@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::StreamExt;
-use rust_toon_ai_api::{
+use rustset_ai_api::{
     ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse, ImageRequest, MediaResponse,
     ModelConfig, SpeechRequest,
 };
@@ -230,7 +230,7 @@ impl OpenAiCompatibleProvider {
         let mut body = json!({"model":config.model,"prompt":request.prompt,"size":size,"n":1});
         let path = if request.references.is_empty() {
             path
-        } else if config.platform == rust_toon_ai_api::AiPlatform::DouBao.code() {
+        } else if config.platform == rustset_ai_api::AiPlatform::DouBao.code() {
             body["image"] = json!(request.references);
             path
         } else {

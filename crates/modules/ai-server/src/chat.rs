@@ -6,10 +6,10 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use futures_util::stream;
-use rust_toon_ai_api::{ChatMessage, ChatRequest, ChatResponse};
-use rust_toon_framework_common::ApiResponse;
-use rust_toon_framework_security::CurrentUser;
-use rust_toon_framework_web::AppError;
+use rustset_ai_api::{ChatMessage, ChatRequest, ChatResponse};
+use rustset_framework_common::ApiResponse;
+use rustset_framework_security::CurrentUser;
+use rustset_framework_web::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;

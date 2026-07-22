@@ -26,18 +26,18 @@ Rust Toon 是 Rust 后端与 Vben Admin 5 前端组成的动漫生产及通用 A
 docker compose -f script/docker/docker-compose.yml up -d
 ```
 
-启动 PostgreSQL、Redis、NATS 和 MinIO。容器只创建空数据库 `rust_toon`，
+启动 PostgreSQL、Redis、NATS 和 MinIO。容器只创建空数据库 `rustset`，
 数据库结构统一由 Rust 网关的 SQLx Migrator 自动管理。
 
 ### 2. 启动 Rust 网关
 
 ```bash
-export DATABASE_URL='postgres://rust_toon:rust_toon@127.0.0.1:5432/rust_toon'
+export DATABASE_URL='postgres://rustset:rustset@127.0.0.1:5432/rustset'
 export REDIS_URL='redis://127.0.0.1:6379'
 export JWT_SECRET='replace-with-at-least-32-random-bytes'
 export BOOTSTRAP_ADMIN_USERNAME='admin'
 export BOOTSTRAP_ADMIN_PASSWORD='Admin#123456'
-cargo run -p rust-toon-gateway
+cargo run -p rustset-gateway
 ```
 
 网关启动时自动执行 SQLx 迁移。`0001_initial.sql` 是已合并的当前完整表结构

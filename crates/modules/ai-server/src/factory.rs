@@ -2,11 +2,11 @@ use crate::provider::{
     AnthropicProvider, AzureOpenAiProvider, ChatProvider, DouBaoMediaProvider, GeminiProvider,
     OpenAiCompatibleProvider,
 };
-use rust_toon_ai_api::{
+use rustset_ai_api::{
     AiModelType, AiPlatform, ChatRequest, ChatResponse, EmbeddingRequest, EmbeddingResponse,
     ImageRequest, MediaResponse, ModelConfig, SpeechRequest,
 };
-use rust_toon_framework_web::AppError;
+use rustset_framework_web::AppError;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 

@@ -1,5 +1,5 @@
 use axum::{Json, http::StatusCode, response::IntoResponse};
-use rust_toon_framework_common::ApiResponse;
+use rustset_framework_common::ApiResponse;
 
 use crate::AccessDenied;
 

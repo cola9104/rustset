@@ -13,7 +13,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use rust_toon_framework_common::ApiResponse;
+use rustset_framework_common::ApiResponse;
 use tracing::warn;
 
 use crate::RedisClient;

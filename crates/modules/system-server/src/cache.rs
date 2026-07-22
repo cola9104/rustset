@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use rust_toon_framework_security::CurrentUser;
+use rustset_framework_security::CurrentUser;
 use tracing::warn;
 use uuid::Uuid;
 

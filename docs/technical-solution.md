@@ -120,9 +120,9 @@ views/
 后端：
 
 ```bash
-export DATABASE_URL=postgres://rust_toon:rust_toon@localhost:5432/rust_toon
+export DATABASE_URL=postgres://rustset:rustset@localhost:5432/rustset
 export JWT_SECRET='replace-with-at-least-32-random-bytes'
-cargo run -p rust-toon-gateway
+cargo run -p rustset-gateway
 ```
 
 前端：

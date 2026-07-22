@@ -10,9 +10,9 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::{DateTime, Utc};
-use rust_toon_framework_common::ApiResponse;
-use rust_toon_framework_security::CurrentUser;
-use rust_toon_framework_web::AppError;
+use rustset_framework_common::ApiResponse;
+use rustset_framework_security::CurrentUser;
+use rustset_framework_web::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgPool};
@@ -107,6 +107,7 @@ pub fn routes() -> axum::Router<SystemState> {
             "/system/permission/assign-role-data-scope",
             axum::routing::post(role_update_data_scope),
         )
+        .route("/system/menu/page", axum::routing::get(generic_page_menu))
         .route("/system/menu/simple-list", axum::routing::get(menu_list))
         .route("/system/menu/list", axum::routing::get(menu_list))
         .route("/system/menu/get", axum::routing::get(generic_get_menu))
@@ -126,6 +127,7 @@ pub fn routes() -> axum::Router<SystemState> {
             "/system/menu/delete-list",
             axum::routing::delete(generic_delete_list_menu),
         )
+        .route("/system/dept/page", axum::routing::get(generic_page_dept))
         .route(
             "/system/dept/simple-list",
             axum::routing::get(generic_list_dept),
@@ -759,6 +761,9 @@ generic_update_handler!("dept", generic_update_dept);
 generic_delete_handler!("dept", generic_delete_dept);
 generic_delete_list_handler!("dept", generic_delete_list_dept);
 
+generic_page_handler!("menu", generic_page_menu);
+generic_page_handler!("dept", generic_page_dept);
+
 generic_resource_handlers!(
     "post",
     generic_page_post,
@@ -1330,7 +1335,7 @@ fn seal_secret(value: &str) -> String {
     }
     let key = env::var("SECRET_ENCRYPTION_KEY")
         .or_else(|_| env::var("JWT_SECRET"))
-        .unwrap_or_else(|_| "rust-toon-local-secret".to_owned());
+        .unwrap_or_else(|_| "rustset-local-secret".to_owned());
     let key = key.as_bytes();
     let sealed = value
         .as_bytes()

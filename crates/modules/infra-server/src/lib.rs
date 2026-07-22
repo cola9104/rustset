@@ -10,19 +10,30 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::{Datelike, Timelike, Utc};
-use rust_toon_framework_common::ApiResponse;
-use rust_toon_framework_database::PgPool;
-use rust_toon_framework_web::AppError;
-use rust_toon_infra_api::InfraCapability;
+use rustset_framework_common::ApiResponse;
+use rustset_framework_database::PgPool;
+use rustset_framework_web::AppError;
+use rustset_infra_api::InfraCapability;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 mod excel;
 mod monitor;
 
+mod asset;
+mod business;
+mod cloud_platform;
+mod provider;
+mod risk;
+mod room;
+mod security;
+mod task;
+mod ticket;
+mod zone;
+
 #[derive(Clone)]
 pub struct InfraState {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
     started_at: Instant,
 }
 
@@ -36,9 +47,9 @@ impl InfraState {
 }
 
 #[derive(Debug, Serialize)]
-struct Page<T> {
-    list: Vec<T>,
-    total: i64,
+pub(crate) struct Page<T> {
+    pub(crate) list: Vec<T>,
+    pub(crate) total: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +58,12 @@ pub struct QueryParams {
     page_no: Option<i64>,
     #[serde(default, rename = "pageSize")]
     page_size: Option<i64>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct TableSpec {
+    pub(crate) table: &'static str,
+    pub(crate) seq: &'static str,
 }
 
 pub fn routes(state: InfraState) -> Router {
@@ -296,6 +313,16 @@ pub fn routes(state: InfraState) -> Router {
             "/infra/demo03-student-erp/demo03-grade/delete-list",
             delete(demo03_grade_delete_list),
         )
+        .merge(provider::routes())
+        .merge(room::routes())
+        .merge(cloud_platform::routes())
+        .merge(zone::routes())
+        .merge(security::routes())
+        .merge(asset::routes())
+        .merge(business::routes())
+        .merge(ticket::routes())
+        .merge(task::routes())
+        .merge(risk::routes())
         .with_state(state)
 }
 
@@ -957,12 +984,6 @@ fn fallback_next_times(count: usize) -> Vec<String> {
         .collect()
 }
 
-#[derive(Clone, Copy)]
-struct TableSpec {
-    table: &'static str,
-    seq: &'static str,
-}
-
 const CODEGEN_TABLE: TableSpec = TableSpec {
     table: "infra_codegen_table",
     seq: "infra_codegen_table_seq",
@@ -1503,7 +1524,7 @@ async fn demo03_grade_get_by_student_id(
     Ok(Json(ApiResponse::new(value)))
 }
 
-async fn table_page(
+pub(crate) async fn table_page(
     pool: &PgPool,
     spec: TableSpec,
     params: QueryParams,
@@ -1532,7 +1553,7 @@ async fn table_page(
     Ok(Json(ApiResponse::new(Page { list, total })))
 }
 
-async fn table_list(
+pub(crate) async fn table_list(
     pool: &PgPool,
     spec: TableSpec,
 ) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
@@ -1550,7 +1571,7 @@ async fn table_list(
     Ok(Json(ApiResponse::new(list)))
 }
 
-async fn table_list_by_i64(
+pub(crate) async fn table_list_by_i64(
     pool: &PgPool,
     spec: TableSpec,
     column: &str,
@@ -1571,7 +1592,7 @@ async fn table_list_by_i64(
     Ok(Json(ApiResponse::new(list)))
 }
 
-async fn table_get(
+pub(crate) async fn table_get(
     pool: &PgPool,
     spec: TableSpec,
     id: i64,
@@ -1581,7 +1602,11 @@ async fn table_get(
     )))
 }
 
-async fn table_get_value(pool: &PgPool, spec: TableSpec, id: i64) -> Result<Value, AppError> {
+pub(crate) async fn table_get_value(
+    pool: &PgPool,
+    spec: TableSpec,
+    id: i64,
+) -> Result<Value, AppError> {
     let sql = format!(
         "SELECT to_jsonb(t) FROM {} t WHERE id=$1 AND deleted=0",
         spec.table
@@ -1595,7 +1620,7 @@ async fn table_get_value(pool: &PgPool, spec: TableSpec, id: i64) -> Result<Valu
     Ok(table_value(value))
 }
 
-async fn table_create(
+pub(crate) async fn table_create(
     pool: &PgPool,
     spec: TableSpec,
     payload: Value,
@@ -1623,7 +1648,7 @@ async fn table_create(
     Ok(Json(ApiResponse::new(id.to_string())))
 }
 
-async fn table_update(
+pub(crate) async fn table_update(
     pool: &PgPool,
     spec: TableSpec,
     payload: Value,
@@ -1685,7 +1710,7 @@ async fn table_writable_columns(
         .collect())
 }
 
-async fn page(
+pub(crate) async fn page(
     pool: &PgPool,
     count_sql: &str,
     list_sql: &str,
@@ -1707,7 +1732,11 @@ async fn page(
     Ok(Json(ApiResponse::new(Page { list, total })))
 }
 
-async fn get_one(pool: &PgPool, sql: &str, id: i64) -> Result<Json<ApiResponse<Value>>, AppError> {
+pub(crate) async fn get_one(
+    pool: &PgPool,
+    sql: &str,
+    id: i64,
+) -> Result<Json<ApiResponse<Value>>, AppError> {
     let value = sqlx::query_scalar::<_, Value>(sql)
         .bind(id)
         .fetch_optional(pool)
@@ -1717,7 +1746,7 @@ async fn get_one(pool: &PgPool, sql: &str, id: i64) -> Result<Json<ApiResponse<V
     Ok(Json(ApiResponse::new(value)))
 }
 
-async fn soft_delete(
+pub(crate) async fn soft_delete(
     pool: &PgPool,
     table: &str,
     id: i64,
@@ -1731,7 +1760,7 @@ async fn soft_delete(
     Ok(Json(ApiResponse::new(())))
 }
 
-async fn soft_delete_list(
+pub(crate) async fn soft_delete_list(
     pool: &PgPool,
     table: &str,
     ids: Vec<i64>,
@@ -1742,18 +1771,18 @@ async fn soft_delete_list(
     Ok(Json(ApiResponse::new(())))
 }
 
-fn id_param(params: &HashMap<String, String>) -> Result<i64, AppError> {
+pub(crate) fn id_param(params: &HashMap<String, String>) -> Result<i64, AppError> {
     params
         .get("id")
         .and_then(|value| value.parse::<i64>().ok())
         .ok_or_else(|| AppError::bad_request("id is required"))
 }
 
-fn ids_param(params: &HashMap<String, String>) -> Vec<i64> {
+pub(crate) fn ids_param(params: &HashMap<String, String>) -> Vec<i64> {
     ids_named_param(params, "ids")
 }
 
-fn ids_named_param(params: &HashMap<String, String>, name: &str) -> Vec<i64> {
+pub(crate) fn ids_named_param(params: &HashMap<String, String>, name: &str) -> Vec<i64> {
     params
         .get(name)
         .into_iter()
@@ -1762,14 +1791,17 @@ fn ids_named_param(params: &HashMap<String, String>, name: &str) -> Vec<i64> {
         .collect()
 }
 
-fn id_named_param(params: &HashMap<String, String>, name: &str) -> Result<i64, AppError> {
+pub(crate) fn id_named_param(
+    params: &HashMap<String, String>,
+    name: &str,
+) -> Result<i64, AppError> {
     params
         .get(name)
         .and_then(|value| value.parse::<i64>().ok())
         .ok_or_else(|| AppError::bad_request(format!("{name} is required")))
 }
 
-fn str_field(value: &Value, key: &str) -> String {
+pub(crate) fn str_field(value: &Value, key: &str) -> String {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -1777,7 +1809,7 @@ fn str_field(value: &Value, key: &str) -> String {
         .to_string()
 }
 
-fn opt_str_field(value: &Value, key: &str) -> Option<String> {
+pub(crate) fn opt_str_field(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -1785,7 +1817,7 @@ fn opt_str_field(value: &Value, key: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn i16_field(value: &Value, key: &str, default: i16) -> i16 {
+pub(crate) fn i16_field(value: &Value, key: &str, default: i16) -> i16 {
     value
         .get(key)
         .and_then(Value::as_i64)
@@ -1793,7 +1825,7 @@ fn i16_field(value: &Value, key: &str, default: i16) -> i16 {
         .unwrap_or(default)
 }
 
-fn i32_field(value: &Value, key: &str, default: i32) -> i32 {
+pub(crate) fn i32_field(value: &Value, key: &str, default: i32) -> i32 {
     value
         .get(key)
         .and_then(Value::as_i64)
@@ -1801,7 +1833,7 @@ fn i32_field(value: &Value, key: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
-fn i64_field(value: &Value, key: &str, default: i64) -> i64 {
+pub(crate) fn i64_field(value: &Value, key: &str, default: i64) -> i64 {
     value
         .get(key)
         .and_then(|value| {
@@ -1812,7 +1844,7 @@ fn i64_field(value: &Value, key: &str, default: i64) -> i64 {
         .unwrap_or(default)
 }
 
-fn opt_i64_field(value: &Value, key: &str) -> Option<i64> {
+pub(crate) fn opt_i64_field(value: &Value, key: &str) -> Option<i64> {
     value.get(key).and_then(|value| {
         value
             .as_i64()
@@ -1820,7 +1852,7 @@ fn opt_i64_field(value: &Value, key: &str) -> Option<i64> {
     })
 }
 
-fn bool_field(value: &Value, key: &str, default: bool) -> bool {
+pub(crate) fn bool_field(value: &Value, key: &str, default: bool) -> bool {
     value.get(key).and_then(Value::as_bool).unwrap_or(default)
 }
 
@@ -1830,7 +1862,7 @@ fn seal_secret(value: &str) -> String {
     }
     let key = env::var("SECRET_ENCRYPTION_KEY")
         .or_else(|_| env::var("JWT_SECRET"))
-        .unwrap_or_else(|_| "rust-toon-local-secret".to_owned());
+        .unwrap_or_else(|_| "rustset-local-secret".to_owned());
     let key = key.as_bytes();
     let sealed = value
         .as_bytes()

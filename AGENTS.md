@@ -5,7 +5,7 @@ This file is the handoff guide for AI coding agents working in this repository. 
 ## Project Shape
 
 - Backend: Rust workspace, gateway entrypoint at `services/gateway`.
-- Frontend: Vben Admin app at `apps/web`, main app package `@vben/web-antd`.
+- Frontend: Dioxus WASM app at `apps/web-dioxus`.
 - Database migrations: `sql/postgresql`, executed automatically by the Rust gateway on startup. `0001_initial.sql` is the consolidated schema and baseline data.
 - Bootstrap reference: `sql/bootstrap/current.sql` is a reference-only `pg_dump` snapshot and is never loaded by the application. The migration chain is sufficient to initialize a new server without `current.sql`.
 - Local infrastructure: PostgreSQL, Redis, NATS, and MinIO via `script/docker/docker-compose.yml`.
@@ -35,27 +35,25 @@ docker compose -f script/docker/docker-compose.yml up -d
 Start the backend gateway:
 
 ```bash
-export DATABASE_URL='postgres://rust_toon:rust_toon@127.0.0.1:5432/rust_toon'
+export DATABASE_URL='postgres://rustset:rustset@127.0.0.1:5432/rustset'
 export REDIS_URL='redis://127.0.0.1:6379'
 export JWT_SECRET='local-development-jwt-secret-change-me-32bytes'
 export BOOTSTRAP_ADMIN_USERNAME='admin'
 export BOOTSTRAP_ADMIN_PASSWORD='Admin#123456'
 export RUST_LOG='info'
-cargo run -p rust-toon-gateway
+cargo run -p rustset-gateway
 ```
 
-In a second terminal, start the frontend:
+In a second terminal, start the Dioxus frontend:
 
 ```bash
-cd apps/web
-corepack enable
-pnpm install
-pnpm dev:antd
+cd apps/web-dioxus
+dx serve --platform web
 ```
 
 Open:
 
-- Frontend: `http://127.0.0.1:5666`
+- Frontend: `http://127.0.0.1:8080`
 - Backend health: `http://127.0.0.1:8080/health`
 - OpenAPI: `http://127.0.0.1:8080/openapi.json`
 - MinIO console: `http://127.0.0.1:9001`
@@ -75,13 +73,12 @@ Use these checks after startup:
 curl -fsS http://127.0.0.1:8080/health
 cargo test --workspace
 bash script/test-database-migrations.sh
-pnpm --dir apps/web --filter @vben/web-antd run typecheck
 ```
 
-Frontend production build check:
+Frontend build check:
 
 ```bash
-pnpm --dir apps/web --filter @vben/web-antd run build
+cd apps/web-dioxus && cargo check
 ```
 
 ## New Server Startup
@@ -90,15 +87,13 @@ Install prerequisites:
 
 - Rust stable with Rust 2024 edition support.
 - Docker and Docker Compose.
-- Node.js `22.18+` or `24.x`.
-- pnpm `11+` through Corepack.
 - Nginx or another reverse proxy for production frontend/API routing.
 
 Clone and enter the repository:
 
 ```bash
-git clone <repo-url> rust-toon
-cd rust-toon
+git clone <repo-url> rustset
+cd rustset
 ```
 
 Start infrastructure. For a single-server deployment, the repository compose file is enough:
@@ -109,10 +104,10 @@ docker compose -f script/docker/docker-compose.yml up -d
 
 For managed PostgreSQL or Redis, skip those compose services and set `DATABASE_URL` / `REDIS_URL` to the managed endpoints.
 
-Create a backend environment file outside git, for example `/etc/rust-toon/gateway.env`:
+Create a backend environment file outside git, for example `/etc/rustset/gateway.env`:
 
 ```bash
-DATABASE_URL=postgres://rust_toon:rust_toon@127.0.0.1:5432/rust_toon
+DATABASE_URL=postgres://rustset:rustset@127.0.0.1:5432/rustset
 REDIS_URL=redis://127.0.0.1:6379
 JWT_SECRET=replace-with-a-strong-random-secret-at-least-32-bytes
 GATEWAY_HOST=0.0.0.0
@@ -125,35 +120,35 @@ BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-strong-initial-password
 Build the backend:
 
 ```bash
-cargo build --release -p rust-toon-gateway
+cargo build --release -p rustset-gateway
 ```
 
 Run once manually to verify migrations and initial admin creation:
 
 ```bash
 set -a
-. /etc/rust-toon/gateway.env
+. /etc/rustset/gateway.env
 set +a
-./target/release/rust-toon-gateway
+./target/release/rustset-gateway
 ```
 
-After the first successful login, remove `BOOTSTRAP_ADMIN_PASSWORD` from `/etc/rust-toon/gateway.env` and restart the service.
+After the first successful login, remove `BOOTSTRAP_ADMIN_PASSWORD` from `/etc/rustset/gateway.env` and restart the service.
 
 ## systemd Service
 
-Use systemd or another process manager in production. Example `/etc/systemd/system/rust-toon-gateway.service`:
+Use systemd or another process manager in production. Example `/etc/systemd/system/rustset-gateway.service`:
 
 ```ini
 [Unit]
-Description=Rust Toon Gateway
+Description=RustSet Gateway
 After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/rust-toon
-EnvironmentFile=/etc/rust-toon/gateway.env
-ExecStart=/opt/rust-toon/target/release/rust-toon-gateway
+WorkingDirectory=/opt/rustset
+EnvironmentFile=/etc/rustset/gateway.env
+ExecStart=/opt/rustset/target/release/rustset-gateway
 Restart=always
 RestartSec=5
 
@@ -165,26 +160,21 @@ Enable and start:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now rust-toon-gateway
-sudo systemctl status rust-toon-gateway
+sudo systemctl enable --now rustset-gateway
+sudo systemctl status rustset-gateway
 curl -fsS http://127.0.0.1:8080/health
 ```
 
 ## Frontend Production
 
-Build the frontend:
+Build the Dioxus frontend:
 
 ```bash
-corepack enable
-pnpm --dir apps/web install --frozen-lockfile
-pnpm --dir apps/web --filter @vben/web-antd run build
+cd apps/web-dioxus
+dx build --release --platform web
 ```
 
-Static output:
-
-```text
-apps/web/apps/web-antd/dist
-```
+Static output is in `target/dx/rustset-web-dioxus/release/web/public`.
 
 Serve that directory through Nginx or a CDN. Route SPA paths to `index.html`, and reverse proxy API traffic to the gateway.
 
@@ -210,6 +200,7 @@ location /api/ {
 - `DATABASE_URL is required`: export it or add it to the systemd environment file.
 - JWT startup error: `JWT_SECRET` must be at least 32 bytes.
 - No admin account: set `BOOTSTRAP_ADMIN_PASSWORD` for the first startup, then remove it after the account exists.
-- Frontend API 404: check `VITE_BASE_URL`, `VITE_GLOB_API_URL`, and Nginx `/api/` proxy prefix handling.
+- Frontend API 404: check that the gateway is running and Nginx `/api/` proxy prefix handling.
 - SSE responses arrive all at once: disable proxy buffering and increase read timeout.
 - Port already in use: check `ss -ltnp | rg ':(8080|5666|5432|6379)'`.
+- Dioxus build fails: ensure `wasm32-unknown-unknown` target is installed (`rustup target add wasm32-unknown-unknown`).

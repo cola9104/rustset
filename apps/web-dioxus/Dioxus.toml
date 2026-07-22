@@ -1,0 +1,9 @@
+[application]
+name = "RustSet"
+default_platform = "web"
+
+[web.app]
+title = "RustSet"
+
+[web.watcher]
+watch_path = ["src", "public"]

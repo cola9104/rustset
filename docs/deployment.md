@@ -6,7 +6,7 @@ AI 编码助手接手项目时应先阅读仓库根目录的 [AI 启动交接指
 
 1. 执行 `docker compose -f script/docker/docker-compose.yml up -d`。
 2. 按 [配置文档](configuration.md) 导出数据库、JWT 和管理员环境变量。
-3. 执行 `cargo run -p rust-toon-gateway`（首次启动自动初始化数据库并执行全部迁移）。
+3. 执行 `cargo run -p rustset-gateway`（首次启动自动初始化数据库并执行全部迁移）。
 4. 在 `apps/web` 执行 `pnpm install && pnpm dev:antd`。
 5. 检查 `GET http://127.0.0.1:8080/health`，然后访问 `http://127.0.0.1:5666`。
 
@@ -15,10 +15,10 @@ AI 编码助手接手项目时应先阅读仓库根目录的 [AI 启动交接指
 ## 后端生产构建
 
 ```bash
-cargo build --release -p rust-toon-gateway
+cargo build --release -p rustset-gateway
 ```
 
-产物为 `target/release/rust-toon-gateway`。生产服务至少需要：
+产物为 `target/release/rustset-gateway`。生产服务至少需要：
 
 - `DATABASE_URL`
 - 强随机 `JWT_SECRET`
@@ -30,11 +30,11 @@ cargo build --release -p rust-toon-gateway
 新服务器首次部署建议流程：
 
 1. 安装 Rust stable、Docker Compose、Node.js `22.18+` 或 `24.x`，并通过 Corepack 使用 pnpm `11+`。
-2. 克隆代码到固定目录，例如 `/opt/rust-toon`。
+2. 克隆代码到固定目录，例如 `/opt/rustset`。
 3. 启动基础设施：`docker compose -f script/docker/docker-compose.yml up -d`。使用托管 PostgreSQL/Redis 时，改为在环境变量中指向托管地址。
-4. 创建 `/etc/rust-toon/gateway.env`，写入 `DATABASE_URL`、`REDIS_URL`、强随机 `JWT_SECRET`、`GATEWAY_HOST`、`GATEWAY_PORT`、`RUST_LOG` 和首次管理员变量。
-5. 执行 `cargo build --release -p rust-toon-gateway`。
-6. 手动加载环境变量运行一次 `target/release/rust-toon-gateway`，确认迁移成功和管理员可登录。
+4. 创建 `/etc/rustset/gateway.env`，写入 `DATABASE_URL`、`REDIS_URL`、强随机 `JWT_SECRET`、`GATEWAY_HOST`、`GATEWAY_PORT`、`RUST_LOG` 和首次管理员变量。
+5. 执行 `cargo build --release -p rustset-gateway`。
+6. 手动加载环境变量运行一次 `target/release/rustset-gateway`，确认迁移成功和管理员可登录。
 7. 管理员创建后，从环境文件移除 `BOOTSTRAP_ADMIN_PASSWORD`。
 8. 使用 systemd、Docker 或 Kubernetes 托管网关进程。
 
@@ -48,9 +48,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/rust-toon
-EnvironmentFile=/etc/rust-toon/gateway.env
-ExecStart=/opt/rust-toon/target/release/rust-toon-gateway
+WorkingDirectory=/opt/rustset
+EnvironmentFile=/etc/rustset/gateway.env
+ExecStart=/opt/rustset/target/release/rustset-gateway
 Restart=always
 RestartSec=5
 
@@ -62,8 +62,8 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now rust-toon-gateway
-sudo systemctl status rust-toon-gateway
+sudo systemctl enable --now rustset-gateway
+sudo systemctl status rustset-gateway
 curl -fsS http://127.0.0.1:8080/health
 ```
 
@@ -85,7 +85,7 @@ location / {
 }
 
 location /api/ {
-    proxy_pass http://rust-toon-gateway:8080/;
+    proxy_pass http://rustset-gateway:8080/;
     proxy_http_version 1.1;
     proxy_buffering off; # SSE 必须关闭代理缓冲
     proxy_read_timeout 600s;

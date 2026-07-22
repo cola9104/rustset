@@ -4,10 +4,10 @@ use axum::{
     extract::{Query, State},
     routing::{delete, get, post, put},
 };
-use rust_toon_ai_api::EmbeddingRequest;
-use rust_toon_framework_common::ApiResponse;
-use rust_toon_framework_security::CurrentUser;
-use rust_toon_framework_web::AppError;
+use rustset_ai_api::EmbeddingRequest;
+use rustset_framework_common::ApiResponse;
+use rustset_framework_security::CurrentUser;
+use rustset_framework_web::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;

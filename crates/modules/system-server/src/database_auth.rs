@@ -4,7 +4,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use rust_toon_framework_security::{CurrentUser, SecurityError};
+use rustset_framework_security::{CurrentUser, SecurityError};
 use uuid::Uuid;
 
 use crate::{SystemState, cache, infrastructure};

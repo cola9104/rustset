@@ -9,8 +9,8 @@ use axum::{
     routing::post,
 };
 use http_body_util::BodyExt;
-use rust_toon_framework_database::{DatabaseConfig, connect, migrate};
-use rust_toon_framework_security::{
+use rustset_framework_database::{DatabaseConfig, connect, migrate};
+use rustset_framework_security::{
     CurrentUser, DataScope, Permission, PermissionSet, SecurityConfig, TokenService,
 };
 use serde_json::{Value, json};
@@ -96,7 +96,7 @@ async fn chat_json_and_sse_persist_complete_messages() -> Result<(), Box<dyn std
             data_scope: DataScope::All,
         })
         .expect("issue E2E access token");
-    let app = rust_toon_ai_server::routes(rust_toon_ai_server::AiState::new(pool.clone(), tokens));
+    let app = rustset_ai_server::routes(rustset_ai_server::AiState::new(pool.clone(), tokens));
     let (status, body) = request(
         app.clone(),
         &token,

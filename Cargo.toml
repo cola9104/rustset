@@ -17,16 +17,15 @@ members = [
     "crates/modules/media-server",
     "crates/modules/system-api",
     "crates/modules/system-server",
-    "crates/modules/toon-api",
-    "crates/modules/toon-server",
     "services/gateway",
+    "apps/web-dioxus",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://example.com/rust-toon"
+repository = "https://example.com/rustset"
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -46,24 +45,22 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 redis = { version = "0.32", default-features = false, features = ["aio", "tokio-comp"] }
 rust_xlsxwriter = "0.96"
-rust-toon-framework-common = { path = "crates/framework/common" }
-rust-toon-framework-database = { path = "crates/framework/database" }
-rust-toon-framework-mq = { path = "crates/framework/mq" }
-rust-toon-framework-redis = { path = "crates/framework/redis" }
-rust-toon-framework-security = { path = "crates/framework/security" }
-rust-toon-framework-telemetry = { path = "crates/framework/telemetry" }
-rust-toon-framework-tenant = { path = "crates/framework/tenant" }
-rust-toon-framework-web = { path = "crates/framework/web" }
-rust-toon-infra-api = { path = "crates/modules/infra-api" }
-rust-toon-infra-server = { path = "crates/modules/infra-server" }
-rust-toon-ai-api = { path = "crates/modules/ai-api" }
-rust-toon-ai-server = { path = "crates/modules/ai-server" }
-rust-toon-media-api = { path = "crates/modules/media-api" }
-rust-toon-media-server = { path = "crates/modules/media-server" }
-rust-toon-system-api = { path = "crates/modules/system-api" }
-rust-toon-system-server = { path = "crates/modules/system-server" }
-rust-toon-toon-api = { path = "crates/modules/toon-api" }
-rust-toon-toon-server = { path = "crates/modules/toon-server" }
+rustset-framework-common = { path = "crates/framework/common" }
+rustset-framework-database = { path = "crates/framework/database" }
+rustset-framework-mq = { path = "crates/framework/mq" }
+rustset-framework-redis = { path = "crates/framework/redis" }
+rustset-framework-security = { path = "crates/framework/security" }
+rustset-framework-telemetry = { path = "crates/framework/telemetry" }
+rustset-framework-tenant = { path = "crates/framework/tenant" }
+rustset-framework-web = { path = "crates/framework/web" }
+rustset-infra-api = { path = "crates/modules/infra-api" }
+rustset-infra-server = { path = "crates/modules/infra-server" }
+rustset-ai-api = { path = "crates/modules/ai-api" }
+rustset-ai-server = { path = "crates/modules/ai-server" }
+rustset-media-api = { path = "crates/modules/media-api" }
+rustset-media-server = { path = "crates/modules/media-server" }
+rustset-system-api = { path = "crates/modules/system-api" }
+rustset-system-server = { path = "crates/modules/system-server" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
