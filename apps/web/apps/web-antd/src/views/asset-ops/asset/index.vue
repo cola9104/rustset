@@ -281,7 +281,7 @@ const statCards = [
               </template>
             </template>
           </a-table>
-          <a-button style="margin-top: 12px" @click="router.push('/asset-ops/network-policy')">
+          <a-button style="margin-top: 12px" @click="router.push('/asset-center/network-policy')">
             前往网络策略台账管理
           </a-button>
         </a-spin>

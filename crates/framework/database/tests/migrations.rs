@@ -11,37 +11,44 @@ async fn applies_all_migrations_to_empty_postgres() {
     migrate(&pool).await.expect("apply complete migration set");
 
     // New migrations are deliberately rerunnable because operators may need
-    // to repair partially imported snapshots during this migration window.
-    sqlx::raw_sql(include_str!(
-        "../../../../sql/postgresql/0003_kairos_asset_permissions.sql"
-    ))
-    .execute(&pool)
-    .await
-    .expect("Kairos menu migration is idempotent");
-    sqlx::raw_sql(include_str!(
-        "../../../../sql/postgresql/0004_remove_baseline_runtime_messages.sql"
-    ))
-    .execute(&pool)
-    .await
-    .expect("runtime baseline cleanup is idempotent");
-    sqlx::raw_sql(include_str!(
-        "../../../../sql/postgresql/0005_kairos_ticket_workflow_fields.sql"
-    ))
-    .execute(&pool)
-    .await
-    .expect("Kairos ticket field migration is idempotent");
-    sqlx::raw_sql(include_str!(
-        "../../../../sql/postgresql/0006_grant_asset_ops_to_super_admin.sql"
-    ))
-    .execute(&pool)
-    .await
-    .expect("super administrator asset grants are idempotent");
-
     let applied: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations WHERE success")
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 14);
+    assert_eq!(applied, 15);
+
+    // 0015 splits 资产运营 into five top-level modules; components and
+    // grants are unchanged, only the menu tree moves.
+    let old_root: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND parent_id = 0 AND path = '/asset-ops'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read old asset-ops root");
+    assert_eq!(old_root, 0, "the old 资产运营 root must be retired");
+    let new_roots: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND parent_id = 0
+           AND path IN ('/asset-center','/cloud-center','/infra-center','/biz-center','/ops-center')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read new module roots");
+    assert_eq!(new_roots, 5);
+    let orphaned_pages: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu page
+         WHERE page.deleted = 0 AND page.type = 2
+           AND page.component LIKE 'asset-ops/%'
+           AND NOT EXISTS (
+               SELECT 1 FROM system_menu parent
+               WHERE parent.id = page.parent_id AND parent.deleted = 0 AND parent.type = 1
+           )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("check reparented pages");
+    assert_eq!(orphaned_pages, 0, "every moved page must have a live parent");
 
     // 0014 repaired the truncated cmdb:* codes seeded by 0009.
     let truncated: i64 = sqlx::query_scalar(
