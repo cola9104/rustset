@@ -2,6 +2,7 @@
 //! relations in `relation.rs`.
 
 mod instance;
+mod net_zone;
 mod relation;
 
 use axum::{
@@ -18,6 +19,7 @@ use sqlx::Row;
 use serde_json::{Value, json};
 
 pub use instance::routes as instance_routes;
+pub use net_zone::routes as net_zone_routes;
 pub use relation::routes as relation_routes;
 
 #[derive(Clone)]
@@ -63,6 +65,7 @@ pub fn routes(state: CmdbState) -> Router {
         .route("/cmdb/attribute/delete", delete(attribute_delete))
         .merge(instance_routes())
         .merge(relation_routes())
+        .merge(net_zone_routes())
         .with_state(state)
 }
 

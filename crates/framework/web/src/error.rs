@@ -20,6 +20,11 @@ impl AppError {
         }
     }
 
+    /// The human-readable reason carried to API clients.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
     pub fn bad_request(message: impl Into<String>) -> Self {
         Self::new(StatusCode::BAD_REQUEST, 400, message)
     }

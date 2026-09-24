@@ -8,7 +8,9 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
+use rustset_framework_security::CurrentUser;
 use rustset_framework_web::AppError;
+use sqlx::Row;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -130,15 +132,99 @@ async fn asset_get(
 }
 async fn asset_create(
     State(state): State<InfraState>,
+    user: CurrentUser,
     Json(p): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
-    table_create(&state.pool, ASSET, p).await
+    let Json(created) = table_create(&state.pool, ASSET, p).await?;
+    if let Ok(asset_id) = created.data.parse::<i64>() {
+        auto_attribute_ownership(&state.pool, asset_id).await;
+    }
+    let _ = user;
+    Ok(Json(created))
+}
+
+/// Longest-prefix segment match over cmdb_net_zone; fills net_zone_id and
+/// organization_name when the IP falls inside a managed segment and the
+/// ownership is not manually pinned.
+pub(crate) async fn auto_attribute_ownership(pool: &sqlx::PgPool, asset_id: i64) {
+    let Ok((asset_id, ip)) = sqlx::query_as::<_, (i64, String)>(
+        // Skip only assets whose organization a human chose; the default
+        // 'manual' marker with an empty organization still gets attributed.
+        "SELECT id, ip FROM infra_asset WHERE id = $1 AND deleted = 0
+           AND NOT (ownership_source = 'manual'
+                    AND organization_name IS NOT NULL AND organization_name <> '')",
+    )
+    .bind(asset_id)
+    .fetch_one(pool)
+    .await else {
+        return;
+    };
+    let segments = sqlx::query(
+        "SELECT id, cidr FROM cmdb_net_zone WHERE deleted = 0 AND cidr IS NOT NULL AND cidr <> ''",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let mut best: Option<(u8, i64)> = None;
+    for row in &segments {
+        let cidr: String = row.get("cidr");
+        let Some((address, prefix)) = cidr.split_once('/') else { continue };
+        let (Ok(network), Ok(prefix)) = (
+            address.trim().parse::<std::net::Ipv4Addr>(),
+            prefix.trim().parse::<u8>(),
+        ) else { continue };
+        if prefix > 32 {
+            continue;
+        }
+        let Ok(ip_addr) = ip.trim().parse::<std::net::Ipv4Addr>() else { return };
+        let mask = if prefix == 0 { 0 } else { u32::MAX << (32 - prefix as u32) };
+        if (u32::from(network) & mask) == (u32::from(ip_addr) & mask)
+            && best
+                .as_ref()
+                .map(|(best_prefix, _)| prefix > *best_prefix)
+                .unwrap_or(true)
+        {
+            best = Some((prefix, row.get("id")));
+        }
+    }
+    let Some((_, zone_id)) = best else { return };
+    // Attribute the nearest company/subsidiary ancestor's name, falling
+    // back to the matched segment itself.
+    let _ = sqlx::query(
+        "UPDATE infra_asset a
+         SET net_zone_id = $2,
+             organization_name = COALESCE((
+                 WITH RECURSIVE ancestors AS (
+                     SELECT id, name, zone_type, parent_id FROM cmdb_net_zone WHERE id = $2
+                     UNION ALL
+                     SELECT z.id, z.name, z.zone_type, z.parent_id
+                     FROM cmdb_net_zone z JOIN ancestors an ON z.id = an.parent_id
+                 )
+                 SELECT name FROM ancestors
+                 WHERE zone_type IN ('company','subsidiary')
+                 ORDER BY id LIMIT 1
+             ), (SELECT name FROM cmdb_net_zone WHERE id = $2), a.organization_name),
+             ownership_source = 'segment',
+             update_time = now()
+         WHERE a.id = $1 AND a.deleted = 0",
+    )
+    .bind(asset_id)
+    .bind(zone_id)
+    .execute(pool)
+    .await;
 }
 async fn asset_update(
     State(state): State<InfraState>,
     Json(p): Json<Value>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    table_update(&state.pool, ASSET, p).await
+    let id = p
+        .get("id")
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0)
+        .ok_or_else(|| AppError::bad_request("id is required"))?;
+    table_update(&state.pool, ASSET, p).await?;
+    auto_attribute_ownership(&state.pool, id).await;
+    Ok(Json(ApiResponse::new(())))
 }
 async fn asset_delete(
     State(state): State<InfraState>,

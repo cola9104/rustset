@@ -27,6 +27,8 @@ pub fn routes() -> Router<CmdbState> {
         .route("/cmdb/instance/update", put(instance_update))
         .route("/cmdb/instance/delete", delete(instance_delete))
         .route("/cmdb/instance/delete-list", delete(instance_delete_list))
+        .route("/cmdb/instance/export", get(instance_export))
+        .route("/cmdb/instance/import", post(instance_import))
 }
 
 #[derive(Debug, Deserialize)]
@@ -460,4 +462,226 @@ async fn instance_delete_list(
         .await
         .map_err(|_| AppError::internal("failed to commit delete"))?;
     Ok(Json(ApiResponse::new(())))
+}
+
+// ---------- Excel export / import ----------
+
+#[derive(Debug, Deserialize)]
+struct ExportParams {
+    model_id: i64,
+}
+
+async fn instance_export(
+    State(state): State<CmdbState>,
+    user: CurrentUser,
+    Query(params): Query<ExportParams>,
+) -> Result<axum::response::Response, AppError> {
+    use rust_xlsxwriter::Workbook;
+
+    require(&user, "cmdb:instance:query")?;
+    let model = load_model(&state.pool, params.model_id).await?;
+    let attributes = load_attributes(&state.pool, params.model_id).await?;
+    let rows = sqlx::query(
+        "SELECT attributes FROM cmdb_instance WHERE model_id = $1 AND deleted = 0 ORDER BY id LIMIT 10000",
+    )
+    .bind(params.model_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(|_| AppError::internal("failed to read instances"))?;
+
+    let mut workbook = Workbook::new();
+    let worksheet = workbook
+        .add_worksheet()
+        .set_name("instances")
+        .map_err(|_| AppError::internal("failed to create sheet"))?;
+    for (col, attr) in attributes.iter().enumerate() {
+        worksheet
+            .write_string(0, col as u16, &attr.code)
+            .map_err(|_| AppError::internal("failed to write header"))?;
+    }
+    for (row_index, row) in rows.iter().enumerate() {
+        let payload: Value = row.get("attributes");
+        for (col, attr) in attributes.iter().enumerate() {
+            let cell = payload.get(&attr.code).map(cell_text).unwrap_or_default();
+            worksheet
+                .write_string((row_index + 1) as u32, col as u16, cell)
+                .map_err(|_| AppError::internal("failed to write row"))?;
+        }
+    }
+    let bytes = workbook
+        .save_to_buffer()
+        .map_err(|_| AppError::internal("failed to build excel"))?;
+    axum::response::Response::builder()
+        .header(
+            "content-type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        .header(
+            "content-disposition",
+            format!("attachment; filename=\"cmdb_instances_model_{}.xlsx\"", model.id),
+        )
+        .body(axum::body::Body::from(bytes))
+        .map_err(|_| AppError::internal("failed to build download"))
+}
+
+fn cell_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Bool(flag) => flag.to_string(),
+        Value::Number(_) => value.to_string(),
+        Value::Array(items) => items
+            .iter()
+            .map(cell_text)
+            .collect::<Vec<_>>()
+            .join(","),
+        other => serde_json::to_string(other).unwrap_or_default(),
+    }
+}
+
+async fn instance_import(
+    State(state): State<CmdbState>,
+    user: CurrentUser,
+    mut multipart: axum::extract::Multipart,
+) -> Result<Json<ApiResponse<Value>>, AppError> {
+    use calamine::{Data, DataType as _, Reader, Xlsx};
+
+    require(&user, "cmdb:instance:create")?;
+    let model_id = std::env::var("CMDB_IMPORT_MODEL")
+        .ok()
+        .and_then(|_| None::<i64>);
+    let mut model_id = model_id.unwrap_or(0);
+    let mut file_bytes: Option<Vec<u8>> = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::bad_request("invalid multipart payload"))?
+    {
+        match field.name() {
+            Some("modelId") => {
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|_| AppError::bad_request("invalid modelId"))?;
+                model_id = text.trim().parse().unwrap_or(0);
+            }
+            Some("file") => {
+                file_bytes = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|_| AppError::bad_request("invalid file"))?
+                        .to_vec(),
+                );
+            }
+            _ => {}
+        }
+    }
+    if model_id <= 0 {
+        return Err(AppError::bad_request("modelId is required"));
+    }
+    let Some(file_bytes) = file_bytes else {
+        return Err(AppError::bad_request("file is required"));
+    };
+    let model = load_model(&state.pool, model_id).await?;
+    let attributes = load_attributes(&state.pool, model_id).await?;
+    let by_code: std::collections::BTreeMap<&str, &AttributeDef> = attributes
+        .iter()
+        .map(|def| (def.code.as_str(), def))
+        .collect();
+
+    let mut reader = Xlsx::new(std::io::Cursor::new(file_bytes))
+        .map_err(|_| AppError::bad_request("无法读取 xlsx 文件"))?;
+    let sheet = reader
+        .sheet_names()
+        .first()
+        .cloned()
+        .unwrap_or_default();
+    let range = reader
+        .worksheet_range(&sheet)
+        .map_err(|_| AppError::bad_request("无法读取工作表"))?;
+
+    let mut created = 0i64;
+    let mut errors: Vec<Value> = Vec::new();
+    for (row_index, row) in range.rows().enumerate() {
+        if row_index == 0 {
+            let unknown: Vec<String> = row
+                .iter()
+                .filter_map(|cell| cell.get_string().map(str::to_string))
+                .filter(|code| !code.trim().is_empty() && !by_code.contains_key(code.trim()))
+                .collect();
+            if !unknown.is_empty() {
+                return Err(AppError::bad_request(format!(
+                    "表头包含模型未定义的属性: {}",
+                    unknown.join(", ")
+                )));
+            }
+            continue;
+        }
+        if row.iter().all(|cell| matches!(cell, Data::Empty)) {
+            continue;
+        }
+        let mut payload = Map::new();
+        for (col, cell) in row.iter().enumerate() {
+            let Some(code) = range
+                .rows()
+                .next()
+                .and_then(|header| header.get(col))
+                .and_then(|cell| cell.get_string().map(str::to_string))
+                .map(|code| code.trim().to_string())
+                .filter(|code| !code.is_empty())
+            else {
+                continue;
+            };
+            let Some(def) = by_code.get(code.as_str()) else {
+                continue;
+            };
+            let raw = match cell {
+                Data::Empty => continue,
+                Data::String(text) => Value::String(text.clone()),
+                Data::Float(number) => def
+                    .attr_type
+                    .code()
+                    .contains("float")
+                    .then(|| json!(number))
+                    .unwrap_or_else(|| json!(*number as i64)),
+                Data::Int(number) => json!(number),
+                Data::Bool(flag) => json!(flag),
+                Data::DateTime(excel) => json!(excel.to_string()),
+                other => Value::String(other.to_string()),
+            };
+            payload.insert(code, raw);
+        }
+        if payload.is_empty() {
+            continue;
+        }
+        let row_no = row_index + 1;
+        match validate_payload(&state.pool, &model, &Value::Object(payload.clone()), true).await {
+            Ok(data) => {
+                if let Err(reason) = enforce_unique_key(&state.pool, &model, &data, None).await {
+                    errors.push(json!({"row": row_no, "error": reason}));
+                    continue;
+                }
+                let insert = sqlx::query(
+                    "INSERT INTO cmdb_instance (model_id, attributes, creator, updater)
+                     VALUES ($1, $2, $3, $3)",
+                )
+                .bind(model_id)
+                .bind(Value::Object(data))
+                .bind(&user.username)
+                .execute(&state.pool)
+                .await;
+                match insert {
+                    Ok(_) => created += 1,
+                    Err(_) => errors.push(json!({"row": row_no, "error": "写入数据库失败"})),
+                }
+            }
+            Err(error) => errors.push(json!({"row": row_no, "error": error.message()})),
+        }
+    }
+
+    Ok(Json(ApiResponse::new(json!({
+        "created": created,
+        "failed": errors.len(),
+        "errors": errors.into_iter().take(50).collect::<Vec<_>>(),
+    }))))
 }

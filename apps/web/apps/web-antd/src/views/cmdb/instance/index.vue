@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { Page } from '@vben/common-ui';
 import { message } from 'ant-design-vue';
+import { requestClient } from '#/api/request';
 import {
   createInstance,
   deleteInstance,
@@ -162,6 +163,46 @@ async function submit() {
   }
 }
 
+async function exportExcel() {
+  if (!currentModelId.value) return;
+  try {
+    const blob = (await requestClient.download('/cmdb/instance/export', {
+      params: { modelId: currentModelId.value },
+    })) as any;
+    const url = URL.createObjectURL(
+      blob instanceof Blob ? blob : new Blob([blob]),
+    );
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `cmdb_instances_model_${currentModelId.value}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    message.error('导出失败');
+  }
+}
+
+async function importExcel(file: File) {
+  if (!currentModelId.value) return false;
+  const form_data = new FormData();
+  form_data.append('modelId', String(currentModelId.value));
+  form_data.append('file', file);
+  try {
+    const result = (await requestClient.post('/cmdb/instance/import', form_data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })) as any;
+    message.success(`导入完成：新增 ${result?.created ?? 0} 条，失败 ${result?.failed ?? 0} 条`);
+    if (result?.failed) {
+      console.warn('import errors:', result.errors);
+      message.warning('失败明细已输出到浏览器控制台（前 50 条）');
+    }
+    fetchRows();
+  } catch (error: any) {
+    message.error(error?.message || '导入失败');
+  }
+  return false;
+}
+
 async function removeOne(record: CmdbInstance) {
   try {
     await deleteInstance(record.id);
@@ -219,6 +260,15 @@ function controlFor(attr: CmdbAttribute) {
           @search="() => { pageNo = 1; fetchRows(); }"
         />
         <a-button @click="fetchRows">刷新</a-button>
+        <a-button :disabled="!currentModelId || !rows.length" @click="exportExcel">导出 Excel</a-button>
+        <a-upload
+          :show-upload-list="false"
+          :before-upload="importExcel"
+          accept=".xlsx"
+          :disabled="!currentModelId || !attributes.length"
+        >
+          <a-button v-access:code="['cmdb:instance:create']" :disabled="!currentModelId || !attributes.length">导入 Excel</a-button>
+        </a-upload>
         <a-button
           v-access:code="['cmdb:instance:create']"
           type="primary"

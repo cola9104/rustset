@@ -41,7 +41,82 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 11);
+    assert_eq!(applied, 14);
+
+    // 0014 repaired the truncated cmdb:* codes seeded by 0009.
+    let truncated: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND type = 3
+           AND permission IN ('cmdb:query','cmdb:create','cmdb:update','cmdb:delete')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read truncated cmdb codes");
+    assert_eq!(truncated, 0, "truncated cmdb permission codes must be renamed");
+    let model_query: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu WHERE deleted = 0 AND permission = 'cmdb:model:query'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read cmdb:model:query");
+    assert_eq!(model_query, 1);
+
+    // 0013 CMDB default roles + organization net-zone tree.
+    for role_code in ["cmdb_admin", "cmdb_user"] {
+        let exists: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM system_role WHERE code = $1 AND deleted = 0",
+        )
+        .bind(role_code)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|_| panic!("read role {role_code}"));
+        assert_eq!(exists, 1, "role {role_code} must exist");
+    }
+    let cmdb_admin_grants: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_role_menu rm
+         JOIN system_role r ON r.id = rm.role_id AND r.code = 'cmdb_admin' AND r.deleted = 0
+         JOIN system_menu m ON m.id = rm.menu_id AND m.deleted = 0
+         WHERE m.permission LIKE 'cmdb:%'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read cmdb_admin grants");
+    let cmdb_total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu WHERE deleted = 0 AND permission LIKE 'cmdb:%' AND type = 3",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count cmdb permissions");
+    assert_eq!(
+        cmdb_admin_grants, cmdb_total,
+        "cmdb_admin must hold every cmdb permission"
+    );
+    let net_zone_table: bool = sqlx::query_scalar(
+        "SELECT to_regclass('public.cmdb_net_zone') IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect net zone table");
+    assert!(net_zone_table);
+
+    // 0012 approval-rule management page.
+    let approval_rule_pages: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND component = 'asset-ops/approval-rule/index' AND type = 2",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read approval rule page");
+    assert_eq!(approval_rule_pages, 1);
+    let approval_rule_perms: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND permission LIKE 'infra:approval-rule:%' AND type = 3",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read approval rule permissions");
+    assert_eq!(approval_rule_perms, 4);
+
 
     // 0011 ops agent: five Rust-executed tools and the preset 运维助理 role.
     let ops_tools: i64 = sqlx::query_scalar(
@@ -114,7 +189,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read cmdb permission menus");
-    assert_eq!(cmdb_permissions, 11, "0009 must seed the cmdb permission set");
+    assert_eq!(cmdb_permissions, 15, "cmdb permissions = 0009 set + net-zone (0013)");
 
 
     // 0008 drops the whole Toonflow media business.
@@ -261,7 +336,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read Kairos asset operations pages");
-    assert_eq!(asset_ops_pages, 14);
+    assert_eq!(asset_ops_pages, 15);
 
     let asset_ops_permissions: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_menu
@@ -273,7 +348,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read Kairos asset operations permissions");
-    assert_eq!(asset_ops_permissions, 59);
+    assert_eq!(asset_ops_permissions, 63);
 
     let missing_super_admin_asset_links: i64 = sqlx::query_scalar(
         "SELECT count(*)

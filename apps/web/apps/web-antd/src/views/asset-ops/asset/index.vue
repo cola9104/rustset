@@ -1,7 +1,9 @@
 <script lang="ts" setup>
 import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 import { message } from 'ant-design-vue';
+import { requestClient } from '#/api/request';
 import { createAsset, getAssetList, updateAsset } from '#/api/scan/asset';
 import type { ScanAssetApi } from '#/api/scan/asset';
 
@@ -48,6 +50,28 @@ async function handleSubmit() {
 }
 
 const viewMode = ref<'grid'|'table'>('grid');
+
+// 需求 D：查看该资产 IP 命中的网络策略（防火墙开通记录），支持跳转到网络策略页。
+const policyDrawerVisible = ref(false);
+const policyTarget = ref<UnifiedAsset | null>(null);
+const policyRows = ref<any[]>([]);
+const policyLoading = ref(false);
+const router = useRouter();
+async function openPolicies(record: UnifiedAsset) {
+  policyTarget.value = record;
+  policyDrawerVisible.value = true;
+  policyLoading.value = true;
+  policyRows.value = [];
+  try {
+    policyRows.value = (await requestClient.get('/cmdb/net-zone/policies-by-ip', {
+      params: { ip: record.ip },
+    })) as any;
+  } catch {
+    message.error('查询网络策略失败');
+  } finally {
+    policyLoading.value = false;
+  }
+}
 const statCards = [
   { title:'资产总数', value:()=>data.value.length, color:'var(--ant-color-primary)', bg:'#e6f4ff', icon:'lucide:hard-drive' },
   { title:'云平台资源', value:()=>data.value.filter(a=>a.source_type==='cloud_platform').length, color:'#1677ff', bg:'#e6f4ff', icon:'lucide:cloud' },
@@ -111,7 +135,7 @@ const statCards = [
               <a-tag v-if="(item.ports||[]).length>8" size="small" style="margin:2px">+{{ item.ports.length-8 }}</a-tag>
             </div>
             <a-row :gutter="8">
-              <a-col :span="16"><a-progress :percent="item.weight" :size="20" :show-info="false" :stroke-color="item.weight>70?'var(--ant-color-error)':item.weight>40?'var(--ant-color-warning)':'var(--ant-color-success)'" /></a-col>
+              <a-col :span="5"><a-button v-access:code="['infra:asset:query']" type="link" size="small" @click="openPolicies(item)">策略</a-button></a-col><a-col :span="11"><a-progress :percent="item.weight" :size="20" :show-info="false" :stroke-color="item.weight>70?'var(--ant-color-error)':item.weight>40?'var(--ant-color-warning)':'var(--ant-color-success)'" /></a-col>
               <a-col :span="8"><a-space size="0"><a-button v-if="item.editable" v-access:code="['infra:asset:update']" type="link" size="small" @click="openEdit(item)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></a-col>
             </a-row>
           </a-card>
@@ -121,7 +145,7 @@ const statCards = [
 
       <!-- Table View -->
       <a-card style="border-radius:10px;margin-top:16px" size="small" v-if="viewMode==='table'">
-        <a-table :columns="[{title:'名称',dataIndex:'name',width:150,fixed:'left'},{title:'所属单位',dataIndex:'organization_name',width:130,ellipsis:true},{title:'应用名称',dataIndex:'application_name',width:130,ellipsis:true},{title:'资产类型',dataIndex:'device_type',width:95},{title:'来源',dataIndex:'source_label',width:140},{title:'IP/URL',dataIndex:'ip',width:140},{title:'区域',key:'zone',width:85},{title:'等保',key:'mlps',width:70},{title:'语言/系统',key:'technology',width:130},{title:'端口指纹',key:'ports',width:85},{title:'漏洞',key:'findings',width:65},{title:'风险评分',key:'weight',width:105},{title:'操作',key:'actions',width:150}]" :data-source="filtered" :loading="loading" row-key="id" size="middle" :pagination="{pageSize:15,showTotal:(t:number)=>`共 ${t} 个`}" :scroll="{x:1600}">
+        <a-table :columns="[{title:'名称',dataIndex:'name',width:150,fixed:'left'},{title:'所属单位',dataIndex:'organization_name',width:130,ellipsis:true},{title:'应用名称',dataIndex:'application_name',width:130,ellipsis:true},{title:'资产类型',dataIndex:'device_type',width:95},{title:'来源',dataIndex:'source_label',width:140},{title:'IP/URL',dataIndex:'ip',width:140},{title:'区域',key:'zone',width:85},{title:'等保',key:'mlps',width:70},{title:'语言/系统',key:'technology',width:130},{title:'端口指纹',key:'ports',width:85},{title:'漏洞',key:'findings',width:65},{title:'风险评分',key:'weight',width:105},{title:'操作',key:'actions',width:190}]" :data-source="filtered" :loading="loading" row-key="id" size="middle" :pagination="{pageSize:15,showTotal:(t:number)=>`共 ${t} 个`}" :scroll="{x:1600}">
           <template #bodyCell="{ column, record }">
             <template v-if="column.key==='zone'"><a-tag :color="zoneInfo[record.zone]?.color">{{ zoneInfo[record.zone]?.label }}</a-tag></template>
             <template v-if="column.key==='mlps'"><a-tag v-if="record.classified_protection_level" color="geekblue">{{ record.classified_protection_level }}</a-tag><span v-else>-</span></template>
@@ -129,7 +153,7 @@ const statCards = [
             <template v-if="column.key==='ports'">{{ (record.ports||[]).length }}</template>
             <template v-if="column.key==='findings'">{{ record.finding_count || 0 }}</template>
             <template v-if="column.key==='weight'"><a-progress :percent="record.weight" :size="20" :show-info="false" :stroke-color="record.weight>70?'var(--ant-color-error)':record.weight>40?'var(--ant-color-warning)':'var(--ant-color-success)'" style="width:60px;display:inline-block" /><span style="font-size:11px;margin-left:4px">{{ record.weight }}</span></template>
-            <template v-if="column.key==='actions'"><a-space><a-button v-if="record.editable" v-access:code="['infra:asset:update']" type="link" size="small" @click="openEdit(record)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></template>
+            <template v-if="column.key==='actions'"><a-space><a-button v-access:code="['infra:asset:query']" type="link" size="small" @click="openPolicies(record)">策略</a-button><a-button v-if="record.editable" v-access:code="['infra:asset:update']" type="link" size="small" @click="openEdit(record)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></template>
           </template>
         </a-table>
       </a-card>
@@ -221,6 +245,46 @@ const statCards = [
             <a-button type="primary" @click="handleSubmit">保存</a-button>
           </a-space>
         </template>
+      </a-drawer>
+
+      <!-- 网络策略查看抽屉（需求 D） -->
+      <a-drawer v-model:open="policyDrawerVisible" :title="`网络策略 · ${policyTarget?.name ?? ''}（${policyTarget?.ip ?? ''}）`" width="760">
+        <a-spin :spinning="policyLoading">
+          <a-alert
+            v-if="!policyLoading && !policyRows.length"
+            type="info"
+            show-icon
+            message="没有查到该 IP 相关的网络策略记录"
+          />
+          <a-table
+            v-else
+            :columns="[
+              { title: '防火墙', dataIndex: 'firewallName', width: 110 },
+              { title: '方向', dataIndex: 'relation', key: 'relation', width: 80 },
+              { title: '源IP', dataIndex: 'sourceIp', width: 130 },
+              { title: '目的IP', dataIndex: 'destinationIp', width: 130 },
+              { title: '端口', dataIndex: 'servicePort', width: 90 },
+              { title: '动作', key: 'action', width: 70 },
+              { title: '申请日期', dataIndex: 'applicationDate', width: 105 },
+            ]"
+            :data-source="policyRows"
+            row-key="id"
+            size="small"
+            :pagination="{ pageSize: 10 }"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'relation'">
+                <a-tag :color="record.relation === 'source' ? 'cyan' : 'purple'">{{ record.relation === 'source' ? '源' : '目的' }}</a-tag>
+              </template>
+              <template v-if="column.key === 'action'">
+                <a-tag :color="record.action === 'allow' ? 'green' : 'red'">{{ record.action === 'allow' ? '允许' : '拒绝' }}</a-tag>
+              </template>
+            </template>
+          </a-table>
+          <a-button style="margin-top: 12px" @click="router.push('/asset-ops/network-policy')">
+            前往网络策略台账管理
+          </a-button>
+        </a-spin>
       </a-drawer>
     </div>
   </Page>
