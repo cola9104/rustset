@@ -41,7 +41,7 @@ const zoneInfo:Record<string,{color:string;bg:string;label:string}> = { Internet
 async function fetchData() { loading.value=true; try { data.value=(await getAssetList()) as any; } catch { message.error('加载失败'); } finally { loading.value=false; } }
 onMounted(fetchData);
 function openCreate() { editingId.value=undefined; form.value={ name:'',ip:'',zone:'Intranet',ports:[],weight:50,labels:[],...inventoryDefaults() } as Asset; modalVisible.value=true; }
-function openEdit(r:UnifiedAsset) { if (!r.editable) return; editingId.value=r.record_id; const { id:_id, record_id:_rid, source_type:_st, source_label:_sl, editable:_ed, status:_s, deployment_type:_d, ...rest }=r; form.value={ ...inventoryDefaults(), ...rest } as Asset; modalVisible.value=true; }
+function openEdit(r:UnifiedAsset) { if (!r.editable) return; editingId.value=r.record_id; const { id:_id, record_id:_rid, source_type:_st, source_label:_sl, editable:_ed, status:_s, deployment_type:_d, ...rest }=r; form.value={ ...inventoryDefaults(), ...rest, operating_system: rest.operating_system || rest.os || '' } as Asset; modalVisible.value=true; }
 async function handleSubmit() {
   if (editingId.value) { await updateAsset(editingId.value,form.value as any); message.success('已更新'); } else { await createAsset(form.value as any); message.success('已创建'); }
   modalVisible.value=false; fetchData();
@@ -159,7 +159,7 @@ const statCards = [
                 <a-col :span="12"><a-form-item label="应用名称"><a-input v-model:value="form.application_name" /></a-form-item></a-col>
                 <a-col :span="12"><a-form-item label="服务器名称"><a-input v-model:value="form.server_name" /></a-form-item></a-col>
                 <a-col :span="12"><a-form-item label="硬件配置（CPU/内存/磁盘）"><a-input v-model:value="form.hardware_configuration" placeholder="例如：8C / 32G / 1T" /></a-form-item></a-col>
-                <a-col :span="12"><a-form-item label="操作系统"><a-input v-model:value="form.operating_system || form.os" placeholder="Ubuntu 22.04 / Windows Server 2019" /></a-form-item></a-col>
+                <a-col :span="12"><a-form-item label="操作系统"><a-input v-model:value="form.operating_system" placeholder="Ubuntu 22.04 / Windows Server 2019" /></a-form-item></a-col>
                 <a-col :span="8"><a-form-item label="数据库类型"><a-input v-model:value="form.database_type" /></a-form-item></a-col>
                 <a-col :span="8"><a-form-item label="应用类型"><a-input v-model:value="form.application_type" /></a-form-item></a-col>
                 <a-col :span="4"><a-form-item label="上线时间"><a-date-picker v-model:value="form.launch_date" value-format="YYYY-MM-DD" style="width:100%" /></a-form-item></a-col>

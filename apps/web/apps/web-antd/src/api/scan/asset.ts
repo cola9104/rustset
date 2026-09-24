@@ -45,7 +45,16 @@ export async function getAssetList() {
     status: 'active',
   }));
 }
+// infra_asset stores ports/labels as text (JSON strings); the page model
+// works with arrays, so serialize collections on write.
+function serializeCollections(data: ScanAssetApi.Asset) {
+  return {
+    ...data,
+    ports: Array.isArray(data.ports) ? JSON.stringify(data.ports) : data.ports,
+    labels: Array.isArray(data.labels) ? JSON.stringify(data.labels) : data.labels,
+  };
+}
 export function getAsset(id: number) { return infraGet<ScanAssetApi.Asset>('asset', id); }
-export function createAsset(data: ScanAssetApi.Asset) { return infraCreate('asset', data); }
-export function updateAsset(id: number, data: ScanAssetApi.Asset) { return infraUpdate('asset', id, data); }
+export function createAsset(data: ScanAssetApi.Asset) { return infraCreate('asset', serializeCollections(data)); }
+export function updateAsset(id: number, data: ScanAssetApi.Asset) { return infraUpdate('asset', id, serializeCollections(data)); }
 export function deleteAsset(id: number) { return infraDelete('asset', id); }
