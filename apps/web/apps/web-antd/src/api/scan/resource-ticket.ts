@@ -1,5 +1,7 @@
 import { requestClient } from '#/api/request';
 
+import { fromInfraResponse, infraCreate, infraDelete, infraGet, infraPageList, infraUpdate, toInfraPayload } from './compat';
+
 export namespace ScanResourceTicketApi {
   export interface ResourceTicket {
     id?: number; resource_type: string; ecs_name: string; ticket_status: string;
@@ -18,12 +20,20 @@ export namespace ScanResourceTicketApi {
     deliverer?: string; deliver_time?: string; deliver_comment?: string;
   }
 }
-export function getResourceTicketList() { return requestClient.get<ScanResourceTicketApi.ResourceTicket[]>('/asset-ops/resource-tickets'); }
-export function getResourceTicket(id: number) { return requestClient.get<ScanResourceTicketApi.ResourceTicket>(`/asset-ops/resource-tickets/${id}`); }
-export function createResourceTicket(data: any) { return requestClient.post('/asset-ops/resource-tickets', data); }
-export function updateResourceTicket(id: number, data: any) { return requestClient.put(`/asset-ops/resource-tickets/${id}`, data); }
-export function deleteResourceTicket(id: number) { return requestClient.delete(`/asset-ops/resource-tickets/${id}`); }
-export function approveTicket(id: number, data: { approved: boolean; comment?: string }) { return requestClient.post(`/asset-ops/resource-tickets/${id}/approve`, data); }
-export function getTicketApprovalHistory(id: number) { return requestClient.get<any[]>(`/asset-ops/resource-tickets/${id}/approvals`); }
-export function provisionTicket(id: number, data: { details?: string; config_id?: number; image_id?: string; flavor?: string }) { return requestClient.post(`/asset-ops/resource-tickets/${id}/provision`, data); }
-export function deliverTicket(id: number, data: { comment?: string }) { return requestClient.post(`/asset-ops/resource-tickets/${id}/deliver`, data); }
+export function getResourceTicketList() { return infraPageList<ScanResourceTicketApi.ResourceTicket>('resource-ticket'); }
+export function getResourceTicket(id: number) { return infraGet<ScanResourceTicketApi.ResourceTicket>('resource-ticket', id); }
+export function createResourceTicket(data: any) { return infraCreate('resource-ticket', data); }
+export function updateResourceTicket(id: number, data: any) { return infraUpdate('resource-ticket', id, data); }
+export function deleteResourceTicket(id: number) { return infraDelete('resource-ticket', id); }
+export function approveTicket(id: number, data: { approved: boolean; comment?: string }) { return requestClient.post(`/infra/resource-ticket/${id}/approve`, toInfraPayload(data)); }
+export async function getTicketApprovalHistory(id: number) {
+  const ticket = await getResourceTicket(id);
+  const events = [
+    ticket.approve_time && { id: 'approve', stage_no: 1, role_name: '资源审批', approver: ticket.approver, decision: ticket.ticket_status === 'rejected' ? 'rejected' : 'approved', comment: ticket.approve_comment },
+    ticket.provision_time && { id: 'provision', stage_no: 2, role_name: '资源配置', approver: ticket.provisioner, decision: 'approved', comment: ticket.provision_details },
+    ticket.deliver_time && { id: 'deliver', stage_no: 3, role_name: '资源交付', approver: ticket.deliverer, decision: 'approved', comment: ticket.deliver_comment },
+  ].filter(Boolean);
+  return fromInfraResponse(events);
+}
+export function provisionTicket(id: number, data: { details?: string; config_id?: number; image_id?: string; flavor?: string }) { return requestClient.post(`/infra/resource-ticket/${id}/provision`, toInfraPayload(data)); }
+export function deliverTicket(id: number, data: { comment?: string }) { return requestClient.post(`/infra/resource-ticket/${id}/deliver`, toInfraPayload(data)); }

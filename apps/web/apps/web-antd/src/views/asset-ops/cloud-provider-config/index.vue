@@ -64,7 +64,7 @@ async function handleTest(r:Config) {
     <div style="padding:16px">
       <a-page-header title="云厂商对接" sub-title="管理云平台的接口凭据并测试连接" style="margin-bottom:16px;padding:0" />
       <a-space :size="24" style="margin-bottom:20px">
-        <a-button type="primary" @click="openCreate">新建云厂商对接</a-button>
+        <a-button v-access:code="['infra:cloud-provider-config:create']" type="primary" @click="openCreate">新建云厂商对接</a-button>
         <a-input-search v-model:value="searchText" allow-clear placeholder="搜索厂商、区域或账号" style="width:240px" />
         <a-button @click="fetchData" :loading="loading">刷新</a-button>
       </a-space>
@@ -76,9 +76,9 @@ async function handleTest(r:Config) {
           <template v-else-if="column.key==='status'"><a-tag :color="record.status==='active'?'green':'default'">{{ record.status==='active'?'已启用':'已停用' }}</a-tag></template>
           <template v-else-if="column.key==='actions'">
             <a-space>
-              <a-button size="small" @click="handleTest(record)">测试连接</a-button>
-              <a-button size="small" @click="openEdit(record)">编辑</a-button>
-              <a-popconfirm title="确认删除?" @confirm="deleteCloudProviderConfig(record.id!).then(fetchData)"><a-button size="small" danger>删除</a-button></a-popconfirm>
+              <a-button v-access:code="['infra:cloud-provider-config:update']" size="small" @click="handleTest(record)">测试连接</a-button>
+              <a-button v-access:code="['infra:cloud-provider-config:update']" size="small" @click="openEdit(record)">编辑</a-button>
+              <a-popconfirm title="确认删除?" @confirm="deleteCloudProviderConfig(record.id!).then(fetchData)"><a-button v-access:code="['infra:cloud-provider-config:delete']" size="small" danger>删除</a-button></a-popconfirm>
             </a-space>
           </template>
         </template>

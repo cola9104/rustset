@@ -36,16 +36,16 @@ const columns = [
     <div style="padding:16px">
       <a-space :size="24" style="margin-bottom:20px">
         <a-input-search v-model:value="searchText" placeholder="搜索名称/CIDR" style="width:220px" allow-clear />
-        <a-button type="primary" @click="openCreate">新建区域</a-button>
+        <a-button v-access:code="['infra:network-zone:create']" type="primary" @click="openCreate">新建区域</a-button>
         <a-button @click="fetchData">刷新</a-button>
       </a-space>
       <a-table :columns="columns" :data-source="filtered" :loading="loading" row-key="id" size="middle" :pagination="{pageSize:20}">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
             <a-space>
-              <a-button size="small" @click="openEdit(record)">编辑</a-button>
+              <a-button v-access:code="['infra:network-zone:update']" size="small" @click="openEdit(record)">编辑</a-button>
               <a-popconfirm title="确认删除?" @confirm="handleDelete(record.id)">
-                <a-button size="small" danger>删除</a-button>
+                <a-button v-access:code="['infra:network-zone:delete']" size="small" danger>删除</a-button>
               </a-popconfirm>
             </a-space>
           </template>

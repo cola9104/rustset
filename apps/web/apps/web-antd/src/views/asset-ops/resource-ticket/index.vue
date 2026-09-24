@@ -43,7 +43,7 @@ async function handleCreate(){if(!createForm.value.ecs_name){message.warning('�
 async function handleApprove(ticket:Ticket){const result:any=await approveTicket(ticket.id!,{approved:true,comment:'审批通过'});message.success(result?.message||'本级审批完成');fetchData();}
 async function handleReject(ticket:Ticket){await approveTicket(ticket.id!,{approved:false,comment:'审批拒绝'});message.success('已拒绝');fetchData();}
 function openProvision(ticket:Ticket){provisionTicketRecord.value=ticket;const configs=providerConfigs.value.filter(item=>item.platform_id===ticket.cloud_platform_id&&item.status==='active');provisionForm.value={config_id:configs[0]?.id,image_id:'',flavor:ticket.ecs_type||'',details:''};provisionVisible.value=true;}
-async function handleProvision(){if(!provisionTicketRecord.value?.id||!provisionForm.value.config_id||!provisionForm.value.image_id||!provisionForm.value.flavor){message.warning('请选择对接配置并填写镜像 ID 和实例规格');return;}provisioning.value=true;try{await provisionTicket(provisionTicketRecord.value.id,provisionForm.value);message.success('云资源创建成功，已进入待交付');provisionVisible.value=false;await fetchData();}catch{message.error('云资源创建失败，工单已保留在待配置');}finally{provisioning.value=false;}}
+async function handleProvision(){if(!provisionTicketRecord.value?.id){return;}provisioning.value=true;try{await provisionTicket(provisionTicketRecord.value.id,provisionForm.value);message.success('资源配置已登记，工单进入待交付');provisionVisible.value=false;await fetchData();}catch{message.error('配置登记失败，工单仍保留在待配置');}finally{provisioning.value=false;}}
 async function handleDeliver(ticket:Ticket){await deliverTicket(ticket.id!,{comment:'交付完成'});message.success('工单已交付');fetchData();}
 </script>
 
@@ -51,7 +51,7 @@ async function handleDeliver(ticket:Ticket){await deliverTicket(ticket.id!,{comm
   <Page auto-content-height>
     <div style="padding:16px">
       <a-page-header title="资源工单审批" sub-title="资源申请、审批、配置和交付" style="margin-bottom:16px;padding:0" />
-      <a-space :size="24" style="margin-bottom:20px"><a-button type="primary" @click="openCreate">创建资源工单</a-button><a-input-search v-model:value="searchText" allow-clear placeholder="搜索工单、申请人、客户或区域" style="width:280px" /><a-button @click="fetchData">刷新</a-button></a-space>
+      <a-space :size="24" style="margin-bottom:20px"><a-button v-access:code="['infra:resource-ticket:create']" type="primary" @click="openCreate">创建资源工单</a-button><a-input-search v-model:value="searchText" allow-clear placeholder="搜索工单、申请人、客户或区域" style="width:280px" /><a-button @click="fetchData">刷新</a-button></a-space>
       <a-tabs v-model:active-key="activeTab">
         <a-tab-pane v-for="tab in tabs" :key="tab.key"><template #tab>{{ tab.label }} <a-badge :count="tab.statuses.length ? data.filter(ticket=>tab.statuses.includes(ticket.ticket_status)).length : data.length" :number-style="{backgroundColor:'#8c8c8c'}" /></template></a-tab-pane>
       </a-tabs>
@@ -65,12 +65,12 @@ async function handleDeliver(ticket:Ticket){await deliverTicket(ticket.id!,{comm
           <template v-else-if="column.key==='spec'">{{ record.resource_count||1 }}台 · {{ record.cpu_cores }}核/{{ record.memory_gb }}GB</template>
           <template v-else-if="column.key==='actions'"><a-space :size="12" wrap>
             <a-button size="small" @click="showDetail(record)">详情</a-button>
-            <a-button v-if="record.ticket_status==='pending_approval'" type="primary" size="small" @click="handleApprove(record)">通过</a-button>
-            <a-button v-if="record.ticket_status==='pending_approval'" danger size="small" @click="handleReject(record)">拒绝</a-button>
-            <a-button v-if="(record.ticket_status==='pending_provision'||record.ticket_status==='approved')&&record.ticket_type==='create'&&record.resource_type==='cloud'" type="primary" size="small" @click="openProvision(record)">自动开通</a-button>
+            <a-button v-if="record.ticket_status==='pending_approval'" v-access:code="['infra:resource-ticket:approve']" type="primary" size="small" @click="handleApprove(record)">通过</a-button>
+            <a-button v-if="record.ticket_status==='pending_approval'" v-access:code="['infra:resource-ticket:approve']" danger size="small" @click="handleReject(record)">拒绝</a-button>
+            <a-button v-if="(record.ticket_status==='pending_provision'||record.ticket_status==='approved')&&record.ticket_type==='create'&&record.resource_type==='cloud'" v-access:code="['infra:resource-ticket:provision']" type="primary" size="small" @click="openProvision(record)">登记配置</a-button>
             <a-tag v-else-if="record.ticket_status==='pending_provision'||record.ticket_status==='approved'" color="orange">待安全执行</a-tag>
-            <a-button v-if="record.ticket_status==='pending_delivery'" type="primary" size="small" @click="handleDeliver(record)">确认交付</a-button>
-            <a-popconfirm v-if="record.ticket_status==='rejected'" title="确认删除已拒绝工单?" @confirm="deleteResourceTicket(record.id!).then(fetchData)"><a-button danger size="small">删除</a-button></a-popconfirm>
+            <a-button v-if="record.ticket_status==='pending_delivery'" v-access:code="['infra:resource-ticket:deliver']" type="primary" size="small" @click="handleDeliver(record)">确认交付</a-button>
+            <a-popconfirm v-if="record.ticket_status==='rejected'" title="确认删除已拒绝工单?" @confirm="deleteResourceTicket(record.id!).then(fetchData)"><a-button v-access:code="['infra:resource-ticket:delete']" danger size="small">删除</a-button></a-popconfirm>
           </a-space></template>
         </template>
       </a-table>
@@ -120,12 +120,12 @@ async function handleDeliver(ticket:Ticket){await deliverTicket(ticket.id!,{comm
           </a-row>
         </a-form>
       </a-modal>
-      <a-modal v-model:open="provisionVisible" title="自动开通云资源" :confirm-loading="provisioning" @ok="handleProvision" width="560px">
-        <a-alert message="提交后将直接调用云厂商接口创建实例" type="warning" show-icon style="margin-bottom:16px" />
+      <a-modal v-model:open="provisionVisible" title="登记资源配置" :confirm-loading="provisioning" @ok="handleProvision" width="560px">
+        <a-alert message="当前阶段记录人工或外部平台配置结果，不会直接调用云厂商创建实例。" type="info" show-icon style="margin-bottom:16px" />
         <a-form layout="vertical">
-          <a-form-item label="云厂商对接配置" required><a-select v-model:value="provisionForm.config_id" :options="providerConfigs.filter(item=>item.platform_id===provisionTicketRecord?.cloud_platform_id&&item.status==='active').map(item=>({value:item.id,label:`${item.account_name} / ${item.region_name}`}))" placeholder="选择已认证配置" /></a-form-item>
-          <a-form-item label="镜像 ID" required><a-input v-model:value="provisionForm.image_id" placeholder="请输入云平台镜像 ID" /></a-form-item>
-          <a-form-item label="实例规格" required><a-input v-model:value="provisionForm.flavor" placeholder="例如 ecs.c6.large" /></a-form-item>
+          <a-form-item label="云厂商对接配置"><a-select v-model:value="provisionForm.config_id" allow-clear :options="providerConfigs.filter(item=>item.platform_id===provisionTicketRecord?.cloud_platform_id&&item.status==='active').map(item=>({value:item.id,label:`${item.account_name} / ${item.region_name}`}))" placeholder="可选：记录使用的对接配置" /></a-form-item>
+          <a-form-item label="镜像 ID"><a-input v-model:value="provisionForm.image_id" placeholder="可选" /></a-form-item>
+          <a-form-item label="实例规格"><a-input v-model:value="provisionForm.flavor" placeholder="例如 ecs.c6.large" /></a-form-item>
           <a-form-item label="配置说明"><a-textarea v-model:value="provisionForm.details" :rows="3" /></a-form-item>
         </a-form>
       </a-modal>

@@ -84,7 +84,7 @@ async function handleStatus(r:Risk,status:string) { await updateRisk(r.id,{statu
             <template v-if="column.key==='actions'">
               <a-space>
                 <a-button type="link" size="small" @click="showDetail(record)">详情</a-button>
-                <a-dropdown>
+                <a-dropdown v-access:code="['infra:risk:update']">
                   <a-button type="link" size="small">处置 <Icon icon="lucide:chevron-down" /></a-button>
                   <template #overlay>
                     <a-menu @click="({key}:any)=>handleStatus(record,key)">

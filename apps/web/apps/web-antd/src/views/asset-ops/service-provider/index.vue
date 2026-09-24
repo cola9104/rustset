@@ -18,12 +18,12 @@ async function handleSubmit() { if (editingId.value) { await updateServiceProvid
 <template>
   <Page auto-content-height>
     <div style="padding:16px">
-      <a-space :size="24" style="margin-bottom:20px"><a-button type="primary" @click="openCreate">新建服务商</a-button><a-input-search v-model:value="searchText" placeholder="搜索服务商" allow-clear style="width:260px" /><a-button @click="fetchData">刷新</a-button></a-space>
+      <a-space :size="24" style="margin-bottom:20px"><a-button v-access:code="['infra:service-provider:create']" type="primary" @click="openCreate">新建服务商</a-button><a-input-search v-model:value="searchText" placeholder="搜索服务商" allow-clear style="width:260px" /><a-button @click="fetchData">刷新</a-button></a-space>
       <a-table :columns="columns" :data-source="filteredRows" :loading="loading" row-key="id" size="middle" :pagination="{pageSize:20}">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'"><a-tag :color="record.status === 'active' ? 'green' : 'red'">{{ record.status }}</a-tag></template>
           <template v-if="column.key === 'actions'">
-            <a-space><a-button size="small" @click="openEdit(record)">编辑</a-button><a-popconfirm title="确认删除?" @confirm="deleteServiceProvider(record.id!).then(fetchData)"><a-button size="small" danger>删除</a-button></a-popconfirm></a-space>
+            <a-space><a-button v-access:code="['infra:service-provider:update']" size="small" @click="openEdit(record)">编辑</a-button><a-popconfirm title="确认删除?" @confirm="deleteServiceProvider(record.id!).then(fetchData)"><a-button v-access:code="['infra:service-provider:delete']" size="small" danger>删除</a-button></a-popconfirm></a-space>
           </template>
         </template>
       </a-table>

@@ -1,4 +1,4 @@
-import { requestClient } from '#/api/request';
+import { infraCreate, infraDelete, infraGet, infraList, infraUpdate } from './compat';
 
 export namespace ScanServiceProviderApi {
   export interface ServiceProvider {
@@ -9,8 +9,8 @@ export namespace ScanServiceProviderApi {
     status: string; created_at: string; updated_at?: string;
   }
 }
-export function getServiceProviderList() { return requestClient.get<ScanServiceProviderApi.ServiceProvider[]>('/asset-ops/service-providers'); }
-export function getServiceProvider(id: number) { return requestClient.get<ScanServiceProviderApi.ServiceProvider>(`/asset-ops/service-providers/${id}`); }
-export function createServiceProvider(data: ScanServiceProviderApi.ServiceProvider) { return requestClient.post('/asset-ops/service-providers', data); }
-export function updateServiceProvider(id: number, data: ScanServiceProviderApi.ServiceProvider) { return requestClient.put(`/asset-ops/service-providers/${id}`, data); }
-export function deleteServiceProvider(id: number) { return requestClient.delete(`/asset-ops/service-providers/${id}`); }
+export function getServiceProviderList() { return infraList<ScanServiceProviderApi.ServiceProvider>('service-provider'); }
+export function getServiceProvider(id: number) { return infraGet<ScanServiceProviderApi.ServiceProvider>('service-provider', id); }
+export function createServiceProvider(data: ScanServiceProviderApi.ServiceProvider) { return infraCreate('service-provider', data); }
+export function updateServiceProvider(id: number, data: ScanServiceProviderApi.ServiceProvider) { return infraUpdate('service-provider', id, data); }
+export function deleteServiceProvider(id: number) { return infraDelete('service-provider', id); }

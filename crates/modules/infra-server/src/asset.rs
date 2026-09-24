@@ -229,14 +229,37 @@ async fn biz_get(
 }
 async fn biz_create(
     State(state): State<InfraState>,
-    Json(p): Json<Value>,
+    Json(mut p): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
+    if let Some(object) = p.as_object_mut() {
+        if let Some(Value::Bool(enabled)) = object.get("hasSecurityProduct").cloned() {
+            object.insert(
+                "hasSecurityProduct".to_string(),
+                Value::Number((enabled as i32).into()),
+            );
+        }
+        let resource_id = uuid::Uuid::new_v4().to_string();
+        object
+            .entry("resourceId".to_string())
+            .or_insert(Value::String(resource_id.clone()));
+        object
+            .entry("instanceId".to_string())
+            .or_insert(Value::String(resource_id));
+    }
     table_create(&state.pool, BUSINESS_RESOURCE, p).await
 }
 async fn biz_update(
     State(state): State<InfraState>,
-    Json(p): Json<Value>,
+    Json(mut p): Json<Value>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Some(object) = p.as_object_mut()
+        && let Some(Value::Bool(enabled)) = object.get("hasSecurityProduct").cloned()
+    {
+        object.insert(
+            "hasSecurityProduct".to_string(),
+            Value::Number((enabled as i32).into()),
+        );
+    }
     table_update(&state.pool, BUSINESS_RESOURCE, p).await
 }
 async fn biz_delete(

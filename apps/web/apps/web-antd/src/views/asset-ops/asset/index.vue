@@ -44,7 +44,7 @@ const statCards = [
             <a-input-search v-model:value="searchText" placeholder="搜索资产名称/IP/负责人..." style="width:260px" allow-clear />
             <a-segmented v-model:value="viewMode" :options="[{value:'grid',label:'卡片'},{value:'table',label:'列表'}]" />
             <a-button @click="fetchData"><Icon icon="lucide:refresh-cw" /> 刷新</a-button>
-            <a-button type="primary" @click="openCreate"><Icon icon="lucide:plus" /> 新建资产</a-button>
+            <a-button v-access:code="['infra:asset:create']" type="primary" @click="openCreate"><Icon icon="lucide:plus" /> 新建资产</a-button>
           </a-space>
         </template>
       </a-page-header>
@@ -90,12 +90,12 @@ const statCards = [
             </div>
             <a-row :gutter="8">
               <a-col :span="16"><a-progress :percent="item.weight" :size="20" :show-info="false" :stroke-color="item.weight>70?'var(--ant-color-error)':item.weight>40?'var(--ant-color-warning)':'var(--ant-color-success)'" /></a-col>
-              <a-col :span="8"><a-space size="0"><a-button v-if="item.editable" type="link" size="small" @click="openEdit(item)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></a-col>
+              <a-col :span="8"><a-space size="0"><a-button v-if="item.editable" v-access:code="['infra:asset:update']" type="link" size="small" @click="openEdit(item)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></a-col>
             </a-row>
           </a-card>
         </a-col>
       </a-row>
-      <a-empty v-if="viewMode==='grid' && !loading && !filtered.length" description="暂无资产数据" style="margin-top:60px"><a-button type="primary" @click="openCreate">创建第一个资产</a-button></a-empty>
+      <a-empty v-if="viewMode==='grid' && !loading && !filtered.length" description="暂无资产数据" style="margin-top:60px"><a-button v-access:code="['infra:asset:create']" type="primary" @click="openCreate">创建第一个资产</a-button></a-empty>
 
       <!-- Table View -->
       <a-card style="border-radius:10px;margin-top:16px" size="small" v-if="viewMode==='table'">
@@ -106,7 +106,7 @@ const statCards = [
             <template v-if="column.key==='ports'">{{ (record.ports||[]).length }}</template>
             <template v-if="column.key==='findings'">{{ record.finding_count || 0 }}</template>
             <template v-if="column.key==='weight'"><a-progress :percent="record.weight" :size="20" :show-info="false" :stroke-color="record.weight>70?'var(--ant-color-error)':record.weight>40?'var(--ant-color-warning)':'var(--ant-color-success)'" style="width:60px;display:inline-block" /><span style="font-size:11px;margin-left:4px">{{ record.weight }}</span></template>
-            <template v-if="column.key==='actions'"><a-space><a-button v-if="record.editable" type="link" size="small" @click="openEdit(record)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></template>
+            <template v-if="column.key==='actions'"><a-space><a-button v-if="record.editable" v-access:code="['infra:asset:update']" type="link" size="small" @click="openEdit(record)">编辑</a-button><a-tag v-else>来源只读</a-tag></a-space></template>
           </template>
         </a-table>
       </a-card>

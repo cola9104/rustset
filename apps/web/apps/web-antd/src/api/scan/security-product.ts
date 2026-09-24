@@ -1,4 +1,4 @@
-import { requestClient } from '#/api/request';
+import { infraCreate, infraDelete, infraGet, infraList, infraUpdate } from './compat';
 
 export namespace ScanSecurityProductApi {
   export interface SecurityProduct {
@@ -11,8 +11,8 @@ export namespace ScanSecurityProductApi {
     remarks?: string; created_at: string;
   }
 }
-export function getSecurityProductList() { return requestClient.get<ScanSecurityProductApi.SecurityProduct[]>('/asset-ops/security-products'); }
-export function getSecurityProduct(id: number) { return requestClient.get<ScanSecurityProductApi.SecurityProduct>(`/asset-ops/security-products/${id}`); }
-export function createSecurityProduct(data: ScanSecurityProductApi.SecurityProduct) { return requestClient.post('/asset-ops/security-products', data); }
-export function updateSecurityProduct(id: number, data: ScanSecurityProductApi.SecurityProduct) { return requestClient.put(`/asset-ops/security-products/${id}`, data); }
-export function deleteSecurityProduct(id: number) { return requestClient.delete(`/asset-ops/security-products/${id}`); }
+export function getSecurityProductList() { return infraList<ScanSecurityProductApi.SecurityProduct>('security-product'); }
+export function getSecurityProduct(id: number) { return infraGet<ScanSecurityProductApi.SecurityProduct>('security-product', id); }
+export function createSecurityProduct(data: ScanSecurityProductApi.SecurityProduct) { return infraCreate('security-product', data); }
+export function updateSecurityProduct(id: number, data: ScanSecurityProductApi.SecurityProduct) { return infraUpdate('security-product', id, data); }
+export function deleteSecurityProduct(id: number) { return infraDelete('security-product', id); }

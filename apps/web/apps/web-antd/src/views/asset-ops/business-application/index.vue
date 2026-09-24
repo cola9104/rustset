@@ -21,14 +21,14 @@ async function addEp() { await addApplicationEndpoint(epAppId.value, epForm.valu
 <template>
   <Page auto-content-height>
     <div style="padding:16px">
-      <a-space :size="24" style="margin-bottom:20px"><a-button type="primary" @click="openCreate">新建应用</a-button><a-input-search v-model:value="searchText" allow-clear placeholder="搜索应用名称或描述" style="width:260px" /><a-button @click="fetchData">刷新</a-button></a-space>
+      <a-space :size="24" style="margin-bottom:20px"><a-button v-access:code="['infra:business-application:create']" type="primary" @click="openCreate">新建应用</a-button><a-input-search v-model:value="searchText" allow-clear placeholder="搜索应用名称或描述" style="width:260px" /><a-button @click="fetchData">刷新</a-button></a-space>
       <a-table :columns="columns" :data-source="filteredRows" :loading="loading" row-key="id" size="middle" :pagination="{pageSize:20}">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'actions'">
             <a-space :size="12">
               <a-button size="small" @click="openEndpoints(record)">接口</a-button>
-              <a-button size="small" @click="openEdit(record)">编辑</a-button>
-              <a-popconfirm title="确认删除?" @confirm="deleteBusinessApplication(record.id!).then(fetchData)"><a-button size="small" danger>删除</a-button></a-popconfirm>
+              <a-button v-access:code="['infra:business-application:update']" size="small" @click="openEdit(record)">编辑</a-button>
+              <a-popconfirm title="确认删除?" @confirm="deleteBusinessApplication(record.id!).then(fetchData)"><a-button v-access:code="['infra:business-application:delete']" size="small" danger>删除</a-button></a-popconfirm>
             </a-space>
           </template>
         </template>
@@ -47,7 +47,7 @@ async function addEp() { await addApplicationEndpoint(epAppId.value, epForm.valu
           <a-form-item label="目标IP"><a-input v-model:value="epForm.dest_ip" style="width:130px" /></a-form-item>
           <a-form-item label="NAT IP"><a-input v-model:value="epForm.nat_ip" style="width:130px" /></a-form-item>
           <a-form-item label="端口"><a-input v-model:value="epForm.dest_port" style="width:80px" /></a-form-item>
-          <a-form-item><a-button type="primary" @click="addEp">添加</a-button></a-form-item>
+          <a-form-item><a-button v-access:code="['infra:business-application:update']" type="primary" @click="addEp">添加</a-button></a-form-item>
         </a-form>
       </a-modal>
     </div>

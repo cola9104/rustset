@@ -5,7 +5,6 @@ import { message } from 'ant-design-vue';
 import { getBusinessResourceList, createBusinessResource, updateBusinessResource, deleteBusinessResource } from '#/api/scan/business-resource';
 import { getMachineRoomList } from '#/api/scan/machine-room';
 import { getCloudProviderConfigList } from '#/api/scan/cloud-provider-config';
-import { getCabinetList, getCabinetRowList } from '#/api/scan/cabinet';
 import { useLocalTableSearch } from '../composables/useLocalTableSearch';
 import PhysicalNetworkFields from './components/PhysicalNetworkFields.vue';
 const props = defineProps<{ fixedResourceType?: 'physical' }>();
@@ -19,7 +18,7 @@ const columns = [{ title: '名称', dataIndex: 'ecs_name' }, { title: '类型', 
 const typeLabel: Record<string, string> = { cloud: '云资源', physical: '物理机' };
 const deploymentLabel: Record<string, string> = { cloud_managed: '云平台托管', datacenter_managed: '机房托管', standalone: '独立部署' };
 const statusLabel: Record<string, string> = { available: '空闲', allocated: '已分配', maintenance: '维修中', offline: '已下线', retired: '已退役' };
-async function fetchData() { loading.value = true; try { const [resources, roomRows, configRows, rowData, cabinetData] = await Promise.all([getBusinessResourceList(), getMachineRoomList(), getCloudProviderConfigList(), getCabinetRowList(), getCabinetList()]); data.value = props.fixedResourceType ? (resources as any[]).filter(item => item.resource_type === props.fixedResourceType) as any : resources as any; rooms.value = roomRows as any; configs.value = configRows as any; cabinetRows.value = rowData as any; cabinets.value = cabinetData as any; } catch { message.error('加载失败'); } finally { loading.value = false; } }
+async function fetchData() { loading.value = true; try { const [resources, roomRows, configRows] = await Promise.all([getBusinessResourceList(), getMachineRoomList(), getCloudProviderConfigList()]); data.value = props.fixedResourceType ? (resources as any[]).filter(item => item.resource_type === props.fixedResourceType) as any : resources as any; rooms.value = roomRows as any; configs.value = configRows as any; cabinetRows.value = []; cabinets.value = []; } catch { message.error('加载失败'); } finally { loading.value = false; } }
 onMounted(fetchData);
 function openCreate() { editingId.value = undefined; form.value = emptyForm(); if (props.fixedResourceType) { form.value.resource_type = props.fixedResourceType; form.value.deployment_type = 'standalone'; form.value.ecs_status = 'available'; } modalVisible.value = true; }
 function openEdit(r: Resource) { editingId.value = r.id; form.value = { ...r }; modalVisible.value = true; }
@@ -29,7 +28,7 @@ async function handleSubmit() { if (form.value.resource_type === 'physical' && f
   <Page auto-content-height>
     <div style="padding:16px">
       <a-page-header v-if="fixedResourceType" title="物理服务器" sub-title="维护物理服务器资产台账、部署归属和网络配置" style="padding:0;margin-bottom:16px" />
-      <a-space :size="24" style="margin-bottom:20px"><a-button type="primary" @click="openCreate">{{ fixedResourceType ? '新建物理服务器' : '新建业务资源' }}</a-button><a-input-search v-model:value="searchText" allow-clear placeholder="搜索名称、区域、客户或 IP" style="width:260px" /><a-button @click="fetchData">刷新</a-button></a-space>
+      <a-space :size="24" style="margin-bottom:20px"><a-button v-access:code="['infra:business-resource:create']" type="primary" @click="openCreate">{{ fixedResourceType ? '新建物理服务器' : '新建业务资源' }}</a-button><a-input-search v-model:value="searchText" allow-clear placeholder="搜索名称、区域、客户或 IP" style="width:260px" /><a-button @click="fetchData">刷新</a-button></a-space>
       <a-table :columns="columns" :data-source="filteredRows" :loading="loading" row-key="id" size="middle" :pagination="{pageSize:20}">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'resource_type'">{{ typeLabel[record.resource_type] || record.resource_type }}</template>
@@ -40,7 +39,7 @@ async function handleSubmit() { if (form.value.resource_type === 'physical' && f
           <template v-if="column.key === 'ip'">{{ record.resource_type === 'physical' ? record.management_ip || record.business_ip || '-' : record.ip_address || '-' }}</template>
           <template v-if="column.key === 'application_status'"><a-tag :color="record.application_status === '已批准' ? 'green' : record.application_status === '待审核' ? 'orange' : 'default'">{{ record.application_status }}</a-tag></template>
           <template v-if="column.key === 'actions'">
-            <a-space :size="12"><a-button size="small" @click="openEdit(record)">编辑</a-button><a-popconfirm title="确认删除?" @confirm="deleteBusinessResource(record.id!).then(fetchData)"><a-button size="small" danger>删除</a-button></a-popconfirm></a-space>
+            <a-space :size="12"><a-button v-access:code="['infra:business-resource:update']" size="small" @click="openEdit(record)">编辑</a-button><a-popconfirm title="确认删除?" @confirm="deleteBusinessResource(record.id!).then(fetchData)"><a-button v-access:code="['infra:business-resource:delete']" size="small" danger>删除</a-button></a-popconfirm></a-space>
           </template>
         </template>
       </a-table>

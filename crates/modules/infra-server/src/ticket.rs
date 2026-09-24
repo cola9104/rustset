@@ -51,6 +51,12 @@ async fn create(
     Json(mut payload): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     if let Some(obj) = payload.as_object_mut() {
+        if let Some(Value::Bool(enabled)) = obj.get("hasSecurityProduct").cloned() {
+            obj.insert(
+                "hasSecurityProduct".to_string(),
+                Value::Number((enabled as i32).into()),
+            );
+        }
         obj.entry("ticketStatus".to_string())
             .or_insert(Value::String("pending_approval".to_string()));
         let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
@@ -60,6 +66,16 @@ async fn create(
             .or_insert(Value::String(now));
         obj.entry("deliveryStatus".to_string())
             .or_insert(Value::String("未交付".to_string()));
+        obj.entry("ticketType".to_string())
+            .or_insert(Value::String("create".to_string()));
+        obj.entry("riskLevel".to_string())
+            .or_insert(Value::String("normal".to_string()));
+        obj.entry("approvalStage".to_string())
+            .or_insert(Value::Number(1.into()));
+        obj.entry("approvalTotal".to_string())
+            .or_insert(Value::Number(1.into()));
+        obj.entry("currentApprovalRole".to_string())
+            .or_insert(Value::String("资源管理员".to_string()));
         obj.entry("createdBy".to_string())
             .or_insert(Value::String(user.username.clone()));
         obj.entry("applicantName".to_string())
@@ -70,8 +86,16 @@ async fn create(
 
 async fn update(
     State(s): State<InfraState>,
-    Json(p): Json<Value>,
+    Json(mut p): Json<Value>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Some(object) = p.as_object_mut()
+        && let Some(Value::Bool(enabled)) = object.get("hasSecurityProduct").cloned()
+    {
+        object.insert(
+            "hasSecurityProduct".to_string(),
+            Value::Number((enabled as i32).into()),
+        );
+    }
     table_update(&s.pool, TICKET, p).await
 }
 async fn delete_one(

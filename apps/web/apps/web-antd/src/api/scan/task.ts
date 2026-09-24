@@ -1,5 +1,7 @@
 import { requestClient } from '#/api/request';
 
+import { infraCreate, infraDelete, infraGet, infraList, toInfraPayload } from './compat';
+
 export namespace ScanTaskApi {
   export interface ScanTask {
     id: string; scanner_id?: string; name: string; target: string; status: string; start_time?: string;
@@ -8,9 +10,8 @@ export namespace ScanTaskApi {
     os_detection: boolean; site_identify: boolean;
   }
 }
-export function getTaskList() { return requestClient.get<ScanTaskApi.ScanTask[]>('/asset-ops/tasks'); }
-export function getTask(id: string) { return requestClient.get<ScanTaskApi.ScanTask>(`/asset-ops/tasks/${id}`); }
-export function createTask(data: any) { return requestClient.post('/asset-ops/tasks', data); }
-export function deleteTask(id: string) { return requestClient.delete(`/asset-ops/tasks/${id}`); }
-export function executeScan(data: { target_ip: string; ports: number[] }) { return requestClient.post('/asset-ops/scan', data); }
-export function getScanResults() { return requestClient.get<any[]>('/asset-ops/results'); }
+export function getTaskList() { return infraList<ScanTaskApi.ScanTask>('task'); }
+export function getTask(id: string) { return infraGet<ScanTaskApi.ScanTask>('task', id); }
+export function createTask(data: any) { return infraCreate('task', data); }
+export function deleteTask(id: string) { return infraDelete('task', id); }
+export function executeScan(data: { target_ip: string; ports: number[] }) { return requestClient.post('/infra/task/trigger-scan', toInfraPayload(data)); }

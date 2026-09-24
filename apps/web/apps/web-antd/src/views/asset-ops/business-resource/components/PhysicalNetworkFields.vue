@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { computed, ref, watch } from 'vue';
-interface RoomOption { id: number; room_name: string; platform_id: number }
+interface RoomOption { id: number; room_name: string; provider_id: number }
 interface ConfigOption { id: number; platform_id: number; account_name: string; region_name: string; status: string }
 interface RowOption { id?: number; machine_room_id: number; row_name: string; status: string }
 interface CabinetOption { id?: number; row_id: number; cabinet_name: string; total_u: number; status: string }
@@ -27,8 +27,7 @@ function changeRow(value: number) { selectedRowId.value = value; form.value.cabi
 
 function changeConfig(value: number) {
   form.value.cloud_provider_config_id = value;
-  const platformId = props.configs.find(item => item.id === value)?.platform_id;
-  if (!props.rooms.some(room => room.id === form.value.machine_room_id && room.platform_id === platformId)) form.value.machine_room_id = undefined;
+  if (!props.rooms.some(room => room.id === form.value.machine_room_id)) form.value.machine_room_id = undefined;
 }
 
 function changeDeployment(value: string) {
@@ -53,7 +52,6 @@ function changeDeployment(value: string) {
     <a-form-item label="部署方式" required>
       <a-select :value="form.deployment_type" @update:value="changeDeployment">
         <a-select-option value="cloud_managed">云平台托管</a-select-option>
-        <a-select-option value="datacenter_managed">机房托管</a-select-option>
         <a-select-option value="standalone">独立部署</a-select-option>
       </a-select>
     </a-form-item>
@@ -65,7 +63,7 @@ function changeDeployment(value: string) {
   </a-col>
   <a-col v-if="form.deployment_type !== 'standalone'" :span="12">
     <a-form-item label="部署机房" required>
-      <a-select :value="form.machine_room_id" placeholder="请选择物理机房" :options="rooms.filter(room => form.deployment_type !== 'cloud_managed' || room.platform_id === configs.find(item => item.id === form.cloud_provider_config_id)?.platform_id).map(room => ({ value: room.id, label: room.room_name }))" @update:value="changeRoom" />
+      <a-select :value="form.machine_room_id" placeholder="请选择物理机房" :options="rooms.map(room => ({ value: room.id, label: room.room_name }))" @update:value="changeRoom" />
     </a-form-item>
   </a-col>
   <a-col :span="24">

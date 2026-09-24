@@ -1,4 +1,4 @@
-import { requestClient } from '#/api/request';
+import { infraCreate, infraDelete, infraGet, infraList, infraUpdate } from './compat';
 
 export namespace ScanBusinessResourceApi {
   export interface BusinessResource {
@@ -21,8 +21,8 @@ export namespace ScanBusinessResourceApi {
     application_status?: string; delivery_status?: string;
   }
 }
-export function getBusinessResourceList() { return requestClient.get<ScanBusinessResourceApi.BusinessResource[]>('/asset-ops/business-resources'); }
-export function getBusinessResource(id: number) { return requestClient.get<ScanBusinessResourceApi.BusinessResource>(`/asset-ops/business-resources/${id}`); }
-export function createBusinessResource(data: ScanBusinessResourceApi.BusinessResource) { return requestClient.post('/asset-ops/business-resources', data); }
-export function updateBusinessResource(id: number, data: ScanBusinessResourceApi.BusinessResource) { return requestClient.put(`/asset-ops/business-resources/${id}`, data); }
-export function deleteBusinessResource(id: number) { return requestClient.delete(`/asset-ops/business-resources/${id}`); }
+export function getBusinessResourceList() { return infraList<ScanBusinessResourceApi.BusinessResource>('business-resource'); }
+export function getBusinessResource(id: number) { return infraGet<ScanBusinessResourceApi.BusinessResource>('business-resource', id); }
+export function createBusinessResource(data: ScanBusinessResourceApi.BusinessResource) { return infraCreate('business-resource', data); }
+export function updateBusinessResource(id: number, data: ScanBusinessResourceApi.BusinessResource) { return infraUpdate('business-resource', id, data); }
+export function deleteBusinessResource(id: number) { return infraDelete('business-resource', id); }
