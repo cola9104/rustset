@@ -1937,6 +1937,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustset-cmdb-api"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rustset-cmdb-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "rustset-cmdb-api",
+ "rustset-framework-common",
+ "rustset-framework-database",
+ "rustset-framework-security",
+ "rustset-framework-web",
+ "serde",
+ "serde_json",
+ "sqlx",
+]
+
+[[package]]
 name = "rustset-framework-common"
 version = "0.1.0"
 dependencies = [
@@ -2036,6 +2061,7 @@ dependencies = [
  "axum",
  "chrono",
  "rustset-ai-server",
+ "rustset-cmdb-server",
  "rustset-framework-common",
  "rustset-framework-database",
  "rustset-framework-redis",

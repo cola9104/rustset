@@ -12,6 +12,8 @@ members = [
     "crates/modules/infra-api",
     "crates/modules/infra-server",
     "crates/modules/ai-api",
+    "crates/modules/cmdb-api",
+    "crates/modules/cmdb-server",
     "crates/modules/ai-server",
     "crates/modules/system-api",
     "crates/modules/system-server",
@@ -53,6 +55,8 @@ rustset-framework-web = { path = "crates/framework/web" }
 rustset-infra-api = { path = "crates/modules/infra-api" }
 rustset-infra-server = { path = "crates/modules/infra-server" }
 rustset-ai-api = { path = "crates/modules/ai-api" }
+rustset-cmdb-api = { path = "crates/modules/cmdb-api" }
+rustset-cmdb-server = { path = "crates/modules/cmdb-server" }
 rustset-ai-server = { path = "crates/modules/ai-server" }
 rustset-system-api = { path = "crates/modules/system-api" }
 rustset-system-server = { path = "crates/modules/system-server" }

@@ -41,7 +41,30 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 8);
+    assert_eq!(applied, 9);
+
+    // 0009 CMDB core: dynamic models, attributes, JSONB instances, relations.
+    for cmdb_table in [
+        "public.cmdb_model",
+        "public.cmdb_attribute",
+        "public.cmdb_instance",
+        "public.cmdb_relation",
+    ] {
+        let exists: bool = sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
+            .bind(cmdb_table)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|_| panic!("inspect {cmdb_table}"));
+        assert!(exists, "expected table {cmdb_table}");
+    }
+    let cmdb_permissions: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu WHERE deleted = 0 AND permission LIKE 'cmdb:%' AND type = 3",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read cmdb permission menus");
+    assert_eq!(cmdb_permissions, 11, "0009 must seed the cmdb permission set");
+
 
     // 0008 drops the whole Toonflow media business.
     for removed_schema in ["toonflow", "toon", "media"] {

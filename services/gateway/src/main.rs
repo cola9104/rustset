@@ -15,7 +15,7 @@ const SERVICE_NAME: &str = "gateway";
 #[derive(Debug, Serialize)]
 struct GatewayIndex {
     service: &'static str,
-    modules: [&'static str; 3],
+    modules: [&'static str; 4],
 }
 
 #[tokio::main]
@@ -33,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     );
     let infra_state = rustset_infra_server::InfraState::new(database.clone());
     let ai_state = rustset_ai_server::AiState::new(database.clone(), tokens);
+    let cmdb_state = rustset_cmdb_server::CmdbState { pool: database.clone() };
     system_state.bootstrap().await?;
     let database_auth = system_state.database_auth_state();
 
@@ -42,6 +43,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(rustset_system_server::routes(system_state))
         .merge(rustset_infra_server::routes(infra_state))
         .merge(rustset_ai_server::routes(ai_state))
+        .merge(rustset_cmdb_server::routes(cmdb_state))
         .merge(health_route(SERVICE_NAME))
         .fallback(not_found)
         .layer(from_fn_with_state(
@@ -83,6 +85,6 @@ async fn not_found() -> AppError {
 async fn index() -> Json<ApiResponse<GatewayIndex>> {
     Json(ApiResponse::new(GatewayIndex {
         service: SERVICE_NAME,
-        modules: ["system", "infra", "ai"],
+        modules: ["system", "infra", "ai", "cmdb"],
     }))
 }

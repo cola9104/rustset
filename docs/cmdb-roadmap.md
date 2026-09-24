@@ -1,0 +1,39 @@
+# CMDB 与云平台适配路线图
+
+日期：2026-09-25。参考：[veops/cmdb](https://github.com/veops/cmdb)（自定义模型/属性/实例/关系/多视图/权限）。
+
+## 已落地（本轮，迁移 0009）
+
+- **模型（cmdb_model）**：名称/编码/唯一键/图标/排序；删除前校验实例清空。
+- **属性（cmdb_attribute）**：12 种类型（text/textarea/number/float/bool/date/datetime/select/multi_select/link/json/password）、必填、选项、默认值、列表显示；同模型内编码唯一。
+- **实例（cmdb_instance）**：JSONB 动态载荷 + GIN 索引；写入按模型定义严格校验（未知属性拒绝、类型/必填/选项校验、默认值填充）；模型唯一键查重；分页 + 关键词（attributes::text ILIKE）。
+- **关系（cmdb_relation）**：实例间有向关系绑定/解绑/双向查询；实例删除时级联软删关系。
+- **权限**：`cmdb:model:*`、`cmdb:attribute:*`、`cmdb:instance:*`，经 CurrentUser 提取器 + require 强制（与 system 模块同模式），菜单"配置管理"下挂模型管理/实例管理。
+- **前端**：模型管理页（含属性编辑器抽屉）、实例管理页（动态表格 + 动态表单）。
+
+## 二期（CMDB 深化）
+
+- 属性高级特性：计算属性、字体颜色、触发器（参考 veops）。
+- 视图：层级视图（机房树）、关系拓扑图（实例页展示 relation）。
+- Excel 批量导入/导出、批量字段修改。
+- 属性变更时对既有实例数据的兼容策略（仅校验新写入，历史数据按需清洗）。
+- 资产台账（infra_asset，采集表 43 字段）向 CMDB 模型的一键导入映射。
+
+## 云平台适配层（OpenTofu）
+
+目标：以 [OpenTofu](https://opentofu.org/)（Terraform 开源分支）+ 各家 Provider 作为统一云资源适配与开通执行层。
+
+对接锚点（现有代码）：
+- `infra_cloud_provider_config` / `infra_cloud_platform` / `infra_cloud_zone`：云凭据与平台台账 —— 作为 Provider 凭证来源（敏感字段脱敏沿用现有约定）。
+- `infra_resource_ticket`：工单状态机（approve → provision → deliver，0005 已补工作流字段）—— provision 阶段触发 OpenTofu apply。
+- `infra_task`（trigger-scan 已有执行语义）：任务编排与执行记录。
+
+设计草案：
+1. 新增 `cmdb` 侧"云资源模型"（如云主机/云盘/EIP），OpenTofu state 导入生成实例 —— CMDB 成为云资源的统一台账。
+2. 后端新增 `tofu-executor`：按工单渲染 `.tfvars` 模板 → `tofu plan/apply`（独立子进程、超时与日志审计）→ state 回读生成/更新 CMDB 实例。
+3. 凭据经云凭据表注入 Provider 环境变量，不落盘到仓库。
+
+## 自动审批与 Agent（计划）
+
+- **自动审批流**：在 `infra_resource_ticket` 审批链上增加规则引擎（阈值/部门/预算条件），命中规则的工单自动 approve 并进入 provision 队列。
+- **Agent（设计阶段）**：复用 `ai-server` 的模型管理与工具调用框架，定义 CMDB/工单/云适配的工具集（查台账、建工单、跑 tofu plan），由 Agent 完成自然语言到工单/资源操作的编排；人工审批作为 Agent 动作的可选闸门。待 CMDB 深化与 OpenTofu 适配层成型后细化。
