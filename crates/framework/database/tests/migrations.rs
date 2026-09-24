@@ -41,7 +41,36 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 10);
+    assert_eq!(applied, 11);
+
+    // 0011 ops agent: five Rust-executed tools and the preset 运维助理 role.
+    let ops_tools: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.tools WHERE name IN
+            ('cmdb_model_list','cmdb_instance_query','asset_query','ticket_query','ticket_create')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read ops agent tools");
+    assert_eq!(ops_tools, 5);
+    let chat_models: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.model_configs WHERE type='chat'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read chat models");
+    let agent_role: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.chat_roles
+         WHERE name='运维助理' AND public_status = true AND array_length(tool_ids, 1) = 5",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read ops agent role");
+    assert_eq!(
+        agent_role,
+        if chat_models > 0 { 1 } else { 0 },
+        "agent role is preset iff a chat model row exists"
+    );
+
 
     // 0010 OpenTofu provision tracking + auto-approval rules.
     let apply_status_exists: bool = sqlx::query_scalar(

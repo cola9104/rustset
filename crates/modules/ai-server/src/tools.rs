@@ -67,6 +67,190 @@ pub(crate) async fn execute(
             }
             response.text().await.map_err(|e| e.to_string())
         }
+        // ---- 运维 Agent 工具集（docs/cmdb-roadmap.md）----
+        "cmdb_model_list" => {
+            let rows = sqlx::query(
+                "SELECT m.id, m.name, m.code, m.description,
+                        (SELECT count(*) FROM cmdb_attribute a WHERE a.model_id=m.id AND a.deleted=0) AS attrs,
+                        (SELECT count(*) FROM cmdb_instance i WHERE i.model_id=m.id AND i.deleted=0) AS instances
+                 FROM cmdb_model m WHERE m.deleted=0 AND m.status=0 ORDER BY m.sort, m.id",
+            )
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let list: Vec<Value> = rows
+                .iter()
+                .map(|r| json!({"name": r.get::<String,_>("name"), "code": r.get::<String,_>("code"),
+                                "description": r.get::<Option<String>,_>("description"),
+                                "attributes": r.get::<i64,_>("attrs"), "instances": r.get::<i64,_>("instances")}))
+                .collect();
+            Ok(serde_json::to_string(&json!({"models": list})).unwrap())
+        }
+        "cmdb_instance_query" => {
+            let model_code = args.get("model_code").and_then(Value::as_str).ok_or("model_code 不能为空")?;
+            let keyword = args.get("keyword").and_then(Value::as_str).unwrap_or("");
+            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10).clamp(1, 20) as i64;
+            let model_id: Option<i64> = sqlx::query_scalar(
+                "SELECT id FROM cmdb_model WHERE code=$1 AND deleted=0",
+            )
+            .bind(model_code)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let Some(model_id) = model_id else {
+                return Ok(format!("模型 {model_code:?} 不存在"));
+            };
+            let rows = sqlx::query(
+                "SELECT attributes, update_time FROM cmdb_instance
+                 WHERE model_id=$1 AND deleted=0
+                   AND ($2::text = '' OR attributes::text ILIKE '%'||$2||'%')
+                 ORDER BY id DESC LIMIT $3",
+            )
+            .bind(model_id)
+            .bind(keyword)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let list: Vec<Value> = rows
+                .iter()
+                .map(|r| json!({"attributes": r.get::<Value,_>("attributes"), "updateTime": r.get::<chrono::NaiveDateTime,_>("update_time").to_string()}))
+                .collect();
+            Ok(serde_json::to_string(&json!({"instances": list})).unwrap())
+        }
+        "asset_query" => {
+            let keyword = args.get("keyword").and_then(Value::as_str).unwrap_or("");
+            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10).clamp(1, 20) as i64;
+            let rows = sqlx::query(
+                "SELECT name, ip, zone, device_type, os, owner, organization_name,
+                        application_name, classified_protection_level, status
+                 FROM infra_asset
+                 WHERE deleted=0 AND ($1::text = '' OR name ILIKE '%'||$1||'%' OR ip ILIKE '%'||$1||'%'
+                                      OR coalesce(organization_name,'') ILIKE '%'||$1||'%'
+                                      OR coalesce(application_name,'') ILIKE '%'||$1||'%')
+                 ORDER BY id DESC LIMIT $2",
+            )
+            .bind(keyword)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let list: Vec<Value> = rows
+                .iter()
+                .map(|r| json!({"name": r.get::<String,_>("name"), "ip": r.get::<String,_>("ip"),
+                                "zone": r.get::<String,_>("zone"),
+                                "deviceType": r.get::<Option<String>,_>("device_type"),
+                                "os": r.get::<Option<String>,_>("os"),
+                                "owner": r.get::<Option<String>,_>("owner"),
+                                "organization": r.get::<Option<String>,_>("organization_name"),
+                                "application": r.get::<Option<String>,_>("application_name"),
+                                "mlpsLevel": r.get::<Option<String>,_>("classified_protection_level"),
+                                "status": r.get::<i16,_>("status")}))
+                .collect();
+            Ok(serde_json::to_string(&json!({"assets": list})).unwrap())
+        }
+        "ticket_query" => {
+            let status = args.get("status").and_then(Value::as_str).unwrap_or("");
+            let keyword = args.get("keyword").and_then(Value::as_str).unwrap_or("");
+            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10).clamp(1, 20) as i64;
+            let rows = sqlx::query(
+                "SELECT id, resource_type, ecs_name, ecs_type, cpu_cores, memory_gb, resource_count,
+                        cloud_platform_name, cloud_region, ticket_status, apply_status,
+                        applicant_name, create_time
+                 FROM infra_resource_ticket
+                 WHERE deleted=0
+                   AND ($1::text = '' OR ticket_status=$1)
+                   AND ($2::text = '' OR coalesce(ecs_name,'') ILIKE '%'||$2||'%'
+                        OR coalesce(application_name,'') ILIKE '%'||$2||'%')
+                 ORDER BY id DESC LIMIT $3",
+            )
+            .bind(status)
+            .bind(keyword)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let list: Vec<Value> = rows
+                .iter()
+                .map(|r| json!({"id": r.get::<i64,_>("id"), "resourceType": r.get::<String,_>("resource_type"),
+                                "ecsName": r.get::<String,_>("ecs_name"),
+                                "ecsType": r.get::<Option<String>,_>("ecs_type"),
+                                "cpuCores": r.get::<Option<i32>,_>("cpu_cores"),
+                                "memoryGb": r.get::<Option<i32>,_>("memory_gb"),
+                                "count": r.get::<Option<i32>,_>("resource_count"),
+                                "cloudPlatform": r.get::<Option<String>,_>("cloud_platform_name"),
+                                "region": r.get::<Option<String>,_>("cloud_region"),
+                                "ticketStatus": r.get::<String,_>("ticket_status"),
+                                "applyStatus": r.get::<Option<String>,_>("apply_status"),
+                                "applicant": r.get::<Option<String>,_>("applicant_name"),
+                                "createTime": r.get::<Option<chrono::NaiveDateTime>,_>("create_time").map(|t| t.to_string())}))
+                .collect();
+            Ok(serde_json::to_string(&json!({"tickets": list})).unwrap())
+        }
+        "ticket_create" => {
+            let ecs_name = args.get("ecs_name").and_then(Value::as_str).ok_or("ecs_name 不能为空")?;
+            let cpu = args.get("cpu_cores").and_then(Value::as_i64).unwrap_or(4);
+            let memory = args.get("memory_gb").and_then(Value::as_i64).unwrap_or(8);
+            let count = args.get("resource_count").and_then(Value::as_i64).unwrap_or(1);
+            let now = chrono::Utc::now();
+            let id: i64 = sqlx::query_scalar(
+                "INSERT INTO infra_resource_ticket
+                     (resource_type, ecs_name, ecs_type, ecs_os, cloud_category, cloud_region,
+                      resource_count, cpu_cores, memory_gb, application_name,
+                      ticket_status, ticket_type, approval_stage, approval_total,
+                      current_approval_role, delivery_status, created_by, applicant_name,
+                      create_time, update_time)
+                 VALUES ('ecs', $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                         'pending_approval', 'create', 1, 1, '资源管理员', '未交付', $10, $10,
+                         date_trunc('second', now()), date_trunc('second', now()))
+                 RETURNING id",
+            )
+            .bind(ecs_name)
+            .bind(args.get("ecs_type").and_then(Value::as_str))
+            .bind(args.get("ecs_os").and_then(Value::as_str))
+            .bind(args.get("cloud_category").and_then(Value::as_str))
+            .bind(args.get("cloud_region").and_then(Value::as_str))
+            .bind(count as i32)
+            .bind(cpu as i32)
+            .bind(memory as i32)
+            .bind(args.get("application_name").and_then(Value::as_str))
+            .bind(args.get("applicant").and_then(Value::as_str).unwrap_or("agent"))
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            let rule: Option<(String, bool)> = sqlx::query_as(
+                "SELECT name, auto_provision FROM infra_approval_rule
+                 WHERE deleted=0 AND status=0
+                   AND (resource_type='' OR resource_type='ecs')
+                   AND (max_cpu_cores IS NULL OR max_cpu_cores >= $1)
+                   AND (max_memory_gb IS NULL OR max_memory_gb >= $2)
+                   AND (max_resource_count IS NULL OR max_resource_count >= $3)
+                 ORDER BY id LIMIT 1",
+            )
+            .bind(cpu as i32)
+            .bind(memory as i32)
+            .bind(count as i32)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+            match rule {
+                Some((rule_name, _auto)) => {
+                    sqlx::query(
+                        "UPDATE infra_resource_ticket SET ticket_status='pending_provision',
+                                approver=$2, approve_comment=$3, update_time=now()
+                         WHERE id=$1",
+                    )
+                    .bind(id)
+                    .bind(format!("auto:{rule_name}"))
+                    .bind(format!("Agent 建单命中自动审批规则 {rule_name}"))
+                    .execute(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    Ok(format!("{{\"ticketId\": {id}, \"status\": \"pending_provision\", \"autoApprovedBy\": \"{rule_name}\"}}"))
+                }
+                None => Ok(format!("{{\"ticketId\": {id}, \"status\": \"pending_approval\"}}")),
+            }
+        }
         _ => Err(format!("工具 {name} 没有已注册的 Rust 执行器")),
     }
 }

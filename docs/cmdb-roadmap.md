@@ -39,7 +39,8 @@ v1 交付（已 E2E 验证：规则命中 → 建单自动审批 → tofu init/a
 2. 后端新增 `tofu-executor`：按工单渲染 `.tfvars` 模板 → `tofu plan/apply`（独立子进程、超时与日志审计）→ state 回读生成/更新 CMDB 实例。
 3. 凭据经云凭据表注入 Provider 环境变量，不落盘到仓库。
 
-## 自动审批与 Agent（计划）
+## 自动审批与 Agent ——自动审批已落地（0010），Agent v1 已落地（0011）
 
-- **自动审批流**：在 `infra_resource_ticket` 审批链上增加规则引擎（阈值/部门/预算条件），命中规则的工单自动 approve 并进入 provision 队列。
-- **Agent（设计阶段）**：复用 `ai-server` 的模型管理与工具调用框架，定义 CMDB/工单/云适配的工具集（查台账、建工单、跑 tofu plan），由 Agent 完成自然语言到工单/资源操作的编排；人工审批作为 Agent 动作的可选闸门。待 CMDB 深化与 OpenTofu 适配层成型后细化。
+- **自动审批流（已落地）**：`infra_approval_rule` 阈值规则引擎，建单命中即自动 approve，auto_provision 时直接触发 OpenTofu 开通。
+- **Agent v1（已落地）**：复用 `ai-server` 工具调用框架，注册 5 个 Rust 执行工具——`cmdb_model_list` / `cmdb_instance_query` / `asset_query` / `ticket_query` / `ticket_create`（建单走同一套自动审批规则；开通执行仍在工单流）。预置公共聊天角色“运维助理”（系统提示词 + 5 工具绑定），在 AI 聊天页选择该角色即可对话使用。实测链路已通至真实模型 API（需在“AI 模型管理”配置有效 API key 后即可对话）。
+- **Agent 二期**：工具沙箱与配额、`tofu plan` 预览工具（只读）、Agent 建单后自动跟踪开通结果、审批链人工闸门参数化。
