@@ -1629,6 +1629,13 @@ pub(crate) async fn table_create(
     payload: Value,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     let db_payload = camel_payload_to_snake(payload);
+    let missing = missing_required_fields(pool, spec.table, &db_payload).await?;
+    if !missing.is_empty() {
+        return Err(AppError::bad_request(format!(
+            "missing required fields: {}",
+            missing.join(", ")
+        )));
+    }
     let columns = table_writable_columns(pool, spec.table, &db_payload, false).await?;
     if columns.is_empty() {
         return Err(AppError::bad_request("no writable fields"));
@@ -1647,7 +1654,7 @@ pub(crate) async fn table_create(
         .bind(db_payload)
         .fetch_one(pool)
         .await
-        .map_err(|_| AppError::internal("failed to create record"))?;
+        .map_err(|error| record_query_error("create", error))?;
     Ok(Json(ApiResponse::new(id.to_string())))
 }
 
@@ -1679,8 +1686,56 @@ pub(crate) async fn table_update(
         .bind(db_payload)
         .execute(pool)
         .await
-        .map_err(|_| AppError::internal("failed to update record"))?;
+        .map_err(|error| record_query_error("update", error))?;
     Ok(Json(ApiResponse::new(())))
+}
+
+/// Columns the database demands on INSERT: NOT NULL with no default, besides
+/// the surrogate key and audit columns the generic INSERT supplies itself.
+async fn missing_required_fields(
+    pool: &PgPool,
+    table: &str,
+    db_payload: &Value,
+) -> Result<Vec<String>, AppError> {
+    let required: Vec<String> = sqlx::query_scalar(
+        "SELECT column_name FROM information_schema.columns
+         WHERE table_schema='public' AND table_name=$1
+           AND is_nullable='NO' AND column_default IS NULL
+           AND column_name NOT IN
+               ('id','creator','create_time','updater','update_time','deleted','tenant_id')
+         ORDER BY ordinal_position",
+    )
+    .bind(table)
+    .fetch_all(pool)
+    .await
+    .map_err(|_| AppError::internal("failed to inspect table"))?;
+    Ok(required
+        .into_iter()
+        .filter(|column| {
+            db_payload
+                .get(column.as_str())
+                .is_none_or(|value| value.is_null())
+        })
+        .collect())
+}
+
+/// Map a failed write to the API error the client deserves: data violations
+/// (class 22) and constraint violations (class 23) are caller input problems
+/// and surface as 400 with the database's field-level detail; anything else
+/// stays a 500 without leaking internals.
+fn record_query_error(action: &str, error: sqlx::Error) -> AppError {
+    if let sqlx::Error::Database(database) = &error {
+        if let Some(code) = database.code() {
+            if is_client_data_violation(&code) {
+                return AppError::bad_request(format!("{action}: {}", database.message()));
+            }
+        }
+    }
+    AppError::internal(format!("failed to {action} record"))
+}
+
+fn is_client_data_violation(code: &str) -> bool {
+    code.starts_with("22") || code.starts_with("23")
 }
 
 async fn table_writable_columns(
@@ -1983,4 +2038,24 @@ fn html_type(data_type: &str) -> &'static str {
 
 async fn ok_bool() -> Json<ApiResponse<bool>> {
     Json(ApiResponse::new(true))
+}
+
+#[cfg(test)]
+mod record_error_tests {
+    use super::is_client_data_violation;
+
+    #[test]
+    fn data_and_constraint_violations_are_client_errors() {
+        assert!(is_client_data_violation("22007")); // invalid date
+        assert!(is_client_data_violation("22P02")); // invalid text for type
+        assert!(is_client_data_violation("23502")); // not null
+        assert!(is_client_data_violation("23505")); // unique
+    }
+
+    #[test]
+    fn server_faults_stay_internal() {
+        assert!(!is_client_data_violation("42P01")); // undefined table
+        assert!(!is_client_data_violation("53300")); // too many connections
+        assert!(!is_client_data_violation(""));
+    }
 }
