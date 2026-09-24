@@ -62,7 +62,12 @@ Default local bootstrap account (seeded by the migration baseline, yudao demo da
 - Username: `admin`
 - Password: `admin123`
 
-Change this password after first login on any real deployment. A proper `BOOTSTRAP_ADMIN_PASSWORD` creation mechanism is not implemented yet (see `docs/migration/p0-baseline.md` §6); the admin account currently comes from the `0001_initial.sql` baseline seed.
+`BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` are the recovery/initialization path:
+
+- When no enabled super administrator exists, startup creates the named account (in the lowest enabled tenant, linked to the `super_admin` role — re-enabling or creating that role if needed) and logs `bootstrapped initial administrator`.
+- When the named account exists with an empty password column, startup sets the password from `BOOTSTRAP_ADMIN_PASSWORD` (conditional update on `password = ''`; a changed password is never overwritten).
+
+Change the seeded password after first login on any real deployment.
 
 ## Local Verification
 
@@ -202,6 +207,7 @@ location /api/ {
 
 - `DATABASE_URL is required`: export it or add it to the systemd environment file.
 - JWT startup error: `JWT_SECRET` must be at least 32 bytes.
+- No admin account: set `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` and restart; startup creates or repairs the administrator when none is enabled.
 - Frontend install fails under pnpm: the project is bun-managed; install bun (`curl -fsSL https://bun.sh/install | bash`) and use `bun install`.
 - Frontend API 404: check that the gateway is running and Nginx `/api/` proxy prefix handling.
 - SSE responses arrive all at once: disable proxy buffering and increase read timeout.
