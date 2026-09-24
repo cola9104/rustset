@@ -1,0 +1,22 @@
+# Normalize line endings: repository stores LF, checkout uses LF.
+# The 2026-09 mass CRLF rewrite of the working tree broke shell scripts and
+# polluted diffs; this prevents recurrence.
+* text=auto eol=lf
+
+# Binaries must never be touched by eol normalization.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg -text
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.mp3 binary
+*.mp4 binary
+*.wasm binary
+*.pdf binary
+*.gz binary
+*.zip binary

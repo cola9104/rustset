@@ -18,4 +18,4 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 export TEST_DATABASE_URL="postgres://rust_toon:rust_toon@127.0.0.1:${port}/rust_toon_test"
-cargo test -p rust-toon-framework-database --test migrations -- --ignored --nocapture
+cargo test -p rustset-framework-database --test migrations -- --ignored --nocapture
