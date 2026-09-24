@@ -129,8 +129,8 @@ cargo run -p rustset-gateway
 
 ```bash
 cd apps/web
-pnpm install
-pnpm dev:antd
+bun install
+bun run dev:antd
 ```
 
 基础设施：

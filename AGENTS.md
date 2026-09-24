@@ -5,7 +5,7 @@ This file is the handoff guide for AI coding agents working in this repository. 
 ## Project Shape
 
 - Backend: Rust workspace, gateway entrypoint at `services/gateway`.
-- Frontend: Dioxus WASM app at `apps/web-dioxus`.
+- Frontend: Vue 3 / Vben Admin (Ant Design Vue) monorepo at `apps/web`, managed with bun.
 - Database migrations: `sql/postgresql`, executed automatically by the Rust gateway on startup. `0001_initial.sql` is the consolidated schema and baseline data.
 - Bootstrap reference: `sql/bootstrap/current.sql` is a reference-only `pg_dump` snapshot and is never loaded by the application. The migration chain is sufficient to initialize a new server without `current.sql`.
 - Local infrastructure: PostgreSQL, Redis, NATS, and MinIO via `script/docker/docker-compose.yml`.
@@ -38,32 +38,31 @@ Start the backend gateway:
 export DATABASE_URL='postgres://rustset:rustset@127.0.0.1:5432/rustset'
 export REDIS_URL='redis://127.0.0.1:6379'
 export JWT_SECRET='local-development-jwt-secret-change-me-32bytes'
-export BOOTSTRAP_ADMIN_USERNAME='admin'
-export BOOTSTRAP_ADMIN_PASSWORD='Admin#123456'
 export RUST_LOG='info'
 cargo run -p rustset-gateway
 ```
 
-In a second terminal, start the Dioxus frontend:
+In a second terminal, start the Vben frontend:
 
 ```bash
-cd apps/web-dioxus
-dx serve --platform web
+cd apps/web
+bun install
+bun run dev:antd
 ```
 
 Open:
 
-- Frontend: `http://127.0.0.1:8080`
+- Frontend (dev): `http://127.0.0.1:5666`
 - Backend health: `http://127.0.0.1:8080/health`
 - OpenAPI: `http://127.0.0.1:8080/openapi.json`
 - MinIO console: `http://127.0.0.1:9001`
 
-Default local bootstrap account:
+Default local bootstrap account (seeded by the migration baseline, yudao demo data):
 
 - Username: `admin`
-- Password: `Admin#123456`
+- Password: `admin123`
 
-`BOOTSTRAP_ADMIN_PASSWORD` is only used to create the initial admin when it does not exist. If the database already has admins, startup skips creating another one.
+Change this password after first login on any real deployment. A proper `BOOTSTRAP_ADMIN_PASSWORD` creation mechanism is not implemented yet (see `docs/migration/p0-baseline.md` §6); the admin account currently comes from the `0001_initial.sql` baseline seed.
 
 ## Local Verification
 
@@ -78,7 +77,10 @@ bash script/test-database-migrations.sh
 Frontend build check:
 
 ```bash
-cd apps/web-dioxus && cargo check
+cd apps/web
+bun install
+bun run check:type
+bun run build:antd
 ```
 
 ## New Server Startup
@@ -167,14 +169,15 @@ curl -fsS http://127.0.0.1:8080/health
 
 ## Frontend Production
 
-Build the Dioxus frontend:
+Build the Vben frontend (bun required):
 
 ```bash
-cd apps/web-dioxus
-dx build --release --platform web
+cd apps/web
+bun install
+bun run build:antd
 ```
 
-Static output is in `target/dx/rustset-web-dioxus/release/web/public`.
+Static output is in `apps/web/apps/web-antd/dist` (plus a `dist.zip` archive).
 
 Serve that directory through Nginx or a CDN. Route SPA paths to `index.html`, and reverse proxy API traffic to the gateway.
 
@@ -199,8 +202,7 @@ location /api/ {
 
 - `DATABASE_URL is required`: export it or add it to the systemd environment file.
 - JWT startup error: `JWT_SECRET` must be at least 32 bytes.
-- No admin account: set `BOOTSTRAP_ADMIN_PASSWORD` for the first startup, then remove it after the account exists.
+- Frontend install fails under pnpm: the project is bun-managed; install bun (`curl -fsSL https://bun.sh/install | bash`) and use `bun install`.
 - Frontend API 404: check that the gateway is running and Nginx `/api/` proxy prefix handling.
 - SSE responses arrive all at once: disable proxy buffering and increase read timeout.
 - Port already in use: check `ss -ltnp | rg ':(8080|5666|5432|6379)'`.
-- Dioxus build fails: ensure `wasm32-unknown-unknown` target is installed (`rustup target add wasm32-unknown-unknown`).

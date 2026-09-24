@@ -1,6 +1,6 @@
-# Rust Toon
+# RustSet
 
-Rust Toon 是 Rust 后端与 Vben Admin 5 前端组成的动漫生产及通用 AI 管理平台。基础后台按 Yudao 的模块化思想实现，动漫工厂按 Toonflow 的业务流程实现；后端统一使用 Rust，前端统一使用 Vue 3、Vben 和 Ant Design Vue。
+RustSet 是 Rust 后端与 Vben Admin 5 前端组成的管理平台。基础后台按 Yudao 的模块化思想实现，动漫工厂按 Toonflow 的业务流程实现；后端统一使用 Rust，前端统一使用 Vue 3、Vben 和 Ant Design Vue，前端工程由 bun 管理。
 
 ## 功能组成
 
@@ -14,8 +14,7 @@ Rust Toon 是 Rust 后端与 Vben Admin 5 前端组成的动漫生产及通用 A
 
 - Rust stable（项目使用 Rust 2024 edition）
 - PostgreSQL 18
-- Node.js `22.18+` 或 `24.x`
-- pnpm `11+`
+- bun `1.4+`（前端包管理器；node 22/24 可选，供部分工具链使用）
 - Docker 及 Docker Compose（推荐用于本地基础设施）
 
 ## 五分钟本地启动
@@ -35,8 +34,6 @@ docker compose -f script/docker/docker-compose.yml up -d
 export DATABASE_URL='postgres://rustset:rustset@127.0.0.1:5432/rustset'
 export REDIS_URL='redis://127.0.0.1:6379'
 export JWT_SECRET='replace-with-at-least-32-random-bytes'
-export BOOTSTRAP_ADMIN_USERNAME='admin'
-export BOOTSTRAP_ADMIN_PASSWORD='Admin#123456'
 cargo run -p rustset-gateway
 ```
 
@@ -59,12 +56,13 @@ cargo run -p rustset-gateway
 
 ```bash
 cd apps/web
-corepack enable
-pnpm install
-pnpm dev:antd
+bun install
+bun run dev:antd
 ```
 
-访问 `http://127.0.0.1:5666`，默认后端为 `http://127.0.0.1:8080`。
+访问 `http://127.0.0.1:5666`，默认后端为 `http://127.0.0.1:8080`（开发代理将 `/api/*` 转发到网关并去掉前缀）。
+
+基线种子账号：`admin` / `admin123`（来自迁移基线数据，正式部署后请立即修改密码）。
 
 > 生产环境必须替换示例密码和 JWT 密钥。
 
@@ -74,8 +72,8 @@ pnpm dev:antd
 cargo test --workspace
 bash script/test-database-migrations.sh
 bash script/test-ai-e2e.sh
-pnpm --dir apps/web --filter @vben/web-antd run typecheck
-pnpm --dir apps/web --filter @vben/web-antd run build
+bun run --cwd apps/web check:type
+bun run --cwd apps/web build:antd
 ```
 
 ## 文档

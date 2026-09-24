@@ -18,7 +18,6 @@ members = [
     "crates/modules/system-api",
     "crates/modules/system-server",
     "services/gateway",
-    "apps/web-dioxus",
 ]
 
 [workspace.package]

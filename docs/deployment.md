@@ -7,7 +7,7 @@ AI 编码助手接手项目时应先阅读仓库根目录的 [AI 启动交接指
 1. 执行 `docker compose -f script/docker/docker-compose.yml up -d`。
 2. 按 [配置文档](configuration.md) 导出数据库、JWT 和管理员环境变量。
 3. 执行 `cargo run -p rustset-gateway`（首次启动自动初始化数据库并执行全部迁移）。
-4. 在 `apps/web` 执行 `pnpm install && pnpm dev:antd`。
+4. 在 `apps/web` 执行 `bun install && bun run dev:antd`。
 5. 检查 `GET http://127.0.0.1:8080/health`，然后访问 `http://127.0.0.1:5666`。
 
 数据库结构由网关的 SQLx Migrator 自动管理，启动时仅执行迁移，禁止同时把 SQL 文件挂载进 `/docker-entrypoint-initdb.d`。
@@ -29,7 +29,7 @@ cargo build --release -p rustset-gateway
 
 新服务器首次部署建议流程：
 
-1. 安装 Rust stable、Docker Compose、Node.js `22.18+` 或 `24.x`，并通过 Corepack 使用 pnpm `11+`。
+1. 安装 Rust stable、Docker Compose 和 bun `1.4+`（node 22/24 可选，供部分工具链使用）。
 2. 克隆代码到固定目录，例如 `/opt/rustset`。
 3. 启动基础设施：`docker compose -f script/docker/docker-compose.yml up -d`。使用托管 PostgreSQL/Redis 时，改为在环境变量中指向托管地址。
 4. 创建 `/etc/rustset/gateway.env`，写入 `DATABASE_URL`、`REDIS_URL`、强随机 `JWT_SECRET`、`GATEWAY_HOST`、`GATEWAY_PORT`、`RUST_LOG` 和首次管理员变量。
@@ -70,9 +70,8 @@ curl -fsS http://127.0.0.1:8080/health
 ## 前端生产构建
 
 ```bash
-corepack enable
-pnpm --dir apps/web install --frozen-lockfile
-pnpm --dir apps/web --filter @vben/web-antd run build
+bun install --frozen-lockfile --cwd apps/web
+bun run --cwd apps/web build:antd
 ```
 
 静态产物位于 `apps/web/apps/web-antd/dist`，可由 Nginx 或对象存储/CDN 托管。SPA 部署需要把未知前端路径回退至 `index.html`，并将 `/api/` 反向代理到 Rust 网关。
@@ -133,8 +132,8 @@ cargo fmt --all -- --check
 cargo test --workspace
 bash script/test-database-migrations.sh
 bash script/test-ai-e2e.sh
-pnpm --dir apps/web --filter @vben/web-antd run typecheck
-pnpm --dir apps/web --filter @vben/web-antd run build
+bun run --cwd apps/web check:type
+bun run --cwd apps/web build:antd
 ```
 
 `test-ai-e2e.sh` 会启动临时 PostgreSQL，并用本地模拟模型验证 JWT、普通聊天、SSE、消息落库及 Midjourney Imagine/Action 状态机，不调用外部付费模型。
