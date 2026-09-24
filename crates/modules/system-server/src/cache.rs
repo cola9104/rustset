@@ -6,7 +6,9 @@ use uuid::Uuid;
 
 use crate::{SystemState, infrastructure};
 
-const CURRENT_USER_CACHE_NAMESPACE: &str = "system:current-user";
+// v2 invalidates authorization snapshots created before the asset permission
+// migration. Ongoing role/menu changes still use the explicit invalidators.
+const CURRENT_USER_CACHE_NAMESPACE: &str = "system:current-user:v2";
 const CURRENT_USER_CACHE_TTL: Duration = Duration::from_secs(300);
 
 pub async fn load_current_user(

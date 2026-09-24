@@ -10,11 +10,51 @@ async fn applies_all_migrations_to_empty_postgres() {
     let pool = connect(&config).await.expect("connect test database");
     migrate(&pool).await.expect("apply complete migration set");
 
+    // New migrations are deliberately rerunnable because operators may need
+    // to repair partially imported snapshots during this migration window.
+    sqlx::raw_sql(include_str!(
+        "../../../../sql/postgresql/0003_kairos_asset_permissions.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("Kairos menu migration is idempotent");
+    sqlx::raw_sql(include_str!(
+        "../../../../sql/postgresql/0004_remove_baseline_runtime_messages.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("runtime baseline cleanup is idempotent");
+    sqlx::raw_sql(include_str!(
+        "../../../../sql/postgresql/0005_kairos_ticket_workflow_fields.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("Kairos ticket field migration is idempotent");
+    sqlx::raw_sql(include_str!(
+        "../../../../sql/postgresql/0006_grant_asset_ops_to_super_admin.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("super administrator asset grants are idempotent");
+
     let applied: i64 = sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations WHERE success")
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 2);
+    assert_eq!(applied, 6);
+
+    let ticket_type_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema='public'
+             AND table_name='infra_resource_ticket'
+             AND column_name='ticket_type'
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect Kairos ticket workflow fields");
+    assert!(ticket_type_exists);
 
     let storyboard_asset_order_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(
@@ -96,6 +136,53 @@ async fn applies_all_migrations_to_empty_postgres() {
         duplicate_route_names, 0,
         "active route menus must not generate duplicate frontend route names"
     );
+
+    let asset_ops_pages: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND component LIKE 'asset-ops/%' AND type = 2",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read Kairos asset operations pages");
+    assert_eq!(asset_ops_pages, 13);
+
+    let asset_ops_permissions: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND permission LIKE 'infra:%' AND parent_id IN (
+             SELECT id FROM system_menu
+             WHERE deleted = 0 AND component LIKE 'asset-ops/%' AND type = 2
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read Kairos asset operations permissions");
+    assert_eq!(asset_ops_permissions, 55);
+
+    let missing_super_admin_asset_links: i64 = sqlx::query_scalar(
+        "SELECT count(*)
+         FROM system_role role
+         CROSS JOIN system_menu menu
+         WHERE role.deleted = 0 AND role.status = 0 AND role.code = 'super_admin'
+           AND menu.deleted = 0
+           AND (
+             menu.path = '/asset-ops'
+             OR menu.component LIKE 'asset-ops/%'
+             OR menu.parent_id IN (
+               SELECT id FROM system_menu
+               WHERE deleted = 0 AND component LIKE 'asset-ops/%'
+             )
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM system_role_menu link
+             WHERE link.deleted = 0
+               AND link.role_id = role.id
+               AND link.menu_id = menu.id
+           )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("verify super administrator asset menu grants");
+    assert_eq!(missing_super_admin_asset_links, 0);
 
     let active_menu_links: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_menu

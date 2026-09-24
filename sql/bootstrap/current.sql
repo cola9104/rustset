@@ -2,14 +2,15 @@
 -- PostgreSQL database dump
 --
 
+\restrict 2Ap1VmVhytJAiL7XMQ2SX5UrLzC241DN71uNPjsdftWt14ICG1IaXxAEKOaTXg6
 
--- Dumped from database version 18.4 (Debian 18.4-1.pgdg13+1)
--- Dumped by pg_dump version 18.4 (Debian 18.4-1)
+-- Dumped from database version 18.6 (Debian 18.6-1.pgdg13+2)
+-- Dumped by pg_dump version 18.6 (Debian 18.6-1.pgdg13+2)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-
+SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -37,13 +38,6 @@ CREATE SCHEMA infra;
 --
 
 CREATE SCHEMA media;
-
-
---
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
--- *not* creating schema, since initdb creates it
 
 
 --
@@ -357,6 +351,20 @@ CREATE TABLE media.assets (
 
 
 --
+-- Name: _sqlx_migrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public._sqlx_migrations (
+    version bigint NOT NULL,
+    description text NOT NULL,
+    installed_on timestamp with time zone DEFAULT now() NOT NULL,
+    success boolean NOT NULL,
+    checksum bytea NOT NULL,
+    execution_time bigint NOT NULL
+);
+
+
+--
 -- Name: infra_api_access_log_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
@@ -439,6 +447,350 @@ CREATE TABLE public.infra_api_error_log (
     process_status smallint DEFAULT 0 NOT NULL,
     process_time timestamp without time zone,
     process_user_id bigint,
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_application_endpoint_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_application_endpoint_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_application_endpoint; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_application_endpoint (
+    id bigint DEFAULT nextval('public.infra_application_endpoint_seq'::regclass) NOT NULL,
+    business_application_id bigint NOT NULL,
+    protocol character varying(16) NOT NULL,
+    dest_ip character varying(64) NOT NULL,
+    nat_ip character varying(64),
+    dest_port character varying(16) NOT NULL,
+    domain character varying(256),
+    created_by character varying(64),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_asset_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_asset_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_asset; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_asset (
+    id bigint DEFAULT nextval('public.infra_asset_seq'::regclass) NOT NULL,
+    name character varying(256) NOT NULL,
+    ip character varying(64) NOT NULL,
+    zone character varying(128) NOT NULL,
+    ports text DEFAULT '[]'::text NOT NULL,
+    last_scanned character varying(32),
+    contact_person character varying(64),
+    contact_phone character varying(32),
+    created_by character varying(64),
+    updated_by character varying(64),
+    owner character varying(64),
+    weight integer DEFAULT 0 NOT NULL,
+    labels text DEFAULT '[]'::text,
+    os character varying(128),
+    device_type character varying(128),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_business_application_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_business_application_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_business_application; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_business_application (
+    id bigint DEFAULT nextval('public.infra_business_application_seq'::regclass) NOT NULL,
+    name character varying(256) NOT NULL,
+    description text,
+    created_by character varying(64),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_business_resource_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_business_resource_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_business_resource; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_business_resource (
+    id bigint DEFAULT nextval('public.infra_business_resource_seq'::regclass) NOT NULL,
+    resource_type character varying(32) NOT NULL,
+    ecs_name character varying(256) NOT NULL,
+    ecs_status character varying(64) NOT NULL,
+    resource_id character varying(128) NOT NULL,
+    cloud_region character varying(128) NOT NULL,
+    cloud_category character varying(128) NOT NULL,
+    cloud_provider_config_id bigint,
+    zone_name character varying(128),
+    platform_name character varying(128),
+    county_city character varying(64),
+    vdc_name character varying(128),
+    customer_name character varying(128) NOT NULL,
+    application_name character varying(128),
+    contract_name character varying(128),
+    instance_id character varying(128) NOT NULL,
+    ecs_type character varying(128) NOT NULL,
+    ecs_os character varying(128) NOT NULL,
+    cpu_cores integer DEFAULT 0 NOT NULL,
+    memory_gb integer DEFAULT 0 NOT NULL,
+    system_disk character varying(64) NOT NULL,
+    system_disk_size_gb integer DEFAULT 0 NOT NULL,
+    data_disk text,
+    completion_time character varying(32),
+    release_time character varying(32),
+    has_security_product integer DEFAULT 0 NOT NULL,
+    ip_address character varying(64) NOT NULL,
+    ecs_login_method character varying(64),
+    ecs_login_username character varying(128),
+    ecs_initial_password character varying(256),
+    bastion_address character varying(128),
+    bastion_admin_account character varying(128),
+    bastion_initial_password character varying(256),
+    serial_number character varying(128),
+    rack_location character varying(128),
+    hardware_model character varying(128),
+    warranty_expiry character varying(32),
+    agent_status character varying(32),
+    ipmi_address character varying(64),
+    remarks text,
+    application_status character varying(32),
+    delivery_status character varying(32),
+    delivery_confirmed_at character varying(32),
+    delivery_confirmed_by character varying(64),
+    applicant character varying(64),
+    department character varying(128),
+    approver character varying(64),
+    approval_time character varying(32),
+    approval_remarks text,
+    rejection_reason text,
+    bandwidth_mbps integer,
+    bandwidth_type character varying(32),
+    public_ip_count integer,
+    network_type character varying(32),
+    project_name character varying(128),
+    project_code character varying(64),
+    business_owner character varying(64),
+    tech_owner character varying(64),
+    contact_phone character varying(32),
+    billing_method character varying(32),
+    purchase_duration integer,
+    cost_center character varying(64),
+    security_level character varying(32),
+    data_sensitivity character varying(32),
+    purpose text,
+    expected_delivery_time character varying(32),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL,
+    machine_room_id bigint,
+    deployment_type character varying(32),
+    management_ip character varying(64),
+    business_ip character varying(64),
+    network_cidr character varying(64),
+    gateway character varying(64),
+    vlan_id character varying(64),
+    dns_servers character varying(256),
+    mac_address character varying(64),
+    switch_name character varying(128),
+    switch_port character varying(64)
+);
+
+
+--
+-- Name: infra_cloud_asset_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_cloud_asset_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_cloud_asset; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_cloud_asset (
+    id bigint DEFAULT nextval('public.infra_cloud_asset_seq'::regclass) NOT NULL,
+    cloud_provider_config_id bigint NOT NULL,
+    provider_type character varying(32) NOT NULL,
+    platform_name character varying(128) NOT NULL,
+    region_id character varying(128) NOT NULL,
+    instance_id character varying(128) NOT NULL,
+    name character varying(256) NOT NULL,
+    status character varying(32) NOT NULL,
+    private_ip character varying(64),
+    public_ip character varying(64),
+    cpu_cores integer DEFAULT 0 NOT NULL,
+    memory_gb integer DEFAULT 0 NOT NULL,
+    instance_type character varying(128) NOT NULL,
+    os_name character varying(128),
+    expire_time character varying(32),
+    raw_payload text,
+    synced_at character varying(32),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_cloud_platform_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_cloud_platform_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_cloud_platform; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_cloud_platform (
+    id bigint DEFAULT nextval('public.infra_cloud_platform_seq'::regclass) NOT NULL,
+    zone_id bigint NOT NULL,
+    platform_name character varying(128) NOT NULL,
+    platform_code character varying(64) NOT NULL,
+    description text,
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_cloud_provider_config_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_cloud_provider_config_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_cloud_provider_config; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_cloud_provider_config (
+    id bigint DEFAULT nextval('public.infra_cloud_provider_config_seq'::regclass) NOT NULL,
+    zone_id bigint,
+    platform_id bigint,
+    provider character varying(32) NOT NULL,
+    region_id character varying(128) NOT NULL,
+    region_name character varying(128) NOT NULL,
+    available_zones text,
+    account_name character varying(128) NOT NULL,
+    access_key_id character varying(256) NOT NULL,
+    access_key_secret character varying(512) NOT NULL,
+    status character varying(32) DEFAULT 'active'::character varying NOT NULL,
+    remarks text,
+    last_test_time timestamp without time zone,
+    last_test_result character varying(512),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_cloud_zone_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_cloud_zone_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_cloud_zone; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_cloud_zone (
+    id bigint DEFAULT nextval('public.infra_cloud_zone_seq'::regclass) NOT NULL,
+    zone_name character varying(128) NOT NULL,
+    zone_code character varying(64) NOT NULL,
+    description text,
     creator character varying(64) DEFAULT ''::character varying NOT NULL,
     create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updater character varying(64) DEFAULT ''::character varying NOT NULL,
@@ -718,6 +1070,330 @@ CREATE TABLE public.infra_job_log (
     update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     deleted smallint DEFAULT 0 NOT NULL
 );
+
+
+--
+-- Name: infra_machine_room_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_machine_room_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_machine_room; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_machine_room (
+    id bigint DEFAULT nextval('public.infra_machine_room_seq'::regclass) NOT NULL,
+    room_name character varying(128) NOT NULL,
+    room_code character varying(64) NOT NULL,
+    facility_type character varying(64) NOT NULL,
+    address character varying(512) NOT NULL,
+    provider_id bigint NOT NULL,
+    room_type character varying(64) NOT NULL,
+    contact_person character varying(64) NOT NULL,
+    contact_phone character varying(32) NOT NULL,
+    floor character varying(64),
+    cabinet_count integer,
+    area_size character varying(32),
+    remarks text,
+    status character varying(32) DEFAULT 'active'::character varying NOT NULL,
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_network_zone; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_network_zone (
+    id character varying(64) NOT NULL,
+    name character varying(128) NOT NULL,
+    cidr character varying(64) NOT NULL,
+    priority integer DEFAULT 0 NOT NULL,
+    cloud_platform_id bigint,
+    cloud_platform_name character varying(128),
+    machine_room_id bigint,
+    machine_room_name character varying(128),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_network_zone_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_network_zone_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_resource_ticket_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_resource_ticket_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_resource_ticket; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_resource_ticket (
+    id bigint DEFAULT nextval('public.infra_resource_ticket_seq'::regclass) NOT NULL,
+    resource_type character varying(32) NOT NULL,
+    ecs_name character varying(256) NOT NULL,
+    ticket_status character varying(32) NOT NULL,
+    provider_id bigint,
+    provider_name character varying(128),
+    cloud_platform_id bigint,
+    cloud_platform_name character varying(128),
+    machine_room_id bigint,
+    machine_room_name character varying(128),
+    cloud_region character varying(128),
+    cloud_category character varying(128),
+    zone_name character varying(128),
+    zone_cabinet character varying(128),
+    rack_units integer DEFAULT 0 NOT NULL,
+    customer_name character varying(128),
+    application_name character varying(128),
+    application_endpoint_id bigint,
+    application_domain character varying(256),
+    contract_name character varying(128),
+    ecs_type character varying(128),
+    ecs_os character varying(128),
+    resource_count integer DEFAULT 0 NOT NULL,
+    cpu_cores integer DEFAULT 0 NOT NULL,
+    memory_gb integer DEFAULT 0 NOT NULL,
+    system_disk character varying(64),
+    system_disk_size_gb integer DEFAULT 0 NOT NULL,
+    data_disk text,
+    expire_at character varying(32),
+    has_security_product integer DEFAULT 0 NOT NULL,
+    security_products text,
+    ip_address character varying(64),
+    delivery_status character varying(32),
+    remarks text,
+    created_by character varying(64) NOT NULL,
+    applicant_name character varying(64),
+    organization_id bigint,
+    organization_name character varying(128),
+    department_id bigint,
+    department_name character varying(128),
+    approver character varying(64),
+    approve_time character varying(32),
+    approve_comment text,
+    provisioner character varying(64),
+    provision_time character varying(32),
+    provision_details text,
+    deliverer character varying(64),
+    deliver_time character varying(32),
+    deliver_comment text,
+    fw_source_zone character varying(128),
+    fw_source_address character varying(64),
+    fw_source_port character varying(16),
+    fw_dest_zone character varying(128),
+    fw_dest_address character varying(64),
+    fw_dest_port character varying(16),
+    fw_protocol character varying(16),
+    fw_port character varying(16),
+    fw_direction character varying(16),
+    fw_valid_until character varying(32),
+    fw_firewall_name character varying(128),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL,
+    ticket_type character varying(32) DEFAULT 'create'::character varying NOT NULL,
+    risk_level character varying(32) DEFAULT 'normal'::character varying NOT NULL,
+    target_resource_id bigint,
+    target_config text,
+    maintenance_window character varying(64),
+    allow_interruption boolean DEFAULT false NOT NULL,
+    backup_confirmed boolean DEFAULT false NOT NULL,
+    rollback_plan text,
+    retention_until character varying(64),
+    approval_stage integer DEFAULT 1 NOT NULL,
+    approval_total integer DEFAULT 1 NOT NULL,
+    current_approval_role character varying(64) DEFAULT '资源管理员'::character varying
+);
+
+
+--
+-- Name: infra_risk; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_risk (
+    id character varying(64) NOT NULL,
+    asset_ip character varying(64) NOT NULL,
+    port integer NOT NULL,
+    severity character varying(32) NOT NULL,
+    description text NOT NULL,
+    solution text,
+    status character varying(32) NOT NULL,
+    assigned_to character varying(64),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_risk_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_risk_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_security_product_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_security_product_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_security_product; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_security_product (
+    id bigint DEFAULT nextval('public.infra_security_product_seq'::regclass) NOT NULL,
+    name character varying(128) NOT NULL,
+    category character varying(64) NOT NULL,
+    vendor character varying(128) NOT NULL,
+    model character varying(128) NOT NULL,
+    version character varying(64) NOT NULL,
+    serial_number character varying(128),
+    license_type character varying(64) NOT NULL,
+    license_expiry character varying(32),
+    management_ip character varying(64),
+    deployment_mode character varying(64) NOT NULL,
+    cloud_platform_id bigint,
+    machine_room_id bigint,
+    provider_id bigint,
+    status character varying(32) DEFAULT 'active'::character varying NOT NULL,
+    features text,
+    throughput character varying(64),
+    contact_person character varying(64) NOT NULL,
+    contact_phone character varying(32) NOT NULL,
+    remarks text,
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_service_provider_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_service_provider_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: infra_service_provider; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_service_provider (
+    id bigint DEFAULT nextval('public.infra_service_provider_seq'::regclass) NOT NULL,
+    provider_name character varying(128) NOT NULL,
+    provider_code character varying(64) NOT NULL,
+    short_name character varying(64) NOT NULL,
+    logo_url character varying(512),
+    contact_person character varying(64) NOT NULL,
+    contact_phone character varying(32) NOT NULL,
+    contact_email character varying(128) NOT NULL,
+    headquarters character varying(256) NOT NULL,
+    service_area character varying(256) NOT NULL,
+    business_license character varying(128) NOT NULL,
+    remarks text,
+    status character varying(32) DEFAULT 'active'::character varying NOT NULL,
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_task; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.infra_task (
+    id character varying(64) NOT NULL,
+    name character varying(256) NOT NULL,
+    target character varying(256) NOT NULL,
+    status character varying(32) NOT NULL,
+    start_time character varying(32),
+    end_time character varying(32),
+    found_assets integer DEFAULT 0 NOT NULL,
+    found_risks integer DEFAULT 0 NOT NULL,
+    port_policy character varying(32) NOT NULL,
+    domain_brute integer DEFAULT 0 NOT NULL,
+    service_detection integer DEFAULT 0 NOT NULL,
+    os_detection integer DEFAULT 0 NOT NULL,
+    site_identify integer DEFAULT 0 NOT NULL,
+    created_by character varying(64),
+    creator character varying(64) DEFAULT ''::character varying NOT NULL,
+    create_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updater character varying(64) DEFAULT ''::character varying NOT NULL,
+    update_time timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: infra_task_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.infra_task_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
@@ -2058,7 +2734,7 @@ CREATE TABLE toonflow.agent_deployments (
     disabled boolean DEFAULT false NOT NULL,
     model_config_id bigint,
     model_type character varying(32) DEFAULT 'chat'::character varying NOT NULL,
-    CONSTRAINT agent_deployments_model_type_check CHECK (((model_type)::text = ANY ((ARRAY['chat'::character varying, 'image'::character varying, 'video'::character varying, 'speech'::character varying])::text[])))
+    CONSTRAINT agent_deployments_model_type_check CHECK (((model_type)::text = ANY (ARRAY[('chat'::character varying)::text, ('image'::character varying)::text, ('video'::character varying)::text, ('speech'::character varying)::text])))
 );
 
 
@@ -2280,7 +2956,7 @@ CREATE TABLE toonflow.creative_manuals (
     data jsonb DEFAULT '[]'::jsonb NOT NULL,
     create_time bigint NOT NULL,
     update_time bigint NOT NULL,
-    CONSTRAINT creative_manuals_kind_check CHECK (((kind)::text = ANY ((ARRAY['visual'::character varying, 'director'::character varying])::text[])))
+    CONSTRAINT creative_manuals_kind_check CHECK (((kind)::text = ANY (ARRAY[('visual'::character varying)::text, ('director'::character varying)::text])))
 );
 
 
@@ -2567,6 +3243,22 @@ CREATE TABLE toonflow.videos (
     project_id bigint NOT NULL,
     video_track_id bigint
 );
+
+
+--
+-- Data for Name: chat_conversations; Type: TABLE DATA; Schema: ai; Owner: -
+--
+
+COPY ai.chat_conversations (id, user_id, title, pinned, role_id, model_id, temperature, max_tokens, max_contexts, system_message, create_time, update_time, tool_ids, knowledge_ids) FROM stdin;
+\.
+
+
+--
+-- Data for Name: chat_messages; Type: TABLE DATA; Schema: ai; Owner: -
+--
+
+COPY ai.chat_messages (id, conversation_id, user_id, type, model_id, content, reasoning_content, tokens, segment_ids, attachment_urls, tool_calls, create_time) FROM stdin;
+\.
 
 
 --
@@ -2876,6 +3568,100 @@ COPY media.assets (id, object_key, content_type, size_bytes, created_at, filenam
 
 
 --
+-- Data for Name: _sqlx_migrations; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public._sqlx_migrations (version, description, installed_on, success, checksum, execution_time) FROM stdin;
+1	initial	2026-09-24 15:41:34.450974+00	t	\\x8860dd58a2513c79f25b099e1d588be3498805ab6669631aee10cde0fca29f295b9c3034c032e242659903866fcb0692	664816341
+2	asset management	2026-09-24 15:41:35.121073+00	t	\\xe05a530c57ef242cfeea36462a3eea8fb8fbd23632897e6edf94848e30157ff4cc0628ffb2364c007aa0a55c65774a21	30331732
+3	kairos asset permissions	2026-09-24 15:41:35.154998+00	t	\\xc66a44c1446984d92c51f282d1e55f28c56bfd9ef6556bc377303aacbaaaf0d1e4e2d1517673213818dd0d94acdcc342	19644934
+4	remove baseline runtime messages	2026-09-24 15:41:35.180458+00	t	\\x75f1d354d4cfd4101236a4099b430401a5e3223328b6f695b3eb70f804fa2cf42bd1a6ea9174988d80d1b9c7c7fe2913	9082596
+5	kairos ticket workflow fields	2026-09-24 15:41:35.193314+00	t	\\x15445c4f9dd94234ffb3ebfe67028537228d3b0c940848c3c0dca6727e7ba0a4c78e65820e7105e30262dd0dc5746d16	10975296
+6	grant asset ops to super admin	2026-09-24 15:41:35.209998+00	t	\\xaf8d8b195f38d418d2696fb7d43ec43492571bcd668361f6f7f2b3dc4ab0dbcaa9598c90fd4116006da12ab55ccd00c3	24478344
+\.
+
+
+--
+-- Data for Name: infra_api_access_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_api_access_log (id, trace_id, user_id, user_type, application_name, request_method, request_url, request_params, response_body, user_ip, user_agent, operate_module, operate_name, operate_type, begin_time, end_time, duration, result_code, result_msg, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_api_error_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_api_error_log (id, trace_id, user_id, user_type, application_name, request_method, request_url, request_params, user_ip, user_agent, exception_time, exception_name, exception_message, exception_root_cause_message, exception_stack_trace, exception_class_name, exception_file_name, exception_method_name, exception_line_number, process_status, process_time, process_user_id, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_application_endpoint; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_application_endpoint (id, business_application_id, protocol, dest_ip, nat_ip, dest_port, domain, created_by, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_asset; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_asset (id, name, ip, zone, ports, last_scanned, contact_person, contact_phone, created_by, updated_by, owner, weight, labels, os, device_type, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_business_application; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_business_application (id, name, description, created_by, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_business_resource; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_business_resource (id, resource_type, ecs_name, ecs_status, resource_id, cloud_region, cloud_category, cloud_provider_config_id, zone_name, platform_name, county_city, vdc_name, customer_name, application_name, contract_name, instance_id, ecs_type, ecs_os, cpu_cores, memory_gb, system_disk, system_disk_size_gb, data_disk, completion_time, release_time, has_security_product, ip_address, ecs_login_method, ecs_login_username, ecs_initial_password, bastion_address, bastion_admin_account, bastion_initial_password, serial_number, rack_location, hardware_model, warranty_expiry, agent_status, ipmi_address, remarks, application_status, delivery_status, delivery_confirmed_at, delivery_confirmed_by, applicant, department, approver, approval_time, approval_remarks, rejection_reason, bandwidth_mbps, bandwidth_type, public_ip_count, network_type, project_name, project_code, business_owner, tech_owner, contact_phone, billing_method, purchase_duration, cost_center, security_level, data_sensitivity, purpose, expected_delivery_time, creator, create_time, updater, update_time, deleted, machine_room_id, deployment_type, management_ip, business_ip, network_cidr, gateway, vlan_id, dns_servers, mac_address, switch_name, switch_port) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_cloud_asset; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_cloud_asset (id, cloud_provider_config_id, provider_type, platform_name, region_id, instance_id, name, status, private_ip, public_ip, cpu_cores, memory_gb, instance_type, os_name, expire_time, raw_payload, synced_at, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_cloud_platform; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_cloud_platform (id, zone_id, platform_name, platform_code, description, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_cloud_provider_config; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_cloud_provider_config (id, zone_id, platform_id, provider, region_id, region_name, available_zones, account_name, access_key_id, access_key_secret, status, remarks, last_test_time, last_test_result, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_cloud_zone; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_cloud_zone (id, zone_name, zone_code, description, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
 -- Data for Name: infra_codegen_column; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -2978,6 +3764,62 @@ COPY public.infra_job (id, name, status, handler_name, handler_param, cron_expre
 COPY public.infra_job_log (id, job_id, handler_name, handler_param, execute_index, begin_time, end_time, duration, status, result, creator, create_time, updater, update_time, deleted) FROM stdin;
 1	1	codexHandler	{}	1	2026-07-16 08:22:32.594164	2026-07-16 08:22:32.594164	0	1	manual trigger		2026-07-16 08:22:32.597449		2026-07-16 08:22:32.597449	0
 2	2	codexHandler	{}	1	2026-07-16 08:24:59.973995	2026-07-16 08:24:59.973995	0	1	manual trigger		2026-07-16 08:24:59.975323		2026-07-16 08:24:59.975323	0
+\.
+
+
+--
+-- Data for Name: infra_machine_room; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_machine_room (id, room_name, room_code, facility_type, address, provider_id, room_type, contact_person, contact_phone, floor, cabinet_count, area_size, remarks, status, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_network_zone; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_network_zone (id, name, cidr, priority, cloud_platform_id, cloud_platform_name, machine_room_id, machine_room_name, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_resource_ticket; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_resource_ticket (id, resource_type, ecs_name, ticket_status, provider_id, provider_name, cloud_platform_id, cloud_platform_name, machine_room_id, machine_room_name, cloud_region, cloud_category, zone_name, zone_cabinet, rack_units, customer_name, application_name, application_endpoint_id, application_domain, contract_name, ecs_type, ecs_os, resource_count, cpu_cores, memory_gb, system_disk, system_disk_size_gb, data_disk, expire_at, has_security_product, security_products, ip_address, delivery_status, remarks, created_by, applicant_name, organization_id, organization_name, department_id, department_name, approver, approve_time, approve_comment, provisioner, provision_time, provision_details, deliverer, deliver_time, deliver_comment, fw_source_zone, fw_source_address, fw_source_port, fw_dest_zone, fw_dest_address, fw_dest_port, fw_protocol, fw_port, fw_direction, fw_valid_until, fw_firewall_name, creator, create_time, updater, update_time, deleted, ticket_type, risk_level, target_resource_id, target_config, maintenance_window, allow_interruption, backup_confirmed, rollback_plan, retention_until, approval_stage, approval_total, current_approval_role) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_risk; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_risk (id, asset_ip, port, severity, description, solution, status, assigned_to, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_security_product; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_security_product (id, name, category, vendor, model, version, serial_number, license_type, license_expiry, management_ip, deployment_mode, cloud_platform_id, machine_room_id, provider_id, status, features, throughput, contact_person, contact_phone, remarks, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_service_provider; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_service_provider (id, provider_name, provider_code, short_name, logo_url, contact_person, contact_phone, contact_email, headquarters, service_area, business_license, remarks, status, creator, create_time, updater, update_time, deleted) FROM stdin;
+\.
+
+
+--
+-- Data for Name: infra_task; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.infra_task (id, name, target, status, start_time, end_time, found_assets, found_risks, port_policy, domain_brute, service_detection, os_detection, site_identify, created_by, creator, create_time, updater, update_time, deleted) FROM stdin;
 \.
 
 
@@ -4122,6 +4964,14 @@ COPY public.system_dict_type (id, name, type, status, remark, creator, create_ti
 
 
 --
+-- Data for Name: system_login_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_login_log (id, log_type, trace_id, user_id, user_type, username, result, user_ip, user_agent, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
+\.
+
+
+--
 -- Data for Name: system_mail_account; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -4203,9 +5053,9 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 1031	配置查询	infra:config:query	3	1	106				\N	0	t	t	t	admin	2021-01-05 17:03:48		2022-04-20 17:03:10	0	\N
 1032	配置新增	infra:config:create	3	2	106				\N	0	t	t	t	admin	2021-01-05 17:03:48	1	2022-04-20 17:03:10	0	\N
 5	OA 示例		1	40	1185	oa	fa:road	\N	\N	0	t	t	t	admin	2021-09-20 16:26:19	system	2026-07-17 01:44:04.417394	1	\N
-111	PostgreSQL 监控		2	1	2740	/infra/postgresql	lucide:database	infra/druid/index	InfraPostgreSql	0	t	t	t	admin	2021-01-05 17:03:48	system	2026-07-17 05:04:14.954699	0	\N
-113	Redis 监控		2	2	2740	/infra/redis-monitor	lucide:database-zap	infra/redis/index	InfraRedis	0	t	t	t	admin	2021-01-05 17:03:48	system	2026-07-17 05:04:14.954699	0	\N
-112	Rust 监控		2	3	2740	/infra/rust	lucide:server-cog	infra/server/index	InfraRustServer	0	t	t	t	admin	2021-01-05 17:03:48	system	2026-07-17 05:08:19.419206	0	\N
+111	PostgreSQL 监控		2	1	2740	postgresql	lucide:database	infra/druid/index	InfraPostgreSql	0	t	t	t	admin	2021-01-05 17:03:48	system	2026-07-17 05:04:14.954699	0	\N
+113	Redis 监控		2	2	2740	redis	lucide:database-zap	infra/redis/index	InfraRedis	0	t	t	t	admin	2021-01-05 17:03:48	system	2026-07-17 05:04:14.954699	0	\N
+112	Rust 监控		2	3	2740	rust	lucide:server-cog	infra/server/index	InfraRustServer	0	t	t	t	admin	2021-01-05 17:03:48	system	2026-07-17 05:08:19.419206	0	\N
 1033	配置修改	infra:config:update	3	3	106				\N	0	t	t	t	admin	2021-01-05 17:03:48	1	2022-04-20 17:03:10	0	\N
 1034	配置删除	infra:config:delete	3	4	106				\N	0	t	t	t	admin	2021-01-05 17:03:48	1	2022-04-20 17:03:10	0	\N
 1035	配置导出	infra:config:export	3	5	106				\N	0	t	t	t	admin	2021-01-05 17:03:48		2022-04-20 17:03:10	0	\N
@@ -4236,16 +5086,16 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 1067	获得 Redis Key 列表	infra:redis:get-key-list	3	2	113				\N	0	t	t	t		2021-01-26 01:02:52		2022-04-20 17:03:10	0	\N
 1070	代码生成案例		1	1	2	demo	ep:aim	infra/testDemo/index	\N	0	t	t	t		2021-02-06 12:42:49	1	2023-11-15 23:45:53	0	\N
 1075	任务触发	infra:job:trigger	3	8	110				\N	0	t	t	t		2021-02-07 13:03:10		2022-04-20 17:03:10	0	\N
-1078	访问日志		2	1	1083	/infra/api-access-log	ep:place	infra/apiAccessLog/index	InfraApiAccessLog	0	t	t	t		2021-02-26 01:32:59	1	2024-02-29 08:54:57	0	\N
+1078	访问日志		2	1	1083	api-access-log	ep:place	infra/apiAccessLog/index	InfraApiAccessLog	0	t	t	t		2021-02-26 01:32:59	1	2024-02-29 08:54:57	0	\N
 1082	日志导出	infra:api-access-log:export	3	2	1078				\N	0	t	t	t		2021-02-26 01:32:59	1	2022-04-20 17:03:10	0	\N
 1083	API 日志		2	4	2	log	fa:tasks	\N	\N	0	t	t	t		2021-02-26 02:18:24	1	2024-04-22 23:58:36	0	\N
-1084	错误日志	infra:api-error-log:query	2	2	1083	/infra/api-error-log	ep:warning-filled	infra/apiErrorLog/index	InfraApiErrorLog	0	t	t	t		2021-02-26 07:53:20	1	2024-02-29 08:55:17	0	\N
+1084	错误日志	infra:api-error-log:query	2	2	1083	api-error-log	ep:warning-filled	infra/apiErrorLog/index	InfraApiErrorLog	0	t	t	t		2021-02-26 07:53:20	1	2024-02-29 08:55:17	0	\N
 1085	日志处理	infra:api-error-log:update-status	3	2	1084				\N	0	t	t	t		2021-02-26 07:53:20	1	2022-04-20 17:03:10	0	\N
 1086	日志导出	infra:api-error-log:export	3	3	1084				\N	0	t	t	t		2021-02-26 07:53:20	1	2022-04-20 17:03:10	0	\N
 1087	任务查询	infra:job:query	3	1	110				\N	0	t	t	t	1	2021-03-10 01:26:19	1	2022-04-20 17:03:10	0	\N
 1088	日志查询	infra:api-access-log:query	3	1	1078				\N	0	t	t	t	1	2021-03-10 01:28:04	1	2022-04-20 17:03:10	0	\N
 1089	日志查询	infra:api-error-log:query	3	1	1084				\N	0	t	t	t	1	2021-03-10 01:29:09	1	2022-04-20 17:03:10	0	\N
-1090	文件列表		2	5	1243	/infra/file	ep:upload-filled	infra/file/index	InfraFile	0	t	t	t		2021-03-12 20:16:20	1	2024-02-29 08:53:02	0	\N
+1090	文件列表		2	5	1243	file	ep:upload-filled	infra/file/index	InfraFile	0	t	t	t		2021-03-12 20:16:20	1	2024-02-29 08:53:02	0	\N
 1091	文件查询	infra:file:query	3	1	1090				\N	0	t	t	t		2021-03-12 20:16:20		2022-04-20 17:03:10	0	\N
 1092	文件删除	infra:file:delete	3	4	1090				\N	0	t	t	t		2021-03-12 20:16:20		2022-04-20 17:03:10	0	\N
 1095	短信渠道查询	system:sms-channel:query	3	1	1094				\N	0	t	t	t		2021-04-01 11:07:15		2022-04-20 17:03:10	0	\N
@@ -4256,7 +5106,7 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 1102	短信模板创建	system:sms-template:create	3	2	1100				\N	0	t	t	t		2021-04-01 17:35:17		2022-04-20 17:03:10	0	\N
 1103	短信模板更新	system:sms-template:update	3	3	1100				\N	0	t	t	t		2021-04-01 17:35:17		2022-04-20 17:03:10	0	\N
 1093	短信管理		1	1	2739	sms	ep:message	\N	\N	0	t	t	t	1	2021-04-05 01:10:16	1	2026-07-17 01:35:39.386526	1	\N
-1077	请求链路		2	4	2740	/infra/traces	lucide:route	infra/skywalking/index	InfraRequestTraces	0	t	t	t		2021-02-08 20:41:31	system	2026-07-17 05:04:14.954699	0	\N
+1077	请求链路		2	4	2740	traces	lucide:route	infra/skywalking/index	InfraRequestTraces	0	t	t	t		2021-02-08 20:41:31	system	2026-07-17 05:04:14.954699	0	\N
 1104	短信模板删除	system:sms-template:delete	3	4	1100				\N	0	t	t	t		2021-04-01 17:35:17		2022-04-20 17:03:10	0	\N
 1105	短信模板导出	system:sms-template:export	3	5	1100				\N	0	t	t	t		2021-04-01 17:35:17		2022-04-20 17:03:10	0	\N
 1106	发送测试短信	system:sms-template:send-sms	3	6	1100				\N	0	t	t	t	1	2021-04-11 00:26:40	1	2022-04-20 17:03:10	0	\N
@@ -4306,14 +5156,14 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 1227	租户套餐创建	system:tenant-package:create	3	2	1225				\N	0	t	t	t		2022-02-19 17:44:06		2022-04-20 17:03:10	0	\N
 1228	租户套餐更新	system:tenant-package:update	3	3	1225				\N	0	t	t	t		2022-02-19 17:44:06		2022-04-20 17:03:10	0	\N
 1229	租户套餐删除	system:tenant-package:delete	3	4	1225				\N	0	t	t	t		2022-02-19 17:44:06		2022-04-20 17:03:10	0	\N
-1237	文件配置		2	0	1243	/infra/file-config	fa-solid:file-signature	infra/fileConfig/index	InfraFileConfig	0	t	t	t		2022-03-15 14:35:28	1	2024-02-29 08:52:54	0	\N
+1237	文件配置		2	0	1243	file-config	fa-solid:file-signature	infra/fileConfig/index	InfraFileConfig	0	t	t	t		2022-03-15 14:35:28	1	2024-02-29 08:52:54	0	\N
 1238	文件配置查询	infra:file-config:query	3	1	1237				\N	0	t	t	t		2022-03-15 14:35:28		2022-04-20 17:03:10	0	\N
 1239	文件配置创建	infra:file-config:create	3	2	1237				\N	0	t	t	t		2022-03-15 14:35:28		2022-04-20 17:03:10	0	\N
 1240	文件配置更新	infra:file-config:update	3	3	1237				\N	0	t	t	t		2022-03-15 14:35:28		2022-04-20 17:03:10	0	\N
 1241	文件配置删除	infra:file-config:delete	3	4	1237				\N	0	t	t	t		2022-03-15 14:35:28		2022-04-20 17:03:10	0	\N
 1242	文件配置导出	infra:file-config:export	3	5	1237				\N	0	t	t	t		2022-03-15 14:35:28		2022-04-20 17:03:10	0	\N
 1243	文件管理		2	6	2	file	ep:files	\N		0	t	t	t	1	2022-03-16 23:47:40	1	2024-04-23 00:02:11	0	\N
-1255	数据源配置		2	1	2	datasource	ep:data-analysis	infra/dataSourceConfig/index	InfraDataSourceConfig	0	t	t	t		2022-04-27 14:37:32	1	2024-02-29 08:51:25	0	\N
+1255	数据源配置		2	1	2	data-source-config	ep:data-analysis	infra/dataSourceConfig/index	InfraDataSourceConfig	0	t	t	t		2022-04-27 14:37:32	1	2024-02-29 08:51:25	0	\N
 1256	数据源配置查询	infra:data-source-config:query	3	1	1255				\N	0	t	t	t		2022-04-27 14:37:32		2022-04-27 14:37:32	0	\N
 1257	数据源配置创建	infra:data-source-config:create	3	2	1255				\N	0	t	t	t		2022-04-27 14:37:32		2022-04-27 14:37:32	0	\N
 1258	数据源配置更新	infra:data-source-config:update	3	3	1255				\N	0	t	t	t		2022-04-27 14:37:32		2022-04-27 14:37:32	0	\N
@@ -4471,12 +5321,12 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 30007	聊天角色	ai:chat-role:query	2	7	30000	model/chat-role	lucide:bot	ai/model/chatRole/index	AiModelChatRole	0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-16 08:12:35.316268	1	\N
 30008	工具管理	ai:tool:query	2	8	30000	model/tool	lucide:wrench	ai/model/tool/index	AiModelTool	0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-16 08:12:35.316268	1	\N
 2760	控制台		1	100	2758	console	lucide:settings-2			0	t	t	t	1	2024-05-09 22:39:09	system	2026-07-17 01:13:48.097106	0	\N
-2767	模型配置		2	0	2760	/ai/model/index	lucide:brain-circuit	ai/model/model/index.vue	AiModel	0	t	t	t		2024-05-10 14:42:48	system	2026-07-17 01:13:48.097106	0	\N
-2773	聊天角色		2	0	2760	/ai/model/chat-role/index	lucide:bot	ai/model/chatRole/index.vue	AiChatRole	0	t	t	t		2024-05-13 12:39:28	system	2026-07-17 01:13:48.097106	0	\N
-2778	聊天管理		2	10	2760	/ai/chat/manager/index	lucide:messages-square	ai/chat/manager/index.vue	AiChatManager	0	t	t	t		2024-05-24 15:39:18	system	2026-07-17 01:13:48.097106	0	\N
-2784	绘画管理		2	11	2760	/ai/image/manager/index	lucide:images	ai/image/manager/index.vue	AiImageManager	0	t	t	t		2024-06-26 13:32:31	system	2026-07-17 01:13:48.097106	0	\N
-2788	音乐管理		2	12	2760	/ai/music/manager/index	lucide:list-music	ai/music/manager/index.vue	AiMusicManager	0	t	t	t		2024-06-27 15:03:33	system	2026-07-17 01:13:48.097106	0	\N
-2793	写作管理		2	13	2760	/ai/write/manager/index	lucide:book-text	ai/write/manager/index.vue	AiWriteManager	0	t	t	t		2024-07-10 13:24:34	system	2026-07-17 01:13:48.097106	0	\N
+2767	模型配置		2	0	2760	model	lucide:brain-circuit	ai/model/model/index.vue	AiModel	0	t	t	t		2024-05-10 14:42:48	system	2026-07-17 01:13:48.097106	0	\N
+2773	聊天角色		2	0	2760	chat-role	lucide:bot	ai/model/chatRole/index.vue	AiChatRole	0	t	t	t		2024-05-13 12:39:28	system	2026-07-17 01:13:48.097106	0	\N
+2778	聊天管理		2	10	2760	chat-conversation	lucide:messages-square	ai/chat/manager/index.vue	AiChatManager	0	t	t	t		2024-05-24 15:39:18	system	2026-07-17 01:13:48.097106	0	\N
+2784	绘画管理		2	11	2760	image	lucide:images	ai/image/manager/index.vue	AiImageManager	0	t	t	t		2024-06-26 13:32:31	system	2026-07-17 01:13:48.097106	0	\N
+2788	音乐管理		2	12	2760	music	lucide:list-music	ai/music/manager/index.vue	AiMusicManager	0	t	t	t		2024-06-27 15:03:33	system	2026-07-17 01:13:48.097106	0	\N
+2793	写作管理		2	13	2760	write	lucide:book-text	ai/write/manager/index.vue	AiWriteManager	0	t	t	t		2024-07-10 13:24:34	system	2026-07-17 01:13:48.097106	0	\N
 30101	模型查询	ai:model:query	3	1	30006					0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-17 01:21:39.834971	1	\N
 30111	知识库创建	ai:knowledge:create	3	1	30005					0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-17 01:21:41.726946	1	\N
 30121	角色创建	ai:chat-role:create	3	1	30007					0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-17 01:21:43.474946	1	\N
@@ -4491,9 +5341,9 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 30122	角色更新	ai:chat-role:update	3	2	30007					0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-17 01:22:02.775135	1	\N
 30112	知识库更新	ai:knowledge:update	3	2	30005					0	t	t	t	system	2026-07-16 05:03:23.711366	system	2026-07-17 01:22:04.945537	1	\N
 30200	仪表盘		1	-10	0	/dashboard	lucide:layout-dashboard		Dashboard	0	t	t	t	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
-30201	工作台		2	1	30200	workspace	carbon:workspace	dashboard/workspace/index	Workspace	0	t	t	t	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
-30202	分析页		2	2	30200	analytics	lucide:area-chart	dashboard/analytics/index	Analytics	0	t	t	t	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
-30203	个人中心		2	99	1	profile	lucide:user-round	_core/profile/index	Profile	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
+30201	工作台		2	1	30200	/workspace	carbon:workspace	dashboard/workspace/index	Workspace	0	t	t	t	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
+30202	分析页		2	2	30200	/analytics	lucide:area-chart	dashboard/analytics/index	Analytics	0	t	t	t	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
+30203	个人中心		2	99	1	/profile	lucide:user-round	_core/profile/index	Profile	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 01:29:09.910057	0	\N
 2761	API 密钥		2	0	2760	api-key	lucide:key-round	ai/model/apiKey/index.vue	AiApiKey	0	t	t	t		2024-05-09 14:52:56	system	2026-07-17 01:44:04.417394	1	\N
 30210	绘图作品	ai:image:query	2	90	2758	image/square	lucide:images	ai/image/square/index	AiImageSquare	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 02:02:24.52913	0	2783
 30211	知识库文档	ai:knowledge:query	2	91	2758	knowledge/document	lucide:files	ai/knowledge/document/index	AiKnowledgeDocument	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 02:02:24.52913	0	2915
@@ -4503,8 +5353,8 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 1	系统功能		1	10	0	/system	lucide:settings	\N	System	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
 2	基础功能		1	21	0	/infra	lucide:blocks	\N	Infra	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
 1185	工作流		1	50	0	/bpm	fa:medium	\N	bpm	0	t	t	t	1	2021-12-30 20:26:36	1	2026-07-17 01:35:39.386526	0	\N
-500	操作日志		2	8	1	/system/operate-log	ep:position	system/operatelog/index	SystemOperateLog	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
-501	登录日志		2	9	1	/system/login-log	ep:promotion	system/loginlog/index	SystemLoginLog	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
+500	操作日志		2	8	1	operatelog	ep:position	system/operatelog/index	SystemOperateLog	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
+501	登录日志		2	9	1	loginlog	ep:promotion	system/loginlog/index	SystemLoginLog	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
 107	通知公告		2	7	1	notice	ep:takeaway-box	system/notice/index	SystemNotice	0	t	t	t	admin	2021-01-05 17:03:48	1	2026-07-17 01:35:39.386526	0	\N
 1138	租户管理		2	1	30240	/system/tenant	ep:house	system/tenant/index	SystemTenant	0	t	t	t		2021-12-14 12:31:43	1	2026-07-17 01:35:39.386526	0	\N
 1225	租户套餐		2	2	30240	/system/tenant-package	fa:bars	system/tenantPackage/index	SystemTenantPackage	0	t	t	t		2022-02-19 17:44:06	1	2026-07-17 01:35:39.386526	0	\N
@@ -4561,16 +5411,75 @@ COPY public.system_menu (id, name, permission, type, sort, parent_id, path, icon
 30230	调度日志	infra:job:query	2	90	2	/infra/job/log	lucide:scroll-text	infra/job/logger/index	InfraJobLog	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 02:02:24.52913	0	110
 30231	生成配置修改	infra:codegen:update	2	91	2	/infra/codegen/edit	lucide:file-cog	infra/codegen/edit/index	InfraCodegenEdit	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 02:02:24.52913	0	115
 30232	我的站内信	system:notify-message:query	2	90	1	/system/notify-message	lucide:mail	system/notify/my/index	MyNotifyMessage	0	f	f	f	system	2026-07-17 01:29:09.910057	system	2026-07-17 02:02:24.52913	0	2151
-30250	云平台管理	cloud:read	2	1	30260	/cloud	lucide:cloud	cloud/index	CloudPlatformPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30251	服务商管理	provider:read	2	2	30260	/provider	lucide:building	provider/index	ProviderPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30252	机房管理	room:read	2	3	30260	/room	lucide:server	room/index	RoomPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30253	安全产品	security:read	2	4	30260	/security	lucide:shield	security/index	SecurityPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30254	网络区域	zone:read	2	5	30260	/zone	lucide:globe	zone/index	ZonePage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30255	资源工单	ticket:read	2	6	30260	/ticket	lucide:ticket	ticket/index	TicketPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30256	任务中心	task:read	2	7	30260	/task	lucide:list-todo	task/index	TaskPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30257	风险中心	risk:read	2	8	30260	/risk	lucide:alert-triangle	risk/index	RiskPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30258	业务应用	app:read	2	9	30260	/business	lucide:layout-grid	business/index	BusinessAppPage	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
-30260	资源管理		1	10	0	/resource	lucide:package		ResourceManagement	0	t	t	t	system	2026-07-22 00:00:00	system	2026-07-22 00:00:00	0	\N
+30242	资产运营		1	35	0	/asset-ops	lucide:boxes		AssetOps	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30243	资产管理		2	10	30242	assets	lucide:hard-drive	asset-ops/asset/index	AssetOpsAsset	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30244	服务商		2	20	30242	service-provider	lucide:briefcase-business	asset-ops/service-provider/index	AssetOpsServiceProvider	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30245	物理机房		2	30	30242	machine-room	lucide:warehouse	asset-ops/machine-room/index	AssetOpsMachineRoom	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30246	云资源区		2	40	30242	cloud-zone	lucide:map-pin	asset-ops/cloud-platform/zone	AssetOpsCloudZone	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30247	云平台		2	50	30242	cloud-platform	lucide:cloud-cog	asset-ops/cloud-platform/platform	AssetOpsCloudPlatform	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30248	云厂商对接		2	60	30242	cloud-provider-config	lucide:plug-zap	asset-ops/cloud-provider-config/index	AssetOpsCloudProviderConfig	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30249	网络区域		2	70	30242	zone	lucide:globe	asset-ops/zone/index	AssetOpsNetworkZone	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30250	安全产品		2	80	30242	security-product	lucide:shield	asset-ops/security-product/index	AssetOpsSecurityProduct	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30251	业务应用		2	90	30242	business-application	lucide:layout-grid	asset-ops/business-application/index	AssetOpsBusinessApplication	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30252	业务资源		2	100	30242	business-resource	lucide:package	asset-ops/business-resource/index	AssetOpsBusinessResource	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30253	资源工单		2	110	30242	resource-ticket	lucide:ticket	asset-ops/resource-ticket/index	AssetOpsResourceTicket	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30254	扫描任务		2	120	30242	task	lucide:list-checks	asset-ops/task/index	AssetOpsTask	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30255	风险管理		2	130	30242	risk	lucide:triangle-alert	asset-ops/risk/index	AssetOpsRisk	0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30256	资产查询	infra:asset:query	3	1	30243					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30257	资产创建	infra:asset:create	3	2	30243					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30258	资产更新	infra:asset:update	3	3	30243					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30259	资产删除	infra:asset:delete	3	4	30243					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30260	服务商查询	infra:service-provider:query	3	1	30244					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30261	服务商创建	infra:service-provider:create	3	2	30244					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30262	服务商更新	infra:service-provider:update	3	3	30244					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30263	服务商删除	infra:service-provider:delete	3	4	30244					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30264	机房查询	infra:machine-room:query	3	1	30245					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30265	机房创建	infra:machine-room:create	3	2	30245					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30266	机房更新	infra:machine-room:update	3	3	30245					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30267	机房删除	infra:machine-room:delete	3	4	30245					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30268	云资源区查询	infra:cloud-zone:query	3	1	30246					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30269	云资源区创建	infra:cloud-zone:create	3	2	30246					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30270	云资源区更新	infra:cloud-zone:update	3	3	30246					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30271	云资源区删除	infra:cloud-zone:delete	3	4	30246					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30272	云平台查询	infra:cloud-platform:query	3	1	30247					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30273	云平台创建	infra:cloud-platform:create	3	2	30247					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30274	云平台更新	infra:cloud-platform:update	3	3	30247					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30275	云平台删除	infra:cloud-platform:delete	3	4	30247					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30276	云对接查询	infra:cloud-provider-config:query	3	1	30248					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30277	云对接创建	infra:cloud-provider-config:create	3	2	30248					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30278	云对接更新	infra:cloud-provider-config:update	3	3	30248					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30279	云对接删除	infra:cloud-provider-config:delete	3	4	30248					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30280	网络区域查询	infra:network-zone:query	3	1	30249					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30281	网络区域创建	infra:network-zone:create	3	2	30249					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30282	网络区域更新	infra:network-zone:update	3	3	30249					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30283	网络区域删除	infra:network-zone:delete	3	4	30249					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30284	安全产品查询	infra:security-product:query	3	1	30250					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30285	安全产品创建	infra:security-product:create	3	2	30250					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30286	安全产品更新	infra:security-product:update	3	3	30250					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30287	安全产品删除	infra:security-product:delete	3	4	30250					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30288	业务应用查询	infra:business-application:query	3	1	30251					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30289	业务应用创建	infra:business-application:create	3	2	30251					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30290	业务应用更新	infra:business-application:update	3	3	30251					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30291	业务应用删除	infra:business-application:delete	3	4	30251					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30292	业务资源查询	infra:business-resource:query	3	1	30252					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30293	业务资源创建	infra:business-resource:create	3	2	30252					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30294	业务资源更新	infra:business-resource:update	3	3	30252					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30295	业务资源删除	infra:business-resource:delete	3	4	30252					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30296	资源工单查询	infra:resource-ticket:query	3	1	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30297	资源工单创建	infra:resource-ticket:create	3	2	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30298	资源工单更新	infra:resource-ticket:update	3	3	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30299	资源工单删除	infra:resource-ticket:delete	3	4	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30300	资源工单审批	infra:resource-ticket:approve	3	5	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30301	资源工单配置	infra:resource-ticket:provision	3	6	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30302	资源工单交付	infra:resource-ticket:deliver	3	7	30253					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30303	任务查询	infra:task:query	3	1	30254					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30304	任务创建	infra:task:create	3	2	30254					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30305	任务更新	infra:task:update	3	3	30254					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30306	任务删除	infra:task:delete	3	4	30254					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30307	任务执行	infra:task:execute	3	5	30254					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30308	风险查询	infra:risk:query	3	1	30255					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30309	风险更新	infra:risk:update	3	2	30255					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
+30310	风险处置	infra:risk:resolve	3	3	30255					0	t	t	t	migration	2026-09-24 15:41:35.154998	migration	2026-09-24 15:41:35.154998	0	\N
 \.
 
 
@@ -4590,16 +5499,6 @@ COPY public.system_notice (id, title, content, type, status, creator, create_tim
 --
 
 COPY public.system_notify_message (id, user_id, user_type, template_id, template_code, template_nickname, template_content, template_type, template_params, read_status, read_time, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
-2	1	2	1	test	123	我是 1，我开始 2 了	1	{"name":"1","what":"2"}	t	2025-12-15 21:24:36	1	2023-01-28 11:44:08	1	2025-12-15 21:24:36	0	1
-3	1	2	1	test	123	我是 1，我开始 2 了	1	{"name":"1","what":"2"}	t	2025-12-15 21:24:36	1	2023-01-28 11:45:04	1	2025-12-15 21:24:36	0	1
-4	103	2	2	register	系统消息	你好，欢迎 哈哈 加入大家庭！	2	{"name":"哈哈"}	f	\N	1	2023-01-28 21:02:20	1	2023-01-28 21:02:20	0	1
-5	1	2	1	test	123	我是 芋艿，我开始 写代码 了	1	{"name":"芋艿","what":"写代码"}	t	2025-12-08 17:25:28	1	2023-01-28 22:21:42	1	2025-12-08 17:25:28	0	1
-6	1	2	1	test	123	我是 芋艿，我开始 写代码 了	1	{"name":"芋艿","what":"写代码"}	t	2025-12-08 17:25:30	1	2023-01-28 22:22:07	1	2025-12-08 17:25:30	0	1
-7	1	2	1	test	123	我是 2，我开始 3 了	1	{"name":"2","what":"3"}	t	2025-12-08 17:25:22	1	2023-01-28 23:45:21	1	2025-12-08 17:25:22	0	1
-8	1	2	2	register	系统消息	你好，欢迎 123 加入大家庭！	2	{"name":"123"}	t	2025-12-08 16:46:01	1	2023-01-28 23:50:21	1	2025-12-08 16:46:01	0	1
-9	247	1	4	brokerage_withdraw_audit_approve	system	您在2023-09-28 08:35:46提现￥0.09元的申请已通过审核	2	{"reason":null,"createTime":"2023-09-28 08:35:46","price":"0.09"}	f	\N	1	2023-09-28 16:36:22	1	2023-09-28 16:36:22	0	1
-10	247	1	4	brokerage_withdraw_audit_approve	system	您在2023-09-30 20:59:40提现￥1.00元的申请已通过审核	2	{"reason":null,"createTime":"2023-09-30 20:59:40","price":"1.00"}	f	\N	1	2023-10-03 12:11:34	1	2023-10-03 12:11:34	0	1
-12	1	2	2	codex_test_1784183375	系统消息	你好，admin	2	{"name":"admin"}	t	2026-07-16 06:33:34.460348	admin	2026-07-16 06:33:12.937459	admin	2026-07-16 06:33:34.460348	0	1
 \.
 
 
@@ -4608,7 +5507,14 @@ COPY public.system_notify_message (id, user_id, user_type, template_id, template
 --
 
 COPY public.system_notify_template (id, name, code, nickname, content, type, params, status, remark, creator, create_time, updater, update_time, deleted) FROM stdin;
-2	Codex测试	codex_test_1784183375	系统消息	你好，{name}	2	["name"]	0	codex verify		2026-07-16 06:29:35.400788		2026-07-16 06:29:35.400788	0
+\.
+
+
+--
+-- Data for Name: system_oauth2_access_token; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_oauth2_access_token (id, user_id, user_type, user_info, access_token, refresh_token, client_id, scopes, expires_time, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
 \.
 
 
@@ -4629,6 +5535,30 @@ COPY public.system_oauth2_client (id, client_id, secret, name, logo, description
 40	test	test2	biubiu	http://test.yudao.iocoder.cn/20251227/javayuanma_1766829882970.jpg	啦啦啦啦	0	1800	43200	["https://www.iocoder.cn"]	["password","authorization_code","implicit"]	["user_info","projects"]	["user_info"]	[]	[]	{}	1	2022-05-12 00:28:20	1	2025-12-27 18:04:44	0
 41	yudao-sso-demo-by-code	test	基于授权码模式，如何实现 SSO 单点登录？	http://test.yudao.iocoder.cn/it/20250502/sign_1746181948685.png	\N	0	1800	43200	["http://127.0.0.1:18080"]	["authorization_code","refresh_token"]	["user.read","user.write"]	[]	[]	[]	\N	1	2022-09-29 13:28:31	1	2025-05-02 18:32:30	0
 42	yudao-sso-demo-by-password	test	基于密码模式，如何实现 SSO 单点登录？	http://test.yudao.iocoder.cn/20251025/images (3)_1761360515810.jpeg	\N	0	1800	43200	["http://127.0.0.1:18080"]	["password","refresh_token"]	["user.read","user.write"]	[]	[]	[]	\N	1	2022-10-04 17:40:16	1	2025-10-25 10:49:40	0
+\.
+
+
+--
+-- Data for Name: system_oauth2_code; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_oauth2_code (id, user_id, user_type, code, client_id, scopes, expires_time, redirect_uri, state, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: system_oauth2_refresh_token; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_oauth2_refresh_token (id, user_id, refresh_token, user_type, client_id, scopes, expires_time, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: system_operate_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_operate_log (id, trace_id, user_id, user_type, type, sub_type, biz_id, action, success, extra, request_method, request_url, user_ip, user_agent, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
 \.
 
 
@@ -5358,6 +6288,75 @@ COPY public.system_role_menu (id, role_id, menu_id, creator, create_time, update
 330137	2	30241	system	2026-07-17 01:35:39.386526	system	2026-07-17 01:35:39.386526	0	0
 330138	109	30241	system	2026-07-17 01:35:39.386526	system	2026-07-17 01:35:39.386526	0	0
 330139	111	30241	system	2026-07-17 01:35:39.386526	system	2026-07-17 01:35:39.386526	0	0
+330140	1	30242	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330141	1	30243	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330142	1	30244	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330143	1	30245	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330144	1	30246	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330145	1	30247	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330146	1	30248	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330147	1	30249	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330148	1	30250	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330149	1	30251	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330150	1	30252	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330151	1	30253	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330152	1	30254	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330153	1	30255	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330154	1	30256	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330155	1	30257	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330156	1	30258	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330157	1	30259	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330158	1	30260	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330159	1	30261	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330160	1	30262	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330161	1	30263	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330162	1	30264	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330163	1	30265	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330164	1	30266	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330165	1	30267	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330166	1	30268	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330167	1	30269	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330168	1	30270	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330169	1	30271	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330170	1	30272	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330171	1	30273	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330172	1	30274	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330173	1	30275	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330174	1	30276	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330175	1	30277	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330176	1	30278	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330177	1	30279	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330178	1	30280	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330179	1	30281	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330180	1	30282	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330181	1	30283	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330182	1	30284	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330183	1	30285	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330184	1	30286	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330185	1	30287	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330186	1	30288	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330187	1	30289	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330188	1	30290	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330189	1	30291	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330190	1	30292	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330191	1	30293	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330192	1	30294	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330193	1	30295	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330194	1	30296	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330195	1	30297	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330196	1	30298	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330197	1	30299	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330198	1	30300	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330199	1	30301	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330200	1	30302	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330201	1	30303	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330202	1	30304	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330203	1	30305	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330204	1	30306	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330205	1	30307	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330206	1	30308	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330207	1	30309	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
+330208	1	30310	migration	2026-09-24 15:41:35.209998	migration	2026-09-24 15:41:35.209998	0	1
 \.
 
 
@@ -5369,6 +6368,22 @@ COPY public.system_sms_channel (id, signature, code, status, remark, api_key, ap
 2	Ballcat	ALIYUN	0	你要改哦，只有我可以用！！！！	enc:v1:bm90LWNvbmZpZ3VyZWQ=	enc:v1:bm90LWNvbmZpZ3VyZWQ=	\N		2021-03-31 11:53:10	1	2026-07-16 07:29:32.31865	0
 4	测试渠道	DEBUG_DING_TALK	0	123	enc:v1:bm90LWNvbmZpZ3VyZWQ=	enc:v1:bm90LWNvbmZpZ3VyZWQ=	\N	1	2021-04-13 00:23:14	1	2026-07-16 07:29:32.31865	0
 7	mock腾讯云	TENCENT	0	123	enc:v1:bm90LWNvbmZpZ3VyZWQ=	enc:v1:bm90LWNvbmZpZ3VyZWQ=		1	2024-09-30 08:53:45	1	2026-07-16 07:29:32.31865	0
+\.
+
+
+--
+-- Data for Name: system_sms_code; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_sms_code (id, mobile, code, create_ip, scene, today_index, used, used_time, used_ip, creator, create_time, updater, update_time, deleted, tenant_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: system_sms_log; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.system_sms_log (id, channel_id, channel_code, template_id, template_code, template_type, template_content, template_params, api_template_id, mobile, user_id, user_type, send_status, send_time, api_send_code, api_send_msg, api_request_id, api_serial_no, receive_status, receive_time, api_receive_code, api_receive_msg, creator, create_time, updater, update_time, deleted) FROM stdin;
 \.
 
 
@@ -5505,7 +6520,6 @@ COPY public.system_users (id, username, password, nickname, remark, dept_id, pos
 108	admin108	$2a$10$y6mfvKoNYL1GXWak8nYwVOH.kCWqjactkzdoIDgiKl93WN3Ejg.Lu	芋艿	\N	\N	\N		15601691300	0	\N	0		\N	1	2022-02-20 23:00:50	1	2025-04-21 14:23:08	0	119
 109	admin109	$2a$10$JAqvH0tEc0I7dfDVBI7zyuB4E3j.uH6daIjV53.vUS6PknFkDJkuK	芋艿	\N	\N	\N		15601691300	0	\N	0		\N	1	2022-02-20 23:11:50	1	2025-04-21 14:23:08	0	120
 115	aotemane	$2a$04$GcyP0Vyzb2F2Yni5PuIK9ueGxM0tkZGMtDwVRwrNbtMvorzbpNsV2	阿呆	11222	102	[1,2]	7648@qq.com	15601691229	2	\N	0		\N	1	2022-04-30 02:55:43	1	2025-04-21 14:23:08	0	1
-1	admin	$2a$04$.vd8nPeLwxt6hnSzmAoAyul8BOLX7Cib6QhcxRe30rfvrIPQHH1OG	芋道源码	管理员	103	[1,2]	13aoteman@126.com	18818260272	1		0		2026-07-21 05:55:59.786431	admin	2021-01-05 17:03:47	\N	2026-07-21 05:55:59.786431	0	1
 103	yuanma	$2a$04$fUBSmjKCPYAUmnMzOb6qE.eZCGPhHi1JmAKclODbfS/O7fHOl2bH6	源码	\N	106	\N	yuanma@iocoder.cn	15601701300	0	\N	0		\N		2021-01-13 23:50:35	1	2025-07-09 23:41:58	0	1
 104	test	$2a$04$BrwaYn303hjA/6TnXqdGoOLhyHOAA0bVrAFu6.1dJKycqKUnIoRz2	测试号	\N	107	[1,2]	111@qq.com	15601691200	1	\N	0		\N		2021-01-21 02:13:53	\N	2026-01-04 18:09:54	0	1
 112	newobject	$2a$04$dB0z8Q819fJWz0hbaLe6B.VfHCjYgWx6LFfET5lyz3JwcqlyCkQ4C	新对象	\N	100	[]		15601691235	1	\N	0		\N	1	2022-02-23 19:08:03	\N	2025-04-21 14:23:08	0	1
@@ -5521,6 +6535,7 @@ COPY public.system_users (id, username, password, nickname, remark, dept_id, pos
 110	admin110	$2a$10$mRMIYLDtRHlf6.9ipiqH1.Z.bh/R9dO9d5iHiGYPigi6r5KOoR2Wm	小王	\N	\N	\N		15601691300	0	\N	0		\N	1	2022-02-22 00:56:14	\N	2026-07-16 06:25:39.039366	0	121
 100	yudao	$2a$04$h.aaPKgO.odHepnk5PCsWeEwKdojFWdTItxGKfx1r0e1CSeBzsTJ6	芋道	不要吓我	104	[1]	yudao@iocoder.cn	15601691300	1	\N	0		\N		2021-01-07 09:07:17	\N	2026-07-16 05:30:28.709765	0	1
 111	test	$2a$10$mRMIYLDtRHlf6.9ipiqH1.Z.bh/R9dO9d5iHiGYPigi6r5KOoR2Wm	测试用户	\N	\N	[]			0	\N	0		\N	110	2022-02-23 13:14:33	\N	2026-07-16 06:12:57.86539	0	121
+1	admin	$2a$04$.vd8nPeLwxt6hnSzmAoAyul8BOLX7Cib6QhcxRe30rfvrIPQHH1OG	芋道源码	管理员	103	[1,2]	13aoteman@126.com	18818260272	1		0		\N	admin	2021-01-05 17:03:47	\N	2026-07-21 05:55:59.786431	0	1
 \.
 
 
@@ -5620,6 +6635,46 @@ COPY toonflow.agent_deployments (id, key, description, name, temperature, max_ou
 14	productionAgent:directorPlanAgent	导演规划	生产Agent:导演规划	1	0	f	1784257814114	chat
 15	productionAgent:storyboardGenAgent	分镜生成	生产Agent:分镜生成	1	0	f	1784257814114	chat
 16	productionAgent:storyboardPanelAgent	分镜面板生成	生产Agent:分镜面板	1	0	f	1784257814114	chat
+\.
+
+
+--
+-- Data for Name: agent_memories; Type: TABLE DATA; Schema: toonflow; Owner: -
+--
+
+COPY toonflow.agent_memories (id, agent_type, isolation_key, role, content, memory_type, summarized, related_message_ids, create_time, embedding) FROM stdin;
+\.
+
+
+--
+-- Data for Name: agent_run_events; Type: TABLE DATA; Schema: toonflow; Owner: -
+--
+
+COPY toonflow.agent_run_events (id, run_id, event_type, data, create_time) FROM stdin;
+\.
+
+
+--
+-- Data for Name: agent_runs; Type: TABLE DATA; Schema: toonflow; Owner: -
+--
+
+COPY toonflow.agent_runs (id, agent_type, isolation_key, project_id, script_id, input, output, state, error_reason, think, think_level, start_time, finish_time) FROM stdin;
+\.
+
+
+--
+-- Data for Name: agent_tool_calls; Type: TABLE DATA; Schema: toonflow; Owner: -
+--
+
+COPY toonflow.agent_tool_calls (id, run_id, agent_type, tool_name, arguments, result, state, error_reason, create_time, finish_time) FROM stdin;
+\.
+
+
+--
+-- Data for Name: agent_work_data; Type: TABLE DATA; Schema: toonflow; Owner: -
+--
+
+COPY toonflow.agent_work_data (id, project_id, episodes_id, key, data, create_time, update_time) FROM stdin;
 \.
 
 
@@ -6388,6 +7443,7 @@ COPY toonflow.novels (id, chapter_index, reel, chapter, chapter_data, project_id
 1784270137651	154		第十部队的武者纷纷一愣，转身可能去。	便看着一个身着黑衣劲装，身姿妖娆，面色妖媚至极的绝色女子走了上来。\n\n\n    她身後还跟着不少学生。\n\n\n    “你是？”钱队长。\n\n\n    “青龙大学的学生，陈玉婷。”女子缓缓开口，“也是王闲的高中同学。”\n\n\n    “王闲不会死在龙劫骨墓。”\n\n\n    “他会出来的。”\n\n\n    “你们现在要做的，是让拥有空间天赋的武者，在龙首崖定好空间信标。”女子声音笃定，“等着王闲用千劫龙脊残刃划开空间，好让他能找到你们这里的空间信标，稳当的从遗迹中回到龙首崖。”\n\n\n    “不然，到时候不知道会出现在什麽地方。”\n\n\n    话一出，众人都微微一愣。\n\n\n    唯独池九幽暗暗看了这女子一眼。\n\n\n    心中有些吃惊。\n\n\n    不是，还有高手？\n\n\n    居然也对龙劫骨墓这麽熟悉？\n\n\n    与此同时。\n\n\n    陈玉婷也看了一眼池九幽。\n\n\n    就这一方对视。\n\n\n    池九幽只觉心神微震，隐约有种给看穿的感觉。\n\n\n    这女人不简单！\n\n\n    这个王学弟到底什麽来历？\n\n\n    同学都这麽厉害？\n\n\n    “机会可能很渺茫啊…”钱队长道，“若是他回不来…”\n\n\n    “两天之内，他必会回来！若回不来，那我进去就是了。”陈玉婷道。\n\n\n    “龙劫骨墓若无九幽冥虫出现，几乎不可能进去。”池九幽低声道，“同学，你想进去，有点难啊…”\n\n\n    “不难。”陈玉婷指了指盘龙山，“盘龙山下有一条地脉，引爆地脉，这一带都会空间震荡，龙劫骨墓就藏於这一带的虚空中。出现了空间震荡，必会出现空间裂痕。”\n\n\n    “自然就可以进去了。”\n\n\n    众人一听，瞳孔一缩。\n\n\n    饶是陈玉婷身後的学生，也狠狠一颤，看向这位会长。\n\n\n    引爆地脉？\n\n\n    那整个盘龙山都得瞬间倾覆，而地脉一爆，煞气沸腾，不知周边多少遗迹都会引爆。\n\n\n    一瞬间，地龙翻身，远处的云河市都会遭殃！\n\n\n    ‘疯子！’池九幽心中狂喊一声。\n\n\n    这个计划，他都没想过，因为前置影响太大了，操作系数太高了。\n\n\n    没想到，这个女人居然敢这麽想？\n\n\n    看她那意思，似乎还真敢这麽做！\n\n\n    “同学，别胡思乱想。”钱队长警惕地看了一眼陈玉婷。\n\n\n    後者只是静静看着那巨大的空洞：\n\n\n    “等两天就知道了。”\n\n\n    搜书名找不到,可以试试搜作者哦,也许只是改名了!	1784265252790	0	\N	\N	1784270137638
 1784270137653	155		第152章 身姿…甚是奇伟	龙劫骨墓。\n\n\n    燕昭雪指尖凝聚元力，顺着手臂经过穴窍，缓缓打通体内的经络。\n\n\n    作为新武武者，她对旧武的开脉还是很熟的。\n\n\n    毕竟爷爷因为天赋受损，无奈之下走了许多年的旧武。\n\n\n    她耳濡目染，也知晓不少。\n\n\n    开脉，对旧武武者很重要。\n\n\n    一般得需要有一定的身体强度才能开脉。\n\n\n    不然开脉时会承受极大痛苦，大概率会失败。\n\n\n    自己拥有四境巅峰，将近十万的生命力，肉身在本体天赋的作用下，已经十分强大了。\n\n\n    所以么。\n\n\n    开脉对她而言很容易的。\n\n\n    只是，开脉对新武武者，尤其是天赋极强的新武武者没太大用。\n\n\n    拥有武道天赋，就能源源不断吸收天地元力汇聚於体内的天赋力量中。\n\n\n    无时无刻淬炼着身体。\n\n\n    也不需要开脉来运转天地元力。\n\n\n    拥有武道天赋这种超凡力量，想怎麽运转天地间的元力，就怎麽运转。\n\n\n    再配合无数先辈总结出来的五大基因修炼法。\n\n\n    这种最顶级的新武天赋功法，对元力的淬炼已经是完善到极致了。\n\n\n    开脉只是多此一举，没有什麽提升。\n\n\n    当然了，除非是修炼一些比较特殊的秘技，才会有大用。\n\n\n    但一般而言，新武武者只会根据修炼的秘技，去选择性开脉的。\n\n\n    不然，一般不会白白浪费功夫去开脉。\n\n\n    过了足足大半天。\n\n\n    直到元力完全耗尽。\n\n\n    “奇经八脉除了之前修炼龙血活脉术的任督二脉，已经开了大半。”\n\n\n    “元力枯竭了…”\n\n\n    “身上的元力补给药剂也用完了…”\n\n\n    燕昭雪微微皱眉。\n\n\n    坠落时，她身上还是带有一些补给品的。\n\n\n    一部分随着坠落而掉了。\n\n\n    还保留了一部分。\n\n\n    加上因为只是来龙首崖悟道的，身上的武斗护具也只是带了一种保护性的四级吊坠。\n\n\n    但因为没有元力，也无法驱动。\n\n\n    “也不知前辈怎样了…”\n\n\n    燕昭雪站起身，走出巨石。\n\n\n    入眼的。\n\n\n    是一幅宛若地狱般的画面。\n\n\n    无数的异兽尸体碎肉，洒满了整个遗迹。\n\n\n    随处可见的各种龙形异兽脑袋，四肢，心脏，腐肉，乃至骨骸。\n\n\n    一堆堆层叠。\n\n\n    垒起了一个个的肉海尸山。\n\n\n    看得燕昭雪眼皮子狂跳。\n\n\n    饶是经过了不少遗迹。\n\n\n    也着实没有见过这般有些恐怖的战场画面。\n\n\n    原本如黑云漫天的龙形尸骸异兽。\n\n\n    此刻也消失了大半。\n\n\n    让整个遗迹都显得有那麽点空荡。\n\n\n    空气中弥漫着腐烂和鲜血相互融合的味道，对於这点，燕昭雪还是比较能适应的。\n\n\n    没看到熟悉的身影。\n\n\n    燕昭雪突然有点害怕。\n\n\n    “前辈！”\n\n\n    她喊了一声。\n\n\n    没有回音。\n\n\n    心中的不安一下就扩散到了脸庞。\n\n\n    燕昭雪奔跑了起来，连连大声呼喊。\n\n\n    连续冲过了好几个肉海尸山，却依旧没有任何回应，也没有看到任何身影。\n\n\n    这麽多的尸骸异兽堆成的尸山。\n\n\n    一天之内，消灭这麽多。\n\n\n    还是在龙劫骨墓这种险恶的遗迹环境中。\n\n\n    换成她自己，恐怕就算能杀完，也早就力竭了。\n\n\n    又无人帮忙，那恐怕……\n\n\n    直到靠近那座巨大的骨骸建筑。\n\n\n    “呜——！”\n\n\n    一个没崩住，燕昭雪眼眶一酸，差点…\n\n\n    “嘘——！”\n\n\n    这时，那骨骸建筑下面，一个坑洞中，传来一道熟悉的声音。\n\n\n    “小声点！”\n\n\n    燕昭雪一愣，赶忙走了过去，便看到了坑洞中。\n\n\n    一个只穿着破烂大裤衩的背影，正趴在坑洞中仔细观察着什麽。\n\n\n    “前辈，你没事？”燕昭雪看着那精壮的背影。\n\n\n    背上满是各种鲜血淋漓的伤痕，看得燕昭雪心神一颤。\n\n\n    王闲道：\n\n\n    搜书名找不到,可以试试搜作者哦,也许只是改名了!\n\n\n    “没事。”\n\n\n    “你身上的伤？”\n\n\n    “皮外伤。”\n\n\n    燕昭雪沉默。\n\n\n    只是皮外伤吗？\n\n\n    她仔细看去，发现确实好像都是皮外伤。\n\n\n    看着鲜血淋漓，可大部分鲜血的颜色并非人血。\n\n\n    而是那些龙形尸骸异兽的鲜血，还有些腐液结痂形成，这才形成了密密麻麻的伤痕。\n\n\n    实际上。\n\n\n    只有少部分已经伤口，而且已经结痂了。\n\n\n    确实是皮外伤。\n\n\n    可杀了这麽多的异兽…\n\n\n    只是皮外伤吗？她心中万分震惊…\n\n\n    嗯……\n\n\n    好像衣服也没了。\n\n\n    应该是被不少龙形异兽喷出的龙系腐液给腐蚀了。\n\n\n    前辈穿的还只是二级的武斗护具。\n\n\n    根本抵挡不住那些d级，乃至c级异兽的攻击，被腐蚀是正常。\n\n\n    她不由多看了几眼…\n\n\n    ‘不愧是爷爷说的武学奇才…先天开了经脉，骨骼惊奇…’\n\n\n    ‘另外，前辈的身姿…身姿…也甚是奇伟…’\n\n\n    不知看到了什麽，燕昭雪脸颊一红。\n\n\n    赶忙偏移视线，转移话题道：\n\n\n    “前辈你在看什麽？”\n\n\n    “过来，给你看个宝贝！”\n\n\n    “宝贝？”燕昭雪脸色愈发红润。\n\n\n    王闲朝着燕昭雪挥了挥手。\n\n\n    燕昭雪也钻进坑洞中，趴到王闲身边。\n\n\n    耳边立刻传来一阵轻微的蠕动声。\n\n\n    只见坑洞中，一只只细小的银白色虫卵似乎正在不停的扭动着。\n\n\n    “这是…”\n\n\n    “九幽冥虫的卵。”王闲眼眸微微放光，“这种异兽一般都是在s级以上的腐尸异兽伴生出现。破卵而出之时，便能咬食空间，离开遗迹。”\n\n\n    “它们伴生在云魔龙的部分残骸下，吸收了一定残骸的力量。”\n\n\n    “那等它出生，我们就能直接离开了么？”燕昭雪疑惑。\n\n\n    “还早的很…”\n\n\n    “那怎麽说是宝贝…”\n\n\n    王闲扭过头看着燕昭雪笑道：\n\n\n    “没出生的九幽冥虫，这些虫卵才是真正的宝贝。”\n\n\n    “出生了九幽冥虫拥有穿越空间的力量，不仅难以扑捉，也十分难对付。”\n\n\n    “它们发出细微虫鸣能扰乱天地间的气场。”\n\n\n    “同时，你有没有发现，盘龙山的煞气浓度一直在上涨？”\n\n\n    燕昭雪微微点头：\n\n\n    “确实有，尤其是在龙首崖，突然间的煞气暴涨…不知道是什麽原因。”\n\n\n    王闲指了指九幽冥虫的卵：\n\n\n    “其中有一部分这些虫豸异兽的原因，九幽冥虫的触角能通过空间，吸收能量。如果盘龙山的灵核受到刺激改变，那麽就会因为九幽冥虫的原因，骤然溢出大量煞气汇聚在龙首崖。”\n\n\n    “原来如此！”\n\n\n    “而它们的虫卵时期，外面的这一层虫蜕，在九幽冥虫诞生后就会成为他们的触角。”王闲眼睛一眯，“你有没有感受到，这洞坑中的煞气浓度异於外面？”\n\n\n    燕昭雪闭眼感知了一下，确实感觉要高於外面。\n\n\n    “因为，这些白色的虫蜕，就是一种能够吸收煞气的特殊材料。”王闲缓缓道。\n\n\n    燕昭雪嗯了一声，还没明白过来。\n\n\n    突然间，她眼睛猛然睁大。\n\n\n    “前辈…你的意思是…”燕昭雪浑身微颤。\n\n\n    “没错！”王闲眼眸绽光，“此物进行熔炼后，使其吸收煞气的特性结合我所说的‘元力晶璧’，就能使得元力晶璧能吸收人体中的煞气，存於经脉中。”\n\n\n    “再通过武学的方式，将煞气释放出去。”\n\n\n    或者，存於经脉，慢慢改善经脉，形成神脉。王闲默默道。\n\n\n    这就是，自己当初和燕霆骁所说的‘最後一步’。\n\n\n    材料！\n\n\n    九幽冥虫确实难找，难对付。\n\n\n    但龙国遗迹很多。\n\n\n    肯定不只是这里有。\n\n\n    “爷爷有救了…”燕昭雪喃喃一声。\n\n\n    “好了，我们先出去吧。”王闲道，“眼下先不处理这些虫卵，等解决了外面的云魔龙残骸，能离开之时我再收取这些九幽冥虫的虫蜕。”\n\n\n    燕昭雪强压住心中的激动，嗯了一声。\n\n\n    两人正要退出洞坑。\n\n\n    但此时，因为洞坑较小，本就趴了两人。\n\n\n    一时间竟有些拥堵。\n\n\n    两人又是同时动作，一下就免不了碰在一起。\n\n\n    面面相觑。\n\n\n    燕昭雪近得几乎连前辈脸颊上的细微绒毛都能看得清清楚楚。\n\n\n    这边呼出的鼻息，刚流入空气中，就被吸入对方吸入。\n\n\n    一下子，燕昭雪浑身一麻，原本偏向中性英气勃勃的绝美脸颊，立刻就红了。\n\n\n    尤其是身侧，严丝合缝的贴在一起。\n\n\n    关於登录用户跨设备保存书架的问题,已经修正了,如果还是无法保存,请先记住书架的内容,清除浏览器的cookie,再重新登陆并加入书架!	1784265252790	0	\N	\N	1784270137639
 1784270137654	156		第153章 燕昭雪：前辈能不能…抱我？	“要不你先出去？”王闲稍微扭了一下，给两人中间腾出了一个缝隙。\n\n\n    “前辈您先出去吧…”燕昭雪侧过头，低声道。\n\n\n    王闲也不墨迹。\n\n\n    正要利索的从洞坑中爬了出来。\n\n\n    然而，刚爬到一小截，就感觉身旁的燕昭雪一抖，身体一下子贴了过来。\n\n\n    而王闲此时的脑袋，也才接近燕昭雪的腰部。\n\n\n    她那一贴，王闲整个脑袋就直接懵在了後者的小腹位置。\n\n\n    燕昭雪还轻微的尖叫了一声。\n\n\n    “嗯？”王闲来不及发一道闷声。\n\n\n    “有虫…”\n\n\n    “好像…有一只九幽冥虫藏在附近，好像钻到我衣服里面了…”燕昭雪止不住的浑身扭动。\n\n\n    王闲微微皱眉。\n\n\n    老实说。\n\n\n    他没察觉到坑洞中，还有九幽冥虫。\n\n\n    都是虫卵才对。\n\n\n    王闲赶忙用双手按住燕昭雪那纤细却极其有劲的腰部，後者身体一震，停止了扭动。\n\n\n    他这才勉强能开口说话：\n\n\n    “我先拉你出来…”\n\n\n    无法，王闲只能按住燕昭雪的腰部，把对方从坑洞中拉了出来。\n\n\n    一出来。\n\n\n    燕昭雪就急匆匆的将身上的衣服连忙脱去。\n\n\n    “等等——！”\n\n\n    然而，刚脱一个外衣，露出里面色褐色武装背心。王闲就赶忙止住後者的动作：\n\n\n    “别急，九幽冥虫对煞气敏感…”\n\n\n    “一旦钻入人的身体中，光脱衣服，是不会出来的…”\n\n\n    “我来试试。”\n\n\n    “从哪个位置钻进去的？”\n\n\n    燕昭雪低着头，声音轻细：\n\n\n    “好像…好像是檀中穴的位置…”\n\n\n    “？”王闲一愣。\n\n\n    你这虫也挺会钻啊。\n\n\n    檀中穴位於天山上，那两朵梅花的连线中心。\n\n\n    他沉默片刻。\n\n\n    “真是九幽冥虫吗？”王闲问道，“你确定没看错？”\n\n\n    燕昭雪点点头，神情有些急：\n\n\n    “是。而且一下就消失不见了…”\n\n\n    王闲沉吟片刻。\n\n\n    自己没察觉到有九幽冥虫。\n\n\n    那只有一个可能。\n\n\n    这只九幽冥虫的强度已经到达了c级。\n\n\n    九幽冥虫不是一种攻击性强的异兽，强在藏匿於虚空中，只会发出细微的虫鸣。\n\n\n    一旦钻入虚空中，就很难感知到。\n\n\n    若是钻进人体中，必会扰乱人体的气场。\n\n\n    还会源源不断，让人体自主吸收煞气，可比之前那一缕煞气麻烦多了。\n\n\n    再如果，若是顺着经络，寻到武者的天赋力量，再吞噬天赋。\n\n\n    那就更麻烦了。\n\n\n    “恐怕，你是的天赋吸引了。”王闲沉思，“龙纹神脊是一种和龙属有关的武道天赋，这里的九幽冥虫又是吸收云魔龙残骸的力量诞生。”\n\n\n    “之前在龙首崖就是因为这个原因，才汇聚在你的地下…”\n\n\n    “那怎麽办？”燕昭雪似乎想到了什麽，微微咬牙，“前辈，你能不能像上次一样，把它从我的经络中抽出来？”\n\n\n    “没那麽简单…”王闲摇头，“上次只是一缕煞气而已，我能随意抽走…可九幽冥虫擅长空间之力，我的煞气一触碰到它，它就会离开，钻到其他位置…”\n\n\n    “跟我来吧。”\n\n\n    王闲带着燕昭雪来到了骸骨建筑的地步，那巨大棺椁的旁边。\n\n\n    然後缓缓拿出魔刀。\n\n\n    此刻的魔刀上，不仅有之前的白虎兵魂，还多了一副玄武兵魂，莹莹生辉。\n\n\n    他轻轻一震。\n\n\n    那玄武兵魂骤然闪耀。\n\n\n    下一秒。\n\n\n    只见魔刀表面骤然涌现出一股水光，水光笼罩好似再为魔刃重塑！\n\n\n    没多久，魔刀就变成了一把通体漆黑的古朴长枪！\n\n\n    “兵器六爻的玄武兵魂，坎水卦象，易器化形！”燕昭雪一怔，看着这把魔枪，“前辈，你的第二爻已经修炼成了？”\n\n\n    “是…”\n\n\n    她看向那些异兽尸骸，若有所悟。\n\n\n    兵器六爻极难修炼，就在於不仅要对材料要求极高。\n\n\n    同时每一爻，都需要击杀异兽以鲜血铸就唤醒兵魂！\n\n\n    “嗯。”\n\n\n    “等会我将云魔龙的龙气渡入给你。”王闲缓缓道，“你纳入任脉后，九幽冥虫会被云魔龙的龙气震慑，届时我再以控制煞气将其引诱出来。”\n\n\n    燕昭雪点点头。\n\n\n    王闲抽出这把变化而成的魔枪，直接将其刺入那棺椁外的枪窟窿中。\n\n\n    刹那间。\n\n\n    棺椁骤然一阵剧烈的颤动。\n\n\n    一道沉闷的低吼声，从棺椁中传来。\n\n\n    王闲毫不在意。\n\n\n    只是轻微感受着魔枪的变化。\n\n\n    没多久。\n\n\n    一股股磅礴的龙气夹杂着精纯的灵煞，从枪身中源源不断传来。\n\n\n    王闲直接先在自己神脉中过滤一片，将其中的灵煞吸得乾乾净净。\n\n\n    “准备好！”\n\n\n    王闲轻喝一声。\n\n\n    燕昭雪神色一凝，微微挺胸，然後双手轻轻用力，在胸口中央把衣服撕开一个巨大的口子。\n\n\n    天山上那披着的雪衣被撕开，直让山上的两座巨峰猛地一颤，荡出了几欲要雪崩的弧度。\n\n\n    王闲指尖一点中央。\n\n\n    燕昭雪浑身一震。\n\n\n    只觉後背的龙纹神脊彷佛也发出了一声欢愉的龙吟般，享受着这一股股精纯的龙气。\n\n\n    与此同时。\n\n\n    王闲指尖凝聚着一股煞气，精妙的控制钻入檀中穴。\n\n\n    果不其然，确实发现了一只宛若米粒般大小的九幽冥虫。\n\n\n    别看它小。\n\n\n    “还真有…”王闲暗道。\n\n\n    九幽冥虫其实不强，只是能力特殊，还能发出扰乱气机的虫鸣，数量一多虫鸣的频率还能迅速扩大。\n\n\n    此刻，随着云魔龙的龙气进入经络中。\n\n\n    直让九幽冥虫不敢动弹分毫。\n\n\n    这可是真正z级异兽的残馀龙气。\n\n\n    即便隔了这多年，已经十分薄弱了，可依旧残留着几分云魔龙的气息。\n\n\n    一下就将这只九幽冥虫震住了。\n\n\n    王闲对煞气的控制早已精妙无双，瞬间凝煞成掌，就把这只九幽冥虫给抓了出来。\n\n\n    然後一把捏碎，只留下触角和残骸。\n\n\n    “前辈…”\n\n\n    这时，燕昭雪恍惚间发出了一声声急促的喘息。\n\n\n    双眼似有几分涣散。\n\n\n    王闲见状，立刻就知晓，肯定是从龙气中被那云魔龙残馀的意志给侵蚀了。\n\n\n    未曾见过z级异兽的她，显然不可能抵挡住云魔龙的意志。\n\n\n    别看已经过了这麽多年，龙其中残馀的意志不足云魔龙当年的万分之一。\n\n\n    可也绝非四境武者的意志能抵抗的。\n\n\n    “昭雪！”\n\n\n    王闲口中大喝一声，双眸直视燕昭雪，彷佛能进入对方的内心世界，“醒来！你若不撑住，我们都得死在这里！”\n\n\n    听到这一声‘昭雪’，後者身体一震，眼神似有几分清醒。\n\n\n    然而。\n\n\n    随着龙气不断注入，她的眼神时而涣散，时而凝聚。\n\n\n    王闲深深皱眉。\n\n\n    不是每个人都有自己一样的经历。\n\n\n    他是不惧这种z级异兽残馀气息的意志。\n\n\n    可燕昭雪不是自己。\n\n\n    燕昭雪双手捂住头部，似乎极为痛苦，她看向眼前的前辈，发出了一声呢喃：\n\n\n    “前辈…你能不能…抱我？”\n\n\n    “我…我有点撑不住了…”\n\n\n    王闲毫不犹豫，直接双手勾住对方的肩膀，揽入怀中。\n\n\n    燕昭雪双手更是死死扣住王闲的後背。\n\n\n    两人紧紧抱在一起。\n\n\n    巨峰成饼，梅花变形。\n\n\n    直让王闲胸口一闷。\n\n\n    但他却无暇顾及，指尖从燕昭雪的背部穴窍，缓慢的渡入龙气。\n\n\n    不多时，她的背後。\n\n\n    龙纹神脊绽放出耀眼的光芒，似乎在疯狂的吸收这一点点来自z级异兽的残馀生命力量。\n\n\n    抱在怀中的燕昭雪，气息稍微平静了不少。\n\n\n    可意识中，依旧在和那云魔龙的意志做着纠缠斗阵。\n\n\n    忽然。\n\n\n    她闷哼一声，无意识般一口咬在王闲的肩膀上。\n\n\n    瞳孔，都隐约有几分龙眸的形状。\n\n\n    王闲抚了抚後者的背，顺平了那欲要显露的魔龙之威。\n\n\n    直到某一刻。\n\n\n    燕昭雪发出一道低吟。\n\n\n    宛若一声清凉的龙吟。\n\n\n    後背的龙纹神脊彷佛长出了一双翼翅，神脊延伸至燕昭雪的骨骼，连成一体。\n\n\n    “天赋进化了…”\n\n\n    王闲微微一怔。\n\n\n    果然。\n\n\n    能撑过这一关，也算是燕昭雪的一番奇遇了。\n\n\n    本是王级天赋的龙纹神脊，此刻已经完全生长至燕昭雪的骸骨深处，与之连为一体。\n\n\n    说是龙纹神脊，已经不太合适了。\n\n\n    龙纹神骨，更合适。\n\n\n    之前只是一条脊骨，而现在不仅多了一双虚幻的翼翅，身上其馀的骨骼都拥有了天赋力量。\n\n\n    距离禁忌天赋，只有一步之遥了。\n\n\n    是最顶级的王级天赋！\n\n\n    渐渐地，燕昭雪平静了下来。\n\n\n    “前辈…我好了。”燕昭雪轻声道。\n\n\n    王闲点点头，双手松开，重新拿起魔枪道：\n\n\n    “我要开棺了，云魔龙的龙气被我们吸收了不少，但它的残骸肯定还有b级左右的实力。”\n\n\n    “你现在实力恢复了多少？”\n\n\n    “十成！”燕昭雪深吸口气，感受着体内充沛的力量，以及更加强大的天赋。\n\n\n    “那等下就看你的了，这是最後一步了。”王闲微微一笑，“毁灭这云魔龙的残骸后，我们就能出去了！”\n\n\n    燕昭雪一怔，嗯了一声，只是馀光一瞥，看到了前辈肩膀上的齿痕，没由来的脸一红。\n\n\n    此时此刻。\n\n\n    忽然间，她有那麽点不舍了…\n\n\n    倒是希望…云魔龙的残骸能稍微更强一些…这样，时间就长一点…\n\n\n    而下一刻，王闲手中魔枪一抖，与里面武极神兵的残刃气息相连。\n\n\n    瞬间，挑开了棺椁的盖子！\n\n\n    关於登录用户跨设备保存书架的问题,已经修正了,如果还是无法保存,请先记住书架的内容,清除浏览器的cookie,再重新登陆并加入书架!	1784265252790	0	\N	\N	1784270137639
+1784270140392	396		第369章神秘种子，抵达战场！	不多时。\n\n\n    神棺中出现了一堆堆‘小山包’。\n\n\n    王闲蹲下身，从脚边捡起一只空械蠕虫的尸体。\n\n\n    作为无界虫族中的一员，空械蠕虫只能算是斥候类的角色。\n\n\n    属于底层的物种。\n\n\n    它们实力不强，唯一比较厉害的就是能啃噬空间，数量足够多的话，甚至能打通一条连接他们无界虫族大本营的空间通道。\n\n\n    以此大规模，短时间的入侵其他界域。\n\n\n    除此之外，空械蠕虫在异星战场本身不算多强。\n\n\n    当然，这也是放在异星战场不算强。\n\n\n    放在其他世界，随便一小批都能瞬间引发大量的空间震动。\n\n\n    王闲把这只拳头大小的空械蠕虫从牙齿到躯体尽数剥离。\n\n\n    空械蠕虫是半机械生命体，在无界虫族的母巢中，是通过容纳大量的各界废弃金属，然后置入无界虫母的‘原质母液’进行机械重塑生产出来。\n\n\n    其中，最有价值的，自然空械蠕虫齿下的原质母液了。\n\n\n    这是无界虫族的‘特产’。\n\n\n    只有无界虫母能生产。\n\n\n    而无界虫母，在异星战场是真正意义上的巅峰域主级领袖。\n\n\n    在众多z级的异兽中，都拥有一定的统治地位。\n\n\n    仅次于王闲前世遇到的噬星厄君。\n\n\n    作为它产出的母液，拥有一个超凡能力，能无差别相融万物。\n\n\n    作用范围极广。\n\n\n    只不过空械蠕虫想要提取出一滴这种母液，怕不是得要成千上万只。\n\n\n    ‘终究是无界虫族的底层…’\n\n\n    王闲连续剥离数只拳头大小的空械蠕虫后，都没有收集到哪怕一丝丝的原质母液，不由在心中发出了这种感叹。\n\n\n    不过嘛，空械虫族的躯体是经过滴入原质母液浸泡而成。\n\n\n    早已不是那种废弃金属了。\n\n\n    进行分解剥离后，其身上的外壳，都能用于制作精良的护具。\n\n\n    前世二代的灵煞武装，其中的材料之一，就是这空械蠕虫的外壳。\n\n\n    二代的灵煞武装，除了针对煞气之外，开始加强了防护能力。\n\n\n    寻找到这空械蠕虫的外壳后，借此替换，使得二代灵煞武装在空间层面拥有极强的稳定性。\n\n\n    不至于在异星战场随便因为一点空间波动，就导致铠甲损坏。\n\n\n    ‘在空械蠕虫中，千只中能诞生一只变异类型的‘军械蠕虫’。’\n\n\n    ‘军械蠕虫摆脱了低层的身份，会被无界虫母赐予一滴原质母液，同时其翅翼还会经过淬炼加强，变成一双祥云翼，不用啃噬就能轻松穿梭在空间的。’\n\n\n    ‘可惜，这一批空械蠕虫应该只是小部队…不是军械蠕虫率领的大部队…’\n\n\n    王闲扫了几眼战场，略感可惜。\n\n\n    不过想想，若是出现了军械蠕虫，以神棺这点人，恐怕根本对付不了。\n\n\n    也幸好只是一小支部队。\n\n\n    但，目前不知道神棺穿梭到哪个位置了。\n\n\n    既然出现了空械蠕虫，就说明异星战场连接的其他界域应该是要被无界虫族入侵了。\n\n\n    “哥，这些虫子咱们都干完了！”\n\n\n    这时，短发男子兴冲冲走了过来喊了一声，“接下来怎么搞？”\n\n\n    “该说不说，这些虫子内部居然是半机械构造，真他妈奇特！”\n\n\n    王闲起身，看着前方累积的两座小山。\n\n\n    空械蠕虫本身比较大，一只就有拳头大小。\n\n\n    看上去垒得很多，实则只有百来只。\n\n\n    有了应对策略之后，对于神棺内这些新人散兵倒也不算难对付。\n\n\n    毕竟这些人都不是寻常武者。\n\n\n    能犯罪的武者，品性这方面不说，实力这方面倒没差的。\n\n\n    没点实力，也犯不了一些重罪。\n\n\n    像是这个短发青年苟泽，看上去实力平平，这小子当年竟然能潜入龙国五大的武库要地。\n\n\n    放在现在，就是能潜入进入天都大学万武岛三层以上的地界。\n\n\n    别说他这五境不到的实力了。\n\n\n    就算是五境，乃至六境武者，都不太可能潜入进去抢武学拓印。\n\n\n    他们有实力，虽是一盘散沙，但在此刻勉强还算能一心对敌。\n\n\n    又有了应对策略，没有对未知的恐惧，把战力正常发挥出来，打这些空械蠕虫自然不在话下。\n\n\n    神棺内终究不是异星战场。\n\n\n    就算是异星战场。\n\n\n    只要心中没有恐惧，习惯了环境，拥有天赋的武者一旦组成军队，并不会弱。\n\n\n    “把它们外壳剥离下来就行了。”王闲指了指。\n\n\n    这场战斗，他除了刚开始抽刀救下那几个被虫血腐蚀手臂的武者。\n\n\n    其他时间都没怎么动手。\n\n\n    只需要稍微提醒一下有些嗜杀的武者不要单独冲上去，跟着群体就行。\n\n\n    偶有几个不听话，被虫血糊脸，或者给空械蠕虫拖拽进入啃噬出来的空间裂缝，被溢散出来的空间风暴撕裂那也怪不了谁。\n\n\n    大都是亡命之徒，大都想着多杀几只能多赚点功劳。\n\n\n    想要一群这样的人完全齐心协力听指挥也不太现实。\n\n\n    能有一大半还算听命令，就算是不错了。\n\n\n    如苟泽这种，完全听命令的，甚至还来主动问的，那就更少了。\n\n\n    “好嘞！”\n\n\n    短发青年抽出一把小刀喜滋滋的朝着那堆小山走去。\n\n\n    “这些空械蠕虫，看上去不像是只有这么点…”\n\n\n    旁边，那个狰狞男子走了过来，他有些疑惑，“我怎么感觉是不是还有更厉害的这种异兽？会不会还有这种袭击之类的？”\n\n\n    王闲有些意外的看了此人一眼。\n\n\n    这人脸上的剑痕并没有完全治好，隐约可见其骨，看上去极其渗人。\n\n\n    而且四五十的年龄，也很大了。\n\n\n    没想到心思还细腻的。\n\n\n    “只不漏掉，就不会有了。”\n\n\n    王闲看向另一边的鲁三通。\n\n\n    有这位长官出手，并没有漏掉一只空械蠕虫。\n\n\n    只要有想要逃跑的，都能被他的虚空大手印及时从空间裂缝中拉扯出来，捏成一手金属渣滓。\n\n\n    很暴力。\n\n\n    可惜，损坏了材料。\n\n\n    作为异星战场出身的武者，实力这方面自然是顶尖的。\n\n\n    “我刚才看你盯着这些尸体，眼中有点可惜，你是在找什么？”\n\n\n    狰狞男子又问道，“有的话开个声，我叫他们一起找。”\n\n\n    王闲笑着摇摇头。\n\n\n    军械蠕虫比较特殊，若真有的话，他一眼就能看出来。\n\n\n    不需要帮着找。\n\n\n    狰狞男子也不废话，感慨道：\n\n\n    “这次多谢你了，不然我感觉我们可能到不了前线，路上就得捐了。”\n\n\n    “这前线战场，到底是什么鬼地方…”\n\n\n    “没那么严重。”王闲看着鲁三通，“鲁长官还是很强的。”\n\n\n    有这位六境武者在，全部捐了倒不至于。\n\n\n    顶多就是被这些空械蠕虫啃出空间通道，神棺流窜到其他的界域去了。\n\n\n    至于那时能不能活下来，就是另一回事了。\n\n\n    其他的，光凭鲁三通，全灭这些空械蠕虫或许很难，但大部分还是能轻松解决的。\n\n\n    （本章未完，请点击下一页继续阅读）第369章神秘种子，抵达战场！(第2/2页)\n\n\n    正说着，鲁三通就一只手插兜走了过来。\n\n\n    他手掌中，还有一只正在逃窜的空械蠕虫。\n\n\n    只是诡异的是，无论这只空械蠕虫怎么移动，都在鲁三通的手掌上方来回变化。\n\n\n    像是他手上，有一方透明的空间将其束缚了一样。\n\n\n    鲁三通走到王闲面前，虽然表情很平淡。\n\n\n    但眼神中的喜色还是出卖了他。\n\n\n    发现并解决新型异兽，在异星战场可是大功一件啊！\n\n\n    “你表现的很好！”\n\n\n    鲁三通十分满意的点了点头，“此次异兽袭击，你应对的策略和临场处理都很不错！去了战场，会给你记一功！”\n\n\n    “没有鲁长官，我们这些人也做不到全歼这些空械蠕虫。”王闲笑着摇摇头。\n\n\n    他说的是实话。\n\n\n    就算自己出手，也未必能如这位精修了上乘武学，轻松擒住这些逃跑的空械蠕虫了。\n\n\n    当然了，自己出手的话，空械蠕虫也没有逃跑的机会。\n\n\n    直接杀干净…\n\n\n    鲁三通一听，心中甚是舒爽。\n\n\n    倒是感觉有点不太对劲。\n\n\n    说起来，就以往的情况来看。\n\n\n    一般那些天才往往都桀骜不驯。\n\n\n    他当年自己上前线战场，那就是真的天不怕地不怕，吃了不少亏。\n\n\n    这小子看着年纪轻轻，论天才名头，比自己当年都要大不少。\n\n\n    毕竟。\n\n\n    以大一身份杀入青年武道大会问鼎冠军的含金量，也算是前无古人了。\n\n\n    眼下看来，倒是一点架子都没有。\n\n\n    难能可贵啊！\n\n\n    鲁三通愈发能理解那个命令。\n\n\n    这时。\n\n\n    正在处理空械蠕虫尸体的众人，忽然一个惊叫声响起：\n\n\n    “咦，这是什么？你们快来看！”\n\n\n    众人闻声立刻围了过去。\n\n\n    只见一只已经被剥离的空械蠕虫身体中心，突然流出一颗淡绿的小珠子。\n\n\n    隐约散发着一股清香。\n\n\n    尤其是那珠子表面，竟是还有一道诡异的鹿形异兽。\n\n\n    王闲几人也围了过去。\n\n\n    在看到这颗珠子的瞬间，王闲微微一愣。\n\n\n    心中顿时沉了下来。\n\n\n    “这是宝贝吧？”\n\n\n    “一看就和这些虫子不是一个样式的，但好像又不像是宝贝…没感觉出元力波动啊！”\n\n\n    “材料得教给专业的，咱们这里面有没有熔炼师？”\n\n\n    “有，我就是，勉强算个中级熔炼师吧！”\n\n\n    一个长发男子走了出来，腼腆一笑，“打架不太擅长，刚在就在后面摸鱼，材料这方面我颇为擅长，虽然这只虫子结构体材料，我摸不透，不过这个珠子看样式应该是我擅长的‘古物材料’。”\n\n\n    “你说说？”鲁三通看了看他。\n\n\n    长发男子拿起这颗珠子，放在手中细细打量。\n\n\n    掌中心不断溢出一缕缕细微极致的元力丝线深入珠子中。\n\n\n    这是在材料内部构造特别的能量回路，以此保存材料同时摸透材料的性能。\n\n\n    熔炼师的常用手法。\n\n\n    片刻后。\n\n\n    长发男子赶忙抽手一甩，将这颗珠子甩了出去，浑身一抖：\n\n\n    “靠，这玩意儿莫名奇妙竟然能自动吸收我的元力…内部十分驳杂，根本无法构造稳健的能量回路！”\n\n\n    “什么垃圾玩意儿！”\n\n\n    “这材料品级我不好说，但绝对不是什么好东西！”\n\n\n    鲁三通捏着下巴，沉思几秒。\n\n\n    似想到什么，他看向了王闲。\n\n\n    资料中显示的，这小子，好像也是一个熔炼师。\n\n\n    新型异兽，必然伴随着新型材料出现。\n\n\n    若能弄懂一二，也是一份不小的功劳。\n\n\n    这时。\n\n\n    王闲走了过去，缓缓捡起这颗珠子。\n\n\n    他放在手中摩挲片刻，迎上了鲁三通的目光，笑道：\n\n\n    “鲁长官，此物能不能作为我此次行动的奖励？”\n\n\n    众人一听，寻思着这么大的功劳，就要个这种奖励？\n\n\n    不太合适啊。\n\n\n    难不成这玩意儿是什么至宝？\n\n\n    “哦？”鲁三通一挑眉。\n\n\n    这小子，也未免太懂规矩了。\n\n\n    “你知道这东西？”\n\n\n    “略知一二。”\n\n\n    “说说看。”\n\n\n    王闲想了想道：\n\n\n    “其实也不是什么，一粒‘树种’而已，汲取元力，是因为它需要能量生长。”\n\n\n    “材料品级的话，目前应该只能算是a级吧？”\n\n\n    “a级，也不高啊。”鲁三通倒没觉得这玩意儿有多稀罕。\n\n\n    对材料他不算了解，但眼力还是有一点的。\n\n\n    “你想要就拿去吧。”鲁三通点点头。\n\n\n    王闲收起树种，心中轻叹口气。\n\n\n    他想错了。\n\n\n    这批空械蠕虫不只是斥候，去打探其他界域信息的。\n\n\n    而是无界虫族已经吞并了某个界域。\n\n\n    这玩意儿是吞并界域后，让空械蠕虫先一步返回无界虫族位于异星战场的主基地，带给虫母的界域小特产。\n\n\n    既然能在空械蠕虫身体中找到此物。\n\n\n    就意味着，恐怕那个界域中，不知道陨落了多少生命…\n\n\n    一如蓝星未来的命运一样…\n\n\n    “古鹿树种…汲血喂养能长成古鹿命种这种s级材料的原物。”\n\n\n    “古鹿命种在前世，作为能补缺任何能量的万能之物，算是一种核心的战略资源，往往出土此物的界域只有‘鹿蛾域’。鹿蛾一族没想到是殁于此时…”\n\n\n    古鹿树种对自己而言，有很多好处。\n\n\n    其一就是能给魔刀用于修炼兵器六爻的‘青龙兵魂。’\n\n\n    魔刀的兵器六爻秘技，碍于材料，目前只修炼了三爻。\n\n\n    后面几爻对材料要求不低。\n\n\n    尤其是最后的勾陈兵魂和腾蛇兵魂。\n\n\n    古鹿树种嵌入魔刀中，正好配合魔刀的汲血之力，能帮助它生长成熟再反助魔刀修成青龙兵魂。\n\n\n    算是最契合修炼兵器六爻的材料了。\n\n\n    最重要的是，加上成熟后古蜀命中本身的能力，可以让未来的王闲，在即便全部动用神脉灵煞后，还能拥有一次瞬间完全恢复灵煞的机会。\n\n\n    其作用不言而喻。\n\n\n    只是，虽是好东西，却让王闲心情略有几分沉重。\n\n\n    此时的空械蠕虫是从鹿蛾域带回战利品，而彼时又会不会从蓝星带回战利品呢？\n\n\n    王闲微微握紧这颗树种，在神棺中一言不发，只是静静看着远处。\n\n\n    目光仿佛能透过神棺那能自动修复的棺壁，看到更遥远的地带…\n\n\n    也不知过了多久。\n\n\n    忽然，随着神棺一阵颤动，猛然间好似被什么阻隔了般瞬间停了下来。\n\n\n    鲁三通这才站起身，看向众人，微微一笑道：\n\n\n    “诸位，已到站。”\n\n\n    “准备一下，跟我出棺吧！”\n\n\n    新兵蛋子们，欢迎你们来到真正的人间地狱！	1784265252790	0	\N	\N	1784270140377
 1784270137656	157		第155章 云魔龙残骸骨片与千劫龙脊残刃	凝视着那一枪落下，龙首碎裂，王闲却并无任何放松而是开口道：\n\n\n    “先回来！”\n\n\n    “残骸碎裂，这畜生要拚死一搏了！”\n\n\n    燕昭雪一个收枪回身，直接飞到了王闲身前悬浮着。\n\n\n    这时。\n\n\n    那碎裂的龙首猛地发出一声剧烈的咆哮。\n\n\n    然後直接一张口，就将所有的尸山肉海直接吞噬！\n\n\n    完全只剩一个龙首。\n\n\n    “是‘龙怨陨星’！”王闲低声道，“龙首吐出骨骸，作无尽的星陨碎片，能穿透空间。若是生前，这一招能轻松毁灭数个城市。”\n\n\n    “如今即便只有b级的实力，这一招覆盖面积也包含了整个遗迹，威力能达到b级异兽的巅峰！”\n\n\n    “这一招之下，它不仅会摧毁整个遗迹，还能创造出许多空间裂缝，极其厉害！”\n\n\n    “同时，这一招之後，它的龙首会碎成无尽碎片，消失在空间裂缝中慢慢汲取煞气等待下次复苏…”\n\n\n    燕昭雪一听。\n\n\n    “这如何对付？”\n\n\n    这可是堪比b级异兽巅峰的一击！\n\n\n    还是大范围无差别攻击，连防御都做不到。\n\n\n    就算自己勉强能防御一下，可前辈怎麽办？\n\n\n    事後，龙首碎裂，化作碎片消失在虚空中，那它以後岂不是还会复苏？\n\n\n    “别急。”王闲手中缓缓掏出一枚奇异的六角龟片。\n\n\n    龟片上刻有密密麻麻的能量回路。\n\n\n    “等会，你直接动全力施展天赋武技。”\n\n\n    “可它的头颅碎掉分散…”燕昭雪。\n\n\n    攻击一堆洒落的碎片，恐怕无法全部消灭啊。\n\n\n    “你只管听我口令，出手就是。”王闲淡淡道。\n\n\n    燕昭雪点点头：\n\n\n    “那前辈…你过来吧，这招覆盖范围这麽大，我勉强能抵挡一二…你在我身後…可以…可以…抱住我。”\n\n\n    “不用。”王闲道，“你要留足全部力量，不要防御。不然你的超凡武技对它无法造成致命伤害。”\n\n\n    “可你…”\n\n\n    王闲一把将手中的龟片轻轻捏碎。\n\n\n    霎时间，一道鳄龟的虚影凝成一方强大的浅蓝色光罩瞬间笼罩两人。\n\n\n    “这是什麽…”燕昭雪吃惊道。\n\n\n    “鳄龟蜕下的甲壳，经过我的熔炼而成的武斗护具，保持了极佳的防御效果，和扩大了防御范围，但也只能用一次。”\n\n\n    王闲话音刚落。\n\n\n    那龙首残骸瞬间变成血红色，口中直接喷涌出无尽的黑色流星。\n\n\n    直让整个遗迹都颤抖不已，空间都出现了寸寸裂痕！\n\n\n    轰隆——！\n\n\n    黑色流星砸落在水蓝色的光罩中，只出现了点点波纹。\n\n\n    燕昭雪瞳孔微缩。\n\n\n    前辈准备的未免也太充足了！\n\n\n    “这个，居然能完全抵挡住这一招！”\n\n\n    当然能挡住。\n\n\n    鳄龟蜕下的甲壳，作为上佳的防御材料，若等鳄龟完全吸收后，足够抵挡住b级异兽的一击。\n\n\n    王闲成为熔炼师后，又将其熔炼一番，维持住了材料本身的特性，同时增加了防御的面积。\n\n\n    後来又学了熔锻。\n\n\n    便将这甲壳炼成了一方甲片，等待关键时刻，用於抵挡这种自己无法挡住的威力。\n\n\n    本来么，是打算对付池九幽的。\n\n\n    以防对方有什麽底牌，能瞬间爆发出五境的实力。\n\n\n    结果对方直接溜了。\n\n\n    那就正好用来对付这个龙首残骸了。\n\n\n    只要解决了这个云魔龙的残骸，就能阻止北藏遗迹的灾难，对王闲而言，消耗就完全是值得的。\n\n\n    “准备！”\n\n\n    王闲全神贯注，忽然轻喝一声，“这一超凡武技，最为关键！用上你在龙首崖对‘太虚神游枪’的领悟！你们的超凡武技，是拥有成长性的最强招式！”\n\n\n    “绝不是一成不变的！”\n\n\n    “如今天赋进化，趁着这场战斗，将之前的对枪法的领悟，融入到超凡武技中！”\n\n\n    燕昭雪一怔。\n\n\n    经过王闲一提醒，她猛然回神！\n\n\n    悟性本就极高的她，双眸中似有无数道人影在演练着枪法的招式！\n\n\n    直到最後，所有演练的人影，瞬间融为一体。\n\n\n    她的眼神，顷刻变化！\n\n\n    龙纹神骨於她体内爆发。\n\n\n    整个人都好似化作一条遨游九天的真龙！\n\n\n    与此同时。\n\n\n    随着‘龙怨陨星’这一招缓缓消失。\n\n\n    那龙首残骸渐渐削弱，同时也欲要爆裂！\n\n\n    王闲眼神锐利，神脉打开，二十条神脉的灵煞，尽数凝於手掌。\n\n\n    三道极光从衣袖飞出！\n\n\n    第一道极光，彷佛穿越了空间，速度快的不可思议。\n\n\n    直接钉入了龙首中央。\n\n\n    第二道极光，贯穿龙首，瞬间削减了其气势。\n\n\n    甚至清除了龙首四周弥漫的雾气，使之完全现形！\n\n\n    直到第三道极光，燃起了金色的炽烈光芒，好似破开云层的第一道阳光，落在了龙首下的脊骨处。\n\n\n    关於登录用户跨设备保存书架的问题,已经修正了,如果还是无法保存,请先记住书架的内容,清除浏览器的cookie,再重新登陆并加入书架!\n\n\n    奇异的极光下，整个遗迹彷佛都多了一层云光渐开的奇景！\n\n\n    本欲自爆的龙首残骸，死死被钉在虚空中！无法动弹分毫！\n\n\n    这正是斩仙飞刀诀的第二重，破晓！\n\n\n    就在这时。\n\n\n    燕昭雪身化九枪，宛若踏有虚空般，出现了九道残影，从各个角落，每一枪都完美准确的落在了此时僵直的龙首残骸身上。\n\n\n    “超凡武技——太虚骁龙陨！”\n\n\n    轰——！\n\n\n    炽烈的枪芒，随着云层渐开，让整个昏暗的遗迹都亮了起来！\n\n\n    驱散了一切的污秽！\n\n\n    过了一会儿。\n\n\n    光芒渐散。\n\n\n    没有机会自爆的龙首残骸完全消失。\n\n\n    只馀下一块宛若云朵的头骨残片，从半空中嗡鸣不止的落下。\n\n\n    王闲张开手，在无尽的光芒中，稳稳地抓住了这块残片。\n\n\n    他凝神一看，微微一笑。\n\n\n    云魔龙残骸的骨片。\n\n\n    即便现在只有b级的气息。\n\n\n    可依旧保留着云魔龙当年的几分残馀力量。\n\n\n    “空间之力…”\n\n\n    “加上之前九幽冥虫的虫卵…”\n\n\n    “回去后…‘星骨’的修炼，就可以启动了！”\n\n\n    “两种材料熔炼后，只要将我的脚骨练成‘星骨’，就能掌握些微空间之力…生命力暴涨的同时，还能练成杨老前辈的那门星痕步…或许，太虚神游枪以後也有机会学成。”\n\n\n    王闲摩挲着手中的骨片。\n\n\n    这枚材料的价值，已经超过了遗迹所有的异兽残骸。\n\n\n    虽然…大部分异兽的残骸已经被那龙首残骸给吸收了。\n\n\n    当然了，骨片中，还参与着云魔龙的意志。\n\n\n    但对自己来说，完全不算什麽。\n\n\n    “前辈！”\n\n\n    燕昭雪兴奋至极地从半空中落了下来。\n\n\n    办到了！\n\n\n    真办到了！\n\n\n    王闲点点头低声道：“你穿好衣服，我们马上离开这个遗迹。遗迹要塌陷了！”\n\n\n    燕昭雪点点头，披上了脱下的外衣。\n\n\n    王闲则来到了棺椁，眯眼一看。\n\n\n    棺椁中，躺着一截枪刃。\n\n\n    便是那武级神兵‘千劫龙脊’的残刃了。\n\n\n    前世。\n\n\n    应该就是池九幽在龙霄问武获得了第一，然後率先在隐龙渊找到了龙形石钥，暗中又来到了此地，获取了这枚残刃至宝！\n\n\n    神兵的残刃。\n\n\n    即便只留有些微残馀之力，也绝对是宝贝了！\n\n\n    不然，也不会镇压龙首残骸这麽多年。\n\n\n    王闲一把抓住残刃。\n\n\n    只觉一股磅礴的枪意袭来。\n\n\n    他怡然不惧，只是直视枪刃。\n\n\n    古老的枪意澎湃涌动，交织在他和残刃之间。\n\n\n    一人一刃，彷佛在进行一场相隔数十年的枪道交流。\n\n\n    片刻后。\n\n\n    枪刃不再鸣动。\n\n\n    ‘果然是至宝，这枪刃中，居然还留有杨天禅的几分传承武学和秘技！’\n\n\n    王闲将枪刃握在手中，走到燕昭雪面前。\n\n\n    “这是…千劫龙脊？”\n\n\n    “不错。”\n\n\n    接下来，两人迅速将那九幽冥虫的虫卵直接取出，王闲再将虫蜕和里面大部分生长完成的九幽冥虫熔炼成材料，完好保存。\n\n\n    然後。\n\n\n    “抓紧我的手！”\n\n\n    王闲深吸口气，一只手抓住了燕昭雪的手臂，一只手握住残刃，轻轻划开空间。\n\n\n    空间骤然出现一道裂痕。\n\n\n    “千劫龙脊可破碎虚空…”王闲低声道，“但因为时隔遥远，千劫龙脊无法空间定位到盘龙山。”\n\n\n    “所以，我们从遗迹的空间离开，可能会随机到其他地方…”\n\n\n    “甚至有可能直接在空间乱流中，都十分危险…”\n\n\n    “除非…盘龙山有空间信标…能让千劫龙脊感应到…但可能性极小。”\n\n\n    “前辈，我有心理准备的！”燕昭雪道。\n\n\n    王闲点点头，忽然咦了一声。\n\n\n    “怎麽了？”\n\n\n    “好像残刃感知到了一处空间信标…难道是盘龙山那边？”\n\n\n    王闲心中生疑，池九幽回去后，就算知晓千劫龙脊，想要装好人，也未必能想到这一层。\n\n\n    哪怕想到了，也绝对不会说。\n\n\n    可若不知道千劫龙脊，还有谁会在盘龙山建立空间信标好让残刃感知到？\n\n\n    除非…\n\n\n    王闲大致想到了一个可能。\n\n\n    随後直接拉着燕昭雪，一步踏入空间裂缝中，消失得无影无踪…\n\n\n    关於登录用户跨设备保存书架的问题,已经修正了,如果还是无法保存,请先记住书架的内容,清除浏览器的cookie,再重新登陆并加入书架!	1784265252790	0	\N	\N	1784270137640
 1784270137658	158		第156章 肩膀上的牙印	盘龙山，龙首崖。\n\n\n    陆铁生已经在龙首崖待了整整两天。\n\n\n    他望了望天空。\n\n\n    昏暗阴沉，看着还要下雨的样子。\n\n\n    两个关键学生走失，他们第十部队都不好回去交代。\n\n\n    此时距离期末考试结束已经过了两天。\n\n\n    大部分学生都有序的返回了各自的家中。\n\n\n    只有他们第十部队还守在这里，轮番侦查，想要寻得一丝进入‘龙劫骨墓’遗迹的机会。\n\n\n    然而，武极神兵碎片创造出来的虚空遗迹，岂是那麽容易找到的？\n\n\n    “陆队，空间信标已经立起两天了…”\n\n\n    一名队员走了过来，脸色很是沉重。\n\n\n    “嗯…”\n\n\n    “再等等吧…”陆铁生盯着龙首崖中央，一道特殊的棱形游标。\n\n\n    空间信标，一般拥有和空间有关系的天赋武&amp;#x4b7e;都能建立的空间记号。\n\n\n    往往是用於一些有着复杂的空间迷宫，地势变化的遗迹中。\n\n\n    可以让空间类武斗护具，或&amp;#x4b7e;其他拥有空间武道天赋的武&amp;#x4b7e;，能够察觉到的记号。\n\n\n    甚至，还能用於一些特殊护具，或&amp;#x4b7e;超凡武技的空间传送。\n\n\n    当然那种特殊护具都比较稀有。\n\n\n    “还没有消息么？”\n\n\n    後面，钱队长的声音传来。\n\n\n    陆铁生没有转过身，只是摇头叹气。\n\n\n    随着钱队长走上来的，还有一干军部的武&amp;#x4b7e;。\n\n\n    显然这两天也还在搜查寻找机会。\n\n\n    “他们如果能出来，只有一种可能…”後面，一位军部的武&amp;#x4b7e;沉吟道，“根据池九幽同学的信息分析，那就是打开棺椁，得到里面的千劫龙脊碎片。”\n\n\n    “这是武神杨天禅的武极神兵，拥有空间之力。”\n\n\n    “绝对足够破开遗迹的空间。”\n\n\n    “可是，如池同学所说，那必然会惊醒里面的云魔龙残骸。”\n\n\n    “就算是残骸，经过这麽多年，也绝对不是一位三境的学生，和一位毫无准备坠入遗迹，元力空虚的四境巅峰武&amp;#x4b7e;能对付的。”\n\n\n    “而且池同学所说，他离开的时候，遗迹里面的那些尸骸异兽，隐有复苏的徵兆。”\n\n\n    “王同学毁了钥匙，不愿打开遗迹。”\n\n\n    “这份愿意牺牲自己一人，保全盘龙山众多武&amp;#x4b7e;，不怕死亡的勇气令人肃然起敬，敬佩万分…可他也只能长眠遗迹了…”\n\n\n    说到这。\n\n\n    他也叹了口气。\n\n\n    作为云河市军部边防的武&amp;#x4b7e;。\n\n\n    他十分清楚，那一举动，需要多麽大的勇气。\n\n\n    开棺拿出残刃，划开虚空就能跑。\n\n\n    就算那时外面没有信标，随即传送到其他地方，也绝对有一线生机！\n\n\n    只是，盘龙山的武&amp;#x4b7e;，乃至是云河市都有可能遭受一场不小的灾难。\n\n\n    如今两天过去。\n\n\n    他们军部做好了充足的准备。\n\n\n    这时候，就算那位王同学再取出千劫龙脊残刃出来。\n\n\n    他们也能将那云魔龙残骸震杀於此！\n\n\n    然而，别说两天时间。\n\n\n    在那种遗迹中，一个三境武&amp;#x4b7e;，一个失去元力的四境武&amp;#x4b7e;，面对即将复苏无数龙形异兽残骸，也根本活不下来。\n\n\n    又怎能坚持两天？\n\n\n    难难难！\n\n\n    “既然这样，不如用我的办法试一试？”\n\n\n    後面，女子冰冷无情的声音传来。\n\n\n    在场众人微微一怔。\n\n\n    “两天时间，把盘龙山的地脉炸了。”\n\n\n    “如今学生也撤离了，只要云河市开启防御，就能极大避免地震带来的损失。”\n\n\n    “就算地脉炸了，引发其他遗迹暴动，只要有所准备，伤亡不大。”\n\n\n    “然後进入骨墓中，一劳永逸解决云魔龙残骸。”\n\n\n    “不然，那遗迹一直在盘龙山中，你们北藏的军部天天能睡得着么？”\n\n\n    “有朝一日，等它主动爆发，不如乾脆杀进去。”\n\n\n    “当年武神杨天禅替你们杀了云魔龙，还用武极神兵镇压残骸这麽多年，若是现代你们这些武&amp;#x4b7e;连一具残骸都解决不了，也浪费了当年杨天禅的一番良苦用心。”\n\n\n    女子的话，平平淡淡。\n\n\n    却宛若一把利刃，寒光四射，听得众人耳旁发寒。\n\n\n    “我觉得，陈同学说的有几分道理！”\n\n\n    跟在钱队长身边的池九幽突然举手赞同，“不只是这样，千劫龙脊的碎片还有不少。万一以後有人暗中又从其他地方得到了钥匙，趁机进入里面，暗中偷取了千劫龙脊残刃…届时引出云魔龙残骸…”\n\n\n    “以及那些尸骸异兽，势必也会造成一番遭难！”\n\n\n    “日防夜防，家贼难防！外贼更难防！”\n\n\n    “不如趁此机会，一劳永逸解决了！”\n\n\n    “就算地脉炸裂，会引起一定伤亡，那也肯定比不上云魔龙残骸飞出遗迹，带着大批尸骸异兽引起的兽潮造成的伤亡！”\n\n\n    陈玉婷眯着眼，看了池九幽一眼。\n\n\n    没有说话。\n\n\n    “而且，王同学和燕会长如此英雄楷模，若让他长眠於遗迹中…连尸体都带不出来…”池九幽一脸沉重。\n\n\n    陆铁生和钱队长对视一眼。\n\n\n    後面北藏军部的一干武&amp;#x4b7e;纷纷皱眉。\n\n\n    倒不是没考虑过这个办法。\n\n\n    只是么…\n\n\n    乾洗过大，须得向上申请才行。\n\n\n    也不能两天就做出决策。\n\n\n    看着这群武&amp;#x4b7e;犹犹豫豫。\n\n\n    陈玉婷盯着那信标看了一眼，没说话，转身离开。\n\n\n    然而。\n\n\n    就在这时。\n\n\n    空中的游标一阵颤动。\n\n\n    “咦——！”\n\n\n    “陆队！”\n\n\n    “空间星标有波动了！”\n\n\n    “怎麽回事儿？”\n\n\n    “有空间波动！快，快！”陆铁生对着身旁的队友大喝一声。\n\n\n    那队友一怔，手掌一挥。\n\n\n    只见掌中心透出一个星芒印记，印记飞出掌心落在那星标上，使得整个空间都散发着剧烈的波动！\n\n\n    下一秒。\n\n\n    星标上，出现一道裂缝。\n\n\n    两道人影驾驭着浓烈的煞气，从裂缝中飞了出来。\n\n\n    然後稳稳的落在龙首崖。\n\n\n    一人赤裸着着半身，只剩一个大裤衩，手持残刃，浑身满是血迹。\n\n\n    另一人穿着满是污痕的武袍劲装，长发染血，飘然垂落。\n\n\n    众人一看。\n\n\n    顿时全场傻住了。\n\n\n    各自表情怪异至极。\n\n\n    陆铁生一干第十部队的武&amp;#x4b7e;，纷纷张着嘴震惊万分的看着两人。\n\n\n    似乎完全不敢相信两人还活着出来了。\n\n\n    後面的陈玉婷嘴角一勾，眼中没有多少震惊，只是平静。\n\n\n    一副早有所料的样子。\n\n\n    她的目光只落在王闲身上。\n\n\n    一眼便看出了，大部分的血迹，都不是他自己的。\n\n\n    几乎没受身上上。\n\n\n    只是。\n\n\n    ‘他肩膀上的牙印…’\n\n\n    似看到了什麽，陈玉婷这才看向拉着王闲手臂的女子，微微眯眼没有说话…	1784265252790	0	\N	\N	1784270137641
 1784270137659	159		第157章 不如当做我们之间的小秘密？	另一边的池九幽先是一脸震惊地看着王闲。\n\n\n    眼神中，浮现一抹不太理解的神色。\n\n\n    似乎没想到这两人居然会出来？\n\n\n    直到，看到了王闲手中的残刃，眼神中更是不可思议至极。\n\n\n    头皮都在发炸！\n\n\n    满脑子都在想。\n\n\n    特么的，明明已经没有钥匙了。\n\n\n    王闲怎麽开棺得到这把残刃的？\n\n\n    不可能！\n\n\n    绝对不可能！\n\n\n    难道…难道是…我被算计了？\n\n\n    他还有後手？\n\n\n    这一刻，池九幽心中一寒。\n\n\n    他忽然大喝一声：\n\n\n    “钱队长，北首长，快！准备好！”\n\n\n    “那云魔龙的残骸恐怕要出来了！”\n\n\n    众人这才恍然。\n\n\n    若王闲和燕昭雪出来。\n\n\n    那必然是开棺，取得千劫龙脊残刃划破空间出来的！\n\n\n    正欲做好战斗准备。\n\n\n    “不用了！”\n\n\n    燕昭雪赶忙招手道，“钱队长，我和王闲已经把那云魔龙的残骸解决了！”\n\n\n    “诸位，龙劫骨墓遗迹，已经被彻底拔除了！”\n\n\n    “不用大费周章了！”\n\n\n    听到这话。\n\n\n    众人一怔。\n\n\n    齐齐石化的看着两人。\n\n\n    池九幽更是惊得差不多脱口而出不可能了。\n\n\n    燕昭雪下去的时候，他算计得死死的，因为天赋牵引，被吸入空间元力尽失，不可能有多少战力了。\n\n\n    一个三境的王闲，就算谨慎过人，下去的时候是满状态的，可在整个遗迹面前，也十分渺小。\n\n\n    两人别说拔除遗迹。\n\n\n    在遗迹中都不可能活过一日！\n\n\n    这怎麽可能？\n\n\n    王闲拿出云魔龙残骸的骨片道：\n\n\n    “这是云魔龙龙首残骸的骨片，算是它死後唯一的契机。”\n\n\n    z级异兽。\n\n\n    哪怕只剩一枚小小的骨片。\n\n\n    即便，这枚骨片现在只能算是b级的材料。\n\n\n    若放任下去，过个几十年上百年，它甚至就能悄然恢复。\n\n\n    甚至能凭藉这一小枚骨片，稍微露出几分气息，就能造就一批龙形异兽。\n\n\n    毕竟，z级异兽是对标武神的异兽。\n\n\n    想要真正的死透，非常困难。\n\n\n    不然，当年武神杨天禅也不至於用神兵来镇压了。\n\n\n    如今这最後一枚骨片，落到王闲身上。\n\n\n    嗯…不出意外，以後只会成为他身体的一部分了。\n\n\n    陆铁生几人匆匆走到王闲身边，先是打量了一番两人，没有感觉到明显的致命伤后，才看向那骨片。\n\n\n    “是真的。”\n\n\n    云河市的北首长走了过来。\n\n\n    同时还指了指那空间裂缝，“空间裂缝自动消失了，若是有云魔龙残骸，或者其他龙形异兽，不会这样就让空间裂缝消失。”\n\n\n    “云魔龙本身就擅长空间之力。”\n\n\n    “若出现空间裂缝，只会将其扩大。”\n\n\n    “而且，这枚骨片，确实有云魔龙的生命气息。”\n\n\n    “二位，辛苦了！”\n\n\n    他看向两人，心中有着许多的不解。\n\n\n    但这时候，显然不需要问太多。\n\n\n    “先下山去盘龙山下的临时营地休息吧。”\n\n\n    “你们在遗迹发生的情况，可以慢慢和你们钱队长汇报。”\n\n\n    王闲点点头，松开手，在现场巡视了一眼，目光落在了池九幽身上。\n\n\n    他缓缓开口：\n\n\n    “池学长……”\n\n\n    还没等王闲开口。\n\n\n    池九幽就走过去跪了下来，双眸含泪道：\n\n\n    “王学弟，我知道。我是个临阵脱逃的懦夫，是个敢说不敢做的废物！你想骂就骂吧…”\n\n\n    “你怎麽骂我都行…”\n\n\n    “我不配当你们的学长…”\n\n\n    “也不配成为天都大学的学生…”\n\n\n    “回去后，我就向学校递交退学申请…”\n\n\n    王闲：“……”\n\n\n    其馀众人沉默，没有开口。\n\n\n    燕昭雪冷哼一声，没有说话。\n\n\n    这家伙，口头上说着：\n\n\n    ‘我辈武者，理当保家卫国，守护人民。若能牺牲我一人，换取千千万万的人性命，那自然是值得的’这种话。\n\n\n    却干着逃跑的事儿，说一套做一套，有点虚伪。\n\n\n    但，也是只是虚伪，还不至於有多大罪。\n\n\n    况且，当时至少这家伙还真敢跳下来，总的来说，还是有些担当的。\n\n\n    只是，贪生怕死，人之常情。\n\n\n    面对真正的死亡，这世间又有几人能真正说不怕呢？\n\n\n    如今，还这般真挚的悔过，她算是能接受。\n\n\n    钱队长微微皱眉，低声道：\n\n\n    “其实…”\n\n\n    他还是想为池九幽说几句话的。\n\n\n    他的想法和燕昭雪差不多…\n\n\n    只是，他还没说完。\n\n\n    王闲就微微一笑，走过去，一把手抓住池九幽，郑重道：\n\n\n    “不不不。”\n\n\n    “我是要感谢池学长的…”\n\n\n    “你不是懦夫，也不是废物。”\n\n\n    “若是没有你跳下来，跟我们是说了那麽多，我们对龙劫骨墓就完全是一无所知啊！”\n\n\n    “你可是帮了大忙啊！”\n\n\n    “不然，我们後面根本没有任何机会逃出去！”\n\n\n    “没有你，我们甚至都不知道那棺椁中，会有千劫龙脊的残刃…”\n\n\n    “我们怎麽会怪你呢？”\n\n\n    关於登录用户跨设备保存书架的问题,已经修正了,如果还是无法保存,请先记住书架的内容,清除浏览器的cookie,再重新登陆并加入书架!\n\n\n    “得感谢你啊！”\n\n\n    “……”池九幽。\n\n\n    他看着一脸真挚的王闲，啊了一声。\n\n\n    一时间，有点懵。\n\n\n    他隐约有点分不清了。\n\n\n    刚才见到王闲拿着残刃回来。\n\n\n    他隐约有种自己上当的错觉。\n\n\n    破坏了钥匙，还能打开棺椁。\n\n\n    说明对方是有後手的！\n\n\n    那意味着，这家伙可能已经猜到是自己搞的鬼，自己反而是被算计的！\n\n\n    一出来，必然会找自己麻烦。\n\n\n    自己若以退为进，就能轻松摆平。\n\n\n    可现在…\n\n\n    看着对方这真挚的模样。\n\n\n    ‘不对，难道，他没看穿我？’\n\n\n    ‘也是，我确实没暴露什麽…’\n\n\n    ‘这家伙，居然真不怪自己？’\n\n\n    一时间。\n\n\n    池九幽都疑惑了。\n\n\n    不是…这世间。\n\n\n    真有这样的人？\n\n\n    “此次我们能拔除遗迹。”\n\n\n    王闲看向钱队长，“池学长，绝对是有功的！”\n\n\n    池九幽：“……”\n\n\n    一旁的燕昭雪眼眸微闪。\n\n\n    心道，前辈真是心胸宽广，气量如海！\n\n\n    我心中都对池九幽有些不爽。\n\n\n    没想到，前辈居然不计前嫌，还为池九幽说话？\n\n\n    嗯…是我太过狭隘了，燕昭雪心想。\n\n\n    馀光看向前辈，她眼神微熏。\n\n\n    在王闲看来。\n\n\n    他是不想打草惊蛇。\n\n\n    若没完全把握击杀此獠。\n\n\n    那不如让他对自己稍微放下戒心更好。\n\n\n    不然…\n\n\n    谁知道，这狗东西还有什麽保命手段？\n\n\n    “好好好！”\n\n\n    陆铁生哈哈大笑，“我就知道你小子！小池，你赶紧起来吧！”\n\n\n    “走走走，路上跟我们说说，你们是怎麽解决这遗迹的？”\n\n\n    燕昭雪闻言，嘴角轻轻一勾，正欲开口。\n\n\n    王闲却抢先一步笑道：\n\n\n    “都是学姐的功劳。”\n\n\n    “学姐在龙首崖领悟了几分‘太虚神游枪’的奥妙，然後以太虚神枪之奥义，与棺椁内的千劫龙脊残刃共鸣，从而打开棺椁！”\n\n\n    “并且，还吸收了云魔龙的龙气，天赋进化，实力大增！”\n\n\n    “我么，就只是简单给学姐扫清了四周的尸骸异兽，清扫好战场。”\n\n\n    “是吧，学姐？”\n\n\n    王闲朝着燕昭雪眨了眨眼。\n\n\n    魔刃的秘密，和自己的一些秘密，比如斩仙飞刀诀。\n\n\n    王闲自然不可能在这里让别人知晓。\n\n\n    尤其在场还有池九幽。自然也不能让燕昭雪真把遗迹中的情况说的清清楚楚，稍微还是得隐瞒一点比较关键的。\n\n\n    燕昭雪一怔，不清楚为什麽前辈会把这些功劳全都推给自己。\n\n\n    她微微咬着牙，那双本厌世的清冷眸子，多了几分水光。\n\n\n    前辈…前辈…你…\n\n\n    “小燕，是这样么？”钱队长好奇。\n\n\n    “前…差不多和学弟说的一样吧…”燕昭雪低声道，“不过，学弟在遗迹中，一人杀了数千的尸骸异兽，为我和云魔龙的死战…提…提供了条件。”\n\n\n    “也…也是大功。”\n\n\n    “总之…没有他，我也没办法的。”\n\n\n    後面的池九幽一听，若有所悟。\n\n\n    若是领悟太虚神游枪，这门杨天禅生前的绝学，以神枪奥义，确实也有可能引起那千劫龙脊的共鸣！\n\n\n    那就不奇怪了，那就不是後手啊！\n\n\n    ‘不愧是你燕会长啊…’池九幽心中长叹一声。\n\n\n    只有後面的陈玉婷看着两人，心中呵了一声，默然不语。\n\n\n    一行人回到临时营地，各自休息。\n\n\n    战功和奖赏，要过两天才会发下。\n\n\n    是夜。\n\n\n    王闲躺在帐篷中，望着外面的繁星，沉默不语。\n\n\n    “王学弟…”外面传来燕昭雪的声音。\n\n\n    王闲走出帐篷外。\n\n\n    此时已经梳洗过，换了一身常服的燕昭雪眼眸清亮，身姿傲然。\n\n\n    “学姐有事？”\n\n\n    “你…”燕昭雪眼神复杂，还是想问问为什麽他不实话实说。\n\n\n    隐瞒了不少。\n\n\n    因为。\n\n\n    在她看来，若无前辈的谋划，她早就死在遗迹中了。\n\n\n    整个过程中，她唯一起到的作用，只是在对付云魔龙罢了。\n\n\n    甚至，即便是对付云魔龙的残骸，若无前辈相助，恐怕也很难成功！\n\n\n    尤其是最後关头…那诡异的三道极光，锁住了云魔龙的龙首！\n\n\n    王闲微微一笑道：\n\n\n    “学姐，遗迹中发生的一切…不如就当成我们之间的秘密如何？”\n\n\n    “不会有第三人知晓。”\n\n\n    燕昭雪一听，心脏微跳。\n\n\n    她懂了。\n\n\n    意思是…\n\n\n    只有自己知道前辈的某些秘密！\n\n\n    他还可以是自己的‘前辈’！\n\n\n    “好！”\n\n\n    燕昭雪脸颊微红，匆匆答了一声，就转身踏着有些杂乱的步伐离开了。\n\n\n    王闲看着燕昭雪的背影，没有说话。\n\n\n    过了一会。\n\n\n    一道淡淡的声音，从阴影中传来：\n\n\n    “你这样说，会让她误会你的…”\n\n\n    搜书名找不到,可以试试搜作者哦,也许只是改名了!	1784265252790	0	\N	\N	1784270137641
@@ -6515,7 +7571,6 @@ COPY toonflow.novels (id, chapter_index, reel, chapter, chapter_data, project_id
 1784270140387	393		第368章 长官，你看着样处理如何？		1784265252790	0	\N	\N	1784270140375
 1784270140388	394		第368章长官，你看着样处理如何？	“啊——！”\n\n\n    忽然，几声痛苦的尖叫声传来。\n\n\n    那几个跑到神棺沿璧的武者猛地捂住手。\n\n\n    诡异的一幕出现了，他们的一只手臂都齐齐嵌入了墙壁中。\n\n\n    然后不断有黑金色的液体从墙沿上通过手臂流了出来，即将渗入他们的身体中。\n\n\n    众人看到这一幕，都愣住了。\n\n\n    只有鲁三通瞳孔微缩。\n\n\n    还没反应过来，只见一道人影骤然冲出去。\n\n\n    然后举刀直接一斩而下，将几名武者的手臂纷纷直接从嵌入的墙壁中切断！\n\n\n    “不要碰墙壁。”\n\n\n    王闲轻轻甩掉魔刀上的血迹，扫了一眼几个倒退跌倒在地上，痛苦得捂住手臂的武者。\n\n\n    “没有擅长医疗，或者学过‘元灵归引手’这种医疗武学的武者吗？”\n\n\n    王闲看了一眼众人，平静开口。\n\n\n    众人赶忙反应过来，从中立刻走出几名男女把几个武者抬到一边。\n\n\n    “我们遇袭的异兽叫做‘空械蠕虫’。”\n\n\n    王闲收好魔刀，走至一旁，“这种生物专以啃噬空间为生，擅长穿梭在各种空间之中。这座神棺外面的空间变化无穷，但被空间蠕虫标记后已经附于外面，正在啃噬外面的神棺表层。”\n\n\n    “越是接近璧沿，就越容易被它们抓住机会。”\n\n\n    “一旦被注入它们的‘虫血’，你们的躯体在十息之内就会异化成为机械体。”\n\n\n    说罢，王闲还指了指嵌入墙壁的几根断臂。\n\n\n    在王闲说话间。\n\n\n    几截断臂瞬间就成为闪烁着黑金光芒的死物。\n\n\n    众人一看，顿时心中一寒。\n\n\n    这要是再晚几秒，刚才那几人就直接死透了。\n\n\n    “这些虫血中，有许多纳米级的微小幼虫。”王闲指了指金属，“它们依附于空械蠕虫，是一种攻击手段能够穿透渗入极厚的空间层。”\n\n\n    “一旦被渗入进来，你们成为了机械体，就能和外面的空械蠕虫相互感知以传递情报。”\n\n\n    “我们这边的情况，它们瞬间就会知晓的一清二楚。”\n\n\n    王闲掌中生出一团冰蓝色的火焰，轻轻覆盖在这几只断臂上。\n\n\n    刹那间，几只断臂立刻成为了冰雕，不再蠕动变化。\n\n\n    “低温环境可以暂缓。”王闲收起冰焰，再度看向众人，沉吟几秒道，“你们之中有没有玄奥天赋，擅长感知空间变化的？”\n\n\n    空间类的天赋比较罕见。\n\n\n    但也不是说一个都没有。\n\n\n    不多时，人群中走出来了三人。\n\n\n    显然，经过刚才的一番情况，即便不知道王闲是谁。\n\n\n    但看上去，至少是个能处理这种情况的。\n\n\n    走出来的三人，其中一个乃是那个短发男子。\n\n\n    “要我们干什么？”短发男子此刻没有了桀骜不驯，只是赶忙开口。\n\n\n    “很简单，你们感知四周的空间变化。”王闲道，“空械蠕虫啃噬空间，它们的实力一般在c级左右，只不过很难感知到它们，因为它们藏身在异空间。”\n\n\n    “但可以通过空间的细微变化，以判断它们具体汇聚的位置。”\n\n\n    “也就是感觉出，这些异兽在神棺外的分布情况。”\n\n\n    三人恍然，若有所思。\n\n\n    于是，三人对视一眼，立刻坐了下来。\n\n\n    短发男子眼眸微闪，湛出道道金光如扫描般看向四周。\n\n\n    另外两人一左一右闭上了眼睛，只是分别伸出手，手掌中蔓延出一道道无形的元力凝聚的细线。\n\n\n    （本章未完，请点击下一页继续阅读）第368章长官，你看着样处理如何？(第2/2页)\n\n\n    这细线通过手掌，链接到他们的脑部。\n\n\n    王闲见状，不由微微点头。\n\n\n    这短发男子天赋不错，是高级的‘寻金灵眸’。\n\n\n    属于一种能看透空间感知金属类的本体天赋。\n\n\n    另外两人，都是玄奥类的天赋‘蚕髓脑’，他们的骨髓异化能衍出特殊的元力蚕丝凝聚在意识海。\n\n\n    通过天赋延伸出这种元力蚕丝，可以无形感知四周空间。\n\n\n    受伤时还能将这种元力蚕丝凝聚在身体中形成防御，配合一些武学秘技，可以说极其厉害。\n\n\n    打架或许不强，但抗伤害是一绝。\n\n\n    片刻后。\n\n\n    三人浑身一抖，交流了一下眼神，就看向了王闲。\n\n\n    “很多，非常多…”短发男子声音有些颤抖。\n\n\n    “具体在什么方位？”\n\n\n    三人分别指了几个位置。\n\n\n    “方位探出来了，那就好办了。”王闲点点头。\n\n\n    有天赋帮忙确实不错。\n\n\n    要是自己来，还得费一些时间。\n\n\n    有天赋，几下就探查出来了。\n\n\n    “哥，接下来该怎么办？”短发男子看着王闲。\n\n\n    听到这话，众人目光都汇聚在王闲身上。\n\n\n    鲁三通表面淡定，却也动了动耳朵，细细听着…\n\n\n    “接下来就好办了。”\n\n\n    王闲微微一笑，“异兽嘛，大家都干过，空械蠕虫也是异兽，虽然有点特别，但也没什么好怕的。”\n\n\n    “干就完事儿。”\n\n\n    “只不过…”\n\n\n    “只不过什么？”短发男子问道。\n\n\n    “只不过，得注意一下。”王闲看向众人，“空械蠕虫喜好金铁之物，就刚才探查出来的位置，数量不会超过三百，这应该只是一小批空械蠕虫盯上神棺了，以为这里面有什么好东西。”\n\n\n    “我们将身上的护具暂时先脱下来，堆在一起。”\n\n\n    “等它们进来神棺中，第一时间会被这堆积如山的护具吸引。”\n\n\n    “到时候一起攻击就行了，它们没什么弱点，只需要注意它们喷出的虫血，第一时间用冰霜类武学或者天赋冰冻住不让其渗入我们的身体中就行了。”\n\n\n    “除此之外，还需要鲁长官出手了。”\n\n\n    “我？”鲁三通一愣，指了指自己。\n\n\n    “我该怎么出手？”他下意识问道。\n\n\n    “空械蠕虫会钻入空间逃跑。”王闲道，“这些畜生很狡猾，第一是时间被攻击后就会迅速逃跑，鲁长官的虚空大手印，配合虚数元罡正好可以从趁着这些空械蠕虫钻入异空间之间，将其拉扯出来！”\n\n\n    “这类武学，算是它们的小克星。”\n\n\n    “一旦被它们钻入异空间，标记了我们神棺，以后恐怕会经常来袭击了。”\n\n\n    “所以，最好一网打尽，一个不留！”\n\n\n    说到这，王闲眼眸微眯。\n\n\n    鲁三通心中恍然，还有点小窃喜。\n\n\n    我的武学居然能克制这些奇怪的蠕虫异兽？\n\n\n    不对…\n\n\n    这小子怎么还命令上我了？\n\n\n    你是长官，还是我是长官？\n\n\n    正当鲁三通感觉不对劲时…\n\n\n    “长官，你看我这么应对处理怎样？”王闲开口道。\n\n\n    鲁三通：“……”\n\n\n    他微微点头，声音洪亮：\n\n\n    “很好，很不错！”\n\n\n    “你们还愣着干什么，按照他说的，就这么办了！”	1784265252790	0	\N	\N	1784270140375
 1784270140390	395		第369章 神秘种子，抵达战场！		1784265252790	0	\N	\N	1784270140376
-1784270140392	396		第369章神秘种子，抵达战场！	不多时。\n\n\n    神棺中出现了一堆堆‘小山包’。\n\n\n    王闲蹲下身，从脚边捡起一只空械蠕虫的尸体。\n\n\n    作为无界虫族中的一员，空械蠕虫只能算是斥候类的角色。\n\n\n    属于底层的物种。\n\n\n    它们实力不强，唯一比较厉害的就是能啃噬空间，数量足够多的话，甚至能打通一条连接他们无界虫族大本营的空间通道。\n\n\n    以此大规模，短时间的入侵其他界域。\n\n\n    除此之外，空械蠕虫在异星战场本身不算多强。\n\n\n    当然，这也是放在异星战场不算强。\n\n\n    放在其他世界，随便一小批都能瞬间引发大量的空间震动。\n\n\n    王闲把这只拳头大小的空械蠕虫从牙齿到躯体尽数剥离。\n\n\n    空械蠕虫是半机械生命体，在无界虫族的母巢中，是通过容纳大量的各界废弃金属，然后置入无界虫母的‘原质母液’进行机械重塑生产出来。\n\n\n    其中，最有价值的，自然空械蠕虫齿下的原质母液了。\n\n\n    这是无界虫族的‘特产’。\n\n\n    只有无界虫母能生产。\n\n\n    而无界虫母，在异星战场是真正意义上的巅峰域主级领袖。\n\n\n    在众多z级的异兽中，都拥有一定的统治地位。\n\n\n    仅次于王闲前世遇到的噬星厄君。\n\n\n    作为它产出的母液，拥有一个超凡能力，能无差别相融万物。\n\n\n    作用范围极广。\n\n\n    只不过空械蠕虫想要提取出一滴这种母液，怕不是得要成千上万只。\n\n\n    ‘终究是无界虫族的底层…’\n\n\n    王闲连续剥离数只拳头大小的空械蠕虫后，都没有收集到哪怕一丝丝的原质母液，不由在心中发出了这种感叹。\n\n\n    不过嘛，空械虫族的躯体是经过滴入原质母液浸泡而成。\n\n\n    早已不是那种废弃金属了。\n\n\n    进行分解剥离后，其身上的外壳，都能用于制作精良的护具。\n\n\n    前世二代的灵煞武装，其中的材料之一，就是这空械蠕虫的外壳。\n\n\n    二代的灵煞武装，除了针对煞气之外，开始加强了防护能力。\n\n\n    寻找到这空械蠕虫的外壳后，借此替换，使得二代灵煞武装在空间层面拥有极强的稳定性。\n\n\n    不至于在异星战场随便因为一点空间波动，就导致铠甲损坏。\n\n\n    ‘在空械蠕虫中，千只中能诞生一只变异类型的‘军械蠕虫’。’\n\n\n    ‘军械蠕虫摆脱了低层的身份，会被无界虫母赐予一滴原质母液，同时其翅翼还会经过淬炼加强，变成一双祥云翼，不用啃噬就能轻松穿梭在空间的。’\n\n\n    ‘可惜，这一批空械蠕虫应该只是小部队…不是军械蠕虫率领的大部队…’\n\n\n    王闲扫了几眼战场，略感可惜。\n\n\n    不过想想，若是出现了军械蠕虫，以神棺这点人，恐怕根本对付不了。\n\n\n    也幸好只是一小支部队。\n\n\n    但，目前不知道神棺穿梭到哪个位置了。\n\n\n    既然出现了空械蠕虫，就说明异星战场连接的其他界域应该是要被无界虫族入侵了。\n\n\n    “哥，这些虫子咱们都干完了！”\n\n\n    这时，短发男子兴冲冲走了过来喊了一声，“接下来怎么搞？”\n\n\n    “该说不说，这些虫子内部居然是半机械构造，真他妈奇特！”\n\n\n    王闲起身，看着前方累积的两座小山。\n\n\n    空械蠕虫本身比较大，一只就有拳头大小。\n\n\n    看上去垒得很多，实则只有百来只。\n\n\n    有了应对策略之后，对于神棺内这些新人散兵倒也不算难对付。\n\n\n    毕竟这些人都不是寻常武者。\n\n\n    能犯罪的武者，品性这方面不说，实力这方面倒没差的。\n\n\n    没点实力，也犯不了一些重罪。\n\n\n    像是这个短发青年苟泽，看上去实力平平，这小子当年竟然能潜入龙国五大的武库要地。\n\n\n    放在现在，就是能潜入进入天都大学万武岛三层以上的地界。\n\n\n    别说他这五境不到的实力了。\n\n\n    就算是五境，乃至六境武者，都不太可能潜入进去抢武学拓印。\n\n\n    他们有实力，虽是一盘散沙，但在此刻勉强还算能一心对敌。\n\n\n    又有了应对策略，没有对未知的恐惧，把战力正常发挥出来，打这些空械蠕虫自然不在话下。\n\n\n    神棺内终究不是异星战场。\n\n\n    就算是异星战场。\n\n\n    只要心中没有恐惧，习惯了环境，拥有天赋的武者一旦组成军队，并不会弱。\n\n\n    “把它们外壳剥离下来就行了。”王闲指了指。\n\n\n    这场战斗，他除了刚开始抽刀救下那几个被虫血腐蚀手臂的武者。\n\n\n    其他时间都没怎么动手。\n\n\n    只需要稍微提醒一下有些嗜杀的武者不要单独冲上去，跟着群体就行。\n\n\n    偶有几个不听话，被虫血糊脸，或者给空械蠕虫拖拽进入啃噬出来的空间裂缝，被溢散出来的空间风暴撕裂那也怪不了谁。\n\n\n    大都是亡命之徒，大都想着多杀几只能多赚点功劳。\n\n\n    想要一群这样的人完全齐心协力听指挥也不太现实。\n\n\n    能有一大半还算听命令，就算是不错了。\n\n\n    如苟泽这种，完全听命令的，甚至还来主动问的，那就更少了。\n\n\n    “好嘞！”\n\n\n    短发青年抽出一把小刀喜滋滋的朝着那堆小山走去。\n\n\n    “这些空械蠕虫，看上去不像是只有这么点…”\n\n\n    旁边，那个狰狞男子走了过来，他有些疑惑，“我怎么感觉是不是还有更厉害的这种异兽？会不会还有这种袭击之类的？”\n\n\n    王闲有些意外的看了此人一眼。\n\n\n    这人脸上的剑痕并没有完全治好，隐约可见其骨，看上去极其渗人。\n\n\n    而且四五十的年龄，也很大了。\n\n\n    没想到心思还细腻的。\n\n\n    “只不漏掉，就不会有了。”\n\n\n    王闲看向另一边的鲁三通。\n\n\n    有这位长官出手，并没有漏掉一只空械蠕虫。\n\n\n    只要有想要逃跑的，都能被他的虚空大手印及时从空间裂缝中拉扯出来，捏成一手金属渣滓。\n\n\n    很暴力。\n\n\n    可惜，损坏了材料。\n\n\n    作为异星战场出身的武者，实力这方面自然是顶尖的。\n\n\n    “我刚才看你盯着这些尸体，眼中有点可惜，你是在找什么？”\n\n\n    狰狞男子又问道，“有的话开个声，我叫他们一起找。”\n\n\n    王闲笑着摇摇头。\n\n\n    军械蠕虫比较特殊，若真有的话，他一眼就能看出来。\n\n\n    不需要帮着找。\n\n\n    狰狞男子也不废话，感慨道：\n\n\n    “这次多谢你了，不然我感觉我们可能到不了前线，路上就得捐了。”\n\n\n    “这前线战场，到底是什么鬼地方…”\n\n\n    “没那么严重。”王闲看着鲁三通，“鲁长官还是很强的。”\n\n\n    有这位六境武者在，全部捐了倒不至于。\n\n\n    顶多就是被这些空械蠕虫啃出空间通道，神棺流窜到其他的界域去了。\n\n\n    至于那时能不能活下来，就是另一回事了。\n\n\n    其他的，光凭鲁三通，全灭这些空械蠕虫或许很难，但大部分还是能轻松解决的。\n\n\n    （本章未完，请点击下一页继续阅读）第369章神秘种子，抵达战场！(第2/2页)\n\n\n    正说着，鲁三通就一只手插兜走了过来。\n\n\n    他手掌中，还有一只正在逃窜的空械蠕虫。\n\n\n    只是诡异的是，无论这只空械蠕虫怎么移动，都在鲁三通的手掌上方来回变化。\n\n\n    像是他手上，有一方透明的空间将其束缚了一样。\n\n\n    鲁三通走到王闲面前，虽然表情很平淡。\n\n\n    但眼神中的喜色还是出卖了他。\n\n\n    发现并解决新型异兽，在异星战场可是大功一件啊！\n\n\n    “你表现的很好！”\n\n\n    鲁三通十分满意的点了点头，“此次异兽袭击，你应对的策略和临场处理都很不错！去了战场，会给你记一功！”\n\n\n    “没有鲁长官，我们这些人也做不到全歼这些空械蠕虫。”王闲笑着摇摇头。\n\n\n    他说的是实话。\n\n\n    就算自己出手，也未必能如这位精修了上乘武学，轻松擒住这些逃跑的空械蠕虫了。\n\n\n    当然了，自己出手的话，空械蠕虫也没有逃跑的机会。\n\n\n    直接杀干净…\n\n\n    鲁三通一听，心中甚是舒爽。\n\n\n    倒是感觉有点不太对劲。\n\n\n    说起来，就以往的情况来看。\n\n\n    一般那些天才往往都桀骜不驯。\n\n\n    他当年自己上前线战场，那就是真的天不怕地不怕，吃了不少亏。\n\n\n    这小子看着年纪轻轻，论天才名头，比自己当年都要大不少。\n\n\n    毕竟。\n\n\n    以大一身份杀入青年武道大会问鼎冠军的含金量，也算是前无古人了。\n\n\n    眼下看来，倒是一点架子都没有。\n\n\n    难能可贵啊！\n\n\n    鲁三通愈发能理解那个命令。\n\n\n    这时。\n\n\n    正在处理空械蠕虫尸体的众人，忽然一个惊叫声响起：\n\n\n    “咦，这是什么？你们快来看！”\n\n\n    众人闻声立刻围了过去。\n\n\n    只见一只已经被剥离的空械蠕虫身体中心，突然流出一颗淡绿的小珠子。\n\n\n    隐约散发着一股清香。\n\n\n    尤其是那珠子表面，竟是还有一道诡异的鹿形异兽。\n\n\n    王闲几人也围了过去。\n\n\n    在看到这颗珠子的瞬间，王闲微微一愣。\n\n\n    心中顿时沉了下来。\n\n\n    “这是宝贝吧？”\n\n\n    “一看就和这些虫子不是一个样式的，但好像又不像是宝贝…没感觉出元力波动啊！”\n\n\n    “材料得教给专业的，咱们这里面有没有熔炼师？”\n\n\n    “有，我就是，勉强算个中级熔炼师吧！”\n\n\n    一个长发男子走了出来，腼腆一笑，“打架不太擅长，刚在就在后面摸鱼，材料这方面我颇为擅长，虽然这只虫子结构体材料，我摸不透，不过这个珠子看样式应该是我擅长的‘古物材料’。”\n\n\n    “你说说？”鲁三通看了看他。\n\n\n    长发男子拿起这颗珠子，放在手中细细打量。\n\n\n    掌中心不断溢出一缕缕细微极致的元力丝线深入珠子中。\n\n\n    这是在材料内部构造特别的能量回路，以此保存材料同时摸透材料的性能。\n\n\n    熔炼师的常用手法。\n\n\n    片刻后。\n\n\n    长发男子赶忙抽手一甩，将这颗珠子甩了出去，浑身一抖：\n\n\n    “靠，这玩意儿莫名奇妙竟然能自动吸收我的元力…内部十分驳杂，根本无法构造稳健的能量回路！”\n\n\n    “什么垃圾玩意儿！”\n\n\n    “这材料品级我不好说，但绝对不是什么好东西！”\n\n\n    鲁三通捏着下巴，沉思几秒。\n\n\n    似想到什么，他看向了王闲。\n\n\n    资料中显示的，这小子，好像也是一个熔炼师。\n\n\n    新型异兽，必然伴随着新型材料出现。\n\n\n    若能弄懂一二，也是一份不小的功劳。\n\n\n    这时。\n\n\n    王闲走了过去，缓缓捡起这颗珠子。\n\n\n    他放在手中摩挲片刻，迎上了鲁三通的目光，笑道：\n\n\n    “鲁长官，此物能不能作为我此次行动的奖励？”\n\n\n    众人一听，寻思着这么大的功劳，就要个这种奖励？\n\n\n    不太合适啊。\n\n\n    难不成这玩意儿是什么至宝？\n\n\n    “哦？”鲁三通一挑眉。\n\n\n    这小子，也未免太懂规矩了。\n\n\n    “你知道这东西？”\n\n\n    “略知一二。”\n\n\n    “说说看。”\n\n\n    王闲想了想道：\n\n\n    “其实也不是什么，一粒‘树种’而已，汲取元力，是因为它需要能量生长。”\n\n\n    “材料品级的话，目前应该只能算是a级吧？”\n\n\n    “a级，也不高啊。”鲁三通倒没觉得这玩意儿有多稀罕。\n\n\n    对材料他不算了解，但眼力还是有一点的。\n\n\n    “你想要就拿去吧。”鲁三通点点头。\n\n\n    王闲收起树种，心中轻叹口气。\n\n\n    他想错了。\n\n\n    这批空械蠕虫不只是斥候，去打探其他界域信息的。\n\n\n    而是无界虫族已经吞并了某个界域。\n\n\n    这玩意儿是吞并界域后，让空械蠕虫先一步返回无界虫族位于异星战场的主基地，带给虫母的界域小特产。\n\n\n    既然能在空械蠕虫身体中找到此物。\n\n\n    就意味着，恐怕那个界域中，不知道陨落了多少生命…\n\n\n    一如蓝星未来的命运一样…\n\n\n    “古鹿树种…汲血喂养能长成古鹿命种这种s级材料的原物。”\n\n\n    “古鹿命种在前世，作为能补缺任何能量的万能之物，算是一种核心的战略资源，往往出土此物的界域只有‘鹿蛾域’。鹿蛾一族没想到是殁于此时…”\n\n\n    古鹿树种对自己而言，有很多好处。\n\n\n    其一就是能给魔刀用于修炼兵器六爻的‘青龙兵魂。’\n\n\n    魔刀的兵器六爻秘技，碍于材料，目前只修炼了三爻。\n\n\n    后面几爻对材料要求不低。\n\n\n    尤其是最后的勾陈兵魂和腾蛇兵魂。\n\n\n    古鹿树种嵌入魔刀中，正好配合魔刀的汲血之力，能帮助它生长成熟再反助魔刀修成青龙兵魂。\n\n\n    算是最契合修炼兵器六爻的材料了。\n\n\n    最重要的是，加上成熟后古蜀命中本身的能力，可以让未来的王闲，在即便全部动用神脉灵煞后，还能拥有一次瞬间完全恢复灵煞的机会。\n\n\n    其作用不言而喻。\n\n\n    只是，虽是好东西，却让王闲心情略有几分沉重。\n\n\n    此时的空械蠕虫是从鹿蛾域带回战利品，而彼时又会不会从蓝星带回战利品呢？\n\n\n    王闲微微握紧这颗树种，在神棺中一言不发，只是静静看着远处。\n\n\n    目光仿佛能透过神棺那能自动修复的棺壁，看到更遥远的地带…\n\n\n    也不知过了多久。\n\n\n    忽然，随着神棺一阵颤动，猛然间好似被什么阻隔了般瞬间停了下来。\n\n\n    鲁三通这才站起身，看向众人，微微一笑道：\n\n\n    “诸位，已到站。”\n\n\n    “准备一下，跟我出棺吧！”\n\n\n    新兵蛋子们，欢迎你们来到真正的人间地狱！	1784265252790	0	\N	\N	1784270140377
 1784270140393	397		第370章 精锐的穹武战士	神棺中。\n\n\n    已经渐渐平复心情的众人，在鲁三通的声音中，瞬间又紧张了起来。\n\n\n    其中倒也有几个浑不怕的武者，面露兴奋之色。\n\n\n    “哥，这前线战场到底是什麽鬼地方？”\n\n\n    王闲身旁，那个短发男子苟泽小声问道。\n\n\n    “刚才在神棺中的空间穿梭，我们现在应该是在什麽遗迹秘境中吗？”\n\n\n    “不可能，空间穿梭这麽久，还有那种从未见过特殊异兽袭击，显然这不是什麽遗迹秘境，我估计应该已经远离蓝星了！”\n\n\n    “王闲你是不是来过这边的？”\n\n\n    ……\n\n\n    王闲身边，已经围了一群人。\n\n\n    此刻都在窃窃私语。\n\n\n    经历过刚才那场袭击，这些人都是自发围上来。\n\n\n    没特别原因，可能是感觉有那麽点安全感…\n\n\n    王闲没说话。\n\n\n    异星战场复杂难言，不亲身体会，光是说是很难说清楚的。\n\n\n    一时半会，也很难说清楚。\n\n\n    即便是前世，他到八境，都不敢说对异星战场完全了解。\n\n\n    或者说，那时的蓝星人类，也依旧只是在异星战场苟延残喘罢了。\n\n\n    倒是王闲挺好奇，这个苟泽有点莫名其妙听自己的话。\n\n\n    尤其是那个眼神。\n\n\n    “反正不是什麽好地方…”\n\n\n    王闲轻叹口气，看向苟泽，“之前就想说，你认识我？”\n\n\n    在他的记忆里，无论是现在还是前世，都没什麽印象。\n\n\n    “认识！”\n\n\n    苟泽嘿嘿一笑，“我在牢狱里时，看过这一届青年武道大会的转播。从积分赛就开始看了，当时我们牢狱正好转播你所在的赛区，我就一直看到你打&amp;#x38c9;决赛。”\n\n\n    “然後莫名奇妙把那个什麽池九幽给宰了。”\n\n\n    “最後那一战，看得我惊心动魄！”\n\n\n    “……”王闲。\n\n\n    原来是这样。\n\n\n    “你杀了池九幽后，那一天我们当时牢狱中其他的人都一片哗然。”苟泽道，“纷纷在说你是不是被资本做局了，或者是被池九幽的蛊虫影响了，怎麽莫名其妙在已经夺冠时要杀了对方。”\n\n\n    “没想到几天後，官方通告说就是故意杀的，然後被流放，被贬去前线战场…”\n\n\n    “我当时听到这个消息，就琢磨着要是有机会，我也要来前线战场亲自问问你。”\n\n\n    “这就是你跑来前线战场的原因？”王闲诧异。\n\n\n    这家伙犯的罪，只被判了十多年。\n\n\n    算算时间，应该也没几年牢狱生活了。\n\n\n    稍微忍忍，就能直接出去，怎麽也犯不着来前线战场。\n\n\n    毕竟这也不是强制性对罪犯徵兵，如果不想来，军部不会说一定要你来。\n\n\n    在场众人，大都是主动自愿来的，都想着在前线战场立下功劳，将功抵过好顺利的出狱。\n\n\n    尤其是那些刑期极重的。\n\n\n    本身就抱着死在牢狱，不如来前线战场搏一搏的心理。\n\n\n    而那些刑期比较短的，基本上就不会选择来了。\n\n\n    “是啊！”\n\n\n    苟泽点点头，“之前在战机上我就看到你了，但你不想说话，我也不敢打扰你。”\n\n\n    王闲摇摇头。\n\n\n    这家伙，也是个怪人。\n\n\n    与此同时，随着神棺停下，上方的大门缓缓打开。\n\n\n    众人还未出棺，就相互看到了对方那张被映成血布一样的脸颊。\n\n\n    紧接着，迎面而来的，就是一股浓郁至极的煞气。\n\n\n    “整理好你们的衣甲！”\n\n\n    鲁三通的声音，在此刻倏然冷了下来，“颈部有一个按钮，按下去后衣甲头部会暂时形成一个隔绝防御罩。从现在开始，我只说三条基本铁则！”\n\n\n    “都给我记好了！”\n\n\n    “第一，在战场上，不要轻易暴露你们的武道天赋！”\n\n\n    “第二，不要进行任何单人作战！如果一不小心走散了，请待在原地。”\n\n\n    “第三，如果听到救命的呼喊声，或者任何身受重伤的人，请不要理会！”\n\n\n    众人一愣。\n\n\n    这三条铁则，也就第二条勉强还算正常。\n\n\n    其馀两条是什麽意思？\n\n\n    “鲁长官，为什麽不要轻易暴露武道天赋？不用武道天赋，只用武学吗？”\n\n\n    有人问道。\n\n\n    鲁长官没说话，只是静静带着他们走出了神棺。\n\n\n    当众人走出，看到高悬天穹之上的那一轮轮赤红色的圆月。\n\n\n    才完全确信。\n\n\n    这里，确实已经不是蓝星了。\n\n\n    &amp;#x38c9;眼望去，视线的尽头，是一堆堆由漆黑的钢铁铸就的壁垒。\n\n\n    围成了一个如铁桶般的简易城墙。\n\n\n    “帝江防线，龙国神璧。”\n\n\n    王闲看着那道城璧，眼眸中闪过一丝缅怀。\n\n\n    记得自己前世三年後来这里的时候。\n\n\n    这座龙国神璧已经碎裂，国家还在尽力重建。\n\n\n    那也是龙国大徵兵的缘由之一。\n\n\n    只不过，重建的过程，死了很多人。\n\n\n    他当时还算幸运的，因为在後备打杂，加上境界也不高，一来此地就被派去了更远更後方的新战线。\n\n\n    後面没几年，帝江防线完全粉碎，重建的壁垒也没能支撑过几轮‘血潮’。\n\n\n    後续就是昆仑大墟也崩溃，那一带开始出现了大量的异兽。\n\n\n    通过神棺连接两地的空间通道，不再只是个别的异兽从某个空间缝隙中来到龙国或者附近的国家。\n\n\n    只不过当时龙国算是有所准备，又在昆仑大墟构建起了一道防线，勉强抵御着。\n\n\n    但说起来的话，那也算是一个转折点了。\n\n\n    异兽数量太多，直接导致就是後续的武者数量锐减。\n\n\n    许多年後，连武考都不只是单纯的在人为控制的遗迹中击杀异兽了。\n\n\n    而是要上真正的遗迹，直接直面异兽。\n\n\n    再过一些年，上武考，甚至还要签署生死条约了…\n\n\n    “沃日，这地方环境怎麽感觉比我们牢狱还要差…”\n\n\n    “废话，战场上环境怎麽可能好？”\n\n\n    “这地方煞气浓度好高啊，难怪要戴隔离面具，长时间吸收这种煞气，感觉真活不了多久。”\n\n\n    “感觉四周好渗人…”\n\n\n    “你们看天上的云层中，怎麽感觉好像有玩意儿在动一样？”\n\n\n    “墙壁之外是什麽？”\n\n\n    “这里是帝江防线，我们所在的地方，应该是这里连接龙国的空间通道吗？难怪要在这里建立防线…”\n\n\n    ……\n\n\n    从神棺中出来的众人，先是浑身簌簌一抖，然後开始打量四周。\n\n\n    墙壁之外不知道是什麽。\n\n\n    但在内部，依稀是能看到许多垒起的帐篷和小型的建筑。\n\n\n    因为所用材料，都是在战场中寻找搜集的，看上去五颜六色。\n\n\n    神棺所在的位置，是防线的核心位置。\n\n\n    神棺外部是用特殊的木制掩盖成一座简易林状结构，作为一种遮掩。\n\n\n    四周还建立起了密密麻麻的箭楼。\n\n\n    箭楼上时时刻刻都站着守卫的武者。\n\n\n    “老鲁！你终於回来了！”\n\n\n    一个身着黑甲全副武装背着长枪的战士从远处跑了过来，狠狠给了鲁三通一拳，“还以为你们出事了，前几批已经到广场集合了，你们也赶紧去。”\n\n\n    “迟一点，这些‘新人的福利’就没了。”\n\n\n    “这一批有福利？”鲁三通惊讶道。\n\n\n    “有的，应将军和海老前一阵带回来了一批‘甲山磐岩龙’，运气好，发现了一些‘月金泥’。”\n\n\n    鲁三通闻言，不由看了一眼背後的众人，笑了笑。\n\n\n    那黑甲战士看向众人：\n\n\n    搜书名找不到,可以试试搜作者哦,也许只是改名了!\n\n\n    “这一批，大部分都是通过犯罪之身挑选出来的武&amp;#x4b7e;吧？”\n\n\n    “犯罪之身怎麽了？碍着你眼了？”有人桀骜出声。\n\n\n    黑甲战士笑了笑，似乎并没有动怒，大抵是习惯了。\n\n\n    “你们的整体素质偏差。”他随口道，“从你们走出神棺的一时间，大都在松松垮垮毫无警戒之态的打量四周就看得出来。”\n\n\n    “和那一群穹武战士比，差得老远了。”\n\n\n    “但素质么，都是靠付出代价锻炼出来的，那些人已经付出了代价了。”\n\n\n    “而你们，则需要在战场上进行锻炼…付出的代价，只会更严重…”\n\n\n    “好好珍惜从现在开始的每一分每一秒吧！”\n\n\n    看到这，黑甲战士轻叹一声。\n\n\n    这意味着，绝大部分都会被淘汰。\n\n\n    这百来号人，最後可能只会剩十个不到？\n\n\n    按照以往的经验，基本上就是这个数…\n\n\n    说完后，黑甲战士就转身离开了，估计只是来给鲁三通传个话的。\n\n\n    众人顿时骂骂咧咧。\n\n\n    “不想死，就闭嘴吧。”\n\n\n    王闲看了众人一眼，随口说了一句。\n\n\n    众人声音顿时小了不少。\n\n\n    “我说你们怎麽这麽应激？”苟泽看着那个满脸桀骜不驯的家伙，“徐博，收敛一点，你看我这麽拽的，现在都收敛了，你们这些人还真当这里是曾经的蓝星吗？”\n\n\n    说完，他指了指天空中。\n\n\n    “看看那个地方，云层都游离着未知的异兽生命，说不定一个吐息就能直接把我们给灭了。”\n\n\n    “那可能是你废物吧…劳资又不怕。”那个徐博嗤笑吐槽了一句。\n\n\n    话虽这麽说，他声音倒是小了许多。\n\n\n    王闲看了这人一眼。\n\n\n    这家伙在这群人中，在神棺中的战斗中，实力算是最强的几个。\n\n\n    甚至不逊色天都大学白星云他们多少。\n\n\n    只不过，十分嗜杀，性格过於跋扈。\n\n\n    在异星战场吸收了太多灵煞，性格还会深度改变，一旦控制不了自己，就会更加嚣张张狂。\n\n\n    死倒是迟早的事儿…\n\n\n    鲁三通看向这群人，笑了笑。\n\n\n    历经神棺中的袭击，这些人本性难怪，一时半会根本不可能在前线战场变成有用的战力。\n\n\n    大部分都是去後备。\n\n\n    至少，能多活几个下来。\n\n\n    “先跟我来吧。”\n\n\n    “你们这趟运气好，居然还有新人福利。”\n\n\n    鲁三通带着他们走出了神棺外，“另外，你们可以回头看看神棺，免得以後没机会看到了。”\n\n\n    “这就是你们以後能回去唯一的通道。”\n\n\n    众人一怔。\n\n\n    俱都下意识回头看了神棺一眼，然後默默跟着鲁三通前行。\n\n\n    不多时，众人随着鲁三通来到了一处十分宽广的平台。\n\n\n    平台上，已经站满了一列列的武&amp;#x4b7e;。\n\n\n    显然，从龙国来前线的武&amp;#x4b7e;，不只是他们这一批，还来了好几批。\n\n\n    神棺也不是只有一具。\n\n\n    在昆仑大墟那边，有好几具相邻挨着的，有的先一步来了。\n\n\n    这些武&amp;#x4b7e;中，也有和他们一样，都是从龙国各地监狱挑选出来的。\n\n\n    还有一些是从军部选出来的，数量比较少。\n\n\n    其中，最惹人瞩目的，自然就是最前方，那一排排穿着特殊的武装铠甲不见容貌的神秘战士！\n\n\n    “我靠，怎麽感觉我们和这群人不是一个画风的？”\n\n\n    苟泽看了看自己身上来之前换上的铠甲。\n\n\n    又看了看那群全身都笼罩着铠甲的神秘战士，一时间麻了。\n\n\n    “这些家伙是谁啊？”\n\n\n    “都是从蓝星上前线的，他们怎麽穿这麽好啊？”\n\n\n    “啧，身为一个熔炼师，他们这铠甲样式，我在龙国都没见过！”\n\n\n    “废话，看看前面，这特么可是宗师带队来前线的！应该就是鲁长官口中的那些‘穹武战士’吧，据说是通过层层考验被选举上来的！”\n\n\n    “我看到了，看这三位，应该就是我们龙国此次上前线战场的宗师了…其中还有个女宗师，站在最前方，应该是领头的。”\n\n\n    “我们是鲁长官带来的，鲁长官一个六境肯定比不上宗师带队…”\n\n\n    一旁的鲁三通嘴角一抽。\n\n\n    他面无表情，看向了人群中那个嘀咕他的武&amp;#x4b7e;眯了眯眼。\n\n\n    你们这群臭鱼烂虾，能让我来带你们上来，知足吧！\n\n\n    忽然，他心中一动，看向了王闲。\n\n\n    此次带队的洛宗师，是备受帝江防线瞩目的一大助力！\n\n\n    她不仅自身实力强大，是真正流派传承的嫡系武&amp;#x4b7e;，同时还带领了一大批精锐的穹武战士。\n\n\n    以及…\n\n\n    鲁三通看向这批战士身上穿着的铠甲。\n\n\n    一种据说是全新适应异星战场的超凡武装！\n\n\n    只不过，也就是说说。\n\n\n    他心中有点不屑，在异星战场多年，目前自家蓝星龙国那边根本研究不出来能完全适应异星战场的铠甲。\n\n\n    顶多能支撑一阵。\n\n\n    忽然，他似乎想起什麽，看向了王闲。\n\n\n    这位洛宗师，可是王闲名义上的师父。\n\n\n    只可惜，犯罪之身并没有机会跟着宗师师父一起上来，自然也穿不上这麽好的铠甲。\n\n\n    虽然有一个能加入的机会…\n\n\n    但战场终究是战场，和武道切磋不太一样。\n\n\n    想要进入宗师所率领的王牌部队，没有在异星战场进行过锻炼，是很难的。\n\n\n    现在心中滋味应该有点复杂吧…\n\n\n    王闲心中滋味确实挺复杂的，只不过并不是因为看到了洛校长，以及她带领的穹武战士。\n\n\n    而是看到了最前方，一个熟悉的人影。\n\n\n    “诸位！”\n\n\n    平台最前方，一名身着白色甲胄的中年男子站起身，他後背大剑，面目如山。\n\n\n    “我叫应天空，是目前帝江防线的指挥官之一。”\n\n\n    他站起身，看向了平台上众多从龙国来到异星战场的新人战士，“本来新人战士并不是我负责锻炼的，不过你们这一次运气比较好。”\n\n\n    “我将代表帝江防线给你们这些新人战士一点来自异星战场的馈赠。”\n\n\n    “希望你们以後都能成为一名守卫在帝江防线的铁血战士！”\n\n\n    众人视线顿时被他吸引。\n\n\n    应长空…\n\n\n    王闲默默的看着此人。\n\n\n    前世帝江防线的八境强&amp;#x4b7e;，历经无数场生死战斗的帝国铁壁，被誉为帝江防线武神之下的最强&amp;#x4b7e;。\n\n\n    後来，死战於帝江防线。\n\n\n    死後其尸体被魇心族人得到，以精神操控夺取其肉身，然後通过特殊的复生秘法短暂复苏应长空，又不知用了什麽办法，使其境界暴增至九境。\n\n\n    但却变成了成为魇心族复仇的利器，以此想要击败曾覆灭魇心族的那只z级异兽。\n\n\n    然而，终究是打不过，最後在魇心族的操控下，逃向了蓝星……\n\n\n    以此祸水东引，间接导致了数位蓝星武神死於这场滔天的灾难之下。\n\n\n    最後被发现应长空有异后，直接给抓了起来进行蓝星武道联盟的军事审判。\n\n\n    只是那时，操控他的魇心族人早就溜之大吉了。\n\n\n    最後还剩一丝理智的应长空，醒悟之後，直接疯了。\n\n\n    然後世人称之为‘蓝星的叛徒’，‘人类的耻辱’，‘罪恶滔天’！\n\n\n    之後被钉在了耻辱柱上，被世人骂了几十年…\n\n\n    直到几十年後，那只曾操控应长空尸体的魇心族人，意外被找到了，无奈之下，交代了一切。\n\n\n    才给应长空正名翻案。\n\n\n    只可惜，人已死去多年，他的家人，後代，全都因为这场席卷全球的巨大舆论一个都没有留下来。\n\n\n    王闲依稀记得，自己前世三年後来到已经残破的帝江防线时，这位应将军正带领着部队抵挡在防线的前方，战火滔天，一直持续了好几个月。\n\n\n    之後又过了好几个月，才穿了他身死的消息…\n\n\n    这个命运和帝江防线绑定的绝世强&amp;#x4b7e;，直到最後那一刻，也没有後退半步。\n\n\n    但却在死後被无数人骂了几十年。\n\n\n    想到这，王闲摸了摸怀中余方海给的断箭…\n\n\n    登录用户的「站内信」功能已经优化,我们可以及时收到并回复您的讯息,请到用户中心-「站内信」页面查看!	1784265252790	0	\N	\N	1784270140377
 1784270140395	398		第371章 骄傲的鲁三通	应长空站在高台之上，看着从台下龙国挑选而来即将注入战场的新鲜血液。\n\n\n    锐利的目光，在一扫而过时，彷佛将在场每个人都看得清清楚楚。\n\n\n    视线与那三位宗师对视之时，微微点了点头。\n\n\n    ‘天都大学的洛宗师，老洛那家伙的後代，後继有人啊，真好…未来蓝星的女武神。’\n\n\n    ‘左边那个是天海世家的柳红麟，这些世家宗师此次没有退缩，能前往异星战场履行兵役倒是能让人高看一眼。’\n\n\n    ‘右边那个是北疆天池大学的李彦，李老上百岁高龄，如今终於踏入七境了…’\n\n\n    三位宗师，他基本上都略知一二。\n\n\n    身处异星战场，对龙国具体的或许不太了解。\n\n\n    但在宗师级别的强者，他不可能不知晓。\n\n\n    应长空甚至还知道，这一届上异星战场的宗师，不止是这三个。\n\n\n    还有两个的样子。\n\n\n    毕竟这是每隔数年一批的。\n\n\n    只不过这两人找了一些借口，暂缓的履行军役的宗师义务。\n\n\n    至於借口…\n\n\n    应长空心中不免冷笑一声。\n\n\n    此类情况不止是龙国这边，其他国家都有。\n\n\n    人么，总是贪生怕死的。\n\n\n    就算成了宗师，也是一样的。\n\n\n    看完宗师，自然是继续看此次前来的年轻武者了。\n\n\n    首先是由宗师率领的穹武战士。\n\n\n    历经数年，通过蓝星武道联盟举行的穹武高级试炼层层选拔而来，都是精锐中的精锐。\n\n\n    他们的武道天赋，在蓝星，在龙国，或许谈不上最好。\n\n\n    但武道一途，又岂是完全看武道天赋的？\n\n\n    武道天赋顶多只能决定你未来的潜力。\n\n\n    可武者的实力，是由多方面组成。\n\n\n    抛开境界武学秘技经验这些不谈。\n\n\n    武者本身的意志，心性，勇气，胆魄，智慧这些，都是在异星战场中需要考量的要素。\n\n\n    所以。\n\n\n    这些穹武战士作为专门蓝星武道联盟专门针对异星战场挑选出来的精锐。\n\n\n    未来必然是帝江防线的中坚战力！\n\n\n    ‘蓝星河，北疆军部出生，穹武高级试炼的三甲之一，五境实力，擅长枪法，身怀家传秘技‘血玉功’。论实力应该是这一批穹武战士中最厉害的几人了。’\n\n\n    ‘徐清海，霸海大学的优秀毕业生，少有参军后对穹武试炼极度感兴趣的武者，穹武高级试炼的前十成员，境界比蓝星河更高一点，擅长剑法，只不过，他不止擅长剑法，还擅长音萧类音律武学…这徐家真是音律武学世家…只是没想到这个比较叛逆，会对战场之事感兴趣，希望他来到这里没後悔…’\n\n\n    ‘武卓耀，京都武家之人，武道天赋是武家这一代最差的…给扫地出门后愤然从军，一路通过穹武高级试炼，名列前十，最後来到异星战场，想要证明自己…诶，是个天真的孩子…但也是个很有勇气的孩子。’\n\n\n    ……\n\n\n    应长空一个个扫过这些精锐的穹武战士。\n\n\n    每人的资料，在他们还没来到异星战场，他自然就已经提前得知了。\n\n\n    能成为穹武高级战士，他们的实力是绝对过关的。\n\n\n    有几个放在如今的龙国，其综合素质也算是天之骄子了。\n\n\n    毕竟异星战场的重要性不言而喻。\n\n\n    即便没有完全公开。\n\n\n    但也不可能真的只派一些囚徒武者上来。\n\n\n    当年蓝星武道联盟举行穹武试炼，其目的就是为了培养出能在异星战场上能真正发光发热的优秀战士。\n\n\n    尤其是。\n\n\n    ‘洛宗师带的这一批穹武战士，身穿的武装是全新产物，再配合这一批穹武精锐…’\n\n\n    看过情报的应长空对此有简单的了解。\n\n\n    作为天都大学出来的大宗师。\n\n\n    她来到异星战场，自然不只是为了单单履行军役，走个过场。\n\n\n    而是真想要干点实事出来。\n\n\n    不然也不会配备这种特殊的铠甲武装。\n\n\n    只能说，天都大学还是有钱。\n\n\n    看看其他两位宗师，他们可没这个底蕴。\n\n\n    毕竟，这种铠甲，一套看上去就很费钱的样子…\n\n\n    看完了这批精锐，再看看另外几批从龙国各大牢狱挑选出来的‘囚徒武者’。\n\n\n    其实从实力的角度来看。\n\n\n    这些囚徒武者实力不比穹武战士差太多。\n\n\n    但是这些穹武精锐，是经过特殊训练的，经过三重试炼，在异星战场的存活率会比这些囚徒武者高太多了。\n\n\n    都不用几年。\n\n\n    可能几个月後，大半都会因为异星战场的各种极端环境而意外出事。\n\n\n    极少部分能留存下来。\n\n\n    可若是这些囚徒武者，只要能留存下来的。\n\n\n    那必然也是帝江防线的中流砥柱。\n\n\n    比如…\n\n\n    应长空看向了鲁三通。\n\n\n    “应将军，我这一批新人战士，有五人在途中遇袭受伤。”看到应长空的视线，鲁三通赶忙出声进行简单的汇报。\n\n\n    “遇袭？”应长空一怔，“神棺遇袭？这麽多年，神棺遇袭都是二十多年前发生过一次，你们是怎麽遇袭的？”\n\n\n    因为是刚出神棺就来到这里，鲁三通自然没有时间向上汇报——主要是这种情况，太罕见了。\n\n\n    以前基本上没怎麽发生过。\n\n\n    倒是一听到遇袭，其他几批武者也立刻看向鲁三通这边。\n\n\n    显然他们途中完全没遇到过。\n\n\n    再说，在神棺中是怎麽遇袭的？\n\n\n    尤其是那三位宗师。\n\n\n    身着一身冰蓝铠甲的洛宗师下意识目光就看向了鲁三通身後，不断来回搜索。\n\n\n    神棺中遇袭，这恐怕不是小事啊！\n\n\n    作为宗师强者，他们更清楚，能在神棺空间穿梭的过程中还能袭击的异兽。\n\n\n    必然不是简单的异兽！\n\n\n    一旦遇袭，必有极大伤亡！\n\n\n    直到看到那道熟悉的身影，洛宗师心中这才松了口气。\n\n\n    嗯…人还在。\n\n\n    “就是…被一种奇特的虫型异兽袭击了，具体情况较为复杂，它们数量在两百三十左&amp;#x3c4f;，强度最高不超过b级。”鲁三通寻思着自己一时半会也解释不了那空械蠕虫的事儿，便只是简单说道，“这种异兽似乎专门以啃噬空间为生，恰巧在神棺空间穿梭时，啃&amp;#x38c9;了神棺之中…”\n\n\n    “这麽麻烦？”应长空一听就皱起了眉。\n\n\n    连自己都没怎麽听过的异兽。\n\n\n    “可我你带的新人战士，似乎没有缺失？”应长空又看了一眼，有些奇怪。\n\n\n    这麽麻烦的袭击，没有人员损失？	1784265252790	0	\N	\N	1784270140378
 1784270140397	399		第372章 新人福利，罕见的修炼资源	“是的，目前只有五人遇袭受伤…”说到这，鲁长空不由微微抬起了胸膛，语气十分平淡，“另外，还全歼了这批异兽！并带回来了相应的材料，本来正打算先移交军械部那边研究。”\n\n\n    其馀众多新人战士一听，不由暗暗点头。\n\n\n    不愧是战场出来强者。\n\n\n    带着一批臭鱼烂虾，让这位应将军都觉得有点麻烦的突发情况，居然能做到只有几人受伤的代价全歼了？\n\n\n    实力且不说，能力绝对是过硬的。\n\n\n    你说要是带着穹武战士这群精英能做到面对突发情况，还全歼异兽的，倒还能理解。\n\n\n    可这群囚徒武者，怕是连基本的指挥都不好指挥，能面对这种突发情况，未知异兽还能全歼且只有几人受伤的，那可太牛了。\n\n\n    那群穹武战士看向鲁三通，一时间投来了敬佩的目光。\n\n\n    连三位宗师，都不由侧目相看。\n\n\n    他们作为宗师，都不敢保证说遇到这种情况，能照顾指挥好每个战士。\n\n\n    “全歼？”只有应长空眼神疑惑的看了鲁三通一眼。\n\n\n    彷佛在说：你有这个本事？我怎麽不知道呢？\n\n\n    鲁三通他是知道的，敢打敢拼，勇气胆魄十足。\n\n\n    是一名极其勇猛的战士。\n\n\n    但其他方面，就不太行了。\n\n\n    不然也不会被派去当做这一批新人武者的接引长官了。\n\n\n    就是为了历练他。\n\n\n    面对这种情况，他个人倒是能完好无损的回来。\n\n\n    至於剩下的新人战士，能带回来多少，那就不好说了…\n\n\n    鲁三通：“……”\n\n\n    别人看不懂应将军的目光，他自然看懂了…\n\n\n    “咳咳…”鲁三通继续说道，“主要是有个武者协助帮了不少忙…这才能全歼…”\n\n\n    “哦……”应长空心中恍然。\n\n\n    明白了。\n\n\n    全都是那个武者帮忙。\n\n\n    “这人是谁？”应长空来了几分兴趣。\n\n\n    囚徒武者中，要麽不出什麽厉害的人物。\n\n\n    要麽一出就必然是极其厉害的武者。\n\n\n    “他叫王闲。”鲁三通侧过身体，露出了身後面不远处的王闲，指了指，想了想，补了一句，“这小子挺不错的。”\n\n\n    应长空心道，那应该是真的挺厉害的。\n\n\n    在异星战场上的这些武者。\n\n\n    尤其是鲁三通这种勇猛的战士。\n\n\n    基本上很少夸人。\n\n\n    能说挺不错的。\n\n\n    那心中就是觉得，你小子是超猛啊！\n\n\n    ‘王闲，这个名字有点耳熟…’\n\n\n    应长空看向王闲。\n\n\n    正巧，也遇到了王闲抬头注视他。\n\n\n    两人微微一对视。\n\n\n    不知为何，应长空有种奇妙的熟悉感。\n\n\n    ‘我想起来了，这人不是小洛的徒弟么？’应长空馀光看到了另一边的洛宗师，见着她嘴角出现了一个小小的弧度，这才猛地想起来了。\n\n\n    说是在这一届龙国的青年武道大会上犯了事，杀了人。\n\n\n    在全国上下造成了极大的舆论影响，这才被流放至异星战场…\n\n\n    他一旁的老者开口道：\n\n\n    “这人是军部那边要求说来到异星战场后，若通过了这边的试炼直接让他加入宗师所率领的王牌部队。”\n\n\n    “我们这边是同意了的。”\n\n\n    应长空微微点头，还有这回事。\n\n\n    帝江防线有三位指挥官，他只是其一，并不完全负责这些事儿。\n\n\n    能让军部提出这个要求，只能说此人的确有过人之处。\n\n\n    “好，很好啊！”\n\n\n    应长空扫了王闲一眼，只是简单的含笑点头。\n\n\n    龙国之事，他无心多管。\n\n\n    上了异星战场，应长空并不介意对方之前做过什麽事。\n\n\n    你哪怕犯下滔天大罪，上了异星战场，那就是一个普通战士。\n\n\n    登录用户的「站内信」功能已经优化,我们可以及时收到并回复您的讯息,请到用户中心-「站内信」页面查看!\n\n\n    若能立功，那就是好样的！\n\n\n    能让这位应将军点名表扬，这让鲁三通也有点羡慕。\n\n\n    自己在异星战场干了这麽多年。\n\n\n    应将军给过最大的口头鼓励，就是那一句‘你小子这一战，打的还行。’\n\n\n    【还行】\n\n\n    比起【很好】，还行二字肯定是差远了。\n\n\n    但平心而论，就神棺遭遇而言，王闲的表现确实很好。\n\n\n    没他的话，这群人半数估计都会身亡。\n\n\n    自己也会因为失责而受到相应的责罚。\n\n\n    毕竟他是长官，带着这群人安全来到异星战场，就是最重要的任务。\n\n\n    人出事了，无论是什麽原因，他都得担责。\n\n\n    “你们这几支队伍，没出事吧？”应长空看向其馀几支队伍。\n\n\n    显然，相比鲁三通，其馀几支队伍别说袭击了。\n\n\n    估计异兽的影子都遇不到。\n\n\n    “既然没事，那接下来我有一件重要的事宣布。”\n\n\n    应长空看向诸多新人战士，“按照以往惯例，每一位到异星战场的新人战士，我们都会给予一定的福利。”\n\n\n    说罢。\n\n\n    他拍了拍手。\n\n\n    下一刻。\n\n\n    一只浑身穿着黑甲的战士，抬着足足有一栋大楼般的巨型牢笼，从後方猛然飞出，然後狠狠地砸落在前方。\n\n\n    “吼——！”\n\n\n    足以震裂众人耳膜的吼声，夹杂着浓郁至极的煞气，不断席卷而来。\n\n\n    众人抬头看去，只见一只体型宛若山岳般的巨型异兽被牢笼死死锁在牢笼中。\n\n\n    这异兽通体赤黄，背脊上长满了如尖峰般的岩石，身上覆盖着密密麻麻的鳞片，每一块鳞片都好似一块钢铁，在这血色的环境下，泛着异样光芒。\n\n\n    “这是‘甲山磐岩龙’，在蓝星你们应该没见过体型如此庞大的c级异兽。”\n\n\n    应长空微微一笑。\n\n\n    “c级异兽？”\n\n\n    “这是c级异兽？刚才气息，我感觉b级都打不住了，什麽情况？”\n\n\n    “这玩意儿感觉就是行走的a级遗迹，吐一口气蕴含的煞气都如此浓郁，都不需要遗迹中凝聚的那些煞种了。真变态啊！”\n\n\n    “异星战场，恐怕是这些异兽的主战场，它们大本营。啧…”\n\n\n    ……\n\n\n    “它只是现在是c级异兽。”应长空摆了摆手，“是s级异兽退化下来的，这边的异兽情况十分复杂，实力波动极大，不要用固定的思维去套用在它们身上。”\n\n\n    “c级只是它目前的煞气波动，可它的身躯，本质上还是s级的躯体，综合实力其实是在a级左&amp;#x3c4f;。”\n\n\n    “闲话不多说，搬来这只异兽，倒不是让你们打败他，你们现如今不具备这种实力。”\n\n\n    应长空指了指这只异兽的背部尖端。\n\n\n    “看这里。”\n\n\n    “甲山磐岩龙的背部，会生长出一种特殊的‘月金泥’，这是一种非同凡响的材料，涂抹在身上，数月内能形成坚不可摧的甲胄，以武&amp;#x4b7e;元力催动可以极大减免许多来自异兽的伤害。”\n\n\n    “还能一定程度上帮你们排开煞气，以适应此地的环境。”\n\n\n    “涂抹在武器上，则能帮助你们的武具成长，暂时性的提升品级，威力大增。”\n\n\n    “而你们几支队伍，需要各自为营，去它的背部挖去这种月金泥。”\n\n\n    “我不管你是穹武战士，还是囚徒武&amp;#x4b7e;，你们只要有本事，想挖多少都行。”\n\n\n    “但切记，这只甲山磐岩龙不是好惹的…”\n\n\n    说到这，应长空深深看了众人一眼。\n\n\n    众人恍然。\n\n\n    这东西绝对是好东西，放在龙国肯定至少都是s级以上的材料了，而且随挖随用。\n\n\n    还没有什麽负面作用！\n\n\n    但，就看怎麽去挖了。\n\n\n    一时间，众人跃跃欲试。\n\n\n    尤其是那些穹武精英，一个个面露精光…\n\n\n    而王闲，也很是意外。\n\n\n    没想到应长空能拿出这玩意儿当做给新人战士的福利…\n\n\n    只不过，他的目光，不只是那些月金泥。\n\n\n    而是那只甲山磐岩龙…\n\n\n    这才是真正的‘宝贝’啊！	1784265252790	0	\N	\N	1784270140379
@@ -7458,6 +8513,7 @@ COPY toonflow.storyboards (id, script_id, prompt, file_path, duration, state, tr
 1784549974121000	1784288140878000	@图1为王闲{角色}，@图2为叶弥月{角色}。@图1俯身凑近@图2耳侧，呼吸扫过她耳廓，她耳根泛红，@图1嘴角挂着从容而危险的弧度。近景，固定。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/0217845977313245fc9fc3c0c40d4ed9ed09f6d5661eaccbccfec_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013611Z&X-Tos-Expires=86400&X-Tos-Signature=02efb2d27929c0165e45185d22b764bef9c3ce78f07080c83b00ab14de7e5fa4&X-Tos-SignedHeaders=host	3	已完成	1784549974121001	\N	8	王闲俯身，凑近叶弥月耳侧。呼吸扫过她耳廓，她耳根迅速泛红。王闲嘴角挂着从容而危险的弧度。时长3秒，近景，固定。台词：王闲：（低笑）校花缺钱？还是有见不得光的秘密？音效：低沉呼吸声。关联资产：王闲、叶弥月、按摩房。	1	1784265252790	\N	25	1784549974122
 1784549936064000	1784288140878000	@图2为二哥王彦{角色}，@图1为王闲{角色}，@图4为北拳武馆{场景}。@图2一把揽住@图1肩膀，拽着他起身往@图4后方走去，@图1踉跄半步顺势抄起外套口袋里@图3手机{道具}。中景，跟拍平移。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/0217845977314647c52c410876ab8649e200d8680cedfa0b0fb4b_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013617Z&X-Tos-Expires=86400&X-Tos-Signature=5ea4ef6e55c957e3dd1556e80a8512e4178505be68096196a1fd0220676e6cd8&X-Tos-SignedHeaders=host	4	已完成	1784549936064001	\N	5	三叔和二哥对视一眼。二哥伸手一把揽住王闲肩膀，拽着他起身往武馆后方走去。王闲踉跄半步，另一只手顺势抄起外套口袋里的手机。时长4秒，中景，跟拍平移。台词：二哥：睡傻了吧你？走，十八号房，给你安排了新人。音效：衣服摩擦声、脚步声在武馆内回荡。关联资产：王闲、二哥王彦、手机、北拳武馆。	1	1784265252790	\N	12	1784549936069
 1784549936118000	1784288140878000	@图3为手机{道具}。@图3屏幕大特写，屏幕亮起，日期清晰显示：新武历2024年12月1日 12:17。大特写，固定。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/0217845977648689a0d83abff91b62c26f47d22f8f16225c45fb4_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013642Z&X-Tos-Expires=86400&X-Tos-Signature=dedd1bc0fe2c196d003159dd8e63aed1707c3034f8e28442acfedb76ea3b8fd8&X-Tos-SignedHeaders=host	3	已完成	1784549936118001	\N	5	手机屏幕亮起，占据画面。日期清晰可读：新武历2024年12月1日 12:17。时长3秒，大特写，固定。音效：手机屏幕点亮提示音。关联资产：王闲、二哥王彦、手机、北拳武馆。	1	1784265252790	\N	13	1784549936121
+1784549997090000	1784288140878000	@图1为王闲{角色}，@图2为叶弥月{角色}。双手特写：@图1单手握住@图2手腕，不急不缓调整她手指角度——沉肩坠肘旋腕，@图1手覆在@图2手背上带着手指缓缓按压肩胛骨间穴位。特写，固定。	\N	3	生成中	1784549997090001	\N	10	王闲忽然睁眼，单手握住叶弥月的手腕。她不自主一僵。王闲不急不缓地调整她手指的角度——沉肩、坠肘、旋腕。他的手覆在她手背上，带着她的手指缓缓按压肩胛骨之间的穴位。时长3秒，特写，固定。台词：王闲：（闭眼）手往下三寸。用力。音效：皮肤摩擦轻响。关联资产：王闲、叶弥月、营养膏、按摩房。	1	1784265252790	\N	31	1784549997092
 1784550008715000	1784288140878000	@图2为叶弥月{角色}，@图3为按摩房{场景}。@图2双手撑在@图3床沿大口喘气，碎发贴在汗湿的额角，胸口剧烈起伏，手臂微微颤抖。近景，固定。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/02178459773139746d1ea52072bfcd170e4d89d85374428f75cb3_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013604Z&X-Tos-Expires=86400&X-Tos-Signature=5f3d9ec05e550087487221f4df8f386c19147b2a7ce2f6b0f8b78854a25911fc&X-Tos-SignedHeaders=host	4	已完成	1784550008715001	\N	11	叶弥月终于脱力，双手撑在床沿大口喘气。碎发贴在汗湿的额角，胸口剧烈起伏，手臂仍在微微颤抖。时长4秒，近景，固定。音效：叶弥月粗重喘息。关联资产：王闲、叶弥月、按摩房。	1	1784265252790	\N	34	1784550008718
 1784549884330000	1784288140878000	@图1为前世病房{场景}，@图3为心电监护仪{道具}，@图2为病床{道具}。@图1中，@图3屏幕显示绿色波纹跳动，@图2旁输液架透明管线垂下。纯白病房，窗外冬日天空，中景。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/021784597533596e9ba0189e2800246c838739f792fc42d1bd714_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013304Z&X-Tos-Expires=86400&X-Tos-Signature=f7c2c95dc0faa42500d75c7f0597fe2f4350a42f660f20f177ce8c7224dcfff6&X-Tos-SignedHeaders=host	4	生成中	1784549884330001	\N	1	纯白病房内，心电监护仪屏幕绿色波纹跳动，输液架旁透明管线从病床边缘垂下。窗外冬日天空透过半透明纱帘。时长4秒，中景，缓推。音效：心电监护仪规律滴答声、病房空调低频嗡鸣。关联资产：王闲、友人、前世病房、病床、心电监护仪。	1	1784265252790	\N	0	1784549884346
 1784549898775000	1784288140878000	@图1为王闲{角色}。@图1面部大特写，瞳孔微微收缩，干裂的嘴唇张开一丝缝隙，绷带缠绕面部边缘可见。大特写，固定。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/02178459777556293b918b1415a5310eff3f6e1414d2c03384b80_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013647Z&X-Tos-Expires=86400&X-Tos-Signature=9da226a9f20ce496f6a114a28bdf3915e978ad88dd0ef49bb3e63a276f6992fc&X-Tos-SignedHeaders=host	3	已完成	1784549898775001	\N	2	王闲瞳孔微微收缩，干裂的嘴唇张开一丝缝隙。时长3秒，大特写，固定。台词：友人：把画塞进你课桌。不是陈玉婷。音效：心电仪滴答声突然加快变急促。关联资产：王闲、友人、心电监护仪。	1	1784265252790	\N	7	1784549898779
@@ -7467,7 +8523,6 @@ COPY toonflow.storyboards (id, script_id, prompt, file_path, duration, state, tr
 1784549961847000	1784288140878000	@图1为王闲{角色}。@图1面部近景，微微偏头，嘴角牵起一丝意味不明的弧度，眼神锐利。近景，固定。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/021784597773446063a4d8654bca5f15707c812669954a4f9e285_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013716Z&X-Tos-Expires=86400&X-Tos-Signature=5036ae3964cc92399543f2ef27caa5c69c57645e24def3079faf6069a0827e56&X-Tos-SignedHeaders=host	3	已完成	1784549961847001	\N	7	王闲微微偏头，嘴角牵起一丝意味不明的弧度，眼神锐利。时长3秒，近景，固定。台词：王闲：蓉城一中高三一班，叶弥月。全校武道理论第一。关联资产：王闲、叶弥月、按摩房、按摩油、毛巾。	1	1784265252790	\N	20	1784549961849
 1784549974052000	1784288140878000	@图2为叶弥月{角色}，@图3为按摩房{场景}。@图2在@图3中转身冲向房门，脚步慌乱。中景，跟拍。	\N	3	生成中	1784549974052001	\N	8	叶弥月转身冲向房门，脚步慌乱。时长3秒，中景，跟拍。台词：叶弥月：你认错人——音效：急促脚步声。关联资产：王闲、叶弥月、按摩房。	1	1784265252790	\N	23	1784549974055
 1784549983766000	1784288140878000	@图4为营养膏{道具}，@图2为叶弥月{角色}。@图2手指拧开@图4，翠绿色膏体从管口挤出，泛着淡淡草本光泽，落在指尖。大特写，固定。	\N	4	生成中	1784549983766001	\N	9	叶弥月拧开营养膏。翠绿色膏体从管口挤出，泛着淡淡的草本光泽，落在她指尖。时长4秒，大特写，固定。音效：塑料管盖拧开声、膏体挤出的黏稠轻响。关联资产：王闲、叶弥月、按摩房、营养膏。	1	1784265252790	\N	29	1784549983768
-1784549997090000	1784288140878000	@图1为王闲{角色}，@图2为叶弥月{角色}。双手特写：@图1单手握住@图2手腕，不急不缓调整她手指角度——沉肩坠肘旋腕，@图1手覆在@图2手背上带着手指缓缓按压肩胛骨间穴位。特写，固定。	\N	3	生成中	1784549997090001	\N	10	王闲忽然睁眼，单手握住叶弥月的手腕。她不自主一僵。王闲不急不缓地调整她手指的角度——沉肩、坠肘、旋腕。他的手覆在她手背上，带着她的手指缓缓按压肩胛骨之间的穴位。时长3秒，特写，固定。台词：王闲：（闭眼）手往下三寸。用力。音效：皮肤摩擦轻响。关联资产：王闲、叶弥月、营养膏、按摩房。	1	1784265252790	\N	31	1784549997092
 1784550008800000	1784288140878000	@图2为叶弥月{角色}。@图2近景，摇头气喘未平，抬起疲惫的眼看向前方，汗水顺着颈侧滑入衬衫领口。近景，固定。	\N	4	生成中	1784550008800001	\N	11	叶弥月摇头，气喘未平，抬起疲惫的眼看向王闲。汗水顺着颈侧滑入衬衫领口。时长4秒，近景，固定。台词：叶弥月：（气喘，摇头）不行……手已经没有力气了……音效：叶弥月喘息声。关联资产：王闲、叶弥月、按摩房。	1	1784265252790	\N	36	1784550008801
 1784549908889000	1784288140878000	@图1为王闲{角色}，@图3为前世病房{场景}。@图1面部特写，瞳孔骤缩至针尖大小，脖颈青筋暴起，嘴唇翕动，眼角有泪光渗出，绷带缠绕的身体剧烈颤抖。特写，急推。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/021784597807566adb2c2f0c14195f56dae5a2071f84ca157ad9e_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013718Z&X-Tos-Expires=86400&X-Tos-Signature=dd6a97d1789e27f39e0ed4df5446a26df1c9fb78cd421d5b1a564d6ee0c2bcab&X-Tos-SignedHeaders=host	5	已完成	1784549908889001	\N	3	王闲瞳孔骤缩至针尖大小，绷带下的身体开始剧烈颤抖，床架发出刺耳金属摩擦声。他脖颈青筋暴起，嘴唇翕动，眼角有泪光渗出。时长5秒，特写→大特写，急推。台词：王闲：（嘶哑）不可能……我问过她，她亲口承认——音效：床架金属尖响、绷带摩擦窸窣声、急促喘息。关联资产：王闲、心电监护仪、前世病房。	1	1784265252790	\N	2	1784549908893
 1784550019387000	1784288140878000	@图2为叶弥月{角色}，@图4为白色帆布鞋{道具}。@图2瞳孔放大，下意识把穿@图4的双脚往床底缩，脚踝在鞋边缘露出一截白皙。近景，固定。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/021784597803221a7f4d4af3e382e8c5fe721af27b2ecdf8fa6f6_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013719Z&X-Tos-Expires=86400&X-Tos-Signature=a5350cce34fef7747249297c7ae8388231e772b0ff795df60bf0cdcc008fdf9f&X-Tos-SignedHeaders=host	3	已完成	1784550019387001	\N	12	叶弥月瞳孔地震，下意识把双脚往床底缩，脚踝在帆布鞋边缘露出一截白皙。时长3秒，近景，固定。台词：叶弥月：你变态！音效：鞋底摩擦地板声。关联资产：王闲、叶弥月、按摩房、白色帆布鞋。	1	1784265252790	\N	38	1784550019389
@@ -7478,6 +8533,7 @@ COPY toonflow.storyboards (id, script_id, prompt, file_path, duration, state, tr
 1784549961801000	1784288140878000	@图2为叶弥月{角色}，@图1为王闲{角色}，@图3为按摩房{场景}，@图4为按摩油{道具}，@图5为毛巾{道具}。@图3中，@图2走近床边低头将@图4和@图5在床头柜上依次摆好，动作拘谨手指发僵。@图1坐在床上目光如鹰隼般锁定她。中景，缓推。	\N	4	生成中	1784549961801001	\N	7	叶弥月走近床边，低头将按摩油和毛巾在床头柜上依次摆好。动作拘谨，手指微微发僵。王闲坐在床上，目光如鹰隼般锁定她的每一个动作。时长4秒，中景，缓推。台词：王闲：（盯着她）八号？叶弥月：（不抬头）嗯。音效：玻璃瓶轻触木质柜面声。关联资产：王闲、叶弥月、按摩房、按摩油、毛巾。	1	1784265252790	\N	19	1784549961804
 1784549961887000	1784288140878000	@图2为叶弥月{角色}。@图2面部特写，手指一颤后猛抬头，清冷杏眼满是惊惶，嘴唇微张，碎发晃动。特写，固定。	\N	3	生成中	1784549961887001	\N	7	叶弥月手指一颤，刚放下的按摩油瓶从指间滑落。她猛抬头——暖光下清冷杏眼满是惊惶，嘴唇微张，碎发晃动。时长3秒，特写，固定。台词：王闲：……跑到武馆当按摩师？音效：按摩油瓶在柜面滚动声。关联资产：王闲、叶弥月、按摩房、按摩油、毛巾。	1	1784265252790	\N	21	1784549961890
 1784549983671000	1784288140878000	@图1为王闲{角色}，@图3为按摩房{场景}。@图1退后一步重新躺回@图3床上，双手枕在脑后，嘴角挂着从容弧度，眼神平静中带着不容拒绝。中景，固定。	\N	4	生成中	1784549983671001	\N	9	王闲退后一步，重新躺回床上——双手枕在脑后，嘴角挂着从容的弧度，眼神平静中带着不容拒绝。时长4秒，中景，固定。台词：王闲：你是按摩师，我是客人。你说干什么？按。音效：身体躺回软床声。关联资产：王闲、叶弥月、按摩房、营养膏。	1	1784265252790	\N	27	1784549983676
+1784549983733000	1784288140878000	@图2为叶弥月{角色}。@图2面部近景，咬唇瞪着前方，胸口起伏未平，僵持后终于低下头伸手拿起@图4营养膏{道具}。近景，固定。	\N	2	生成中	1784549983733001	\N	9	叶弥月咬唇瞪着他，胸口起伏未平。僵持。三秒。五秒。她终于低下头，伸手拿起营养膏。时长2秒，近景，固定。关联资产：王闲、叶弥月、按摩房、营养膏。	1	1784265252790	\N	28	1784549983738
 1784549997125000	1784288140878000	@图1为王闲{角色}，@图2为叶弥月{角色}，@图3为营养膏{道具}。蒙太奇首帧：@图2手指沾着@图3翠绿膏体在@图1背脊上游走，膏体缓缓化开。多景别快切。	\N	4	生成中	1784549997125001	\N	10	蒙太奇快切——叶弥月手指在王闲背脊上游走→翠绿营养膏在皮肤上缓缓化开→叶弥月额角汗珠滑落→王闲闭眼嘴角微扬→叶弥月手臂开始颤抖、咬紧牙关→窗外日光从正午斜射转为午后暖黄。时长4秒，多景别，快切。音效：营养膏涂抹的黏腻声、叶弥月压抑的喘息、窗外远处隐约的城市午后环境声。关联资产：王闲、叶弥月、营养膏、按摩房。	1	1784265252790	\N	33	1784549997127
 1784549884445000	1784288140878000	@图1为王闲{角色}，@图4为病床{道具}，@图3为前世病房{场景}。@图1浑身缠满绷带躺在@图4上，面色灰白，嘴唇干裂，眼珠缓缓转向侧面，眼神涣散。特写，缓推。	https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-5/02178459753408516105250997c3183a3687369088432adde676a_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260721%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260721T013257Z&X-Tos-Expires=86400&X-Tos-Signature=4a7467c1247ef37f2b464f989a0ab5624910c231a9530b3a788f458bc436bd5c&X-Tos-SignedHeaders=host	4	生成中	1784549884445001	\N	1	王闲浑身缠满绷带躺在病床上，面色灰白，嘴唇干裂。他眼珠缓缓转向友人，眼神涣散却努力聚焦。时长4秒，特写，缓推。台词：王闲：（虚弱摇头）跟陈玉婷没关系。是因为那幅画。音效：床架轻微金属摩擦声。关联资产：王闲、友人、前世病房、病床、心电监护仪。	1	1784265252790	\N	3	1784549884447
 1784549949131000	1784288140878000	@图1为王闲{角色}，@图4为按摩房{场景}。@图1在@图4软床上翻身欲起，单手撑床，膝盖离床，眼神急切。近景，固定。	\N	2	生成中	1784549949131001	\N	6	房门关上。王闲翻身欲起，单手撑床，膝盖已经离床，眼神急切。时长2秒，近景，固定。台词：王闲：不行，得去找叶弥月……音效：软床弹簧轻响。关联资产：王闲、二哥王彦、叶弥月、按摩房。	1	1784265252790	\N	16	1784549949136
@@ -7490,9 +8546,16 @@ COPY toonflow.storyboards (id, script_id, prompt, file_path, duration, state, tr
 1784549923790000	1784288140878000	@图4为北拳武馆{场景}，@图5为武字牌匾{道具}，@图6为软垫{道具}，@图1为王闲{角色}。@图4内，@图5下方木人架和梅花桩依次排列，@图6上@图1躺卧的身影渐渐清晰，正午阳光从高窗斜射，空气中浮动着细尘。全景，缓推。	\N	3	生成中	1784549923790001	\N	4	黑屏中急速闪白——北拳武馆内，正午阳光从高窗斜射，空气中浮动着细尘。武字牌匾下木人架和梅花桩依次排列，软垫上王闲躺卧的身影渐渐清晰。时长3秒，全景，缓推。音效：武馆空旷回响声、远处木人架被击打的闷响。关联资产：王闲、三叔王大彪、二哥王彦、北拳武馆、武字牌匾、软垫。	1	1784265252790	\N	9	1784549923792
 1784549923866000	1784288140878000	@图1为王闲{角色}，@图2为三叔王大彪{角色}，@图3为二哥王彦{角色}。@图1近景，伸手摸自己脸颊，手指触到年轻紧致皮肤，指节微微颤抖，眼神先看向@图2眼睛再转向@图3双腿。近景，手持微晃。	\N	5	生成中	1784549923866001	\N	4	王闲盯着三叔的眼睛——明亮完好。又看向二哥的双腿——稳稳站立。他伸手摸了摸自己的脸，手指触到年轻紧致的皮肤，指节微微颤抖。时长5秒，近景，手持微晃。台词：王闲：三叔……你眼睛还好好的。二哥，你的腿——音效：手掌摩挲脸颊的轻响。关联资产：王闲、三叔王大彪、二哥王彦、北拳武馆、武字牌匾、软垫。	1	1784265252790	\N	11	1784549923867
 1784549949230000	1784288140878000	@图1为王闲{角色}。@图1面部特写，全身僵住缓缓转头，瞳孔剧烈收缩，嘴唇微微张开，喉结滚动。特写，缓推。	\N	3	生成中	1784549949230001	\N	6	王闲全身僵住，缓缓转头——瞳孔剧烈收缩，嘴唇微微张开，喉结上下滚动一次。时长3秒，特写，缓推。台词：王闲（VO，极低）：是她。叶弥月。音效：心跳声骤响、呼吸凝滞。关联资产：王闲、二哥王彦、叶弥月、按摩房。	1	1784265252790	\N	18	1784549949236
-1784549983733000	1784288140878000	@图2为叶弥月{角色}。@图2面部近景，咬唇瞪着前方，胸口起伏未平，僵持后终于低下头伸手拿起@图4营养膏{道具}。近景，固定。	\N	2	生成中	1784549983733001	\N	9	叶弥月咬唇瞪着他，胸口起伏未平。僵持。三秒。五秒。她终于低下头，伸手拿起营养膏。时长2秒，近景，固定。关联资产：王闲、叶弥月、按摩房、营养膏。	1	1784265252790	\N	28	1784549983738
 1784549997073000	1784288140878000	@图2为叶弥月{角色}，@图1为王闲{角色}，@图4为按摩房{场景}。@图2双手覆上@图1肩颈，手指纤细但按压力道不弱，@图1闭眼面部肌肉松弛。中景，固定。	\N	3	生成中	1784549997073001	\N	10	叶弥月双手覆上王闲肩颈——手指纤细但按下的力道不弱。王闲闭眼，面部肌肉松弛。时长3秒，中景，固定。音效：手掌按压皮肤的轻微声响。关联资产：王闲、叶弥月、营养膏、按摩房。	1	1784265252790	\N	30	1784549997075
 1784550008839000	1784288140878000	@图1为王闲{角色}，@图2为叶弥月{角色}。@图1视线缓缓下移扫过@图2微微颤抖的小腿落在双脚上，白色帆布鞋，脚趾在鞋里微微蜷缩。@图1抬眼嘴角勾起，眼神从戏谑变为猎人般的锐利。近景，微移下摇。	\N	2	生成中	1784550008839001	\N	11	王闲的视线缓缓下移——扫过她微微颤抖的小腿，落在双脚上。白色帆布鞋因紧张，脚趾在鞋里微微蜷缩。他抬眼，嘴角勾起，眼神从戏谑慢慢变化，像猎人发现了意料之外的猎物。时长2秒，中景→近景，微移下摇。台词：王闲：手没力气了……不还有脚么？关联资产：王闲、叶弥月、按摩房。	1	1784265252790	\N	37	1784550008841
+\.
+
+
+--
+-- Data for Name: tasks; Type: TABLE DATA; Schema: toonflow; Owner: -
+--
+
+COPY toonflow.tasks (id, project_id, task_class, related_objects, model, description, state, start_time, reason) FROM stdin;
 \.
 
 
@@ -7575,6 +8638,62 @@ SELECT pg_catalog.setval('public.infra_api_error_log_seq', 1, false);
 
 
 --
+-- Name: infra_application_endpoint_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_application_endpoint_seq', 1, false);
+
+
+--
+-- Name: infra_asset_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_asset_seq', 1, false);
+
+
+--
+-- Name: infra_business_application_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_business_application_seq', 1, false);
+
+
+--
+-- Name: infra_business_resource_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_business_resource_seq', 1, false);
+
+
+--
+-- Name: infra_cloud_asset_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_cloud_asset_seq', 1, false);
+
+
+--
+-- Name: infra_cloud_platform_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_cloud_platform_seq', 1, false);
+
+
+--
+-- Name: infra_cloud_provider_config_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_cloud_provider_config_seq', 1, false);
+
+
+--
+-- Name: infra_cloud_zone_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_cloud_zone_seq', 1, false);
+
+
+--
 -- Name: infra_codegen_column_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
@@ -7631,6 +8750,55 @@ SELECT pg_catalog.setval('public.infra_job_seq', 3, true);
 
 
 --
+-- Name: infra_machine_room_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_machine_room_seq', 1, false);
+
+
+--
+-- Name: infra_network_zone_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_network_zone_seq', 1, false);
+
+
+--
+-- Name: infra_resource_ticket_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_resource_ticket_seq', 1, false);
+
+
+--
+-- Name: infra_risk_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_risk_seq', 1, false);
+
+
+--
+-- Name: infra_security_product_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_security_product_seq', 1, false);
+
+
+--
+-- Name: infra_service_provider_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_service_provider_seq', 1, false);
+
+
+--
+-- Name: infra_task_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.infra_task_seq', 1, false);
+
+
+--
 -- Name: system_dept_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
@@ -7683,7 +8851,7 @@ SELECT pg_catalog.setval('public.system_mail_template_seq', 16, true);
 -- Name: system_menu_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.system_menu_seq', 30260, true);
+SELECT pg_catalog.setval('public.system_menu_seq', 30310, true);
 
 
 --
@@ -7760,7 +8928,7 @@ SELECT pg_catalog.setval('public.system_post_seq', 8, true);
 -- Name: system_role_menu_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.system_role_menu_seq', 330139, true);
+SELECT pg_catalog.setval('public.system_role_menu_seq', 330208, true);
 
 
 --
@@ -8057,6 +9225,14 @@ ALTER TABLE ONLY ai.writes
 
 ALTER TABLE ONLY media.assets
     ADD CONSTRAINT assets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: _sqlx_migrations _sqlx_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public._sqlx_migrations
+    ADD CONSTRAINT _sqlx_migrations_pkey PRIMARY KEY (version);
 
 
 --
@@ -8845,6 +10021,104 @@ CREATE INDEX idx_media_assets_owner ON media.assets USING btree (owner_user_id);
 
 
 --
+-- Name: idx_app_endpoint_business; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_app_endpoint_business ON public.infra_application_endpoint USING btree (business_application_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_asset_ip; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_asset_ip ON public.infra_asset USING btree (ip) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_asset_ip_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_asset_ip_unique ON public.infra_asset USING btree (ip) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_business_app_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_business_app_name ON public.infra_business_application USING btree (name) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_business_resource_category; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_business_resource_category ON public.infra_business_resource USING btree (cloud_category) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_business_resource_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_business_resource_customer ON public.infra_business_resource USING btree (customer_name) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_business_resource_machine_room; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_business_resource_machine_room ON public.infra_business_resource USING btree (machine_room_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_business_resource_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_business_resource_type ON public.infra_business_resource USING btree (resource_type) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_cloud_asset_instance; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cloud_asset_instance ON public.infra_cloud_asset USING btree (instance_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_cloud_asset_provider; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cloud_asset_provider ON public.infra_cloud_asset USING btree (cloud_provider_config_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_cloud_platform_zone; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cloud_platform_zone ON public.infra_cloud_platform USING btree (zone_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_cloud_provider_config_platform; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cloud_provider_config_platform ON public.infra_cloud_provider_config USING btree (platform_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_cloud_provider_config_zone; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cloud_provider_config_zone ON public.infra_cloud_provider_config USING btree (zone_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_cloud_zone_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cloud_zone_code ON public.infra_cloud_zone USING btree (zone_code) WHERE (deleted = 0);
+
+
+--
 -- Name: idx_infra_api_access_log_time; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8877,6 +10151,97 @@ CREATE INDEX idx_infra_job_active ON public.infra_job USING btree (status, id) W
 --
 
 CREATE INDEX idx_infra_job_log_job_time ON public.infra_job_log USING btree (job_id, create_time DESC) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_machine_room_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_machine_room_code ON public.infra_machine_room USING btree (room_code) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_machine_room_provider; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_machine_room_provider ON public.infra_machine_room USING btree (provider_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_network_zone_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_network_zone_name ON public.infra_network_zone USING btree (name) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_resource_ticket_provider; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_resource_ticket_provider ON public.infra_resource_ticket USING btree (provider_id) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_resource_ticket_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_resource_ticket_status ON public.infra_resource_ticket USING btree (ticket_status) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_resource_ticket_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_resource_ticket_type ON public.infra_resource_ticket USING btree (resource_type) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_resource_ticket_workflow; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_resource_ticket_workflow ON public.infra_resource_ticket USING btree (ticket_type, ticket_status) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_risk_asset_ip; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_risk_asset_ip ON public.infra_risk USING btree (asset_ip) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_risk_severity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_risk_severity ON public.infra_risk USING btree (severity) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_risk_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_risk_status ON public.infra_risk USING btree (status) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_security_product_category; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_security_product_category ON public.infra_security_product USING btree (category) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_security_product_vendor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_security_product_vendor ON public.infra_security_product USING btree (vendor) WHERE (deleted = 0);
+
+
+--
+-- Name: idx_service_provider_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_service_provider_code ON public.infra_service_provider USING btree (provider_code) WHERE (deleted = 0);
 
 
 --
@@ -9066,6 +10431,13 @@ CREATE INDEX idx_system_users_03 ON public.system_users USING btree (email);
 --
 
 CREATE INDEX idx_system_users_04 ON public.system_users USING btree (dept_id);
+
+
+--
+-- Name: idx_task_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_task_status ON public.infra_task USING btree (status) WHERE (deleted = 0);
 
 
 --
@@ -9665,4 +11037,5 @@ ALTER TABLE ONLY toonflow.videos
 -- PostgreSQL database dump complete
 --
 
+\unrestrict 2Ap1VmVhytJAiL7XMQ2SX5UrLzC241DN71uNPjsdftWt14ICG1IaXxAEKOaTXg6
 
