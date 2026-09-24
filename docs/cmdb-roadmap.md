@@ -19,7 +19,13 @@
 - 属性变更时对既有实例数据的兼容策略（仅校验新写入，历史数据按需清洗）。
 - 资产台账（infra_asset，采集表 43 字段）向 CMDB 模型的一键导入映射。
 
-## 云平台适配层（OpenTofu）
+## 云平台适配层（OpenTofu）——已落地 v1（迁移 0010）
+
+v1 交付（已 E2E 验证：规则命中 → 建单自动审批 → tofu init/apply → outputs 回读 → CMDB 回写）：
+- `rustset-framework-tofu`：模板渲染（demo/null 与 aliyun 参考模板）、子进程执行（超时/代理透传/环境变量注入凭据）、`tofu output -json` 解析；6 个单元测试。
+- 工单真实 provision：`POST /infra/resource-ticket/{id}/provision` 读取云凭据（infra_cloud_provider_config）→ 渲染工作区 → init/apply → `apply_status/apply_log/tf_outputs/tofu_workspace` 落库 → 成功后写入 CMDB（`cloud_<resource_type>` 模型，键 `ticket_id`）并推进到待交付；失败记录原因且工单留在待配置。
+- 自动审批：`infra_approval_rule`（资源类型 + CPU/内存/数量阈值 + auto_provision），建单时命中即自动审批，auto_provision 时立即开通（失败不阻断建单）。规则经 `/infra/approval-rule/*` CRUD 管理（infra:approval-rule:* 权限码）。
+- 环境要求：安装 OpenTofu（≥1.6），可用 `TOFU_BINARY/TOFU_WORKSPACE_ROOT/TOFU_TIMEOUT_SECONDS` 调节；网关进程 PATH 需含 tofu。
 
 目标：以 [OpenTofu](https://opentofu.org/)（Terraform 开源分支）+ 各家 Provider 作为统一云资源适配与开通执行层。
 

@@ -41,7 +41,29 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 9);
+    assert_eq!(applied, 10);
+
+    // 0010 OpenTofu provision tracking + auto-approval rules.
+    let apply_status_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema='public'
+             AND table_name='infra_resource_ticket'
+             AND column_name='apply_status'
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect ticket apply tracking");
+    assert!(apply_status_exists);
+    let approval_rules_table: bool = sqlx::query_scalar(
+        "SELECT to_regclass('public.infra_approval_rule') IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect approval rule table");
+    assert!(approval_rules_table);
+
 
     // 0009 CMDB core: dynamic models, attributes, JSONB instances, relations.
     for cmdb_table in [

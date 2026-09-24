@@ -2039,6 +2039,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustset-framework-tofu"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "rustset-framework-web"
 version = "0.1.0"
 dependencies = [
@@ -2095,12 +2103,14 @@ dependencies = [
  "rustset-framework-common",
  "rustset-framework-database",
  "rustset-framework-security",
+ "rustset-framework-tofu",
  "rustset-framework-web",
  "rustset-infra-api",
  "serde",
  "serde_json",
  "sqlx",
  "tokio",
+ "tracing",
  "uuid",
  "zip 8.6.0",
 ]

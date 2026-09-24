@@ -31,6 +31,7 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "/infra/application-endpoint/delete-list",
         Some("infra:application-endpoint:delete"),
     ),
+    ("DELETE", "/infra/approval-rule/delete", Some("infra:approval-rule:delete")),
     ("DELETE", "/infra/asset/delete", Some("infra:asset:delete")),
     (
         "DELETE",
@@ -311,6 +312,8 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "/infra/application-endpoint/page",
         Some("infra:application-endpoint:query"),
     ),
+    ("GET", "/infra/approval-rule/list", Some("infra:approval-rule:query")),
+    ("GET", "/infra/approval-rule/page", Some("infra:approval-rule:query")),
     ("GET", "/infra/asset/get", Some("infra:asset:query")),
     ("GET", "/infra/asset/list", Some("infra:asset:query")),
     ("GET", "/infra/asset/page", Some("infra:asset:query")),
@@ -701,6 +704,7 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "/infra/application-endpoint/create",
         Some("infra:application-endpoint:create"),
     ),
+    ("POST", "/infra/approval-rule/create", Some("infra:approval-rule:create")),
     ("POST", "/infra/asset/create", Some("infra:asset:create")),
     (
         "POST",
@@ -858,6 +862,7 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "/infra/application-endpoint/update",
         Some("infra:application-endpoint:update"),
     ),
+    ("PUT", "/infra/approval-rule/update", Some("infra:approval-rule:update")),
     ("PUT", "/infra/asset/update", Some("infra:asset:update")),
     (
         "PUT",
@@ -1048,7 +1053,7 @@ mod tests {
 
     #[test]
     fn registry_covers_every_entry_with_sorted_keys() {
-        assert_eq!(ROUTE_PERMISSIONS.len(), 230);
+        assert_eq!(ROUTE_PERMISSIONS.len(), 235);
         for window in ROUTE_PERMISSIONS.windows(2) {
             assert!(
                 (window[0].0, window[0].1) < (window[1].0, window[1].1),

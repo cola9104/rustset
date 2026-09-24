@@ -7,6 +7,7 @@ members = [
     "crates/framework/redis",
     "crates/framework/security",
     "crates/framework/telemetry",
+    "crates/framework/tofu",
     "crates/framework/tenant",
     "crates/framework/web",
     "crates/modules/infra-api",
@@ -50,6 +51,7 @@ rustset-framework-mq = { path = "crates/framework/mq" }
 rustset-framework-redis = { path = "crates/framework/redis" }
 rustset-framework-security = { path = "crates/framework/security" }
 rustset-framework-telemetry = { path = "crates/framework/telemetry" }
+rustset-framework-tofu = { path = "crates/framework/tofu" }
 rustset-framework-tenant = { path = "crates/framework/tenant" }
 rustset-framework-web = { path = "crates/framework/web" }
 rustset-infra-api = { path = "crates/modules/infra-api" }
