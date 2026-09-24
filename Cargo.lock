@@ -2069,6 +2069,7 @@ dependencies = [
  "rust_xlsxwriter",
  "rustset-framework-common",
  "rustset-framework-database",
+ "rustset-framework-security",
  "rustset-framework-web",
  "rustset-infra-api",
  "serde",
