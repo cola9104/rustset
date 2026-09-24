@@ -16,9 +16,9 @@
   },
   "type": "module",
   "scripts": {
-    "build": "pnpm vite build --mode production",
-    "build:analyze": "pnpm vite build --mode analyze",
-    "dev": "pnpm vite --mode development",
+    "build": "vite build --mode production",
+    "build:analyze": "vite build --mode analyze",
+    "dev": "vite --mode development",
     "preview": "vite preview",
     "typecheck": "cross-env NODE_OPTIONS=--max-old-space-size=8192 vue-tsc --noEmit --skipLibCheck"
   },

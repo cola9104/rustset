@@ -1,7 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
-    "pnpm-lock.yaml",
+    "bun.lock",
     "**/.env.*local",
     "**/tsconfig*.json",
     "internal/node-utils/*.json",
@@ -28,6 +28,9 @@
     },
     "build:analyze": {
       "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "stub": {
       "outputs": ["dist/**"]
     },
     "test:e2e": {},

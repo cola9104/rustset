@@ -113,7 +113,7 @@ async function cleanTargetsRecursively(currentDir, targets, depth = 0) {
   const cleanupTargets = [...targets];
 
   if (deleteLockFile) {
-    cleanupTargets.push('pnpm-lock.yaml');
+    cleanupTargets.push('bun.lock');
   }
 
   console.log(

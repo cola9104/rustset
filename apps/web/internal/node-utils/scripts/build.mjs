@@ -1,14 +1,16 @@
 import { spawnSync } from 'node:child_process';
 
-const pnpmCommand =
+// Scripts run with the workspace's local node_modules/.bin on PATH, so the
+// tools can be invoked directly. Under bun, npm_execpath points at the bun
+// runtime; the legacy pnpm execpath fallback is kept for pnpm compatibility.
+const baseArgs =
   process.env.npm_execpath && process.env.npm_execpath.endsWith('.cjs')
-    ? [process.execPath, process.env.npm_execpath]
-    : ['pnpm'];
+    ? [process.execPath, process.env.npm_execpath, 'exec']
+    : [];
 
 const steps = [
-  ['exec', 'tsdown', '--no-dts'],
+  ['tsdown', '--no-dts'],
   [
-    'exec',
     'tsc',
     '-p',
     'tsconfig.build.json',
@@ -20,12 +22,9 @@ const steps = [
 ];
 
 for (const args of steps) {
-  const [command, ...commandArgs] = pnpmCommand;
-  let cmd = command;
-  if (cmd.includes(' ')) {
-    cmd = `"${command}"`;
-  }
-  const result = spawnSync(cmd, [...commandArgs, ...args], {
+  const command = baseArgs[0] ?? args[0];
+  const commandArgs = baseArgs.length > 0 ? [...baseArgs.slice(1), ...args] : args.slice(1);
+  const result = spawnSync(command, commandArgs, {
     shell: true,
     stdio: 'inherit',
   });

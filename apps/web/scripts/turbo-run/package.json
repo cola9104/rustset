@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "stub": "pnpm exec tsdown"
+    "stub": "tsdown"
   },
   "files": [
     "dist"

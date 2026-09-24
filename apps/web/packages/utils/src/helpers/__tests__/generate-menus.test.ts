@@ -287,4 +287,61 @@ describe('generateMenus', () => {
     expect(hiddenPage?.meta?.activePath).toBe('/ai/image');
     expect(hiddenPage?.meta?.hideInMenu).toBe(true);
   });
+
+  it('redirects a backend menu group to its first visible child', () => {
+    const backendMenus = [
+      {
+        children: [
+          {
+            children: [],
+            component: 'pent/dashboard/index.vue',
+            componentName: 'PentDashboard',
+            id: 30401,
+            keepAlive: true,
+            name: '仪表盘',
+            parentId: 30400,
+            path: 'dashboard',
+            sort: 1,
+            visible: true,
+          },
+        ],
+        component: '',
+        componentName: 'Pent',
+        id: 30400,
+        keepAlive: true,
+        name: '安全智能',
+        parentId: 0,
+        path: '/pent',
+        sort: 25,
+        visible: true,
+      },
+    ] as any;
+
+    const converted =
+      convertServerMenuToRouteRecordStringComponent(backendMenus);
+
+    expect(converted[0]?.redirect).toBe('/pent/dashboard');
+  });
+
+  it('does not cache anonymous backend page components', () => {
+    const backendMenus = [
+      {
+        children: [],
+        component: 'asset-ops/risk/index',
+        componentName: '',
+        id: 30306,
+        keepAlive: true,
+        name: '风险管理',
+        parentId: 30300,
+        path: '/asset-ops/risk',
+        sort: 5,
+        visible: true,
+      },
+    ] as any;
+
+    const [converted] =
+      convertServerMenuToRouteRecordStringComponent(backendMenus);
+
+    expect(converted?.meta?.keepAlive).toBe(false);
+  });
 });
