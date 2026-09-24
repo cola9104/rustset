@@ -11,6 +11,7 @@ base64.workspace = true
 chrono.workspace = true
 rustset-framework-common.workspace = true
 rustset-framework-database.workspace = true
+rustset-framework-security.workspace = true
 rustset-framework-web.workspace = true
 rustset-infra-api.workspace = true
 rust_xlsxwriter.workspace = true

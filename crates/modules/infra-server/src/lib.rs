@@ -5,6 +5,7 @@ use axum::{
     body::{Body, Bytes},
     extract::{Multipart, Path, Query, State},
     http::header,
+    middleware::from_fn,
     response::Response,
     routing::{delete, get, post, put},
 };
@@ -17,6 +18,7 @@ use rustset_infra_api::InfraCapability;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+mod authorization;
 mod excel;
 mod monitor;
 
@@ -323,6 +325,7 @@ pub fn routes(state: InfraState) -> Router {
         .merge(ticket::routes())
         .merge(task::routes())
         .merge(risk::routes())
+        .route_layer(from_fn(authorization::authorize))
         .with_state(state)
 }
 

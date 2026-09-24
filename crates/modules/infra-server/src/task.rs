@@ -1,4 +1,4 @@
-use crate::{InfraState, QueryParams, bool_field, opt_str_field, str_field};
+use crate::{InfraState, QueryParams, bool_field, str_field};
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -6,6 +6,7 @@ use axum::{
 };
 use chrono::Utc;
 use rustset_framework_common::ApiResponse;
+use rustset_framework_security::CurrentUser;
 use rustset_framework_web::AppError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -69,6 +70,7 @@ async fn get_one(
 
 async fn create(
     State(state): State<InfraState>,
+    user: CurrentUser,
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     let id = Uuid::new_v4().to_string();
@@ -76,15 +78,18 @@ async fn create(
         .bind(&id).bind(&str_field(&payload, "name")).bind(&str_field(&payload, "target")).bind("pending").bind(&str_field(&payload, "portPolicy"))
         .bind(bool_field(&payload, "domainBrute", false) as i32).bind(bool_field(&payload, "serviceDetection", false) as i32)
         .bind(bool_field(&payload, "osDetection", false) as i32).bind(bool_field(&payload, "siteIdentify", false) as i32)
-        .bind(opt_str_field(&payload, "createdBy")).execute(&state.pool).await.map_err(|_| AppError::internal("failed"))?;
+        .bind(&user.username).execute(&state.pool).await.map_err(|_| AppError::internal("failed"))?;
     Ok(Json(ApiResponse::new(id)))
 }
 
 async fn update(
     State(state): State<InfraState>,
-    axum::extract::Path(id): axum::extract::Path<String>,
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
+    let id = str_field(&payload, "id");
+    if id.is_empty() {
+        return Err(AppError::bad_request("id is required"));
+    }
     sqlx::query("UPDATE infra_task SET name=$2, target=$3, port_policy=$4, domain_brute=$5, service_detection=$6, os_detection=$7, site_identify=$8, update_time=now() WHERE id=$1 AND deleted=0")
         .bind(&id).bind(&str_field(&payload, "name")).bind(&str_field(&payload, "target")).bind(&str_field(&payload, "portPolicy"))
         .bind(bool_field(&payload, "domainBrute", false) as i32).bind(bool_field(&payload, "serviceDetection", false) as i32)

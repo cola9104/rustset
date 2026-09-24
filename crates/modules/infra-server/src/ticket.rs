@@ -9,6 +9,7 @@ use axum::{
 };
 use chrono::Utc;
 use rustset_framework_common::ApiResponse;
+use rustset_framework_security::CurrentUser;
 use rustset_framework_web::AppError;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -46,6 +47,7 @@ async fn get_one(
 
 async fn create(
     State(s): State<InfraState>,
+    user: CurrentUser,
     Json(mut payload): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     if let Some(obj) = payload.as_object_mut() {
@@ -58,6 +60,10 @@ async fn create(
             .or_insert(Value::String(now));
         obj.entry("deliveryStatus".to_string())
             .or_insert(Value::String("未交付".to_string()));
+        obj.entry("createdBy".to_string())
+            .or_insert(Value::String(user.username.clone()));
+        obj.entry("applicantName".to_string())
+            .or_insert(Value::String(user.username));
     }
     table_create(&s.pool, TICKET, payload).await
 }
@@ -84,6 +90,7 @@ async fn delete_list(
 async fn approve(
     State(s): State<InfraState>,
     axum::extract::Path(id): axum::extract::Path<i64>,
+    user: CurrentUser,
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     let approved = crate::bool_field(&payload, "approved", false);
@@ -98,7 +105,7 @@ async fn approve(
         return Err(AppError::bad_request("只能审批待审批状态的工单"));
     }
     sqlx::query("UPDATE infra_resource_ticket SET ticket_status=$2, approver=$3, approve_time=$4, approve_comment=$5, update_time=now() WHERE id=$1 AND deleted=0")
-        .bind(id).bind(new_status).bind(opt_str_field(&payload, "approver").unwrap_or_default()).bind(&now).bind(opt_str_field(&payload, "comment"))
+        .bind(id).bind(new_status).bind(&user.username).bind(&now).bind(opt_str_field(&payload, "comment"))
         .execute(&s.pool).await.map_err(|_| AppError::internal("failed"))?;
     Ok(Json(ApiResponse::new(
         json!({"message": if approved { "工单审批通过" } else { "工单已拒绝" }, "id": id, "ticketStatus": new_status}),
@@ -108,6 +115,7 @@ async fn approve(
 async fn provision(
     State(s): State<InfraState>,
     axum::extract::Path(id): axum::extract::Path<i64>,
+    user: CurrentUser,
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
@@ -120,7 +128,7 @@ async fn provision(
         return Err(AppError::bad_request("只能配置待配置状态的工单"));
     }
     sqlx::query("UPDATE infra_resource_ticket SET ticket_status='pending_delivery', provisioner=$2, provision_time=$3, provision_details=$4, update_time=now() WHERE id=$1 AND deleted=0")
-        .bind(id).bind(opt_str_field(&payload, "provisioner").unwrap_or_default()).bind(&now).bind(opt_str_field(&payload, "details"))
+        .bind(id).bind(&user.username).bind(&now).bind(opt_str_field(&payload, "details"))
         .execute(&s.pool).await.map_err(|_| AppError::internal("failed"))?;
     Ok(Json(ApiResponse::new(
         json!({"message": "工单配置完成", "id": id, "ticketStatus": "pending_delivery"}),
@@ -130,6 +138,7 @@ async fn provision(
 async fn deliver(
     State(s): State<InfraState>,
     axum::extract::Path(id): axum::extract::Path<i64>,
+    user: CurrentUser,
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     let now = Utc::now().format("%Y-%m-%d %H:%M").to_string();
@@ -138,7 +147,7 @@ async fn deliver(
         return Err(AppError::bad_request("只能交付待交付状态的工单"));
     }
     sqlx::query("UPDATE infra_resource_ticket SET ticket_status='delivered', delivery_status='已交付', deliverer=$2, deliver_time=$3, deliver_comment=$4, update_time=now() WHERE id=$1 AND deleted=0")
-        .bind(id).bind(opt_str_field(&payload, "deliverer").unwrap_or_default()).bind(&now).bind(opt_str_field(&payload, "comment"))
+        .bind(id).bind(&user.username).bind(&now).bind(opt_str_field(&payload, "comment"))
         .execute(&s.pool).await.map_err(|_| AppError::internal("failed"))?;
     Ok(Json(ApiResponse::new(
         json!({"message": "工单交付完成", "id": id, "ticketStatus": "delivered"}),
