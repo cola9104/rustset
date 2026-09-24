@@ -217,6 +217,16 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "DELETE",
+        "/infra/network-policy/delete",
+        Some("infra:network-policy:delete"),
+    ),
+    (
+        "DELETE",
+        "/infra/network-policy/delete-list",
+        Some("infra:network-policy:delete"),
+    ),
+    (
+        "DELETE",
         "/infra/network-zone/delete",
         Some("infra:network-zone:delete"),
     ),
@@ -606,6 +616,21 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ("GET", "/infra/monitor/traces", None),
     (
         "GET",
+        "/infra/network-policy/get",
+        Some("infra:network-policy:query"),
+    ),
+    (
+        "GET",
+        "/infra/network-policy/list",
+        Some("infra:network-policy:query"),
+    ),
+    (
+        "GET",
+        "/infra/network-policy/page",
+        Some("infra:network-policy:query"),
+    ),
+    (
+        "GET",
         "/infra/network-zone/get",
         Some("infra:network-zone:query"),
     ),
@@ -779,6 +804,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "POST",
+        "/infra/network-policy/create",
+        Some("infra:network-policy:create"),
+    ),
+    (
+        "POST",
         "/infra/network-zone/create",
         Some("infra:network-zone:create"),
     ),
@@ -931,6 +961,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "PUT",
+        "/infra/network-policy/update",
+        Some("infra:network-policy:update"),
+    ),
+    (
+        "PUT",
         "/infra/network-zone/update",
         Some("infra:network-zone:update"),
     ),
@@ -1013,7 +1048,7 @@ mod tests {
 
     #[test]
     fn registry_covers_every_entry_with_sorted_keys() {
-        assert_eq!(ROUTE_PERMISSIONS.len(), 223);
+        assert_eq!(ROUTE_PERMISSIONS.len(), 230);
         for window in ROUTE_PERMISSIONS.windows(2) {
             assert!(
                 (window[0].0, window[0].1) < (window[1].0, window[1].1),
@@ -1041,6 +1076,10 @@ mod tests {
         assert_eq!(
             required_permission("POST", "/infra/task/trigger-scan"),
             Some(Some("infra:task:execute"))
+        );
+        assert_eq!(
+            required_permission("GET", "/infra/network-policy/page"),
+            Some(Some("infra:network-policy:query"))
         );
         assert_eq!(
             required_permission("GET", "/infra/capabilities"),

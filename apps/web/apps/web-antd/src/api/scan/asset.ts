@@ -6,6 +6,32 @@ export namespace ScanAssetApi {
     last_scanned?: string; contact_person?: string; contact_phone?: string;
     owner?: string; weight: number; labels: string[]; os?: string; device_type?: string;
     url?: string; language?: string; finding_count?: number; endpoint_count?: number;
+    city?: string; district?: string; organization_name?: string;
+    business_department?: string; department_contact?: string;
+    application_name?: string; server_name?: string;
+    hardware_configuration?: string; operating_system?: string;
+    database_type?: string; launch_date?: string; decommission_date?: string;
+    application_type?: string; network_environment?: string;
+    internet_ipv4?: string; internet_ipv6?: string; domain_address?: string;
+    internal_network_ip?: string; government_extranet_ip?: string;
+    open_ports?: string; publishing_endpoint?: string;
+    publishes_other_endpoint?: boolean; other_endpoint_name?: string;
+    security_product_installation?: string; development_vendor?: string;
+    development_vendor_contact?: string; security_vendor?: string;
+    security_vendor_contact?: string; operations_vendor?: string;
+    operations_vendor_contact?: string; classified_protection_level?: string;
+    classified_protection_assessed?: boolean;
+    classified_protection_assessor?: string;
+    classified_protection_assessment_date?: string;
+    classified_protection_score?: number;
+    classified_protection_filed?: boolean;
+    classified_protection_filing_date?: string;
+    classified_protection_filing_number?: string;
+    classified_protection_filing_authority?: string;
+    cryptography_assessed?: boolean;
+    cryptography_assessment_level?: string;
+    cryptography_assessment_date?: string;
+    cryptography_assessment_number?: string;
   }
 }
 export async function getAssetList() {

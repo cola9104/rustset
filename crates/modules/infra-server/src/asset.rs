@@ -24,6 +24,10 @@ const BUSINESS_RESOURCE: TableSpec = TableSpec {
     table: "infra_business_resource",
     seq: "infra_business_resource_seq",
 };
+const NETWORK_POLICY: TableSpec = TableSpec {
+    table: "infra_network_policy",
+    seq: "infra_network_policy_seq",
+};
 
 pub fn routes() -> Router<InfraState> {
     Router::new()
@@ -37,6 +41,16 @@ pub fn routes() -> Router<InfraState> {
         .route("/infra/asset/{id}/port/add", post(asset_add_port))
         .route("/infra/asset/{id}/port/{port}", put(asset_update_port))
         .route("/infra/asset/{id}/port/{port}", delete(asset_delete_port))
+        .route("/infra/network-policy/page", get(network_policy_page))
+        .route("/infra/network-policy/list", get(network_policy_list))
+        .route("/infra/network-policy/get", get(network_policy_get))
+        .route("/infra/network-policy/create", post(network_policy_create))
+        .route("/infra/network-policy/update", put(network_policy_update))
+        .route("/infra/network-policy/delete", delete(network_policy_delete))
+        .route(
+            "/infra/network-policy/delete-list",
+            delete(network_policy_delete_list),
+        )
         .route("/infra/cloud-asset/page", get(cloud_asset_page))
         .route("/infra/cloud-asset/list", get(cloud_asset_list))
         .route("/infra/cloud-asset/get", get(cloud_asset_get))
@@ -53,6 +67,48 @@ pub fn routes() -> Router<InfraState> {
             "/infra/business-resource/delete-list",
             delete(biz_delete_list),
         )
+}
+
+async fn network_policy_page(
+    State(state): State<InfraState>,
+    Query(p): Query<QueryParams>,
+) -> Result<Json<ApiResponse<crate::Page<Value>>>, AppError> {
+    table_page(&state.pool, NETWORK_POLICY, p).await
+}
+async fn network_policy_list(
+    State(state): State<InfraState>,
+) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
+    table_list(&state.pool, NETWORK_POLICY).await
+}
+async fn network_policy_get(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Value>>, AppError> {
+    table_get(&state.pool, NETWORK_POLICY, id_param(&p)?).await
+}
+async fn network_policy_create(
+    State(state): State<InfraState>,
+    Json(p): Json<Value>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    table_create(&state.pool, NETWORK_POLICY, p).await
+}
+async fn network_policy_update(
+    State(state): State<InfraState>,
+    Json(p): Json<Value>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    table_update(&state.pool, NETWORK_POLICY, p).await
+}
+async fn network_policy_delete(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    soft_delete(&state.pool, NETWORK_POLICY.table, id_param(&p)?).await
+}
+async fn network_policy_delete_list(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    soft_delete_list(&state.pool, NETWORK_POLICY.table, ids_param(&p)).await
 }
 
 async fn asset_page(

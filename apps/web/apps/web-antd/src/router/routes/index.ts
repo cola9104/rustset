@@ -11,7 +11,32 @@ import { coreRoutes, fallbackNotFoundRoute } from './core';
 /** 外部路由列表，访问这些页面可以不需要Layout，可能用于内嵌在别的系统(不会显示在菜单中) */
 // const externalRoutes: RouteRecordRaw[] = mergeRouteModules(externalRouteFiles);
 // const staticRoutes: RouteRecordRaw[] = mergeRouteModules(staticRouteFiles);
-const staticRoutes: RouteRecordRaw[] = [];
+// Keep historical Dioxus bookmarks working. These routes still pass through
+// the login guard, and their dynamic targets remain permission-controlled.
+const legacyAssetRedirects: RouteRecordRaw[] = [
+  { path: '/asset', redirect: '/asset-ops', name: 'LegacyAssetRoot' },
+  { path: '/asset/list', redirect: '/asset-ops/assets', name: 'LegacyAssetList' },
+  { path: '/asset/provider', redirect: '/asset-ops/service-provider', name: 'LegacyAssetProvider' },
+  { path: '/provider', redirect: '/asset-ops/service-provider', name: 'LegacyProvider' },
+  { path: '/asset/room', redirect: '/asset-ops/machine-room', name: 'LegacyAssetRoom' },
+  { path: '/room', redirect: '/asset-ops/machine-room', name: 'LegacyRoom' },
+  { path: '/asset/cloud', redirect: '/asset-ops/cloud-platform', name: 'LegacyAssetCloud' },
+  { path: '/cloud', redirect: '/asset-ops/cloud-platform', name: 'LegacyCloud' },
+  { path: '/asset/zone', redirect: '/asset-ops/zone', name: 'LegacyAssetZone' },
+  { path: '/zone', redirect: '/asset-ops/zone', name: 'LegacyZone' },
+  { path: '/asset/security', redirect: '/asset-ops/security-product', name: 'LegacyAssetSecurity' },
+  { path: '/security', redirect: '/asset-ops/security-product', name: 'LegacySecurity' },
+  { path: '/asset/business-app', redirect: '/asset-ops/business-application', name: 'LegacyAssetBusinessApp' },
+  { path: '/business', redirect: '/asset-ops/business-application', name: 'LegacyBusiness' },
+  { path: '/asset/business-resource', redirect: '/asset-ops/business-resource', name: 'LegacyAssetBusinessResource' },
+  { path: '/asset/ticket', redirect: '/asset-ops/resource-ticket', name: 'LegacyAssetTicket' },
+  { path: '/ticket', redirect: '/asset-ops/resource-ticket', name: 'LegacyTicket' },
+  { path: '/asset/task', redirect: '/asset-ops/task', name: 'LegacyAssetTask' },
+  { path: '/task', redirect: '/asset-ops/task', name: 'LegacyTask' },
+  { path: '/asset/risk', redirect: '/asset-ops/risk', name: 'LegacyAssetRisk' },
+  { path: '/risk', redirect: '/asset-ops/risk', name: 'LegacyRisk' },
+];
+const staticRoutes: RouteRecordRaw[] = legacyAssetRedirects;
 const externalRoutes: RouteRecordRaw[] = [];
 
 /** 路由列表，由基本路由、外部路由和404兜底路由组成

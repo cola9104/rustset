@@ -41,7 +41,46 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 6);
+    assert_eq!(applied, 7);
+
+    let network_policy_exists: bool = sqlx::query_scalar(
+        "SELECT to_regclass('public.infra_network_policy') IS NOT NULL",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect network policy table");
+    assert!(network_policy_exists, "0007 must create infra_network_policy");
+
+    let asset_inventory_column_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema='public'
+             AND table_name='infra_asset'
+             AND column_name='classified_protection_level'
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect asset inventory columns");
+    assert!(
+        asset_inventory_column_exists,
+        "0007 must extend infra_asset with inventory columns"
+    );
+
+    let network_policy_permissions: i64 = sqlx::query_scalar(
+        "SELECT count(*)
+         FROM system_menu
+         WHERE deleted = 0
+           AND permission LIKE 'infra:network-policy:%'
+           AND type = 3",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read network policy permission menus");
+    assert_eq!(
+        network_policy_permissions, 4,
+        "0007 must seed query/create/update/delete permissions for network policies"
+    );
 
     let ticket_type_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(
@@ -144,7 +183,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read Kairos asset operations pages");
-    assert_eq!(asset_ops_pages, 13);
+    assert_eq!(asset_ops_pages, 14);
 
     let asset_ops_permissions: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_menu
@@ -156,7 +195,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read Kairos asset operations permissions");
-    assert_eq!(asset_ops_permissions, 55);
+    assert_eq!(asset_ops_permissions, 59);
 
     let missing_super_admin_asset_links: i64 = sqlx::query_scalar(
         "SELECT count(*)
