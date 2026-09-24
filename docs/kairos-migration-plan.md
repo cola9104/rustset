@@ -1,8 +1,8 @@
 # RustSet 切换 Kairos 前端与权限体系：详细方案及实施计划
 
-状态：P0（基线和清单）与 P1（前端基线）已于 2026-09-24 完成；P2 及之后尚未实施。调研日期：2026-09-24。
+状态：P0、P1、P2 已于 2026-09-24 完成；P3 及之后尚未实施。调研日期：2026-09-24。
 
-P1 完成摘要（分支 `kairos-migration`，提交 cc8f2f6 / 0fb7dca / 6dbe4a0 / 51984f1）：全仓 CRLF 归一化 + .gitattributes；bun 取代 pnpm 成为正式前端工具链（turbo 2.11.3 + bun.lock）；引入上游菜单转换修正与 form-create 修正，Kairos 资产页面入库但未接线（待 P4）；品牌切换 RustSet 并升级缓存命名空间；删除 apps/web-dioxus 及全部专属配置；登录/退出协议闭环在全新空库上验证通过（浏览器人工验收仍待用户执行）。差异清单见 `docs/migration/upstream-diff.md`。
+P2 完成摘要（提交 60a5c8b / 5f5abe4）：infra 全部 223 条路由经集中注册表强制认证 + 权限码校验（未注册默认拒绝，5 条仅登录路由待 P3 补码）；bootstrap 管理员机制实现并实证（空密码条件更新 + 锁死恢复创建，advisory lock 并发安全）；验收矩阵通过（未登录 401 / 无权限 403 / super_admin 200）。数据范围（§4.3）与资产域权限码播种随 P3 菜单迁移落地。P1 摘要：全仓 CRLF 归一化；bun 正式工具链；上游菜单转换修正；RustSet 品牌；Dioxus 已删除。交付：`docs/migration/p0-baseline.md`、`docs/migration/upstream-diff.md`。
 
 P0 结论摘要：工作区未提交变更为纯 LF→CRLF 行尾改写；本地旧库仅 yudao 演示数据可弃；前端工具链确定为 bun（全局 pnpm 已损坏，bun 安装/类型检查/构建全链路验证通过）；infra-server 223 条路由零强制认证已证实。待核实项结论见 P0 报告 §7。
 
