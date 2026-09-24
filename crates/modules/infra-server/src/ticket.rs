@@ -419,9 +419,11 @@ async fn load_platform_credentials(
     .await
     .map_err(|_| AppError::internal("failed to read cloud credentials"))?;
     Ok(row.map(|row| {
+        // Cloud credentials are sealed at rest (SM4, formerly XOR); the tofu
+        // executor receives them via environment variables only.
         (
-            row.get::<String, _>("access_key_id"),
-            row.get::<String, _>("access_key_secret"),
+            crate::open_secret(&row.get::<String, _>("access_key_id")),
+            crate::open_secret(&row.get::<String, _>("access_key_secret")),
         )
     }))
 }

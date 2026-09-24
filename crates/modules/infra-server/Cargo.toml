@@ -13,6 +13,7 @@ rustset-framework-common.workspace = true
 rustset-framework-database.workspace = true
 rustset-framework-security.workspace = true
 rustset-framework-tofu.workspace = true
+rustset-framework-gm.workspace = true
 tracing.workspace = true
 rustset-framework-web.workspace = true
 rustset-infra-api.workspace = true

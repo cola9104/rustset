@@ -9,7 +9,6 @@ use axum::{
     response::Response,
     routing::{delete, get, post, put},
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::{Datelike, Timelike, Utc};
 use rustset_framework_common::ApiResponse;
 use rustset_framework_database::PgPool;
@@ -1915,20 +1914,28 @@ pub(crate) fn bool_field(value: &Value, key: &str, default: bool) -> bool {
 }
 
 fn seal_secret(value: &str) -> String {
-    if value.is_empty() || value.starts_with("enc:v1:") {
+    use rustset_framework_gm::sm4_seal;
+    if value.is_empty() || rustset_framework_gm::is_sm4_sealed(value) {
         return value.to_owned();
     }
-    let key = env::var("SECRET_ENCRYPTION_KEY")
+    let secret = env::var("SECRET_ENCRYPTION_KEY")
         .or_else(|_| env::var("JWT_SECRET"))
         .unwrap_or_else(|_| "rustset-local-secret".to_owned());
-    let key = key.as_bytes();
-    let sealed = value
-        .as_bytes()
-        .iter()
-        .enumerate()
-        .map(|(index, byte)| byte ^ key[index % key.len()])
-        .collect::<Vec<_>>();
-    format!("enc:v1:{}", BASE64.encode(sealed))
+    // SM4-CBC with a random IV (国密). Legacy enc:v1 XOR values are still
+    // opened by open_secret; re-sealing happens on the next write.
+    sm4_seal(value, &secret).unwrap_or_else(|_| value.to_owned())
+}
+
+/// Open a sealed secret for use (SM4 v2, legacy XOR v1, or plain).
+pub(crate) fn open_secret(sealed: &str) -> String {
+    use rustset_framework_gm::sm4_open;
+    if sealed.is_empty() {
+        return String::new();
+    }
+    let secret = env::var("SECRET_ENCRYPTION_KEY")
+        .or_else(|_| env::var("JWT_SECRET"))
+        .unwrap_or_else(|_| "rustset-local-secret".to_owned());
+    sm4_open(sealed, &secret).unwrap_or_else(|_| String::new())
 }
 
 fn table_value(value: Value) -> Value {
