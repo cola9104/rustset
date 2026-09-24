@@ -13,8 +13,6 @@ members = [
     "crates/modules/infra-server",
     "crates/modules/ai-api",
     "crates/modules/ai-server",
-    "crates/modules/media-api",
-    "crates/modules/media-server",
     "crates/modules/system-api",
     "crates/modules/system-server",
     "services/gateway",
@@ -56,8 +54,6 @@ rustset-infra-api = { path = "crates/modules/infra-api" }
 rustset-infra-server = { path = "crates/modules/infra-server" }
 rustset-ai-api = { path = "crates/modules/ai-api" }
 rustset-ai-server = { path = "crates/modules/ai-server" }
-rustset-media-api = { path = "crates/modules/media-api" }
-rustset-media-server = { path = "crates/modules/media-server" }
 rustset-system-api = { path = "crates/modules/system-api" }
 rustset-system-server = { path = "crates/modules/system-server" }
 serde = { version = "1.0", features = ["derive"] }

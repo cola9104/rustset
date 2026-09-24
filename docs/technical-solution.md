@@ -100,8 +100,7 @@ views/
   system/
   infra/
   ai/
-  toonflow/
-  media/
+  asset-ops/
 ```
 
 ## 服务入口
@@ -112,8 +111,7 @@ views/
 - `POST /system/auth/login`
 - `GET /system/auth/me`（Bearer Token）
 - `/ai/**`：模型、聊天、知识库、图片、音乐、工具与写作
-- `/toonflow/**`：动漫工厂完整业务接口
-- `/system/**`、`/infra/**`、`/media/**`：基础后台模块
+- `/system/**`、`/infra/**`：基础后台与资产运营（含网络策略）模块
 
 ## 本地运行
 

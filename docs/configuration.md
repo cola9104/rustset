@@ -34,7 +34,7 @@
 
 ## 统一模型管理
 
-AI 页面和 Toonflow 共用 `ai.model_configs`，业务表只保存模型 ID。模型记录包含：
+AI 页面统一使用 `ai.model_configs`，业务表只保存模型 ID。模型记录包含：
 
 - `platform`：供应商协议，如 `OpenAICompatible`、`OpenAI`、`Anthropic`、`Gemini`、`AzureOpenAI`、`Midjourney`、`Suno`。
 - `type`：`chat`、`image`、`video`、`speech`、`transcription`、`music`、`embedding` 或 `rerank`。
@@ -57,7 +57,7 @@ OpenAI 兼容服务常用配置键：
 | `midjourneyTaskPath` | `/mj/task/{taskId}/fetch` | Midjourney 轮询 |
 | `authHeader` | `Authorization` | 自定义鉴权头；Authorization 自动使用 Bearer |
 
-Toonflow 的图片、视频、配音和 Agent 必须选择类型匹配且启用的统一模型 ID，不支持旧 `vendor:model` 配置。
+图片、视频、配音和 Agent 功能必须选择类型匹配且启用的统一模型 ID，不支持旧 `vendor:model` 配置。
 
 ## 异步任务状态
 

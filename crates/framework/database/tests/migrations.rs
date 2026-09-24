@@ -41,7 +41,26 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 7);
+    assert_eq!(applied, 8);
+
+    // 0008 drops the whole Toonflow media business.
+    for removed_schema in ["toonflow", "toon", "media"] {
+        let schema_exists: bool =
+            sqlx::query_scalar("SELECT to_regnamespace($1) IS NOT NULL")
+                .bind(removed_schema)
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|_| panic!("inspect removed schema {removed_schema}"));
+        assert!(!schema_exists, "schema {removed_schema} must be dropped");
+    }
+    let toon_menus: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND (permission LIKE 'toon:%' OR path = '/toonflow')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read toonflow menus");
+    assert_eq!(toon_menus, 0, "0008 must remove the 短剧工厂 menu subtree");
 
     let network_policy_exists: bool = sqlx::query_scalar(
         "SELECT to_regclass('public.infra_network_policy') IS NOT NULL",
@@ -95,27 +114,12 @@ async fn applies_all_migrations_to_empty_postgres() {
     .expect("inspect Kairos ticket workflow fields");
     assert!(ticket_type_exists);
 
-    let storyboard_asset_order_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-           SELECT 1 FROM information_schema.columns
-           WHERE table_schema='toonflow'
-             AND table_name='assets_storyboards'
-             AND column_name='sort_order'
-         )",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("inspect storyboard asset ordering column");
-    assert!(storyboard_asset_order_exists);
-
     for table in [
         "ai.model_configs",
         "ai.chat_roles",
         "ai.knowledge_segments",
         "ai.images",
         "ai.music",
-        "toonflow.projects",
-        "toonflow.project_assets",
         "system_users",
         "system_role",
         "system_menu",

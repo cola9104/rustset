@@ -2042,7 +2042,6 @@ dependencies = [
  "rustset-framework-security",
  "rustset-framework-web",
  "rustset-infra-server",
- "rustset-media-server",
  "rustset-system-server",
  "serde",
  "serde_json",
@@ -2078,30 +2077,6 @@ dependencies = [
  "tokio",
  "uuid",
  "zip 8.6.0",
-]
-
-[[package]]
-name = "rustset-media-api"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rustset-media-server"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "rustset-framework-common",
- "rustset-framework-database",
- "rustset-framework-security",
- "rustset-framework-web",
- "rustset-media-api",
- "serde_json",
- "sqlx",
- "uuid",
 ]
 
 [[package]]

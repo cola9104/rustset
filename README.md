@@ -1,14 +1,13 @@
 # RustSet
 
-RustSet 是 Rust 后端与 Vben Admin 5 前端组成的管理平台。基础后台按 Yudao 的模块化思想实现，动漫工厂按 Toonflow 的业务流程实现；后端统一使用 Rust，前端统一使用 Vue 3、Vben 和 Ant Design Vue，前端工程由 bun 管理。
+RustSet 是 Rust 后端与 Vben Admin 5 前端组成的管理平台。基础后台按 Yudao 的模块化思想实现，资产运营按资产采集表落地台账与网络策略；后端统一使用 Rust，前端统一使用 Vue 3、Vben 和 Ant Design Vue，前端工程由 bun 管理。
 
 ## 功能组成
 
 - System：认证、用户、角色、权限、菜单、租户及后台管理能力。
 - Infra：配置、文件、任务、日志、数据源等基础设施能力。
 - AI：统一模型管理、聊天/SSE、工具调用、知识库、图片、Midjourney、音乐、语音、Embedding 和写作。
-- Toonflow：项目、小说、剧本、事件、资产、分镜、音频、视频、Agent、提示词、Skill 和任务中心。
-- Media：素材上传及媒体基础能力。
+- 资产运营：服务商、机房、云平台、安全产品、资产台账（按资产采集表 43 字段）、工单与网络策略。
 
 ## 环境要求
 
