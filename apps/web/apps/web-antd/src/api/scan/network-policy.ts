@@ -31,6 +31,18 @@ export interface NetworkPolicy {
 
 const resource = 'network-policy';
 
+function normalizeDates(data: NetworkPolicy) {
+  const payload: Record<string, unknown> = { ...data };
+  for (const field of [
+    'application_date',
+    'implementation_date',
+    'delivery_date',
+  ]) {
+    if (payload[field] === '') payload[field] = null;
+  }
+  return payload;
+}
+
 export function getNetworkPolicyList() {
   return infraList<NetworkPolicy>(resource);
 }
@@ -40,11 +52,11 @@ export function getNetworkPolicy(id: number) {
 }
 
 export function createNetworkPolicy(data: NetworkPolicy) {
-  return infraCreate(resource, data);
+  return infraCreate(resource, normalizeDates(data));
 }
 
 export function updateNetworkPolicy(id: number, data: NetworkPolicy) {
-  return infraUpdate(resource, id, data);
+  return infraUpdate(resource, id, normalizeDates(data));
 }
 
 export function deleteNetworkPolicy(id: number) {

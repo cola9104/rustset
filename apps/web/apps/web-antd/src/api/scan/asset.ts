@@ -34,10 +34,38 @@ export namespace ScanAssetApi {
     cryptography_assessment_number?: string;
   }
 }
+
+const dateFields: (keyof ScanAssetApi.Asset)[] = [
+  'launch_date',
+  'decommission_date',
+  'classified_protection_assessment_date',
+  'classified_protection_filing_date',
+  'cryptography_assessment_date',
+];
+
+function parseArray(value: unknown) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeAsset(row: ScanAssetApi.Asset): ScanAssetApi.Asset {
+  return {
+    ...row,
+    ports: parseArray(row.ports),
+    labels: parseArray(row.labels),
+  };
+}
+
 export async function getAssetList() {
   const rows = await infraList<ScanAssetApi.Asset>('asset');
   return rows.map((row) => ({
-    ...row,
+    ...normalizeAsset(row),
     editable: true,
     record_id: row.id,
     source_label: '本地资产',
@@ -48,13 +76,19 @@ export async function getAssetList() {
 // infra_asset stores ports/labels as text (JSON strings); the page model
 // works with arrays, so serialize collections on write.
 function serializeCollections(data: ScanAssetApi.Asset) {
-  return {
+  const payload: Record<string, unknown> = {
     ...data,
     ports: Array.isArray(data.ports) ? JSON.stringify(data.ports) : data.ports,
     labels: Array.isArray(data.labels) ? JSON.stringify(data.labels) : data.labels,
   };
+  for (const field of dateFields) {
+    if (payload[field] === '') payload[field] = null;
+  }
+  return payload;
 }
-export function getAsset(id: number) { return infraGet<ScanAssetApi.Asset>('asset', id); }
+export async function getAsset(id: number) {
+  return normalizeAsset(await infraGet<ScanAssetApi.Asset>('asset', id));
+}
 export function createAsset(data: ScanAssetApi.Asset) { return infraCreate('asset', serializeCollections(data)); }
 export function updateAsset(id: number, data: ScanAssetApi.Asset) { return infraUpdate('asset', id, serializeCollections(data)); }
 export function deleteAsset(id: number) { return infraDelete('asset', id); }
