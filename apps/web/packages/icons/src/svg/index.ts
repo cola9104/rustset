@@ -37,10 +37,6 @@ const SvgWalletIcon = createIconifyIcon('svg:wallet');
 const SvgMockIcon = createIconifyIcon('svg:mock');
 
 /** BPM */
-const SvgBpmRunningIcon = createIconifyIcon('svg:bpm-running');
-const SvgBpmApproveIcon = createIconifyIcon('svg:bpm-approve');
-const SvgBpmRejectIcon = createIconifyIcon('svg:bpm-reject');
-const SvgBpmCancelIcon = createIconifyIcon('svg:bpm-cancel');
 
 export {
   SvgAlipayAppIcon,
@@ -55,10 +51,6 @@ export {
   SvgAvatar3Icon,
   SvgAvatar4Icon,
   SvgBellIcon,
-  SvgBpmApproveIcon,
-  SvgBpmCancelIcon,
-  SvgBpmRejectIcon,
-  SvgBpmRunningIcon,
   SvgCakeIcon,
   SvgCardIcon,
   SvgDingDingIcon,

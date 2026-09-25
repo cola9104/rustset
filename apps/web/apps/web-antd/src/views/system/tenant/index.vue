@@ -20,9 +20,15 @@ import { $t } from '#/locales';
 
 import { useGridColumns, useGridFormSchema } from './data';
 import Form from './modules/form.vue';
+import NetZone from './modules/net-zone.vue';
 
 const [FormModal, formModalApi] = useVbenModal({
   connectedComponent: Form,
+  destroyOnClose: true,
+});
+
+const [NetZoneModal, netZoneModalApi] = useVbenModal({
+  connectedComponent: NetZone,
   destroyOnClose: true,
 });
 
@@ -45,6 +51,10 @@ function handleCreate() {
 /** 编辑租户 */
 function handleEdit(row: SystemTenantApi.Tenant) {
   formModalApi.setData(row).open();
+}
+
+function handleNetZones(row: SystemTenantApi.Tenant) {
+  netZoneModalApi.setData(row).open();
 }
 
 /** 删除租户 */
@@ -129,6 +139,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
     </template>
 
     <FormModal @success="handleRefresh" />
+    <NetZoneModal />
     <Grid table-title="租户列表">
       <template #toolbar-tools>
         <TableAction
@@ -162,6 +173,13 @@ const [Grid, gridApi] = useVbenVxeGrid({
       <template #actions="{ row }">
         <TableAction
           :actions="[
+            {
+              label: '网段',
+              type: 'link',
+              icon: 'lucide:network',
+              auth: ['cmdb:net-zone:query'],
+              onClick: handleNetZones.bind(null, row),
+            },
             {
               label: $t('common.edit'),
               type: 'link',

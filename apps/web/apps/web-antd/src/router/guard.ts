@@ -105,7 +105,7 @@ function setupAccessGuard(router: Router) {
     // 当前登录用户拥有的角色标识列表
     let userInfo = userStore.userInfo;
     if (!userInfo || accessStore.backendAccessMenus.length === 0) {
-      // add by 芋艿：由于 yudao 是 fetchUserInfo 统一加载用户 + 权限信息，所以将 fetchMenuListAsync
+      // fetchUserInfo 已统一加载用户与权限信息，再按权限生成动态菜单。
       const loading = message.loading({
         content: `${$t('common.loadingMenu')}...`,
       });

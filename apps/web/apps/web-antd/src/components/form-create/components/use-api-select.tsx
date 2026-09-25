@@ -161,9 +161,9 @@ export function useApiSelect(option: ApiSelectProps) {
           parseOptions0(data);
           return;
         }
-        // 情况三：不是 yudao-vue-pro 标准返回
+        // 情况三：不是 RustSet 标准响应
         console.warn(
-          `接口[${props.url}] 返回结果不是 yudao-vue-pro 标准返回建议采用自定义解析函数处理`,
+          `接口[${props.url}] 返回结果不符合 RustSet 标准响应，建议使用自定义解析函数处理`,
         );
       }
 

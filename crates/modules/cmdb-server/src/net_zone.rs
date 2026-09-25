@@ -35,6 +35,27 @@ pub fn routes() -> Router<CmdbState> {
 struct NetZonePageParams {
     #[serde(rename = "parentId", default)]
     parent_id: Option<i64>,
+    #[serde(rename = "tenantId", default)]
+    tenant_id: Option<i64>,
+}
+
+fn tenant_id_for(user: &CurrentUser, requested: Option<i64>) -> Result<i64, AppError> {
+    let current = user
+        .tenant_id
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok());
+    if user.role_codes.iter().any(|role| role == "super_admin") {
+        return requested
+            .or(current)
+            .ok_or_else(|| AppError::bad_request("tenantId is required"));
+    }
+    let current = current.ok_or_else(|| AppError::forbidden("tenant context is required"))?;
+    if requested.is_some_and(|tenant_id| tenant_id != current) {
+        return Err(AppError::forbidden(
+            "cannot access another tenant's net zones",
+        ));
+    }
+    Ok(current)
 }
 
 fn parse_cidr(cidr: &str) -> Option<(Ipv4Addr, u8)> {
@@ -64,12 +85,15 @@ pub fn cidr_contains(cidr: &str, ip: &str) -> bool {
 async fn net_zone_tree(
     State(state): State<CmdbState>,
     user: CurrentUser,
+    Query(params): Query<NetZonePageParams>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     require(&user, "cmdb:net-zone:query")?;
+    let tenant_id = tenant_id_for(&user, params.tenant_id)?;
     let rows = sqlx::query(
         "SELECT id, name, parent_id, zone_type, cidr, sort, description
-         FROM cmdb_net_zone WHERE deleted = 0 ORDER BY sort, id",
+         FROM cmdb_net_zone WHERE deleted = 0 AND tenant_id = $1 ORDER BY sort, id",
     )
+    .bind(tenant_id)
     .fetch_all(&state.pool)
     .await
     .map_err(|_| AppError::internal("failed to read net zones"))?;
@@ -91,7 +115,7 @@ async fn net_zone_tree(
     // Build the tree bottom-up: promote child nodes into their parents
     // until only roots remain. Parent ids arrive as node payload copies.
     let node_count = nodes.len();
-    let mut parent_of: Vec<i64> = nodes
+    let parent_of: Vec<i64> = nodes
         .iter()
         .map(|node| node.get("parentId").and_then(Value::as_i64).unwrap_or(0))
         .collect();
@@ -149,11 +173,14 @@ async fn net_zone_list(
     Query(params): Query<NetZonePageParams>,
 ) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
     require(&user, "cmdb:net-zone:query")?;
+    let tenant_id = tenant_id_for(&user, params.tenant_id)?;
     let rows = sqlx::query(
         "SELECT id, name, parent_id, zone_type, cidr, sort, description
-         FROM cmdb_net_zone WHERE deleted = 0 AND ($1::bigint IS NULL OR parent_id = $1)
+         FROM cmdb_net_zone WHERE deleted = 0 AND tenant_id = $1
+           AND ($2::bigint IS NULL OR parent_id = $2)
          ORDER BY sort, id",
     )
+    .bind(tenant_id)
     .bind(params.parent_id)
     .fetch_all(&state.pool)
     .await
@@ -178,6 +205,8 @@ async fn net_zone_list(
 #[derive(Debug, Deserialize)]
 struct IdParams {
     id: i64,
+    #[serde(rename = "tenantId", default)]
+    tenant_id: Option<i64>,
 }
 
 async fn net_zone_get(
@@ -186,11 +215,13 @@ async fn net_zone_get(
     Query(params): Query<IdParams>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     require(&user, "cmdb:net-zone:query")?;
+    let tenant_id = tenant_id_for(&user, params.tenant_id)?;
     let row = sqlx::query(
         "SELECT id, name, parent_id, zone_type, cidr, sort, description
-         FROM cmdb_net_zone WHERE id = $1 AND deleted = 0",
+         FROM cmdb_net_zone WHERE id = $1 AND tenant_id = $2 AND deleted = 0",
     )
     .bind(params.id)
+    .bind(tenant_id)
     .fetch_optional(&state.pool)
     .await
     .map_err(|_| AppError::internal("failed to read net zone"))?
@@ -212,6 +243,7 @@ async fn net_zone_create(
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     require(&user, "cmdb:net-zone:create")?;
+    let tenant_id = tenant_id_for(&user, payload.get("tenantId").and_then(Value::as_i64))?;
     let name = payload
         .get("name")
         .and_then(Value::as_str)
@@ -245,9 +277,11 @@ async fn net_zone_create(
         .unwrap_or(0);
     if parent_id > 0 {
         let parent_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM cmdb_net_zone WHERE id = $1 AND deleted = 0)",
+            "SELECT EXISTS(SELECT 1 FROM cmdb_net_zone
+             WHERE id = $1 AND tenant_id = $2 AND deleted = 0)",
         )
         .bind(parent_id)
+        .bind(tenant_id)
         .fetch_one(&state.pool)
         .await
         .map_err(|_| AppError::internal("failed to check parent"))?;
@@ -256,9 +290,11 @@ async fn net_zone_create(
         }
     }
     let id: i64 = sqlx::query_scalar(
-        "INSERT INTO cmdb_net_zone (name, parent_id, zone_type, cidr, sort, description, creator, updater)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id",
+        "INSERT INTO cmdb_net_zone
+         (tenant_id, name, parent_id, zone_type, cidr, sort, description, creator, updater)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING id",
     )
+    .bind(tenant_id)
     .bind(name)
     .bind(parent_id)
     .bind(zone_type)
@@ -278,6 +314,7 @@ async fn net_zone_update(
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     require(&user, "cmdb:net-zone:update")?;
+    let tenant_id = tenant_id_for(&user, payload.get("tenantId").and_then(Value::as_i64))?;
     let id = payload
         .get("id")
         .and_then(Value::as_i64)
@@ -296,7 +333,7 @@ async fn net_zone_update(
         "UPDATE cmdb_net_zone SET name = COALESCE($2, name), parent_id = COALESCE($3, parent_id),
                 zone_type = COALESCE($4, zone_type), cidr = $5, sort = COALESCE($6, sort),
                 description = $7, updater = $8, update_time = now()
-         WHERE id = $1 AND deleted = 0",
+         WHERE id = $1 AND tenant_id = $9 AND deleted = 0",
     )
     .bind(id)
     .bind(
@@ -322,6 +359,7 @@ async fn net_zone_update(
     )
     .bind(payload.get("description").and_then(Value::as_str))
     .bind(&user.username)
+    .bind(tenant_id)
     .execute(&state.pool)
     .await
     .map_err(|_| AppError::internal("failed to update net zone"))?;
@@ -337,10 +375,13 @@ async fn net_zone_delete(
     Query(params): Query<IdParams>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     require(&user, "cmdb:net-zone:delete")?;
+    let tenant_id = tenant_id_for(&user, params.tenant_id)?;
     let has_children: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM cmdb_net_zone WHERE parent_id = $1 AND deleted = 0",
+        "SELECT count(*) FROM cmdb_net_zone
+         WHERE parent_id = $1 AND tenant_id = $2 AND deleted = 0",
     )
     .bind(params.id)
+    .bind(tenant_id)
     .fetch_one(&state.pool)
     .await
     .map_err(|_| AppError::internal("failed to check children"))?;
@@ -349,10 +390,11 @@ async fn net_zone_delete(
     }
     let result = sqlx::query(
         "UPDATE cmdb_net_zone SET deleted = 1, updater = $2, update_time = now()
-         WHERE id = $1 AND deleted = 0",
+         WHERE id = $1 AND tenant_id = $3 AND deleted = 0",
     )
     .bind(params.id)
     .bind(&user.username)
+    .bind(tenant_id)
     .execute(&state.pool)
     .await
     .map_err(|_| AppError::internal("failed to delete net zone"))?;
@@ -365,12 +407,14 @@ async fn net_zone_delete(
 /// Longest-prefix match of one IP against all segments.
 async fn resolve_segment(
     state: &CmdbState,
+    tenant_id: i64,
     ip: &str,
 ) -> Result<Option<(i64, String, String)>, AppError> {
     let rows = sqlx::query(
         "SELECT id, name, zone_type, cidr FROM cmdb_net_zone
-         WHERE deleted = 0 AND cidr IS NOT NULL AND cidr <> ''",
+         WHERE deleted = 0 AND tenant_id = $1 AND cidr IS NOT NULL AND cidr <> ''",
     )
+    .bind(tenant_id)
     .fetch_all(&state.pool)
     .await
     .map_err(|_| AppError::internal("failed to read segments"))?;
@@ -398,12 +442,14 @@ async fn resolve_segment(
 }
 
 /// The org name for a segment: nearest company/subsidiary ancestor's name.
-async fn organization_for_zone(state: &CmdbState, mut zone_id: i64) -> String {
+async fn organization_for_zone(state: &CmdbState, tenant_id: i64, mut zone_id: i64) -> String {
     for _ in 0..8 {
         let row = sqlx::query(
-            "SELECT name, zone_type, parent_id FROM cmdb_net_zone WHERE id = $1 AND deleted = 0",
+            "SELECT name, zone_type, parent_id FROM cmdb_net_zone
+             WHERE id = $1 AND tenant_id = $2 AND deleted = 0",
         )
         .bind(zone_id)
+        .bind(tenant_id)
         .fetch_optional(&state.pool)
         .await;
         let Ok(Some(row)) = row else { break };
@@ -420,26 +466,22 @@ async fn organization_for_zone(state: &CmdbState, mut zone_id: i64) -> String {
     String::new()
 }
 
-#[derive(Debug, Deserialize)]
-struct ResolveParams {
-    ip: String,
-}
-
 async fn net_zone_resolve(
     State(state): State<CmdbState>,
     user: CurrentUser,
     Json(payload): Json<Value>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     require(&user, "cmdb:net-zone:query")?;
+    let tenant_id = tenant_id_for(&user, payload.get("tenantId").and_then(Value::as_i64))?;
     let ip = payload
         .get("ip")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::bad_request("ip is required"))?;
-    match resolve_segment(&state, ip).await? {
+    match resolve_segment(&state, tenant_id, ip).await? {
         Some((zone_id, name, zone_type)) => {
-            let organization = organization_for_zone(&state, zone_id).await;
+            let organization = organization_for_zone(&state, tenant_id, zone_id).await;
             Ok(Json(ApiResponse::new(json!({
                 "matched": true,
                 "netZoneId": zone_id,
@@ -459,6 +501,7 @@ async fn identify_assets(
     Json(_payload): Json<Value>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     require(&user, "cmdb:net-zone:update")?;
+    let tenant_id = tenant_id_for(&user, _payload.get("tenantId").and_then(Value::as_i64))?;
     let assets = sqlx::query(
         "SELECT id, ip FROM infra_asset
          WHERE deleted = 0
@@ -473,9 +516,9 @@ async fn identify_assets(
     for asset in &assets {
         let id: i64 = asset.get("id");
         let ip: String = asset.get("ip");
-        match resolve_segment(&state, &ip).await? {
+        match resolve_segment(&state, tenant_id, &ip).await? {
             Some((zone_id, _, _)) => {
-                let organization = organization_for_zone(&state, zone_id).await;
+                let organization = organization_for_zone(&state, tenant_id, zone_id).await;
                 let _ = sqlx::query(
                     "UPDATE infra_asset SET net_zone_id = $2, organization_name = $3,
                             ownership_source = 'segment', update_time = now()

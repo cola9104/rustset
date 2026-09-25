@@ -23,7 +23,7 @@ import {
 
 /** 编码表单 Conf */
 export function encodeConf(designerRef: any) {
-  // 关联案例：https://gitee.com/yudaocode/yudao-ui-admin-vue3/pulls/834/
+  // Keep nested component names stable when cloning form schemas.
   return formCreate.toJson(designerRef.value.getOption());
 }
 

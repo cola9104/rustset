@@ -42,7 +42,7 @@ systemd 示例：
 
 ```ini
 [Unit]
-Description=Rust Toon Gateway
+Description=RustSet Gateway
 After=network-online.target docker.service
 Wants=network-online.target
 
@@ -145,4 +145,4 @@ bun run --cwd apps/web build:antd
 - 没有初始管理员：确认首次启动时设置了 `BOOTSTRAP_ADMIN_PASSWORD`。
 - SSE 到前端后一次性出现：关闭 Nginx/Ingress 的响应缓冲并增加读取超时。
 - AI 任务一直处理中：检查模型配置的任务查询路径、鉴权头和供应商任务 ID；可调用 `/poll` 接口立即同步。
-- 前端请求 404：确认 Vben API 基址或 Nginx `/api/` 转发是否去掉了正确的前缀。
+- 前端请求 404：确认 RustSet 管理端 API 基址或 Nginx `/api/` 转发是否去掉了正确的前缀。

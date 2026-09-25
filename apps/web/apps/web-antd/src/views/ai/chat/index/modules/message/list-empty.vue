@@ -20,7 +20,7 @@ async function handlerPromptClick(prompt: any) {
   <div class="relative flex h-full w-full flex-row justify-center">
     <div class="flex flex-col justify-center">
       <!-- title -->
-      <div class="text-center text-3xl font-bold">芋道 AI</div>
+      <div class="text-center text-3xl font-bold">RustSet AI</div>
       <!-- role-list -->
       <div class="mt-5 flex w-96 flex-wrap items-center justify-center">
         <div

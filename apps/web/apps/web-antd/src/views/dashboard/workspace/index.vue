@@ -3,227 +3,149 @@ import type {
   WorkbenchProjectItem,
   WorkbenchQuickNavItem,
   WorkbenchTodoItem,
-  WorkbenchTrendItem,
 } from '@vben/common-ui';
 
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
-  AnalysisChartCard,
   WorkbenchHeader,
   WorkbenchProject,
   WorkbenchQuickNav,
   WorkbenchTodo,
-  WorkbenchTrends,
 } from '@vben/common-ui';
 import { preferences } from '@vben/preferences';
 import { useUserStore } from '@vben/stores';
-import { openWindow } from '@vben/utils';
-
-import AnalyticsVisitsSource from '../analytics/analytics-visits-source.vue';
 
 const userStore = useUserStore();
-
-// 这是一个示例数据，实际项目中需要根据实际情况进行调整
-// url 也可以是内部路由，在 navTo 方法中识别处理，进行内部跳转
-// 例如：url: /dashboard/workspace
-const projectItems: WorkbenchProjectItem[] = [
-  {
-    color: '#6DB33F',
-    content: 'github.com/YunaiV/ruoyi-vue-pro',
-    date: '2025-01-02',
-    group: 'Spring Boot 单体架构',
-    icon: 'simple-icons:springboot',
-    title: 'ruoyi-vue-pro',
-    url: 'https://github.com/YunaiV/ruoyi-vue-pro',
-  },
-  {
-    color: '#409EFF',
-    content: 'github.com/yudaocode/yudao-ui-admin-vue3',
-    date: '2025-02-03',
-    group: 'Vue3 + element-plus 管理后台',
-    icon: 'ep:element-plus',
-    title: 'yudao-ui-admin-vue3',
-    url: 'https://github.com/yudaocode/yudao-ui-admin-vue3',
-  },
-  {
-    color: '#ff4d4f',
-    content: 'github.com/yudaocode/yudao-mall-uniapp',
-    date: '2025-03-04',
-    group: 'Vue3 + uniapp 商城手机端',
-    icon: 'icon-park-outline:mall-bag',
-    title: 'yudao-mall-uniapp',
-    url: 'https://github.com/yudaocode/yudao-mall-uniapp',
-  },
-  {
-    color: '#1890ff',
-    content: 'github.com/YunaiV/yudao-cloud',
-    date: '2025-04-05',
-    group: 'Spring Cloud 微服务架构',
-    icon: 'material-symbols:cloud-outline',
-    title: 'yudao-cloud',
-    url: 'https://github.com/YunaiV/yudao-cloud',
-  },
-  {
-    color: '#e18525',
-    content: 'github.com/yudaocode/yudao-ui-admin-vben',
-    date: '2025-05-06',
-    group: 'Vue3 + vben5(antd) 管理后台',
-    icon: 'devicon:antdesign',
-    title: 'yudao-ui-admin-vben',
-    url: 'https://github.com/yudaocode/yudao-ui-admin-vben',
-  },
-  {
-    color: '#2979ff',
-    content: 'github.com/yudaocode/yudao-ui-admin-uniapp',
-    date: '2025-06-01',
-    group: 'Vue3 + uniapp 管理手机端',
-    icon: 'ant-design:mobile',
-    title: 'yudao-ui-admin-uniapp',
-    url: 'https://github.com/yudaocode/yudao-ui-admin-uniapp',
-  },
-];
-
-// 同样，这里的 url 也可以使用以 http 开头的外部链接
-const quickNavItems: WorkbenchQuickNavItem[] = [
-  {
-    color: '#1fdaca',
-    icon: 'ion:home-outline',
-    title: '首页',
-    url: '/',
-  },
-  {
-    color: '#ff6b6b',
-    icon: 'lucide:shopping-bag',
-    title: '商城中心',
-    url: '/mall',
-  },
-  {
-    color: '#7c3aed',
-    icon: 'tabler:ai',
-    title: 'AI 大模型',
-    url: '/ai',
-  },
-  {
-    color: '#3fb27f',
-    icon: 'simple-icons:erpnext',
-    title: 'ERP 系统',
-    url: '/erp',
-  },
-  {
-    color: '#4daf1bc9',
-    icon: 'simple-icons:civicrm',
-    title: 'CRM 系统',
-    url: '/crm',
-  },
-  {
-    color: '#1a73e8',
-    icon: 'fa-solid:hdd',
-    title: 'IoT 物联网',
-    url: '/iot',
-  },
-];
-
-const todoItems = ref<WorkbenchTodoItem[]>([
-  {
-    completed: false,
-    content: `系统支持 JDK 8/17/21，Vue 2/3`,
-    date: '2024-07-15 09:30:00',
-    title: '技术兼容性',
-  },
-  {
-    completed: false,
-    content: `后端提供 Spring Boot 2.7/3.2 + Cloud 双架构`,
-    date: '2024-08-30 14:20:00',
-    title: '架构灵活性',
-  },
-  {
-    completed: false,
-    content: `全部开源，个人与企业可 100% 直接使用，无需授权`,
-    date: '2024-07-25 16:45:00',
-    title: '开源免授权',
-  },
-  {
-    completed: false,
-    content: `国内使用最广泛的快速开发平台，远超 10w+ 企业使用`,
-    date: '2024-07-10 11:15:00',
-    title: '广泛企业认可',
-  },
-]);
-const trendItems: WorkbenchTrendItem[] = [
-  {
-    avatar: 'svg:avatar-1',
-    content: `在 <a>开源组</a> 创建了项目 <a>Vue</a>`,
-    date: '刚刚',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-2',
-    content: `关注了 <a>威廉</a> `,
-    date: '1个小时前',
-    title: '艾文',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1天前',
-    title: '克里斯',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写一个Vite插件</a> `,
-    date: '2天前',
-    title: 'Vben',
-  },
-  {
-    avatar: 'svg:avatar-1',
-    content: `回复了 <a>杰克</a> 的问题 <a>如何进行项目优化？</a>`,
-    date: '3天前',
-    title: '皮特',
-  },
-  {
-    avatar: 'svg:avatar-2',
-    content: `关闭了问题 <a>如何运行项目</a> `,
-    date: '1周前',
-    title: '杰克',
-  },
-  {
-    avatar: 'svg:avatar-3',
-    content: `发布了 <a>个人动态</a> `,
-    date: '1周前',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `推送了代码到 <a>Github</a>`,
-    date: '2021-04-01 20:00',
-    title: '威廉',
-  },
-  {
-    avatar: 'svg:avatar-4',
-    content: `发表文章 <a>如何编写使用 Admin Vben</a> `,
-    date: '2021-03-01 20:00',
-    title: 'Vben',
-  },
-];
-
 const router = useRouter();
 
-// 这是一个示例方法，实际项目中需要根据实际情况进行调整
-// This is a sample method, adjust according to the actual project requirements
+const projectItems: WorkbenchProjectItem[] = [
+  {
+    color: '#1677ff',
+    content: '统一维护资产采集表字段、归属和运行状态',
+    date: '持续维护',
+    group: '资产中心',
+    icon: 'lucide:database',
+    title: '资产台账',
+    url: '/asset-center/assets',
+  },
+  {
+    color: '#722ed1',
+    content: '定义配置项结构、属性、实例及实例关系',
+    date: '动态建模',
+    group: '配置管理',
+    icon: 'lucide:boxes',
+    title: 'CMDB',
+    url: '/cmdb/model',
+  },
+  {
+    color: '#13c2c2',
+    content: '管理云平台、区域和云厂商接入凭据',
+    date: '多云接入',
+    group: '云管理',
+    icon: 'lucide:cloud-cog',
+    title: '云平台',
+    url: '/cloud-center/cloud-platform',
+  },
+  {
+    color: '#52c41a',
+    content: '维护业务应用与其关联的计算、网络资源',
+    date: '关系清晰',
+    group: '业务中心',
+    icon: 'lucide:layout-grid',
+    title: '业务应用',
+    url: '/biz-center/business-application',
+  },
+  {
+    color: '#fa8c16',
+    content: '通过审批规则和 OpenTofu 管理资源交付',
+    date: '流程留痕',
+    group: '运维中心',
+    icon: 'lucide:clipboard-check',
+    title: '资源工单',
+    url: '/ops-center/resource-ticket',
+  },
+  {
+    color: '#eb2f96',
+    content: '复用统一模型配置开展对话、知识库和智能运维',
+    date: '统一模型',
+    group: 'AI 大模型',
+    icon: 'lucide:brain-circuit',
+    title: 'AI 助手',
+    url: '/ai/chat',
+  },
+];
+
+const quickNavItems: WorkbenchQuickNavItem[] = [
+  {
+    color: '#1677ff',
+    icon: 'lucide:server',
+    title: '资产台账',
+    url: '/asset-center/assets',
+  },
+  {
+    color: '#722ed1',
+    icon: 'lucide:network',
+    title: '网络策略',
+    url: '/asset-center/network-policy',
+  },
+  {
+    color: '#13c2c2',
+    icon: 'lucide:scan-line',
+    title: '扫描任务',
+    url: '/asset-center/task',
+  },
+  {
+    color: '#fa541c',
+    icon: 'lucide:shield-alert',
+    title: '风险管理',
+    url: '/asset-center/risk',
+  },
+  {
+    color: '#52c41a',
+    icon: 'lucide:ticket-check',
+    title: '资源工单',
+    url: '/ops-center/resource-ticket',
+  },
+  {
+    color: '#faad14',
+    icon: 'lucide:building-2',
+    title: '租户与网段',
+    url: '/system/tenant',
+  },
+];
+
+const capabilityItems = ref<WorkbenchTodoItem[]>([
+  {
+    completed: true,
+    content: '资产台账按资产采集表字段统一维护，并可匹配网络策略。',
+    date: '资产中心',
+    title: '资产数据标准化',
+  },
+  {
+    completed: true,
+    content: '租户网段在租户页面集中维护，不再提供独立网段菜单。',
+    date: '系统管理',
+    title: '租户网络边界',
+  },
+  {
+    completed: true,
+    content: 'AI 对话、知识库与智能运维共用 AI 大模型配置。',
+    date: 'AI 大模型',
+    title: '统一模型管理',
+  },
+  {
+    completed: false,
+    content: '云厂商连接和扫描执行能力需要按实际环境持续接入验证。',
+    date: '持续建设',
+    title: '外部系统接入',
+  },
+]);
+
 function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
-  if (nav.url?.startsWith('http')) {
-    openWindow(nav.url);
-    return;
-  }
-  if (nav.url?.startsWith('/')) {
-    router.push(nav.url).catch((error) => {
-      console.error('Navigation failed:', error);
-    });
-  } else {
-    console.warn(`Unknown URL for navigation item: ${nav.title} -> ${nav.url}`);
-  }
+  if (!nav.url?.startsWith('/')) return;
+  void router.push(nav.url);
 }
 </script>
 
@@ -233,15 +155,20 @@ function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
       :avatar="userStore.userInfo?.avatar || preferences.app.defaultAvatar"
     >
       <template #title>
-        早安, {{ userStore.userInfo?.nickname }}, 开始您一天的工作吧！
+        您好，{{ userStore.userInfo?.nickname || userStore.userInfo?.username }}
       </template>
-      <template #description> 今日晴，20℃ - 32℃！ </template>
+      <template #description>
+        在 RustSet 统一管理资产、CMDB、云资源与运维流程。
+      </template>
     </WorkbenchHeader>
 
     <div class="flex flex-col lg:flex-row">
       <div class="mr-4 w-full lg:w-3/5">
-        <WorkbenchProject :items="projectItems" title="项目" @click="navTo" />
-        <WorkbenchTrends :items="trendItems" class="mt-5" title="最新动态" />
+        <WorkbenchProject
+          :items="projectItems"
+          title="业务模块"
+          @click="navTo"
+        />
       </div>
       <div class="w-full lg:w-2/5">
         <WorkbenchQuickNav
@@ -250,10 +177,7 @@ function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
           title="快捷导航"
           @click="navTo"
         />
-        <WorkbenchTodo :items="todoItems" class="mt-5" title="待办事项" />
-        <AnalysisChartCard class="mt-5" title="访问来源">
-          <AnalyticsVisitsSource />
-        </AnalysisChartCard>
+        <WorkbenchTodo :items="capabilityItems" class="mt-5" title="平台能力" />
       </div>
     </div>
   </div>

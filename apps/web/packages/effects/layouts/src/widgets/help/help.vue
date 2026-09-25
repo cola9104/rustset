@@ -1,20 +1,15 @@
 <script lang="ts" setup>
 import { $t } from '@vben/locales';
-import { openWindow } from '@vben/utils';
 
 import { useVbenModal } from '@vben-core/popup-ui';
-import { Badge, VbenButton, VbenButtonGroup } from '@vben-core/shadcn-ui';
+import { Badge } from '@vben-core/shadcn-ui';
 
 import { useMagicKeys, whenever } from '@vueuse/core';
 
-defineOptions({
-  name: 'Help',
-});
+defineOptions({ name: 'Help' });
 
 const keys = useMagicKeys();
-whenever(keys['Alt+KeyH']!, () => {
-  modalApi.open();
-});
+whenever(keys['Alt+KeyH']!, () => modalApi.open());
 
 const [Modal, modalApi] = useVbenModal({
   draggable: true,
@@ -25,81 +20,15 @@ const [Modal, modalApi] = useVbenModal({
   },
 });
 </script>
+
 <template>
   <Modal class="w-1/3" :title="$t('ui.widgets.qa')">
-    <div class="mt-2 flex flex-col">
-      <div class="mt-2 flex flex-col">
-        <VbenButtonGroup class="basis-1/3" :gap="2" border size="large">
-          <p class="w-24 p-2">项目地址:</p>
-          <VbenButton
-            variant="link"
-            @click="
-              openWindow('https://gitee.com/yudaocode/yudao-ui-admin-vben')
-            "
-          >
-            Gitee
-          </VbenButton>
-          <VbenButton
-            variant="link"
-            @click="
-              openWindow('https://github.com/yudaocode/yudao-ui-admin-vben')
-            "
-          >
-            Github
-          </VbenButton>
-        </VbenButtonGroup>
-
-        <VbenButtonGroup class="basis-1/3" :gap="2" border size="large">
-          <p class="w-24 p-2">issues:</p>
-          <VbenButton
-            variant="link"
-            @click="
-              openWindow(
-                'https://gitee.com/yudaocode/yudao-ui-admin-vben/issues',
-              )
-            "
-          >
-            Gitee
-          </VbenButton>
-          <VbenButton
-            variant="link"
-            @click="
-              openWindow(
-                'https://github.com/yudaocode/yudao-ui-admin-vben/issues',
-              )
-            "
-          >
-            Github
-          </VbenButton>
-        </VbenButtonGroup>
-
-        <VbenButtonGroup class="basis-1/3" :gap="2" border size="large">
-          <p class="w-24 p-2">开发文档:</p>
-          <VbenButton
-            variant="link"
-            @click="openWindow('https://doc.iocoder.cn/quick-start/')"
-          >
-            项目文档
-          </VbenButton>
-          <VbenButton variant="link" @click="openWindow('https://antdv.com/')">
-            antdv 文档
-          </VbenButton>
-        </VbenButtonGroup>
-      </div>
-
-      <div class="mt-2 flex justify-start">
-        <p class="w-24 p-2">软件外包:</p>
-        <img
-          src="/wx-xingyu.png"
-          alt="数舵科技"
-          class="cursor-pointer"
-          width="80%"
-          @click="openWindow('https://shuduokeji.com')"
-        />
-      </div>
-      <p class="mt-2 flex justify-center pt-4 text-sm italic">
-        本项目采用 <Badge class="mx-2" variant="destructive">MIT</Badge>
-        开源协议，个人与企业可100% 免费使用
+    <div class="space-y-3 p-2 text-sm">
+      <p class="text-base font-semibold">RustSet 管理平台</p>
+      <p>资产、CMDB、云资源、运维流程和 AI 能力使用同一套租户与权限体系。</p>
+      <p>部署、配置与开发说明请查看仓库根目录 README 和 docs 目录。</p>
+      <p class="flex items-center pt-2">
+        开源许可：<Badge class="ml-2">MIT</Badge>
       </p>
     </div>
   </Modal>

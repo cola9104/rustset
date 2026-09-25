@@ -65,7 +65,7 @@ const [Modal, modalApi] = useVbenModal({
     modalApi.lock();
     try {
       formData.value = await getTenant(data.id);
-      // @ts-expect-error: special-case workaround for yudao-ui-admin-vben issue ID43CX
+      // @ts-expect-error: cascader model value compatibility workaround
       formData.value.expireTime = String(formData.value.expireTime);
       // 设置到 values
       await formApi.setValues(formData.value);

@@ -57,7 +57,7 @@ Open:
 - OpenAPI: `http://127.0.0.1:8080/openapi.json`
 - MinIO console: `http://127.0.0.1:9001`
 
-Default local bootstrap account (seeded by the migration baseline, yudao demo data):
+Default local bootstrap account (seeded by the RustSet migration baseline):
 
 - Username: `admin`
 - Password: `admin123`

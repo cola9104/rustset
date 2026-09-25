@@ -18,7 +18,7 @@ interface WebAntdPreferencesExtension {
 export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
-    /** 与 Yudao 一致，由 system_menu 和角色菜单授权生成动态路由。 */
+    /** 由 system_menu 和角色菜单授权生成动态路由。 */
     accessMode: 'backend',
     defaultHomePath: '/workspace',
     name: import.meta.env.VITE_APP_TITLE,
@@ -44,7 +44,7 @@ export const overridesPreferences = defineOverridesPreferences({
   },
   copyright: {
     companyName: import.meta.env.VITE_APP_TITLE,
-    companySiteLink: 'https://gitee.com/yudaocode/yudao-ui-admin-vben',
+    companySiteLink: '/',
   },
 });
 

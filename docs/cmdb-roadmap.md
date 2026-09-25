@@ -1,6 +1,8 @@
-# CMDB 与云平台适配路线图
+# RustSet CMDB 与云平台适配路线图
 
 日期：2026-09-25。参考：[veops/cmdb](https://github.com/veops/cmdb)（自定义模型/属性/实例/关系/多视图/权限）。
+
+本文中的 CMDB“模型”用于定义配置项字段和关系，不是 AI 推理模型。AI 供应商、API Key 和模型参数统一在“AI 大模型 → 模型管理”中维护。
 
 ## 已落地（本轮，迁移 0009）
 
@@ -22,19 +24,22 @@
 ## 云平台适配层（OpenTofu）——已落地 v1（迁移 0010）
 
 v1 交付（已 E2E 验证：规则命中 → 建单自动审批 → tofu init/apply → outputs 回读 → CMDB 回写）：
+
 - `rustset-framework-tofu`：模板渲染（demo/null 与 aliyun 参考模板）、子进程执行（超时/代理透传/环境变量注入凭据）、`tofu output -json` 解析；6 个单元测试。
-- 工单真实 provision：`POST /infra/resource-ticket/{id}/provision` 读取云凭据（infra_cloud_provider_config）→ 渲染工作区 → init/apply → `apply_status/apply_log/tf_outputs/tofu_workspace` 落库 → 成功后写入 CMDB（`cloud_<resource_type>` 模型，键 `ticket_id`）并推进到待交付；失败记录原因且工单留在待配置。
-- 自动审批：`infra_approval_rule`（资源类型 + CPU/内存/数量阈值 + auto_provision），建单时命中即自动审批，auto_provision 时立即开通（失败不阻断建单）。规则经 `/infra/approval-rule/*` CRUD 管理（infra:approval-rule:* 权限码）。
+- 工单真实 provision：`POST /infra/resource-ticket/{id}/provision` 读取云凭据（infra*cloud_provider_config）→ 渲染工作区 → init/apply → `apply_status/apply_log/tf_outputs/tofu_workspace` 落库 → 成功后写入 CMDB（`cloud*<resource_type>`模型，键`ticket_id`）并推进到待交付；失败记录原因且工单留在待配置。
+- 自动审批：`infra_approval_rule`（资源类型 + CPU/内存/数量阈值 + auto_provision），建单时命中即自动审批，auto_provision 时立即开通（失败不阻断建单）。规则经 `/infra/approval-rule/*` CRUD 管理（infra:approval-rule:\* 权限码）。
 - 环境要求：安装 OpenTofu（≥1.6），可用 `TOFU_BINARY/TOFU_WORKSPACE_ROOT/TOFU_TIMEOUT_SECONDS` 调节；网关进程 PATH 需含 tofu。
 
 目标：以 [OpenTofu](https://opentofu.org/)（Terraform 开源分支）+ 各家 Provider 作为统一云资源适配与开通执行层。
 
 对接锚点（现有代码）：
+
 - `infra_cloud_provider_config` / `infra_cloud_platform` / `infra_cloud_zone`：云凭据与平台台账 —— 作为 Provider 凭证来源（敏感字段脱敏沿用现有约定）。
 - `infra_resource_ticket`：工单状态机（approve → provision → deliver，0005 已补工作流字段）—— provision 阶段触发 OpenTofu apply。
 - `infra_task`（trigger-scan 已有执行语义）：任务编排与执行记录。
 
 设计草案：
+
 1. 新增 `cmdb` 侧"云资源模型"（如云主机/云盘/EIP），OpenTofu state 导入生成实例 —— CMDB 成为云资源的统一台账。
 2. 后端新增 `tofu-executor`：按工单渲染 `.tfvars` 模板 → `tofu plan/apply`（独立子进程、超时与日志审计）→ state 回读生成/更新 CMDB 实例。
 3. 凭据经云凭据表注入 Provider 环境变量，不落盘到仓库。

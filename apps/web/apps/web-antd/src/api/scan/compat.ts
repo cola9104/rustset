@@ -10,7 +10,7 @@ function camelToSnake(key: string) {
   return key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
-/** Convert the copied Kairos page payloads to the RustSet JSON convention. */
+/** Convert page payloads to the RustSet JSON convention. */
 export function toInfraPayload(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toInfraPayload);
   if (!value || typeof value !== 'object') return value;
@@ -35,7 +35,7 @@ export function fromInfraResponse<T>(value: T): T {
       fromInfraResponse(child),
     ]),
   ) as Record<string, unknown>;
-  // Kairos uses created_at/updated_at; the local schema uses create_time/update_time.
+  // Accept common timestamp aliases while exposing RustSet field names.
   result.created_at ??= result.create_time;
   result.updated_at ??= result.update_time;
   return result as T;
@@ -69,8 +69,11 @@ export function infraDelete(resource: string, id: EntityId) {
 }
 
 export async function infraPageList<T>(resource: string): Promise<T[]> {
-  const page = await requestClient.get<{ list: T[] }>(`/infra/${resource}/page`, {
-    params: { pageNo: 1, pageSize: 200 },
-  });
+  const page = await requestClient.get<{ list: T[] }>(
+    `/infra/${resource}/page`,
+    {
+      params: { pageNo: 1, pageSize: 200 },
+    },
+  );
   return fromInfraResponse(page.list);
 }

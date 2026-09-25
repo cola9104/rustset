@@ -1,33 +1,55 @@
 # RustSet
 
-RustSet 是 Rust 后端与 Vben Admin 5 前端组成的管理平台。基础后台按 Yudao 的模块化思想实现，资产运营按资产采集表落地台账与网络策略；后端统一使用 Rust，前端统一使用 Vue 3、Vben 和 Ant Design Vue，前端工程由 bun 管理。
+RustSet 是面向企业资产、CMDB、云资源和运维流程的一体化管理平台。后端采用 Rust、Axum 与 SQLx，管理端采用 Vue 3、Vben 和 Ant Design Vue；系统以租户和 RBAC 权限为边界，将资产台账、基础设施、业务资源、资源交付及 AI 能力集中到同一个平台。
 
-## 功能组成
+## 核心能力
 
-- System：认证、用户、角色、权限、菜单、租户及后台管理能力。
-- Infra：配置、文件、任务、日志、数据源等基础设施能力。
-- AI：统一模型管理、聊天/SSE、工具调用、知识库、图片、Midjourney、音乐、语音、Embedding 和写作。
-- 资产运营：服务商、机房、云平台、安全产品、资产台账（按资产采集表 43 字段）、工单与网络策略。
+- **资产中心**：按 `docs/资产采集表.xlsx` 管理资产台账与网络策略，支持扫描任务、风险记录及资产与策略联查。
+- **CMDB**：自定义配置项模型、属性和实例，维护实例关系。这里的“模型”是资产数据结构，与 AI 模型配置相互独立。
+- **基础设施中心**：维护服务商、机房、区域和安全产品。
+- **云管理中心**：维护云平台、云区域及云厂商接入凭据。
+- **业务中心**：维护业务应用及其关联的物理、云和网络资源。
+- **运维中心**：管理资源工单与自动审批规则，通过 OpenTofu 执行资源开通并回写 CMDB。
+- **AI 大模型**：统一管理供应商、API Key 和各类型模型；对话、知识库、绘图、音乐、写作和运维 Agent 共用这一套模型配置。
+- **系统与基础能力**：认证、用户、部门、角色、菜单、租户、租户网段、字典、通知、日志、文件和定时任务。
+
+BPM 已从产品范围、菜单、前端代码和数据库活动数据中移除。租户网段在“系统管理 → 租户管理”中维护，不再提供独立的网段页面。
+
+## 技术架构
+
+```text
+Vue 3 / Ant Design Vue
+          |
+          v
+Rust Gateway (Axum)
+  |-- system       认证、租户、RBAC 与后台管理
+  |-- infra        资产、基础设施、云资源与运维工单
+  |-- cmdb         动态模型、属性、实例与关系
+  `-- ai           统一模型、对话、知识库与媒体生成
+          |
+          v
+PostgreSQL / Redis / NATS / MinIO
+```
+
+数据库迁移由网关启动时的 SQLx Migrator 统一执行。`sql/bootstrap/current.sql` 仅供审查和比对，应用启动不依赖该快照。
 
 ## 环境要求
 
-- Rust stable（项目使用 Rust 2024 edition）
+- Rust stable，支持 Rust 2024 edition
 - PostgreSQL 18
-- bun `1.4+`（前端包管理器；node 22/24 可选，供部分工具链使用）
-- Docker 及 Docker Compose（推荐用于本地基础设施）
+- bun `1.4+`
+- Docker 与 Docker Compose（推荐用于本地基础设施）
+- OpenTofu `1.6+`（仅资源自动开通功能需要）
 
-## 五分钟本地启动
+## 本地启动
 
-### 1. 启动基础设施
+启动 PostgreSQL、Redis、NATS 和 MinIO：
 
 ```bash
 docker compose -f script/docker/docker-compose.yml up -d
 ```
 
-启动 PostgreSQL、Redis、NATS 和 MinIO。容器只创建空数据库 `rustset`，
-数据库结构统一由 Rust 网关的 SQLx Migrator 自动管理。
-
-### 2. 启动 Rust 网关
+启动网关：
 
 ```bash
 export DATABASE_URL='postgres://rustset:rustset@127.0.0.1:5432/rustset'
@@ -36,22 +58,7 @@ export JWT_SECRET='replace-with-at-least-32-random-bytes'
 cargo run -p rustset-gateway
 ```
 
-网关启动时自动执行 SQLx 迁移。`0001_initial.sql` 是已合并的当前完整表结构
-和基准数据，因此部署时不需要
-`sql/bootstrap/current.sql`。`current.sql` 仅作为人工核对用的快照，不会被应用加载。
-
-后续修改数据库时，必须从 `0002` 开始新增更高版本的迁移文件，并在干净数据库
-完成全量迁移后重新导出 `current.sql` 参考快照。合并后的 `0001` 一旦发布就不能再修改。
-
-可选环境变量：
-- `DATABASE_MIN_CONNECTIONS`（默认 1）
-- `DATABASE_MAX_CONNECTIONS`（默认 20）
-- `DATABASE_ACQUIRE_TIMEOUT_SECONDS`（默认 5）
-- `GATEWAY_HOST`（默认 `0.0.0.0`）
-- `GATEWAY_PORT`（默认 `8080`）
-- `RUST_LOG`（推荐 `info`）
-
-### 3. 启动 Vben 前端
+启动管理端：
 
 ```bash
 cd apps/web
@@ -59,11 +66,12 @@ bun install
 bun run dev:antd
 ```
 
-访问 `http://127.0.0.1:5666`，默认后端为 `http://127.0.0.1:8080`（开发代理将 `/api/*` 转发到网关并去掉前缀）。
+- 管理端：<http://127.0.0.1:5666>
+- 健康检查：<http://127.0.0.1:8080/health>
+- OpenAPI：<http://127.0.0.1:8080/openapi.json>
+- 本地基线账号：`admin` / `admin123`
 
-基线种子账号：`admin` / `admin123`（来自迁移基线数据，正式部署后请立即修改密码）。
-
-> 生产环境必须替换示例密码和 JWT 密钥。
+生产环境必须更换基线密码和 JWT 密钥。
 
 ## 验证
 
@@ -75,10 +83,18 @@ bun run --cwd apps/web check:type
 bun run --cwd apps/web build:antd
 ```
 
+## 当前边界
+
+- 扫描任务目前提供轻量级端口扫描及任务记录，不等同于完整漏洞扫描平台。
+- 云厂商连接、OpenTofu Provider 和外部 AI 模型需要使用实际凭据在目标环境验收。
+- 未实现能力必须返回明确错误，不以空数据或固定成功结果代替真实实现。
+
 ## 文档
 
-- [AI 启动交接指南](AGENTS.md)
+- [AI 开发与部署交接指南](AGENTS.md)
 - [技术架构](docs/technical-solution.md)
-- [配置与模型接入](docs/configuration.md)
+- [配置与统一 AI 模型接入](docs/configuration.md)
 - [启动、部署与运维](docs/deployment.md)
-- [功能范围与验收口径](docs/parity-roadmap.md)
+- [CMDB 与云平台路线图](docs/cmdb-roadmap.md)
+- [功能范围与验收标准](docs/parity-roadmap.md)
+- [前端开发说明](apps/web/README.md)

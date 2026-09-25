@@ -6,19 +6,11 @@ import type { SystemTenantApi } from '#/api/system/tenant';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { useAccess } from '@vben/access';
-import { AuthenticationLoginExpiredModal, useVbenModal } from '@vben/common-ui';
-import { VBEN_DOC_URL, VBEN_GITHUB_URL } from '@vben/constants';
+import { AuthenticationLoginExpiredModal } from '@vben/common-ui';
 import { isTenantEnable, useTabs, useWatermark } from '@vben/hooks';
-import {
-  AntdProfileOutlined,
-  BookOpenText,
-  CircleHelp,
-  IconifyIcon,
-  SvgGithubIcon,
-} from '@vben/icons';
+import { AntdProfileOutlined, IconifyIcon } from '@vben/icons';
 import {
   BasicLayout,
-  Help,
   LockScreen,
   Notification,
   TenantDropdown,
@@ -26,7 +18,7 @@ import {
 } from '@vben/layouts';
 import { preferences, usePreferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
-import { formatDateTime, openWindow } from '@vben/utils';
+import { formatDateTime } from '@vben/utils';
 
 import { message, Tooltip } from 'ant-design-vue';
 
@@ -55,13 +47,10 @@ const showDot = computed(() => unreadCount.value > 0);
 let unreadCountPollingTimer: ReturnType<typeof setInterval> | undefined;
 let unreadCountRequestPending = false;
 
-const hasActiveSession = computed(
-  () => Boolean(accessStore.accessToken && accessStore.refreshToken),
+const hasActiveSession = computed(() =>
+  Boolean(accessStore.accessToken && accessStore.refreshToken),
 );
 
-const [HelpModal, helpModalApi] = useVbenModal({
-  connectedComponent: Help,
-});
 const { isDark } = usePreferences();
 
 const menus = computed(() => [
@@ -71,31 +60,6 @@ const menus = computed(() => [
     },
     icon: AntdProfileOutlined,
     text: $t('ui.widgets.profile'),
-  },
-  {
-    handler: () => {
-      openWindow(VBEN_DOC_URL, {
-        target: '_blank',
-      });
-    },
-    icon: BookOpenText,
-    text: $t('ui.widgets.document'),
-  },
-  {
-    handler: () => {
-      openWindow(VBEN_GITHUB_URL, {
-        target: '_blank',
-      });
-    },
-    icon: SvgGithubIcon,
-    text: 'GitHub',
-  },
-  {
-    handler: () => {
-      helpModalApi.open();
-    },
-    icon: CircleHelp,
-    text: $t('ui.widgets.qa'),
   },
 ]);
 
@@ -371,5 +335,4 @@ watch(
       <LockScreen :avatar @to-login="handleLogout" />
     </template>
   </BasicLayout>
-  <HelpModal />
 </template>

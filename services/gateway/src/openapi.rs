@@ -5,7 +5,8 @@ pub async fn document() -> Json<Value> {
     Json(json!({
         "openapi": "3.1.0",
         "info": {
-            "title": "Rust Toon Gateway API",
+            "title": "RustSet Gateway API",
+            "description": "RustSet 资产、CMDB、云资源、运维与 AI 管理接口",
             "version": "0.1.0"
         },
         "servers": [{ "url": "/api" }],
@@ -19,69 +20,38 @@ pub async fn document() -> Json<Value> {
             }
         },
         "paths": {
-            "/system/capabilities": { "get": { "tags": ["system"], "summary": "System module capabilities", "responses": { "200": { "description": "OK" } } } },
-            "/system/auth/login": { "post": { "tags": ["auth"], "summary": "Login", "responses": { "200": { "description": "Token pair" }, "401": { "description": "Invalid credentials" } } } },
-            "/system/auth/refresh-token": { "get": { "tags": ["auth"], "summary": "Refresh access token", "responses": { "200": { "description": "Rotated token pair" }, "401": { "description": "Invalid refresh token" } } } },
-            "/system/auth/logout": { "post": { "tags": ["auth"], "summary": "Logout and revoke refresh token", "responses": { "200": { "description": "OK" } } } },
-            "/system/auth/me": { "get": { "tags": ["auth"], "summary": "Current user", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Current user permissions" } } } },
-            "/system/users": {
-                "get": { "tags": ["system-user"], "summary": "List users", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Users" } } },
-                "post": { "tags": ["system-user"], "summary": "Create user", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Created user id" } } }
+            "/health": {
+                "get": { "tags": ["运维"], "summary": "健康检查", "responses": { "200": { "description": "服务正常" } } }
             },
-            "/system/users/{id}": {
-                "put": { "tags": ["system-user"], "summary": "Update user", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } },
-                "delete": { "tags": ["system-user"], "summary": "Delete user", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+            "/system/auth/login": {
+                "post": { "tags": ["认证"], "summary": "登录", "responses": { "200": { "description": "访问令牌与刷新令牌" }, "401": { "description": "用户名或密码错误" } } }
             },
-            "/system/users/{id}/roles": { "put": { "tags": ["system-user"], "summary": "Assign user roles", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
-            "/system/roles": {
-                "get": { "tags": ["system-role"], "summary": "List roles", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Roles" } } },
-                "post": { "tags": ["system-role"], "summary": "Create role", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Created role id" } } }
+            "/system/auth/refresh-token": {
+                "get": { "tags": ["认证"], "summary": "刷新访问令牌", "responses": { "200": { "description": "新令牌" }, "401": { "description": "刷新令牌无效" } } }
             },
-            "/system/roles/{id}": {
-                "put": { "tags": ["system-role"], "summary": "Update role", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } },
-                "delete": { "tags": ["system-role"], "summary": "Delete role", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+            "/system/auth/logout": {
+                "post": { "tags": ["认证"], "summary": "退出并撤销刷新令牌", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "退出成功" } } }
             },
-            "/system/roles/{id}/permissions": { "put": { "tags": ["system-role"], "summary": "Assign role permissions", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } } },
-            "/system/permissions": { "get": { "tags": ["system-permission"], "summary": "List permissions", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Permissions" } } } },
-            "/system/audit-logs": { "get": { "tags": ["system-audit"], "summary": "List audit logs", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Audit logs" } } } },
-            "/health": { "get": { "tags": ["ops"], "summary": "Health check", "responses": { "200": { "description": "OK" } } } },
-            "/infra/capabilities": { "get": { "tags": ["infra"], "summary": "Infra module capabilities", "responses": { "200": { "description": "OK" } } } },
-            "/toon/capabilities": { "get": { "tags": ["toon"], "summary": "Toon module capabilities", "responses": { "200": { "description": "OK" } } } },
-            "/toon/projects": {
-                "get": { "tags": ["toon"], "summary": "List toon projects", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Projects" } } },
-                "post": { "tags": ["toon"], "summary": "Create toon project", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Created project id" } } }
+            "/system/auth/me": {
+                "get": { "tags": ["认证"], "summary": "当前用户、角色与权限", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "当前用户信息" } } }
             },
-            "/toon/projects/{id}": {
-                "get": { "tags": ["toon"], "summary": "Get toon project", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Project" } } },
-                "put": { "tags": ["toon"], "summary": "Update toon project", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } },
-                "delete": { "tags": ["toon"], "summary": "Delete toon project", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+            "/infra/asset/page": {
+                "get": { "tags": ["资产中心"], "summary": "分页查询资产台账", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "资产分页" } } }
             },
-            "/toon/projects/{id}/publish": { "post": { "tags": ["toon"], "summary": "Publish toon project", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Publication id" } } } },
-            "/toon/projects/{project_id}/episodes": {
-                "get": { "tags": ["toon"], "summary": "List episodes", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Episodes" } } },
-                "post": { "tags": ["toon"], "summary": "Create episode", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Created episode id" } } }
+            "/infra/network-policy/page": {
+                "get": { "tags": ["资产中心"], "summary": "分页查询网络策略", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "网络策略分页" } } }
             },
-            "/toon/episodes/{id}": {
-                "put": { "tags": ["toon"], "summary": "Update episode", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } },
-                "delete": { "tags": ["toon"], "summary": "Delete episode", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+            "/cmdb/model/page": {
+                "get": { "tags": ["CMDB"], "summary": "分页查询 CMDB 模型", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "CMDB 模型分页" } } }
             },
-            "/toon/episodes/{episode_id}/scenes": {
-                "get": { "tags": ["toon"], "summary": "List scenes", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Scenes" } } },
-                "post": { "tags": ["toon"], "summary": "Create scene", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Created scene id" } } }
+            "/cmdb/instance/page": {
+                "get": { "tags": ["CMDB"], "summary": "分页查询 CMDB 实例", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "CMDB 实例分页" } } }
             },
-            "/toon/scenes/{id}": {
-                "put": { "tags": ["toon"], "summary": "Update scene", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } },
-                "delete": { "tags": ["toon"], "summary": "Delete scene", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+            "/ai/model/page": {
+                "get": { "tags": ["AI 大模型"], "summary": "分页查询统一 AI 模型配置", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "AI 模型配置分页" } } }
             },
-            "/media/capabilities": { "get": { "tags": ["media"], "summary": "Media module capabilities", "responses": { "200": { "description": "OK" } } } },
-            "/media/assets": {
-                "get": { "tags": ["media"], "summary": "List media assets", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Assets" } } },
-                "post": { "tags": ["media"], "summary": "Create media asset", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Created asset id" } } }
-            },
-            "/media/assets/{id}": {
-                "get": { "tags": ["media"], "summary": "Get media asset", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "Asset" } } },
-                "put": { "tags": ["media"], "summary": "Update media asset", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } },
-                "delete": { "tags": ["media"], "summary": "Delete media asset", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "OK" } } }
+            "/ai/model/test": {
+                "post": { "tags": ["AI 大模型"], "summary": "测试 AI 模型连接", "security": [{ "bearerAuth": [] }], "responses": { "200": { "description": "模型调用结果" } } }
             }
         }
     }))

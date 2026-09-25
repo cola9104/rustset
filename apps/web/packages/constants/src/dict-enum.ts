@@ -39,18 +39,6 @@ const INFRA_DICT = {
   INFRA_OPERATE_TYPE: 'infra_operate_type',
 } as const;
 
-/** ========== BPM - 工作流模块 ========== */
-const BPM_DICT = {
-  BPM_MODEL_FORM_TYPE: 'bpm_model_form_type', // BPM 模型表单类型
-  BPM_MODEL_TYPE: 'bpm_model_type', // BPM 模型类型
-  BPM_OA_LEAVE_TYPE: 'bpm_oa_leave_type', // BPM OA 请假类型
-  BPM_PROCESS_INSTANCE_STATUS: 'bpm_process_instance_status', // BPM 流程实例状态
-  BPM_PROCESS_LISTENER_TYPE: 'bpm_process_listener_type', // BPM 流程监听器类型
-  BPM_PROCESS_LISTENER_VALUE_TYPE: 'bpm_process_listener_value_type', // BPM 流程监听器值类型
-  BPM_TASK_CANDIDATE_STRATEGY: 'bpm_task_candidate_strategy', // BPM 任务候选人策略
-  BPM_TASK_STATUS: 'bpm_task_status', // BPM 任务状态
-} as const;
-
 /** ========== PAY - 支付模块 ========== */
 const PAY_DICT = {
   PAY_CHANNEL_CODE: 'pay_channel_code', // 支付渠道编码类型
@@ -282,7 +270,6 @@ const WMS_DICT = {
 /** 字典类型枚举 - 统一导出 */
 const DICT_TYPE = {
   ...AI_DICT,
-  ...BPM_DICT,
   ...CRM_DICT,
   ...ERP_DICT,
   ...INFRA_DICT,

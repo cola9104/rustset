@@ -6,9 +6,9 @@ use uuid::Uuid;
 
 use crate::{SystemState, infrastructure};
 
-// v2 invalidates authorization snapshots created before the asset permission
-// migration. Ongoing role/menu changes still use the explicit invalidators.
-const CURRENT_USER_CACHE_NAMESPACE: &str = "system:current-user:v2";
+// v3 invalidates authorization snapshots that still contain the removed BPM
+// permissions. Ongoing role/menu changes still use the explicit invalidators.
+const CURRENT_USER_CACHE_NAMESPACE: &str = "system:current-user:v3";
 const CURRENT_USER_CACHE_TTL: Duration = Duration::from_secs(300);
 
 pub async fn load_current_user(

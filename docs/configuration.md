@@ -2,24 +2,24 @@
 
 ## 后端环境变量
 
-| 变量 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | 是 | 无 | PostgreSQL 连接串 |
-| `DATABASE_MIN_CONNECTIONS` | 否 | `1` | 最小连接数 |
-| `DATABASE_MAX_CONNECTIONS` | 否 | `20` | 最大连接数 |
-| `DATABASE_ACQUIRE_TIMEOUT_SECONDS` | 否 | `5` | 获取连接超时 |
-| `JWT_SECRET` | 是 | 无 | 至少 32 字节 |
-| `JWT_ISSUER` | 否 | `rustset` | Token 签发方 |
-| `JWT_AUDIENCE` | 否 | `rustset-api` | Token 受众 |
-| `JWT_ACCESS_TOKEN_TTL_SECONDS` | 否 | `900` | Access Token 有效期 |
-| `GATEWAY_HOST` | 否 | `0.0.0.0` | 网关监听地址 |
-| `GATEWAY_PORT` | 否 | `8080` | 网关端口 |
-| `WEB_PERMISSIVE_CORS` | 否 | `false` | 开发调试跨域开关，设为 `true`/`1`/`yes` 时允许任意来源 |
-| `REDIS_URL` | 否 | 无 | 不配置时缓存和限流自动关闭 |
-| `REDIS_KEY_PREFIX` | 否 | `rustset` | Redis 键前缀 |
-| `BOOTSTRAP_ADMIN_USERNAME` | 否 | `admin` | 初始管理员用户名 |
-| `BOOTSTRAP_ADMIN_PASSWORD` | 否 | 无 | 不配置时跳过管理员初始化 |
-| `RUST_LOG` | 否 | 框架默认 | tracing 日志过滤规则 |
+| 变量                               | 必填 | 默认值        | 说明                                                   |
+| ---------------------------------- | ---- | ------------- | ------------------------------------------------------ |
+| `DATABASE_URL`                     | 是   | 无            | PostgreSQL 连接串                                      |
+| `DATABASE_MIN_CONNECTIONS`         | 否   | `1`           | 最小连接数                                             |
+| `DATABASE_MAX_CONNECTIONS`         | 否   | `20`          | 最大连接数                                             |
+| `DATABASE_ACQUIRE_TIMEOUT_SECONDS` | 否   | `5`           | 获取连接超时                                           |
+| `JWT_SECRET`                       | 是   | 无            | 至少 32 字节                                           |
+| `JWT_ISSUER`                       | 否   | `rustset`     | Token 签发方                                           |
+| `JWT_AUDIENCE`                     | 否   | `rustset-api` | Token 受众                                             |
+| `JWT_ACCESS_TOKEN_TTL_SECONDS`     | 否   | `900`         | Access Token 有效期                                    |
+| `GATEWAY_HOST`                     | 否   | `0.0.0.0`     | 网关监听地址                                           |
+| `GATEWAY_PORT`                     | 否   | `8080`        | 网关端口                                               |
+| `WEB_PERMISSIVE_CORS`              | 否   | `false`       | 开发调试跨域开关，设为 `true`/`1`/`yes` 时允许任意来源 |
+| `REDIS_URL`                        | 否   | 无            | 不配置时缓存和限流自动关闭                             |
+| `REDIS_KEY_PREFIX`                 | 否   | `rustset`     | Redis 键前缀                                           |
+| `BOOTSTRAP_ADMIN_USERNAME`         | 否   | `admin`       | 初始管理员用户名                                       |
+| `BOOTSTRAP_ADMIN_PASSWORD`         | 否   | 无            | 不配置时跳过管理员初始化                               |
+| `RUST_LOG`                         | 否   | 框架默认      | tracing 日志过滤规则                                   |
 
 ## 前端环境变量
 
@@ -32,7 +32,9 @@
 
 生产环境应通过部署环境文件或运行时 `_app-config` 将 API 地址设置为网关地址。
 
-## 统一模型管理
+## 统一 AI 模型管理
+
+这里的模型配置专指 AI 供应商和推理模型，与 CMDB 中用于定义资产属性结构的“模型管理”相互独立。对话、知识库、Embedding、媒体生成和运维 Agent 全部复用本节所述配置，不再为业务功能单独保存 API Key 或模型端点。
 
 AI 页面统一使用 `ai.model_configs`，业务表只保存模型 ID。模型记录包含：
 
@@ -43,19 +45,19 @@ AI 页面统一使用 `ai.model_configs`，业务表只保存模型 ID。模型�
 
 OpenAI 兼容服务常用配置键：
 
-| 配置键 | 默认值 | 用途 |
-| --- | --- | --- |
-| `textPath` | `/chat/completions` | 聊天及流式聊天 |
-| `imageGeneratePath` | `/images/generations` | 图片生成 |
-| `videoGeneratePath` | `/videos/generations` | 视频生成 |
-| `speechPath` | `/audio/speech` | TTS |
-| `embeddingPath` | `/embeddings` | Embedding |
-| `musicGeneratePath` | `/music/generations` | 音乐提交 |
-| `musicTaskPath` | `/music/tasks/{taskId}` | 音乐轮询 |
-| `midjourneyImaginePath` | `/mj/submit/imagine` | Midjourney Imagine |
-| `midjourneyActionPath` | `/mj/submit/action` | Midjourney Action |
-| `midjourneyTaskPath` | `/mj/task/{taskId}/fetch` | Midjourney 轮询 |
-| `authHeader` | `Authorization` | 自定义鉴权头；Authorization 自动使用 Bearer |
+| 配置键                  | 默认值                    | 用途                                        |
+| ----------------------- | ------------------------- | ------------------------------------------- |
+| `textPath`              | `/chat/completions`       | 聊天及流式聊天                              |
+| `imageGeneratePath`     | `/images/generations`     | 图片生成                                    |
+| `videoGeneratePath`     | `/videos/generations`     | 视频生成                                    |
+| `speechPath`            | `/audio/speech`           | TTS                                         |
+| `embeddingPath`         | `/embeddings`             | Embedding                                   |
+| `musicGeneratePath`     | `/music/generations`      | 音乐提交                                    |
+| `musicTaskPath`         | `/music/tasks/{taskId}`   | 音乐轮询                                    |
+| `midjourneyImaginePath` | `/mj/submit/imagine`      | Midjourney Imagine                          |
+| `midjourneyActionPath`  | `/mj/submit/action`       | Midjourney Action                           |
+| `midjourneyTaskPath`    | `/mj/task/{taskId}/fetch` | Midjourney 轮询                             |
+| `authHeader`            | `Authorization`           | 自定义鉴权头；Authorization 自动使用 Bearer |
 
 图片、视频、配音和 Agent 功能必须选择类型匹配且启用的统一模型 ID，不支持旧 `vendor:model` 配置。
 

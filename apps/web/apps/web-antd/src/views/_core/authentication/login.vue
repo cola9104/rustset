@@ -46,7 +46,7 @@ async function fetchTenantList() {
 
     // 选中租户：域名 > store 中仍然有效的租户 > 首个租户。
     // 数据库切换后，浏览器里可能还留着旧系统的 tenantId（例如 1000），
-    // 不允许该值继续覆盖 Yudao 数据库返回的真实租户列表。
+    // 不允许该值继续覆盖后端返回的真实租户列表。
     let tenantId: null | number = null;
     const websiteTenant = await websiteTenantPromise;
     if (
