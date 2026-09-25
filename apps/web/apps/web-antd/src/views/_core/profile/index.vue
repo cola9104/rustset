@@ -59,7 +59,7 @@ onMounted(loadProfile);
           <Tabs.TabPane key="userSocial" tab="社交绑定" force-render>
             <UserSocial @update:active-name="activeName = $event" />
           </Tabs.TabPane>
-          <!-- TODO @芋艿：在线设备 -->
+          <!-- TODO：在线设备 -->
         </Tabs>
       </Card>
     </div>

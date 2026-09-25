@@ -8,7 +8,6 @@ import { resetStaticRoutes } from '@vben/utils';
 
 import { createRouterGuard } from './guard';
 import { routes } from './routes';
-import { setupBaiduTongJi } from './tongji';
 
 /**
  *  @zh_CN 创建vue-router实例
@@ -35,6 +34,5 @@ const resetRoutes = () => resetStaticRoutes(router, routes);
 // 创建路由守卫
 createRouterGuard(router);
 // 设置百度统计
-setupBaiduTongJi(router);
 
 export { resetRoutes, router };

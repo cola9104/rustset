@@ -79,7 +79,7 @@ async function handleRegeneration(image: AiImageApi.Image) {
     }
     // No default
   }
-  // TODO @fan：貌似 other 重新设置不行？
+  // TODO：貌似 other 重新设置不行？
 }
 
 /** 组件挂载的时候 */

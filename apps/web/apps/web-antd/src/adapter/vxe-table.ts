@@ -165,7 +165,7 @@ setupVbenVxeTable({
     });
 
     // 表格配置项可以用 cellRender: { name: 'CellSwitch', props: { beforeChange: () => {} } },
-    // add by 芋艿：from https://github.com/vbenjs/vue-vben-admin/blob/main/playground/src/adapter/vxe-table.ts#L97-L123
+    // 源自 vue-vben-admin playground：https://github.com/vbenjs/vue-vben-admin/blob/main/playground/src/adapter/vxe-table.ts#L97-L123
     vxeUI.renderer.add('CellSwitch', {
       renderTableDefault({ attrs, props }, { column, row }) {
         const loadingKey = `__loading_${column.field}`;
@@ -197,7 +197,7 @@ setupVbenVxeTable({
     });
 
     // 注册表格的操作按钮渲染器 cellRender: { name: 'CellOperation', options: ['edit', 'delete'] }
-    // add by 芋艿：from https://github.com/vbenjs/vue-vben-admin/blob/main/playground/src/adapter/vxe-table.ts#L125-L255
+    // 源自 vue-vben-admin playground：https://github.com/vbenjs/vue-vben-admin/blob/main/playground/src/adapter/vxe-table.ts#L125-L255
     vxeUI.renderer.add('CellOperation', {
       renderTableDefault({ attrs, options, props }, { column, row }) {
         const defaultProps = { size: 'small', type: 'link', ...props };
@@ -336,13 +336,13 @@ setupVbenVxeTable({
       },
     });
 
-    // add by 星语：数量格式化，保留 3 位
+    // 数量格式化，保留 3 位
     vxeUI.formats.add('formatAmount3', {
       tableCellFormatMethod({ cellValue }) {
         return erpCountInputFormatter(cellValue);
       },
     });
-    // add by 星语：数量格式化，保留 2 位
+    // 数量格式化，保留 2 位
     vxeUI.formats.add('formatAmount2', {
       tableCellFormatMethod({ cellValue }, digits = 2) {
         return `${erpNumberFormatter(cellValue, digits)}`;
@@ -355,7 +355,7 @@ setupVbenVxeTable({
       },
     });
 
-    // add by 星语：文件大小格式化
+    // 文件大小格式化
     vxeUI.formats.add('formatFileSize', {
       tableCellFormatMethod({ cellValue }, digits = 2) {
         return formatFileSize(cellValue, digits);

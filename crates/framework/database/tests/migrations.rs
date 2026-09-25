@@ -15,7 +15,56 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 15);
+    assert_eq!(applied, 19);
+
+    // 0016 removes unsupported BPM and scopes network zones by tenant;
+    // 0017 removes user-visible upstream branding from baseline data;
+    // 0018 moves internals to 国密 (SM3 identity UUIDs, SM3 password hash,
+    // SM4-seeded secrets) and clears the last naming residue.
+    let bpm_menus: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND (path = '/bpm' OR permission LIKE 'bpm:%')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read BPM menus");
+    assert_eq!(bpm_menus, 0, "BPM must not remain visible or authorized");
+    let demo_analytics_menu: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND path = '/analytics'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read demo analytics menu");
+    assert_eq!(
+        demo_analytics_menu, 0,
+        "the Vben playground demo analytics page must not stay visible"
+    );
+
+    let net_zone_page: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND component = 'cmdb/net-zone/index'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read standalone network-zone page");
+    assert_eq!(
+        net_zone_page, 0,
+        "network zones live inside tenant management"
+    );
+    let tenant_scoped_net_zones: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'cmdb_net_zone'
+             AND column_name = 'tenant_id'
+             AND is_nullable = 'NO'
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect tenant-scoped network zones");
+    assert!(tenant_scoped_net_zones);
 
     // 0015 splits 资产运营 into five top-level modules; components and
     // grants are unchanged, only the menu tree moves.
@@ -392,7 +441,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read hidden-page business menu links");
-    assert!(active_menu_links >= 14);
+    assert!(active_menu_links >= 8);
 
     let administrators: i64 = sqlx::query_scalar(
         "SELECT count(*)
@@ -420,7 +469,7 @@ async fn applies_all_migrations_to_empty_postgres() {
     let current_baseline_tenant_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(
             SELECT 1 FROM system_tenant
-            WHERE id = 1 AND name = '芋道源码' AND deleted = 0
+            WHERE id = 1 AND name = 'RustSet' AND deleted = 0
          )",
     )
     .fetch_one(&pool)
@@ -428,8 +477,22 @@ async fn applies_all_migrations_to_empty_postgres() {
     .expect("inspect current baseline tenant");
     assert!(
         current_baseline_tenant_exists,
-        "fresh migration bootstrap must use the current database baseline data"
+        "fresh migration bootstrap must expose the RustSet baseline tenant"
     );
+
+    let visible_upstream_branding: i64 = sqlx::query_scalar(
+        "SELECT
+            (SELECT count(*) FROM system_tenant
+             WHERE deleted = 0 AND (name ILIKE '%芋道%' OR contact_name ILIKE '%芋道%'))
+          + (SELECT count(*) FROM system_notice
+             WHERE deleted = 0 AND (title ILIKE '%芋道%' OR content ILIKE '%yudao.iocoder.cn%'))
+          + (SELECT count(*) FROM system_oauth2_client
+             WHERE deleted = 0 AND (name ILIKE '%芋道%' OR logo ILIKE '%yudao.iocoder.cn%'))",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect user-visible baseline branding");
+    assert_eq!(visible_upstream_branding, 0);
 
     let legacy_schema_exists: bool =
         sqlx::query_scalar("SELECT to_regnamespace('system') IS NOT NULL")
@@ -488,23 +551,76 @@ async fn applies_all_migrations_to_empty_postgres() {
 
     let plain_mail_passwords: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_mail_account
-         WHERE password IS NOT NULL AND password <> '' AND password NOT LIKE 'enc:v1:%'",
+         WHERE password IS NOT NULL AND password <> '' AND password NOT LIKE 'enc:sm4:v2:%'",
     )
     .fetch_one(&pool)
     .await
     .expect("read mail secrets");
     assert_eq!(
         plain_mail_passwords, 0,
-        "mail account passwords must be sealed"
+        "mail account passwords must be SM4-sealed (国密), not the retired XOR format"
     );
 
     let plain_sms_secrets: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_sms_channel
-         WHERE api_key NOT LIKE 'enc:v1:%'
-            OR (api_secret IS NOT NULL AND api_secret <> '' AND api_secret NOT LIKE 'enc:v1:%')",
+         WHERE api_key NOT LIKE 'enc:sm4:v2:%'
+            OR (api_secret IS NOT NULL AND api_secret <> '' AND api_secret NOT LIKE 'enc:sm4:v2:%')",
     )
     .fetch_one(&pool)
     .await
     .expect("read sms secrets");
-    assert_eq!(plain_sms_secrets, 0, "sms channel secrets must be sealed");
+    assert_eq!(
+        plain_sms_secrets, 0,
+        "sms channel secrets must be SM4-sealed (国密), not the retired XOR format"
+    );
+
+    let users_without_identity_uuid: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM system_users WHERE identity_uuid IS NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("read user identity uuids");
+    assert_eq!(
+        users_without_identity_uuid, 0,
+        "every user must carry an SM3-derived identity_uuid"
+    );
+
+    let legacy_identity_duplicates: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM (
+            SELECT identity_uuid FROM system_users
+            WHERE identity_uuid IS NOT NULL
+            GROUP BY identity_uuid HAVING count(*) > 1
+         ) duplicates",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read duplicate identity uuids");
+    assert_eq!(legacy_identity_duplicates, 0);
+
+    let admin_uses_gm_password: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM system_users
+            WHERE id = 1 AND username = 'admin' AND password LIKE '$sm3$%'
+         )",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read admin password format");
+    assert!(
+        admin_uses_gm_password,
+        "the seeded admin must verify via PBKDF2-HMAC-SM3 after 0018"
+    );
+
+    let user_level_branding_residue: i64 = sqlx::query_scalar(
+        "SELECT
+            (SELECT count(*) FROM system_users
+             WHERE deleted = 0
+               AND (username = 'yudao' OR nickname IN ('芋艿', '芋道', '芋道1', '源码')
+                    OR email IN ('yudao@iocoder.cn', 'yuanma@iocoder.cn')))
+          + (SELECT count(*) FROM system_dept
+             WHERE deleted = 0 AND email = 'ry@qq.com')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("inspect user-level naming residue");
+    assert_eq!(user_level_branding_residue, 0);
 }
