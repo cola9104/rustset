@@ -1,10 +1,12 @@
 //! CMDB relations between configuration items: bind, unbind, and lookup in
 //! both directions.
 
+use aide::axum::routing::{delete, get, post};
+use schemars::JsonSchema;
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
@@ -15,14 +17,17 @@ use sqlx::Row;
 
 use crate::{CmdbState, require};
 
-pub fn routes() -> Router<CmdbState> {
-    Router::new()
-        .route("/cmdb/relation/list-by-instance", get(relation_list))
-        .route("/cmdb/relation/bind", post(relation_bind))
-        .route("/cmdb/relation/unbind", delete(relation_unbind))
+pub fn routes() -> ApiRouter<CmdbState> {
+    ApiRouter::new()
+        .api_route(
+"/cmdb/relation/list-by-instance", get(relation_list))
+        .api_route(
+"/cmdb/relation/bind", post(relation_bind))
+        .api_route(
+"/cmdb/relation/unbind", delete(relation_unbind))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct InstanceIdParams {
     #[serde(rename = "instanceId")]
     instance_id: i64,

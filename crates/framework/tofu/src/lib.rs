@@ -157,6 +157,7 @@ impl TofuExecutor {
                     .unwrap_or_default(),
             )
             .stdin(Stdio::null())
+            .kill_on_drop(true)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
         let rendered = format!("{:?} {} {:?}", self.binary, chdir, args);
@@ -196,15 +197,26 @@ impl TofuExecutor {
         .await
     }
 
-    /// `tofu output -json` -> flat {name: value}. Empty when apply failed.
-    pub async fn outputs(&self, workspace: &PathBuf) -> BTreeMap<String, Value> {
+    /// `tofu output -json` -> flat {name: value}; errors must block delivery.
+    pub async fn outputs(&self, workspace: &PathBuf) -> Result<BTreeMap<String, Value>, String> {
         let run = self
             .run(&["output", "-json", "-no-color"], &[], workspace)
             .await;
         if !run.success {
-            return BTreeMap::new();
+            return Err(
+                "tofu output failed; resources may already exist, retain the workspace".into(),
+            );
         }
-        parse_outputs(&run.stdout)
+        let value: Value =
+            serde_json::from_str(&run.stdout).map_err(|_| "invalid tofu output JSON")?;
+        if !value.is_object() || value.as_object().is_none_or(|v| v.is_empty()) {
+            return Err("tofu returned no resource outputs".into());
+        }
+        let outputs = parse_outputs(&run.stdout);
+        if outputs.is_empty() {
+            return Err("tofu returned malformed resource outputs".into());
+        }
+        Ok(outputs)
     }
 }
 
@@ -212,9 +224,10 @@ impl TofuExecutor {
 /// have no curated template yet.
 pub fn provider_source(cloud_category: &str) -> Option<&'static str> {
     match cloud_category {
-        DEMO_PROVIDER | "" => Some("hashicorp/null"),
+        DEMO_PROVIDER => Some("hashicorp/null"),
         "aliyun" | "alicloud" => Some("aliyun/alicloud"),
-        "tencent" | "tencentcloud" => Some("tencentcloud/tencentcloud"),
+        "tencent" | "tencentcloud" => Some("tencentcloudstack/tencentcloud"),
+        "huawei" | "huaweicloud" => Some("huaweicloud/huaweicloud"),
         _ => None,
     }
 }
@@ -243,6 +256,11 @@ pub fn credential_env(target: &CloudTarget) -> Vec<(String, String)> {
             ));
             env.push(("TENCENTCLOUD_REGION".into(), target.region.clone()));
         }
+        "huawei" | "huaweicloud" => {
+            env.push(("HW_ACCESS_KEY".into(), target.access_key_id.clone()));
+            env.push(("HW_SECRET_KEY".into(), target.access_key_secret.clone()));
+            env.push(("HW_REGION_NAME".into(), target.region.clone()));
+        }
         _ => {}
     }
     env
@@ -263,8 +281,41 @@ pub fn render_main_tf(target: &CloudTarget, spec: &Value) -> Result<String, Stri
     if !spec.is_object() {
         return Err("spec must be a JSON object".into());
     }
+    if target.cloud_category != DEMO_PROVIDER {
+        validate_compute_spec(spec)?;
+        if matches!(target.cloud_category.as_str(), "tencent" | "tencentcloud")
+            && spec
+                .get("vpc_id")
+                .and_then(Value::as_str)
+                .is_none_or(|v| v.trim().is_empty())
+        {
+            return Err("vpc_id is required for Tencent Cloud".into());
+        }
+        if target.region.trim().is_empty() {
+            return Err("cloud region is required".into());
+        }
+        let (provider, body) = match target.cloud_category.as_str() {
+            "aliyun" | "alicloud" => ("alicloud", include_str!("templates/aliyun.tf")),
+            "tencent" | "tencentcloud" => ("tencentcloud", include_str!("templates/tencent.tf")),
+            "huawei" | "huaweicloud" => ("huaweicloud", include_str!("templates/huawei.tf")),
+            _ => return Err("unsupported compute provider".into()),
+        };
+        return Ok(format!(
+            r#"terraform {{
+  required_version = ">= 1.6"
+  required_providers {{
+    {provider} = {{ source = "{source}" }}
+  }}
+}}
+variable "region" {{ type = string }}
+variable "spec" {{ type = any }}
+provider "{provider}" {{ region = var.region }}
+{body}
+"#
+        ));
+    }
     match target.cloud_category.as_str() {
-        DEMO_PROVIDER | "" => Ok(format!(
+        DEMO_PROVIDER => Ok(format!(
             r#"terraform {{
   required_version = ">= 1.6"
   required_providers {{
@@ -292,49 +343,89 @@ output "spec" {{
 }}
 "#
         )),
-        "aliyun" | "alicloud" => Ok(format!(
-            r#"terraform {{
-  required_version = ">= 1.6"
-  required_providers {{
-    alicloud = {{
-      source  = "{source}"
-    }}
-  }}
-}}
-
-variable "region" {{
-  type = string
-}}
-
-variable "spec" {{
-  type = map(any)
-}}
-
-resource "alicloud_instance" "requested" {{
-  instance_name   = try(var.spec["ecs_name"], "rustset-{{count.index}}")
-  instance_type   = try(var.spec["ecs_type"], "ecs.e-c1.medium")
-  image_id        = try(var.spec["ecs_os"], "")
-  security_groups = try(var.spec["security_groups"], [])
-  count           = try(var.spec["resource_count"], 1)
-  tags = {{
-    provisioned_by = "rustset"
-    ticket         = try(var.spec["ticket_id"], "")
-  }}
-}}
-
-output "instance_ids" {{
-  value = alicloud_instance.requested[*].id
-}}
-
-output "public_ips" {{
-  value = alicloud_instance.requested[*].public_ip
-}}
-"#
-        )),
         other => Err(format!(
             "cloud {other:?} provider source known but template not curated"
         )),
     }
+}
+
+/// Validate before starting a provider process. Values remain JSON data,
+/// never interpolated into HCL source.
+pub fn validate_compute_spec(spec: &Value) -> Result<(), String> {
+    if let Some(size) = spec.get("system_disk_size_gb") {
+        if size.as_u64().is_none_or(|v| v == 0) {
+            return Err("system_disk_size_gb must be a positive integer".into());
+        }
+    }
+    for key in [
+        "ecs_name",
+        "ecs_type",
+        "image_id",
+        "availability_zone",
+        "subnet_id",
+    ] {
+        if spec
+            .get(key)
+            .and_then(Value::as_str)
+            .is_none_or(|v| v.trim().is_empty())
+        {
+            return Err(format!("{key} is required"));
+        }
+    }
+    if spec
+        .get("resource_count")
+        .and_then(Value::as_u64)
+        .is_none_or(|v| v == 0)
+    {
+        return Err("resource_count must be a positive integer".into());
+    }
+    if spec
+        .get("security_groups")
+        .and_then(Value::as_array)
+        .is_none_or(|items| {
+            items.is_empty()
+                || items
+                    .iter()
+                    .any(|v| v.as_str().is_none_or(|s| s.trim().is_empty()))
+        })
+    {
+        return Err("security_groups must be a nonempty array of IDs".into());
+    }
+    Ok(())
+}
+
+/// A read-only data source evaluated by `tofu plan`, never by apply.
+pub fn render_connection_check(target: &CloudTarget) -> Result<String, String> {
+    let (provider, query) = match target.cloud_category.as_str() {
+        "aliyun" | "alicloud" => (
+            "alicloud",
+            "data \"alicloud_regions\" \"probe\" { current = true }",
+        ),
+        "tencent" | "tencentcloud" => (
+            "tencentcloud",
+            "data \"tencentcloud_regions\" \"probe\" { product = \"cvm\" }",
+        ),
+        "huawei" | "huaweicloud" => (
+            "huaweicloud",
+            "data \"huaweicloud_availability_zones\" \"probe\" {}",
+        ),
+        _ => return Err("该厂商尚不支持连接测试".into()),
+    };
+    let source = provider_source(&target.cloud_category).ok_or("unsupported provider")?;
+    if target.region.trim().is_empty() {
+        return Err("区域不能为空".into());
+    }
+    Ok(format!(
+        r#"terraform {{
+  required_providers {{
+    {provider} = {{ source = "{source}" }}
+  }}
+}}
+variable "region" {{ type = string }}
+provider "{provider}" {{ region = var.region }}
+{query}
+"#
+    ))
 }
 
 /// Render terraform.tfvars.json: the request spec under `spec` plus the
@@ -371,13 +462,13 @@ mod tests {
     #[test]
     fn maps_provider_sources() {
         assert_eq!(provider_source("demo"), Some("hashicorp/null"));
-        assert_eq!(provider_source(""), Some("hashicorp/null"));
+        assert_eq!(provider_source(""), None);
         assert_eq!(provider_source("aliyun"), Some("aliyun/alicloud"));
         assert_eq!(
             provider_source("tencentcloud"),
-            Some("tencentcloud/tencentcloud")
+            Some("tencentcloudstack/tencentcloud")
         );
-        assert_eq!(provider_source("huawei"), None);
+        assert_eq!(provider_source("huawei"), Some("huaweicloud/huaweicloud"));
     }
 
     #[test]
@@ -398,7 +489,7 @@ mod tests {
     #[test]
     fn rejects_unsupported_clouds() {
         let target = CloudTarget {
-            cloud_category: "huawei".into(),
+            cloud_category: "unsupported".into(),
             provider_source: String::new(),
             region: String::new(),
             access_key_id: String::new(),

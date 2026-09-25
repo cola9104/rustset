@@ -7,6 +7,9 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+aide.workspace = true
+indexmap.workspace = true
+schemars.workspace = true
 axum.workspace = true
 chrono.workspace = true
 rustset-framework-common.workspace = true

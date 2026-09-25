@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use schemars::JsonSchema;
 
 use axum::{
     Json,
@@ -14,13 +15,13 @@ use uuid::Uuid;
 
 use crate::{SystemState, management::shared::require};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct Page<T> {
     list: Vec<T>,
     total: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct QueryParams {
     #[serde(default, rename = "pageNo")]
     page_no: Option<i64>,

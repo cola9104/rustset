@@ -1,8 +1,10 @@
 use crate::{AiState, require};
+use schemars::JsonSchema;
+use aide::axum::routing::{delete, get, post, put};
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
@@ -11,17 +13,26 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
 
-pub(crate) fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/chat-role/page", get(page))
-        .route("/ai/chat-role/my-page", get(my_page))
-        .route("/ai/chat-role/get", get(get_one))
-        .route("/ai/chat-role/category-list", get(categories))
-        .route("/ai/chat-role/create", post(create_admin))
-        .route("/ai/chat-role/create-my", post(create_my))
-        .route("/ai/chat-role/update", put(update))
-        .route("/ai/chat-role/delete", delete(remove_admin))
-        .route("/ai/chat-role/delete-my", delete(remove_my))
+pub(crate) fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/chat-role/page", get(page))
+        .api_route(
+"/ai/chat-role/my-page", get(my_page))
+        .api_route(
+"/ai/chat-role/get", get(get_one))
+        .api_route(
+"/ai/chat-role/category-list", get(categories))
+        .api_route(
+"/ai/chat-role/create", post(create_admin))
+        .api_route(
+"/ai/chat-role/create-my", post(create_my))
+        .api_route(
+"/ai/chat-role/update", put(update))
+        .api_route(
+"/ai/chat-role/delete", delete(remove_admin))
+        .api_route(
+"/ai/chat-role/delete-my", delete(remove_my))
 }
 fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -29,11 +40,11 @@ fn now() -> i64 {
 fn id() -> i64 {
     chrono::Utc::now().timestamp_micros()
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Id {
     id: i64,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Page {
     page_no: Option<i64>,
@@ -42,7 +53,7 @@ struct Page {
     category: Option<String>,
     public_status: Option<bool>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Save {
     id: Option<i64>,

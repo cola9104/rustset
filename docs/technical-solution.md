@@ -2,7 +2,7 @@
 
 ## 产品目标
 
-RustSet 将企业资产、CMDB、基础设施、云资源、业务资源、资源交付和 AI 辅助运维纳入统一租户与权限体系。系统采用前后端分离架构，网关负责组合模块、执行鉴权和暴露统一 API，业务规则保留在各 Rust 模块中。
+RustSet 将企业资产、CMDB、基础设施、云资源与物理资源台账、资源交付和 AI 辅助运维纳入统一租户与权限体系。系统采用前后端分离架构，网关负责组合模块、执行鉴权和暴露统一 API，业务规则保留在各 Rust 模块中。
 
 ## 总体架构
 
@@ -53,7 +53,9 @@ framework/* 不依赖具体业务模块
 
 ### Infra 与资产运营
 
-负责资产采集表台账、网络策略、扫描任务、风险、服务商、机房、云平台、云凭据、业务应用、业务资源、资源工单和审批规则。OpenTofu 开通从云凭据读取 Provider 参数，执行结果写回工单与 CMDB。
+负责资产采集表台账、网络策略、扫描任务、风险、服务商、机房、云平台、云凭据、业务应用、云资源与物理资源台账（infra_cloud_resource / infra_physical_resource 分表存储，工单经 target_resource_type 鉴别引用）、资源工单和审批规则。OpenTofu 开通从云凭据读取 Provider 参数，执行结果写回工单与 CMDB。
+
+资产核查（`/infra/inspection/**`）复用扫描任务表（`infra_task`，`task_kind='inspection'`）与风险表：对明确 IP 列表做 TCP 连通性探测，与资产台账登记、`infra_inspection_baseline` 已确认端口基线比对，仅对「台账未登记」与「超出基线的开放端口」两类差异生成 `infra_risk` 预警；连接超时视为不确定，不产生也不消除预警。预警在独立页面查看、确认基线与复核处置，基线确认须登记在案并填写依据。
 
 ### CMDB
 
@@ -94,7 +96,7 @@ bash script/test-database-migrations.sh
 ## 服务入口
 
 - `GET /health`：健康检查
-- `GET /openapi.json`：OpenAPI
+- `GET /openapi.json`：OpenAPI（由 aide 从 axum 路由与处理器类型推导生成，启动时组装；前端“基础功能 → API 接口”页面内嵌 Scalar 渲染，可直接调试）
 - `/system/**`：认证和系统管理
 - `/infra/**`：资产、基础设施、云与运维
 - `/cmdb/**`：CMDB
@@ -103,6 +105,6 @@ bash script/test-database-migrations.sh
 ## 功能边界
 
 - BPM 不属于 RustSet 当前产品范围。
-- 扫描执行器目前是轻量能力，不能描述为完整漏洞扫描平台。
+- 扫描执行器目前是轻量能力，不能描述为完整漏洞扫描平台；资产核查是 TCP 差异比对（台账与端口基线），不是漏洞发现。
 - 云 Provider 与外部 AI 服务需要在部署环境使用真实凭据验证。
 - API 不得通过固定成功值或空数据伪装未实现能力。

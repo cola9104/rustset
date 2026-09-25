@@ -1,8 +1,10 @@
 use crate::{AiModelFactory, AiState, require};
+use schemars::JsonSchema;
+use aide::axum::routing::{delete, get, post, put};
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_ai_api::ImageRequest;
 use rustset_framework_common::ApiResponse;
@@ -11,21 +13,34 @@ use rustset_framework_web::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
-pub fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/image/draw", post(draw))
-        .route("/ai/image/my-page", get(image_my_page))
-        .route("/ai/image/get-my", get(image_my))
-        .route("/ai/image/my-list-by-ids", get(image_ids))
-        .route("/ai/image/delete-my", delete(image_delete_my))
-        .route("/ai/image/page", get(image_page))
-        .route("/ai/image/update", put(image_update))
-        .route("/ai/image/delete", delete(image_delete))
-        .route("/ai/music/generate", post(music_generate))
-        .route("/ai/music/poll", post(music_poll))
-        .route("/ai/music/page", get(music_page))
-        .route("/ai/music/update", put(music_update))
-        .route("/ai/music/delete", delete(music_delete))
+pub fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/image/draw", post(draw))
+        .api_route(
+"/ai/image/my-page", get(image_my_page))
+        .api_route(
+"/ai/image/get-my", get(image_my))
+        .api_route(
+"/ai/image/my-list-by-ids", get(image_ids))
+        .api_route(
+"/ai/image/delete-my", delete(image_delete_my))
+        .api_route(
+"/ai/image/page", get(image_page))
+        .api_route(
+"/ai/image/update", put(image_update))
+        .api_route(
+"/ai/image/delete", delete(image_delete))
+        .api_route(
+"/ai/music/generate", post(music_generate))
+        .api_route(
+"/ai/music/poll", post(music_poll))
+        .api_route(
+"/ai/music/page", get(music_page))
+        .api_route(
+"/ai/music/update", put(music_update))
+        .api_route(
+"/ai/music/delete", delete(music_delete))
 }
 pub(crate) fn spawn_music_sync(pool: sqlx::PgPool, factory: AiModelFactory) {
     let Ok(handle) = tokio::runtime::Handle::try_current() else {
@@ -157,7 +172,7 @@ async fn sync_pending_music(
     }
     Ok(synced)
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct PollRequest {
     #[serde(default)]
     ids: Vec<i64>,
@@ -182,15 +197,15 @@ fn now() -> i64 {
 fn id() -> i64 {
     chrono::Utc::now().timestamp_micros()
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Id {
     id: i64,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Ids {
     ids: String,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Page {
     page_no: Option<i64>,
@@ -199,7 +214,7 @@ struct Page {
     status: Option<i32>,
     public_status: Option<bool>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Draw {
     prompt: String,
@@ -343,7 +358,7 @@ async fn image_delete_my(
         .map_err(|_| AppError::internal("删除绘图失败"))?;
     Ok(Json(ApiResponse::new(r.rows_affected() > 0)))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Update {
     id: i64,
@@ -376,7 +391,7 @@ async fn image_delete(
         .map_err(|_| AppError::internal("删除绘图失败"))?;
     Ok(Json(ApiResponse::new(r.rows_affected() > 0)))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct MusicGenerate {
     model_id: Option<i64>,

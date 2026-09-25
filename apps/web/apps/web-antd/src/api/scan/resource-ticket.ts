@@ -35,5 +35,5 @@ export async function getTicketApprovalHistory(id: number) {
   ].filter(Boolean);
   return fromInfraResponse(events);
 }
-export function provisionTicket(id: number, data: { details?: string; config_id?: number; image_id?: string; flavor?: string }) { return requestClient.post(`/infra/resource-ticket/${id}/provision`, toInfraPayload(data)); }
+export function provisionTicket(id: number, data: { details?: string; config_id?: number; image_id?: string; flavor?: string; availability_zone?: string; subnet_id?: string; vpc_id?: string; security_groups?: string[] }) { return requestClient.post(`/infra/resource-ticket/${id}/provision`, toInfraPayload(data), { timeout: 600_000 }); }
 export function deliverTicket(id: number, data: { comment?: string }) { return requestClient.post(`/infra/resource-ticket/${id}/deliver`, toInfraPayload(data)); }

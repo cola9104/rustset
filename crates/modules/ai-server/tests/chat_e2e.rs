@@ -96,7 +96,8 @@ async fn chat_json_and_sse_persist_complete_messages() -> Result<(), Box<dyn std
             data_scope: DataScope::All,
         })
         .expect("issue E2E access token");
-    let app = rustset_ai_server::routes(rustset_ai_server::AiState::new(pool.clone(), tokens));
+    let app = rustset_ai_server::routes(rustset_ai_server::AiState::new(pool.clone(), tokens))
+        .finish_api(&mut aide::openapi::OpenApi::default());
     let (status, body) = request(
         app.clone(),
         &token,

@@ -1,8 +1,10 @@
 use crate::{AiState, require, vector};
+use schemars::JsonSchema;
+use aide::axum::routing::{delete, get, post, put};
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_ai_api::EmbeddingRequest;
 use rustset_framework_common::ApiResponse;
@@ -11,29 +13,50 @@ use rustset_framework_web::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
-pub fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/knowledge/page", get(k_page))
-        .route("/ai/knowledge/simple-list", get(k_simple))
-        .route("/ai/knowledge/get", get(k_get))
-        .route("/ai/knowledge/create", post(k_create))
-        .route("/ai/knowledge/update", put(k_update))
-        .route("/ai/knowledge/delete", delete(k_delete))
-        .route("/ai/knowledge/document/page", get(d_page))
-        .route("/ai/knowledge/document/get", get(d_get))
-        .route("/ai/knowledge/document/create-list", post(d_create_list))
-        .route("/ai/knowledge/document/update", put(d_update))
-        .route("/ai/knowledge/document/update-status", put(d_status))
-        .route("/ai/knowledge/document/delete", delete(d_delete))
-        .route("/ai/knowledge/segment/page", get(s_page))
-        .route("/ai/knowledge/segment/get", get(s_get))
-        .route("/ai/knowledge/segment/create", post(s_create))
-        .route("/ai/knowledge/segment/update", put(s_update))
-        .route("/ai/knowledge/segment/update-status", put(s_status))
-        .route("/ai/knowledge/segment/delete", delete(s_delete))
-        .route("/ai/knowledge/segment/split", get(s_split))
-        .route("/ai/knowledge/segment/get-process-list", get(s_process))
-        .route("/ai/knowledge/segment/search", get(s_search))
+pub fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/knowledge/page", get(k_page))
+        .api_route(
+"/ai/knowledge/simple-list", get(k_simple))
+        .api_route(
+"/ai/knowledge/get", get(k_get))
+        .api_route(
+"/ai/knowledge/create", post(k_create))
+        .api_route(
+"/ai/knowledge/update", put(k_update))
+        .api_route(
+"/ai/knowledge/delete", delete(k_delete))
+        .api_route(
+"/ai/knowledge/document/page", get(d_page))
+        .api_route(
+"/ai/knowledge/document/get", get(d_get))
+        .api_route(
+"/ai/knowledge/document/create-list", post(d_create_list))
+        .api_route(
+"/ai/knowledge/document/update", put(d_update))
+        .api_route(
+"/ai/knowledge/document/update-status", put(d_status))
+        .api_route(
+"/ai/knowledge/document/delete", delete(d_delete))
+        .api_route(
+"/ai/knowledge/segment/page", get(s_page))
+        .api_route(
+"/ai/knowledge/segment/get", get(s_get))
+        .api_route(
+"/ai/knowledge/segment/create", post(s_create))
+        .api_route(
+"/ai/knowledge/segment/update", put(s_update))
+        .api_route(
+"/ai/knowledge/segment/update-status", put(s_status))
+        .api_route(
+"/ai/knowledge/segment/delete", delete(s_delete))
+        .api_route(
+"/ai/knowledge/segment/split", get(s_split))
+        .api_route(
+"/ai/knowledge/segment/get-process-list", get(s_process))
+        .api_route(
+"/ai/knowledge/segment/search", get(s_search))
 }
 fn id() -> i64 {
     chrono::Utc::now().timestamp_micros()
@@ -41,11 +64,11 @@ fn id() -> i64 {
 fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Id {
     id: i64,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Page {
     page_no: Option<i64>,
@@ -55,7 +78,7 @@ struct Page {
     document_id: Option<i64>,
     status: Option<i32>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Knowledge {
     id: Option<i64>,
@@ -185,12 +208,12 @@ async fn d_get(
         .ok_or_else(|| AppError::not_found("文档不存在"))?;
     Ok(Json(ApiResponse::new(dv(r))))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct DocItem {
     name: String,
     url: String,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct DocList {
     knowledge_id: i64,
@@ -240,7 +263,7 @@ async fn d_create_list(
     }
     Ok(Json(ApiResponse::new(ids)))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct DocUpdate {
     id: i64,
@@ -356,7 +379,7 @@ async fn s_get(
         .ok_or_else(|| AppError::not_found("分段不存在"))?;
     Ok(Json(ApiResponse::new(sv(r))))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Segment {
     id: Option<i64>,
@@ -407,7 +430,7 @@ async fn s_update(
     let r=sqlx::query("UPDATE ai.knowledge_segments SET content=$2,content_length=$3,tokens=$4,status=$5,embedding=$6,update_time=$7 WHERE id=$1").bind(id).bind(&v.content).bind(v.content.chars().count()as i32).bind((v.content.chars().count()/4)as i32).bind(v.status.unwrap_or(1)).bind(embedding).bind(now()).execute(&s.pool).await.map_err(|_|AppError::internal("更新分段失败"))?;
     Ok(Json(ApiResponse::new(r.rows_affected() > 0)))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Status {
     id: i64,
     status: i32,
@@ -440,7 +463,7 @@ async fn s_delete(
         .map_err(|_| AppError::internal("删除分段失败"))?;
     Ok(Json(ApiResponse::new(r.rows_affected() > 0)))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Split {
     url: String,
@@ -458,7 +481,7 @@ async fn s_split(
         .map_err(|_| AppError::bad_request("读取文档失败"))?;
     Ok(Json(ApiResponse::new(vector::split(&content,q.segment_max_tokens).into_iter().map(|content|json!({"contentLength":content.chars().count(),"tokens":content.chars().count()/4,"content":content})).collect())))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Process {
     document_ids: String,
@@ -476,7 +499,7 @@ async fn s_process(
     let rows=sqlx::query("SELECT d.id document_id,count(s.id)::bigint count,count(s.embedding)::bigint embedding_count FROM ai.knowledge_documents d LEFT JOIN ai.knowledge_segments s ON s.document_id=d.id WHERE d.id=ANY($1) GROUP BY d.id").bind(ids).fetch_all(&s.pool).await.map_err(|_|AppError::internal("读取处理进度失败"))?;
     Ok(Json(ApiResponse::new(rows.into_iter().map(|r|json!({"documentId":r.get::<i64,_>("document_id"),"count":r.get::<i64,_>("count"),"embeddingCount":r.get::<i64,_>("embedding_count")})).collect())))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Search {
     knowledge_id: i64,

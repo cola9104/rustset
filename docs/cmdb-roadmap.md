@@ -23,6 +23,19 @@
 
 ## 云平台适配层（OpenTofu）——已落地 v1（迁移 0010）
 
+### 公有云开通补齐（2026-09-25）
+
+- 新增腾讯云 CVM、华为云 ECS 模板，补齐阿里云 ECS 的镜像、可用区、子网、安全组和系统盘容量。腾讯云使用 `tencentcloudstack/tencentcloud`。
+- 开通弹窗的凭据选择、镜像与规格现在实际传入执行器；凭据必须属于工单的平台，支持 `active` / `enabled` 状态。多个凭据时必须明确选择；厂商以所选凭据为准，区域优先工单、其次凭据中的区域名称。
+- 连接测试通过只读数据源执行 `tofu plan` 查询区域/可用区，不创建云资源。成功表示查询 API 可用，不保证账号有开通权限。
+- 只有显式 `cloudCategory=demo` 才运行模拟模板。真实云缺少配置、镜像、网络参数时拒绝开通。
+- 开通参数保存在现有 `target_config` 中；同工单使用数据库 advisory lock 防止并发执行，失败重试保留工作区，禁止切换厂商或凭据配置。超时终止 tofu 子进程，outputs 读取失败不会推进到待交付。
+- 自动开通可通过工单 `targetConfig` JSON 提供 `configId`、`imageId`、`flavor`、`availabilityZone`、`subnetId`、`securityGroups`，腾讯云另需 `vpcId`；数量沿用审批后的工单值。不要放入密码或密钥。
+- 三家模板使用真实 Provider 做 `tofu validate`（含连接测试数据源），不使用真实云凭据。实云 `plan/apply` 和故障恢复仍需目标环境验收。
+- 尚未实现：存量资源自动发现、vCenter 采集、Proxmox/OpenStack/vSphere 开通、真实云端停机/销毁/变配。当前只支持三家公有云 AK/SK 开通，不代表界面列出的其他认证方式已接通。
+
+验证命令：`cargo test -p rustset-framework-tofu --test compute -- --include-ignored`（需要 tofu 和 Provider 下载网络）。部署时将 `TOFU_WORKSPACE_ROOT` 指向持久化目录并保留 state；默认临时目录不适合作为生产状态存储。
+
 v1 交付（已 E2E 验证：规则命中 → 建单自动审批 → tofu init/apply → outputs 回读 → CMDB 回写）：
 
 - `rustset-framework-tofu`：模板渲染（demo/null 与 aliyun 参考模板）、子进程执行（超时/代理透传/环境变量注入凭据）、`tofu output -json` 解析；6 个单元测试。

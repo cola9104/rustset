@@ -28,22 +28,29 @@ const legacyAssetRedirects: RouteRecordRaw[] = [
   { path: '/security', redirect: '/infra-center/security-product', name: 'LegacySecurity' },
   { path: '/asset/business-app', redirect: '/biz-center/business-application', name: 'LegacyAssetBusinessApp' },
   { path: '/business', redirect: '/biz-center/business-application', name: 'LegacyBusiness' },
-  { path: '/asset/business-resource', redirect: '/biz-center/business-resource', name: 'LegacyAssetBusinessResource' },
+  { path: '/asset/business-resource', redirect: '/biz-center/cloud-resource', name: 'LegacyAssetBusinessResource' },
+  // 0020 拆分前存在过的旧地址，兼容历史标签页/收藏。
+  { path: '/biz-center/business-resource', redirect: '/biz-center/cloud-resource', name: 'LegacyBizBusinessResource' },
   { path: '/asset/ticket', redirect: '/ops-center/resource-ticket', name: 'LegacyAssetTicket' },
   { path: '/ticket', redirect: '/ops-center/resource-ticket', name: 'LegacyTicket' },
   { path: '/asset/task', redirect: '/asset-center/task', name: 'LegacyAssetTask' },
   { path: '/task', redirect: '/asset-center/task', name: 'LegacyTask' },
   { path: '/asset/risk', redirect: '/asset-center/risk', name: 'LegacyAssetRisk' },
   { path: '/risk', redirect: '/asset-center/risk', name: 'LegacyRisk' },
+  // 0024 将 API 文档页从 swagger 更名为 api-docs，兼容历史标签页/收藏。
+  { path: '/infra/swagger', redirect: '/infra/api-docs', name: 'LegacyInfraSwagger' },
 ];
 const staticRoutes: RouteRecordRaw[] = legacyAssetRedirects;
 const externalRoutes: RouteRecordRaw[] = [];
 
-/** 路由列表，由基本路由、外部路由和404兜底路由组成
+/** 路由列表，由基本路由、外部路由、静态重定向和404兜底路由组成
  *  无需走权限验证（会一直显示在菜单中） */
 const routes: RouteRecordRaw[] = [
   ...coreRoutes,
   ...externalRoutes,
+  // 纯重定向的旧地址与 system_menu 路径零冲突；后端路由生成器不合并
+  // 本地路由，必须在创建 router 时直接注册，否则历史地址会 404。
+  ...staticRoutes,
   fallbackNotFoundRoute,
 ];
 

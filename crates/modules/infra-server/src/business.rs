@@ -2,10 +2,11 @@ use crate::{
     InfraState, QueryParams, TableSpec, id_param, ids_param, soft_delete, table_create, table_get,
     table_list, table_page, table_update,
 };
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_web::AppError;
@@ -21,26 +22,38 @@ const ENDPOINT: TableSpec = TableSpec {
     seq: "infra_application_endpoint_seq",
 };
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/business-application/page", get(app_page))
-        .route("/infra/business-application/list", get(app_list))
-        .route("/infra/business-application/get", get(app_get))
-        .route("/infra/business-application/create", post(app_create))
-        .route("/infra/business-application/update", put(app_update))
-        .route("/infra/business-application/delete", delete(app_delete))
-        .route("/infra/application-endpoint/page", get(ep_page))
-        .route("/infra/application-endpoint/list", get(ep_list))
-        .route(
-            "/infra/application-endpoint/list-by-app",
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/business-application/page", get(app_page))
+        .api_route(
+"/infra/business-application/list", get(app_list))
+        .api_route(
+"/infra/business-application/get", get(app_get))
+        .api_route(
+"/infra/business-application/create", post(app_create))
+        .api_route(
+"/infra/business-application/update", put(app_update))
+        .api_route(
+"/infra/business-application/delete", delete(app_delete))
+        .api_route(
+"/infra/application-endpoint/page", get(ep_page))
+        .api_route(
+"/infra/application-endpoint/list", get(ep_list))
+        .api_route(
+"/infra/application-endpoint/list-by-app",
             get(ep_list_by_app),
         )
-        .route("/infra/application-endpoint/get", get(ep_get))
-        .route("/infra/application-endpoint/create", post(ep_create))
-        .route("/infra/application-endpoint/update", put(ep_update))
-        .route("/infra/application-endpoint/delete", delete(ep_delete))
-        .route(
-            "/infra/application-endpoint/delete-list",
+        .api_route(
+"/infra/application-endpoint/get", get(ep_get))
+        .api_route(
+"/infra/application-endpoint/create", post(ep_create))
+        .api_route(
+"/infra/application-endpoint/update", put(ep_update))
+        .api_route(
+"/infra/application-endpoint/delete", delete(ep_delete))
+        .api_route(
+"/infra/application-endpoint/delete-list",
             delete(ep_delete_list),
         )
 }

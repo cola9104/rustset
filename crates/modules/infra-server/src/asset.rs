@@ -2,10 +2,11 @@ use crate::{
     InfraState, QueryParams, TableSpec, id_param, ids_param, soft_delete, soft_delete_list,
     table_create, table_get, table_list, table_page, table_update,
 };
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
@@ -22,55 +23,110 @@ const CLOUD_ASSET: TableSpec = TableSpec {
     table: "infra_cloud_asset",
     seq: "infra_cloud_asset_seq",
 };
-const BUSINESS_RESOURCE: TableSpec = TableSpec {
-    table: "infra_business_resource",
-    seq: "infra_business_resource_seq",
+const CLOUD_RESOURCE: TableSpec = TableSpec {
+    table: "infra_cloud_resource",
+    seq: "infra_cloud_resource_seq",
+};
+const PHYSICAL_RESOURCE: TableSpec = TableSpec {
+    table: "infra_physical_resource",
+    seq: "infra_physical_resource_seq",
 };
 const NETWORK_POLICY: TableSpec = TableSpec {
     table: "infra_network_policy",
     seq: "infra_network_policy_seq",
 };
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/asset/page", get(asset_page))
-        .route("/infra/asset/list", get(asset_list))
-        .route("/infra/asset/get", get(asset_get))
-        .route("/infra/asset/create", post(asset_create))
-        .route("/infra/asset/update", put(asset_update))
-        .route("/infra/asset/delete", delete(asset_delete))
-        .route("/infra/asset/delete-list", delete(asset_delete_list))
-        .route("/infra/asset/{id}/port/add", post(asset_add_port))
-        .route("/infra/asset/{id}/port/{port}", put(asset_update_port))
-        .route("/infra/asset/{id}/port/{port}", delete(asset_delete_port))
-        .route("/infra/network-policy/page", get(network_policy_page))
-        .route("/infra/network-policy/list", get(network_policy_list))
-        .route("/infra/network-policy/get", get(network_policy_get))
-        .route("/infra/network-policy/create", post(network_policy_create))
-        .route("/infra/network-policy/update", put(network_policy_update))
-        .route(
-            "/infra/network-policy/delete",
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/asset/page", get(asset_page))
+        .api_route(
+"/infra/asset/list", get(asset_list))
+        .api_route(
+"/infra/asset/get", get(asset_get))
+        .api_route(
+"/infra/asset/create", post(asset_create))
+        .api_route(
+"/infra/asset/update", put(asset_update))
+        .api_route(
+"/infra/asset/delete", delete(asset_delete))
+        .api_route(
+"/infra/asset/delete-list", delete(asset_delete_list))
+        .api_route(
+"/infra/asset/{id}/port/add", post(asset_add_port))
+        .api_route(
+"/infra/asset/{id}/port/{port}", put(asset_update_port))
+        .api_route(
+"/infra/asset/{id}/port/{port}", delete(asset_delete_port))
+        .api_route(
+"/infra/network-policy/page", get(network_policy_page))
+        .api_route(
+"/infra/network-policy/list", get(network_policy_list))
+        .api_route(
+"/infra/network-policy/get", get(network_policy_get))
+        .api_route(
+"/infra/network-policy/create", post(network_policy_create))
+        .api_route(
+"/infra/network-policy/update", put(network_policy_update))
+        .api_route(
+"/infra/network-policy/delete",
             delete(network_policy_delete),
         )
-        .route(
-            "/infra/network-policy/delete-list",
+        .api_route(
+"/infra/network-policy/delete-list",
             delete(network_policy_delete_list),
         )
-        .route("/infra/cloud-asset/page", get(cloud_asset_page))
-        .route("/infra/cloud-asset/list", get(cloud_asset_list))
-        .route("/infra/cloud-asset/get", get(cloud_asset_get))
-        .route("/infra/cloud-asset/create", post(cloud_asset_create))
-        .route("/infra/cloud-asset/update", put(cloud_asset_update))
-        .route("/infra/cloud-asset/delete", delete(cloud_asset_delete))
-        .route("/infra/business-resource/page", get(biz_page))
-        .route("/infra/business-resource/list", get(biz_list))
-        .route("/infra/business-resource/get", get(biz_get))
-        .route("/infra/business-resource/create", post(biz_create))
-        .route("/infra/business-resource/update", put(biz_update))
-        .route("/infra/business-resource/delete", delete(biz_delete))
-        .route(
-            "/infra/business-resource/delete-list",
-            delete(biz_delete_list),
+        .api_route(
+"/infra/cloud-asset/page", get(cloud_asset_page))
+        .api_route(
+"/infra/cloud-asset/list", get(cloud_asset_list))
+        .api_route(
+"/infra/cloud-asset/get", get(cloud_asset_get))
+        .api_route(
+"/infra/cloud-asset/create", post(cloud_asset_create))
+        .api_route(
+"/infra/cloud-asset/update", put(cloud_asset_update))
+        .api_route(
+"/infra/cloud-asset/delete", delete(cloud_asset_delete))
+        .api_route(
+"/infra/cloud-resource/page", get(cloud_resource_page))
+        .api_route(
+"/infra/cloud-resource/list", get(cloud_resource_list))
+        .api_route(
+"/infra/cloud-resource/get", get(cloud_resource_get))
+        .api_route(
+"/infra/cloud-resource/create", post(cloud_resource_create))
+        .api_route(
+"/infra/cloud-resource/update", put(cloud_resource_update))
+        .api_route(
+"/infra/cloud-resource/delete",
+            delete(cloud_resource_delete),
+        )
+        .api_route(
+"/infra/cloud-resource/delete-list",
+            delete(cloud_resource_delete_list),
+        )
+        .api_route(
+"/infra/physical-resource/page", get(physical_resource_page))
+        .api_route(
+"/infra/physical-resource/list", get(physical_resource_list))
+        .api_route(
+"/infra/physical-resource/get", get(physical_resource_get))
+        .api_route(
+"/infra/physical-resource/create",
+            post(physical_resource_create),
+        )
+        .api_route(
+"/infra/physical-resource/update",
+            put(physical_resource_update),
+        )
+        .api_route(
+"/infra/physical-resource/delete",
+            delete(physical_resource_delete),
+        )
+        .api_route(
+"/infra/physical-resource/delete-list",
+            delete(physical_resource_delete_list),
         )
 }
 
@@ -366,34 +422,29 @@ async fn cloud_asset_delete(
     soft_delete(&state.pool, CLOUD_ASSET.table, id_param(&p)?).await
 }
 
-async fn biz_page(
+async fn cloud_resource_page(
     State(state): State<InfraState>,
     Query(p): Query<QueryParams>,
 ) -> Result<Json<ApiResponse<crate::Page<Value>>>, AppError> {
-    table_page(&state.pool, BUSINESS_RESOURCE, p).await
+    table_page(&state.pool, CLOUD_RESOURCE, p).await
 }
-async fn biz_list(
+async fn cloud_resource_list(
     State(state): State<InfraState>,
 ) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
-    table_list(&state.pool, BUSINESS_RESOURCE).await
+    table_list(&state.pool, CLOUD_RESOURCE).await
 }
-async fn biz_get(
+async fn cloud_resource_get(
     State(state): State<InfraState>,
     Query(p): Query<HashMap<String, String>>,
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
-    table_get(&state.pool, BUSINESS_RESOURCE, id_param(&p)?).await
+    table_get(&state.pool, CLOUD_RESOURCE, id_param(&p)?).await
 }
-async fn biz_create(
+async fn cloud_resource_create(
     State(state): State<InfraState>,
     Json(mut p): Json<Value>,
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     if let Some(object) = p.as_object_mut() {
-        if let Some(Value::Bool(enabled)) = object.get("hasSecurityProduct").cloned() {
-            object.insert(
-                "hasSecurityProduct".to_string(),
-                Value::Number((enabled as i32).into()),
-            );
-        }
+        normalize_security_product(object);
         let resource_id = uuid::Uuid::new_v4().to_string();
         object
             .entry("resourceId".to_string())
@@ -402,31 +453,85 @@ async fn biz_create(
             .entry("instanceId".to_string())
             .or_insert(Value::String(resource_id));
     }
-    table_create(&state.pool, BUSINESS_RESOURCE, p).await
+    table_create(&state.pool, CLOUD_RESOURCE, p).await
 }
-async fn biz_update(
+async fn cloud_resource_update(
     State(state): State<InfraState>,
     Json(mut p): Json<Value>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
-    if let Some(object) = p.as_object_mut()
-        && let Some(Value::Bool(enabled)) = object.get("hasSecurityProduct").cloned()
-    {
+    if let Some(object) = p.as_object_mut() {
+        normalize_security_product(object);
+    }
+    table_update(&state.pool, CLOUD_RESOURCE, p).await
+}
+async fn cloud_resource_delete(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    soft_delete(&state.pool, CLOUD_RESOURCE.table, id_param(&p)?).await
+}
+async fn cloud_resource_delete_list(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    soft_delete_list(&state.pool, CLOUD_RESOURCE.table, ids_param(&p)).await
+}
+
+async fn physical_resource_page(
+    State(state): State<InfraState>,
+    Query(p): Query<QueryParams>,
+) -> Result<Json<ApiResponse<crate::Page<Value>>>, AppError> {
+    table_page(&state.pool, PHYSICAL_RESOURCE, p).await
+}
+async fn physical_resource_list(
+    State(state): State<InfraState>,
+) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
+    table_list(&state.pool, PHYSICAL_RESOURCE).await
+}
+async fn physical_resource_get(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Value>>, AppError> {
+    table_get(&state.pool, PHYSICAL_RESOURCE, id_param(&p)?).await
+}
+async fn physical_resource_create(
+    State(state): State<InfraState>,
+    Json(mut p): Json<Value>,
+) -> Result<Json<ApiResponse<String>>, AppError> {
+    if let Some(object) = p.as_object_mut() {
+        normalize_security_product(object);
+    }
+    table_create(&state.pool, PHYSICAL_RESOURCE, p).await
+}
+async fn physical_resource_update(
+    State(state): State<InfraState>,
+    Json(mut p): Json<Value>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    if let Some(object) = p.as_object_mut() {
+        normalize_security_product(object);
+    }
+    table_update(&state.pool, PHYSICAL_RESOURCE, p).await
+}
+async fn physical_resource_delete(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    soft_delete(&state.pool, PHYSICAL_RESOURCE.table, id_param(&p)?).await
+}
+async fn physical_resource_delete_list(
+    State(state): State<InfraState>,
+    Query(p): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<()>>, AppError> {
+    soft_delete_list(&state.pool, PHYSICAL_RESOURCE.table, ids_param(&p)).await
+}
+
+/// `hasSecurityProduct` arrives as a boolean from the form but persists as an
+/// integer flag.
+fn normalize_security_product(object: &mut serde_json::Map<String, Value>) {
+    if let Some(Value::Bool(enabled)) = object.get("hasSecurityProduct").cloned() {
         object.insert(
             "hasSecurityProduct".to_string(),
             Value::Number((enabled as i32).into()),
         );
     }
-    table_update(&state.pool, BUSINESS_RESOURCE, p).await
-}
-async fn biz_delete(
-    State(state): State<InfraState>,
-    Query(p): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete(&state.pool, BUSINESS_RESOURCE.table, id_param(&p)?).await
-}
-async fn biz_delete_list(
-    State(state): State<InfraState>,
-    Query(p): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete_list(&state.pool, BUSINESS_RESOURCE.table, ids_param(&p)).await
 }

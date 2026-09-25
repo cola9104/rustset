@@ -18,9 +18,6 @@ export_handler!(job_export, "job");
 export_handler!(job_log_export, "job_log");
 export_handler!(api_access_log_export, "api_access_log");
 export_handler!(api_error_log_export, "api_error_log");
-export_handler!(demo01_contact_export, "demo01_contact");
-export_handler!(demo02_category_export, "demo02_category");
-export_handler!(demo03_student_export, "demo03_student");
 
 async fn export_kind(state: InfraState, kind: &str) -> Result<Response, AppError> {
     let spec = export_spec(kind).ok_or_else(|| AppError::bad_request("unsupported export kind"))?;
@@ -135,44 +132,6 @@ fn export_spec(kind: &str) -> Option<ExportSpec> {
                 ("exceptionMessage", "异常消息"),
                 ("processStatus", "处理状态"),
                 ("processTime", "处理时间"),
-                ("createTime", "创建时间"),
-            ],
-        },
-        "demo01_contact" => ExportSpec {
-            table: "yudao_demo01_contact",
-            filename: "infra-demo01-contact.xlsx",
-            sheet_name: "联系人",
-            columns: &[
-                ("id", "编号"),
-                ("name", "名字"),
-                ("sex", "性别"),
-                ("birthday", "生日"),
-                ("description", "简介"),
-                ("avatar", "头像"),
-                ("createTime", "创建时间"),
-            ],
-        },
-        "demo02_category" => ExportSpec {
-            table: "yudao_demo02_category",
-            filename: "infra-demo02-category.xlsx",
-            sheet_name: "分类",
-            columns: &[
-                ("id", "编号"),
-                ("name", "名字"),
-                ("parentId", "父级编号"),
-                ("createTime", "创建时间"),
-            ],
-        },
-        "demo03_student" => ExportSpec {
-            table: "yudao_demo03_student",
-            filename: "infra-demo03-student.xlsx",
-            sheet_name: "学生",
-            columns: &[
-                ("id", "编号"),
-                ("name", "名字"),
-                ("sex", "性别"),
-                ("birthday", "生日"),
-                ("description", "简介"),
                 ("createTime", "创建时间"),
             ],
         },

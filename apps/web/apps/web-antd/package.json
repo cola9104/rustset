@@ -57,6 +57,7 @@
     "vue-dompurify-html": "catalog:",
     "vue-router": "catalog:",
     "vue3-print-nb": "catalog:",
-    "vue3-signature": "catalog:"
+    "vue3-signature": "catalog:",
+    "@scalar/api-reference": "^1.0.0"
   }
 }

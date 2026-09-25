@@ -1,13 +1,15 @@
 use std::{collections::HashMap, env, io::Write, time::Instant};
+use schemars::JsonSchema;
 
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     body::{Body, Bytes},
     extract::{Multipart, Path, Query, State},
     http::header,
     middleware::from_fn,
     response::Response,
-    routing::{delete, get, post, put},
 };
 use chrono::{Datelike, Timelike, Utc};
 use rustset_framework_common::ApiResponse;
@@ -24,6 +26,7 @@ mod monitor;
 mod asset;
 mod business;
 mod cloud_platform;
+mod inspection;
 mod provider;
 mod risk;
 mod room;
@@ -47,13 +50,13 @@ impl InfraState {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub(crate) struct Page<T> {
     pub(crate) list: Vec<T>,
     pub(crate) total: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct QueryParams {
     #[serde(default, rename = "pageNo")]
     page_no: Option<i64>,
@@ -67,253 +70,148 @@ pub(crate) struct TableSpec {
     pub(crate) seq: &'static str,
 }
 
-pub fn routes(state: InfraState) -> Router {
-    Router::new()
-        .route("/infra/capabilities", get(capabilities))
-        .route("/infra/config/page", get(config_page))
-        .route("/infra/config/get", get(config_get))
-        .route("/infra/config/get-value-by-key", get(config_value_by_key))
-        .route("/infra/config/create", post(config_create))
-        .route("/infra/config/update", put(config_update))
-        .route("/infra/config/delete", delete(config_delete))
-        .route("/infra/config/delete-list", delete(config_delete_list))
-        .route("/infra/config/export-excel", get(excel::config_export))
-        .route("/infra/data-source-config/list", get(data_source_list))
-        .route("/infra/data-source-config/get", get(data_source_get))
-        .route("/infra/data-source-config/create", post(data_source_create))
-        .route("/infra/data-source-config/update", put(data_source_update))
-        .route(
-            "/infra/data-source-config/delete",
+pub fn routes(state: InfraState) -> ApiRouter {
+    ApiRouter::new()
+        .api_route(
+"/infra/capabilities", get(capabilities))
+        .api_route(
+"/infra/config/page", get(config_page))
+        .api_route(
+"/infra/config/get", get(config_get))
+        .api_route(
+"/infra/config/get-value-by-key", get(config_value_by_key))
+        .api_route(
+"/infra/config/create", post(config_create))
+        .api_route(
+"/infra/config/update", put(config_update))
+        .api_route(
+"/infra/config/delete", delete(config_delete))
+        .api_route(
+"/infra/config/delete-list", delete(config_delete_list))
+        .api_route(
+"/infra/config/export-excel", get(excel::config_export))
+        .api_route(
+"/infra/data-source-config/list", get(data_source_list))
+        .api_route(
+"/infra/data-source-config/get", get(data_source_get))
+        .api_route(
+"/infra/data-source-config/create", post(data_source_create))
+        .api_route(
+"/infra/data-source-config/update", put(data_source_update))
+        .api_route(
+"/infra/data-source-config/delete",
             delete(data_source_delete),
         )
-        .route(
-            "/infra/data-source-config/delete-list",
+        .api_route(
+"/infra/data-source-config/delete-list",
             delete(data_source_delete_list),
         )
-        .route("/infra/file-config/page", get(file_config_page))
-        .route("/infra/file-config/get", get(file_config_get))
-        .route("/infra/file-config/create", post(file_config_create))
-        .route("/infra/file-config/update", put(file_config_update))
-        .route("/infra/file-config/update-master", put(file_config_master))
-        .route("/infra/file-config/delete", delete(file_config_delete))
-        .route(
-            "/infra/file-config/delete-list",
+        .api_route(
+"/infra/file-config/page", get(file_config_page))
+        .api_route(
+"/infra/file-config/get", get(file_config_get))
+        .api_route(
+"/infra/file-config/create", post(file_config_create))
+        .api_route(
+"/infra/file-config/update", put(file_config_update))
+        .api_route(
+"/infra/file-config/update-master", put(file_config_master))
+        .api_route(
+"/infra/file-config/delete", delete(file_config_delete))
+        .api_route(
+"/infra/file-config/delete-list",
             delete(file_config_delete_list),
         )
-        .route("/infra/file-config/test", get(ok_bool))
-        .route("/infra/file/page", get(file_page))
-        .route("/infra/file/create", post(file_create))
-        .route("/infra/file/upload", post(file_upload))
-        .route("/upload/{*path}", get(file_download))
-        .route("/infra/file/presigned-url", get(file_presigned_url))
-        .route("/infra/file/delete", delete(file_delete))
-        .route("/infra/file/delete-list", delete(file_delete_list))
-        .route("/infra/job/page", get(job_page))
-        .route("/infra/job/get", get(job_get))
-        .route("/infra/job/create", post(job_create))
-        .route("/infra/job/update", put(job_update))
-        .route("/infra/job/update-status", put(job_update_status))
-        .route("/infra/job/trigger", put(job_trigger))
-        .route("/infra/job/get_next_times", get(job_next_times))
-        .route("/infra/job/sync", post(job_sync))
-        .route("/infra/job/delete", delete(job_delete))
-        .route("/infra/job/delete-list", delete(job_delete_list))
-        .route("/infra/job/export-excel", get(excel::job_export))
-        .route("/infra/job-log/page", get(job_log_page))
-        .route("/infra/job-log/export-excel", get(excel::job_log_export))
-        .route("/infra/api-access-log/page", get(api_access_log_page))
-        .route(
-            "/infra/api-access-log/export-excel",
+        .api_route(
+"/infra/file-config/test", get(ok_bool))
+        .api_route(
+"/infra/file/page", get(file_page))
+        .api_route(
+"/infra/file/create", post(file_create))
+        .api_route(
+"/infra/file/upload", post(file_upload))
+        .api_route(
+"/upload/{*path}", get(file_download))
+        .api_route(
+"/infra/file/presigned-url", get(file_presigned_url))
+        .api_route(
+"/infra/file/delete", delete(file_delete))
+        .api_route(
+"/infra/file/delete-list", delete(file_delete_list))
+        .api_route(
+"/infra/job/page", get(job_page))
+        .api_route(
+"/infra/job/get", get(job_get))
+        .api_route(
+"/infra/job/create", post(job_create))
+        .api_route(
+"/infra/job/update", put(job_update))
+        .api_route(
+"/infra/job/update-status", put(job_update_status))
+        .api_route(
+"/infra/job/trigger", put(job_trigger))
+        .api_route(
+"/infra/job/get_next_times", get(job_next_times))
+        .api_route(
+"/infra/job/sync", post(job_sync))
+        .api_route(
+"/infra/job/delete", delete(job_delete))
+        .api_route(
+"/infra/job/delete-list", delete(job_delete_list))
+        .api_route(
+"/infra/job/export-excel", get(excel::job_export))
+        .api_route(
+"/infra/job-log/page", get(job_log_page))
+        .api_route(
+"/infra/job-log/get", get(job_log_get))
+        .api_route(
+"/infra/job-log/export-excel", get(excel::job_log_export))
+        .api_route(
+"/infra/api-access-log/page", get(api_access_log_page))
+        .api_route(
+"/infra/api-access-log/export-excel",
             get(excel::api_access_log_export),
         )
-        .route("/infra/api-error-log/page", get(api_error_log_page))
-        .route(
-            "/infra/api-error-log/update-status",
+        .api_route(
+"/infra/api-error-log/page", get(api_error_log_page))
+        .api_route(
+"/infra/api-error-log/update-status",
             put(api_error_log_update_status),
         )
-        .route(
-            "/infra/api-error-log/export-excel",
+        .api_route(
+"/infra/api-error-log/export-excel",
             get(excel::api_error_log_export),
         )
-        .route("/infra/redis/get-monitor-info", get(redis_monitor_info))
-        .route("/infra/monitor/postgresql", get(monitor::postgresql))
-        .route("/infra/monitor/rust", get(monitor::rust_service))
-        .route("/infra/monitor/traces", get(monitor::traces))
-        .route("/infra/codegen/table/list", get(codegen_table_list))
-        .route("/infra/codegen/table/page", get(codegen_table_page))
-        .route("/infra/codegen/detail", get(codegen_detail))
-        .route("/infra/codegen/update", put(codegen_update))
-        .route("/infra/codegen/sync-from-db", put(codegen_sync_from_db))
-        .route("/infra/codegen/preview", get(codegen_preview))
-        .route("/infra/codegen/download", get(codegen_download))
-        .route("/infra/codegen/db/table/list", get(codegen_db_table_list))
-        .route("/infra/codegen/create-list", post(codegen_create_list))
-        .route("/infra/codegen/delete", delete(codegen_delete))
-        .route("/infra/codegen/delete-list", delete(codegen_delete_list))
-        .route("/infra/demo01-contact/page", get(demo01_contact_page))
-        .route("/infra/demo01-contact/get", get(demo01_contact_get))
-        .route("/infra/demo01-contact/create", post(demo01_contact_create))
-        .route("/infra/demo01-contact/update", put(demo01_contact_update))
-        .route(
-            "/infra/demo01-contact/delete",
-            delete(demo01_contact_delete),
-        )
-        .route(
-            "/infra/demo01-contact/delete-list",
-            delete(demo01_contact_delete_list),
-        )
-        .route(
-            "/infra/demo01-contact/export-excel",
-            get(excel::demo01_contact_export),
-        )
-        .route("/infra/demo02-category/list", get(demo02_category_list))
-        .route("/infra/demo02-category/get", get(demo02_category_get))
-        .route(
-            "/infra/demo02-category/create",
-            post(demo02_category_create),
-        )
-        .route("/infra/demo02-category/update", put(demo02_category_update))
-        .route(
-            "/infra/demo02-category/delete",
-            delete(demo02_category_delete),
-        )
-        .route(
-            "/infra/demo02-category/export-excel",
-            get(excel::demo02_category_export),
-        )
-        .route(
-            "/infra/demo03-student-normal/page",
-            get(demo03_student_page),
-        )
-        .route("/infra/demo03-student-normal/get", get(demo03_student_get))
-        .route(
-            "/infra/demo03-student-normal/create",
-            post(demo03_student_create),
-        )
-        .route(
-            "/infra/demo03-student-normal/update",
-            put(demo03_student_update),
-        )
-        .route(
-            "/infra/demo03-student-normal/delete",
-            delete(demo03_student_delete),
-        )
-        .route(
-            "/infra/demo03-student-normal/delete-list",
-            delete(demo03_student_delete_list),
-        )
-        .route(
-            "/infra/demo03-student-normal/export-excel",
-            get(excel::demo03_student_export),
-        )
-        .route(
-            "/infra/demo03-student-normal/demo03-course/list-by-student-id",
-            get(demo03_course_list_by_student_id),
-        )
-        .route(
-            "/infra/demo03-student-normal/demo03-grade/get-by-student-id",
-            get(demo03_grade_get_by_student_id),
-        )
-        .route("/infra/demo03-student-inner/page", get(demo03_student_page))
-        .route("/infra/demo03-student-inner/get", get(demo03_student_get))
-        .route(
-            "/infra/demo03-student-inner/create",
-            post(demo03_student_create),
-        )
-        .route(
-            "/infra/demo03-student-inner/update",
-            put(demo03_student_update),
-        )
-        .route(
-            "/infra/demo03-student-inner/delete",
-            delete(demo03_student_delete),
-        )
-        .route(
-            "/infra/demo03-student-inner/delete-list",
-            delete(demo03_student_delete_list),
-        )
-        .route(
-            "/infra/demo03-student-inner/export-excel",
-            get(excel::demo03_student_export),
-        )
-        .route(
-            "/infra/demo03-student-inner/demo03-course/list-by-student-id",
-            get(demo03_course_list_by_student_id),
-        )
-        .route(
-            "/infra/demo03-student-inner/demo03-grade/get-by-student-id",
-            get(demo03_grade_get_by_student_id),
-        )
-        .route("/infra/demo03-student-erp/page", get(demo03_student_page))
-        .route("/infra/demo03-student-erp/get", get(demo03_student_get))
-        .route(
-            "/infra/demo03-student-erp/create",
-            post(demo03_student_create),
-        )
-        .route(
-            "/infra/demo03-student-erp/update",
-            put(demo03_student_update),
-        )
-        .route(
-            "/infra/demo03-student-erp/delete",
-            delete(demo03_student_delete),
-        )
-        .route(
-            "/infra/demo03-student-erp/delete-list",
-            delete(demo03_student_delete_list),
-        )
-        .route(
-            "/infra/demo03-student-erp/export-excel",
-            get(excel::demo03_student_export),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-course/page",
-            get(demo03_course_page),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-course/get",
-            get(demo03_course_get),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-course/create",
-            post(demo03_course_create),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-course/update",
-            put(demo03_course_update),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-course/delete",
-            delete(demo03_course_delete),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-course/delete-list",
-            delete(demo03_course_delete_list),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-grade/page",
-            get(demo03_grade_page),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-grade/get",
-            get(demo03_grade_get),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-grade/create",
-            post(demo03_grade_create),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-grade/update",
-            put(demo03_grade_update),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-grade/delete",
-            delete(demo03_grade_delete),
-        )
-        .route(
-            "/infra/demo03-student-erp/demo03-grade/delete-list",
-            delete(demo03_grade_delete_list),
-        )
+        .api_route(
+"/infra/redis/get-monitor-info", get(redis_monitor_info))
+        .api_route(
+"/infra/monitor/postgresql", get(monitor::postgresql))
+        .api_route(
+"/infra/monitor/rust", get(monitor::rust_service))
+        .api_route(
+"/infra/monitor/traces", get(monitor::traces))
+        .api_route(
+"/infra/codegen/table/list", get(codegen_table_list))
+        .api_route(
+"/infra/codegen/table/page", get(codegen_table_page))
+        .api_route(
+"/infra/codegen/detail", get(codegen_detail))
+        .api_route(
+"/infra/codegen/update", put(codegen_update))
+        .api_route(
+"/infra/codegen/sync-from-db", put(codegen_sync_from_db))
+        .api_route(
+"/infra/codegen/preview", get(codegen_preview))
+        .api_route(
+"/infra/codegen/download", get(codegen_download))
+        .api_route(
+"/infra/codegen/db/table/list", get(codegen_db_table_list))
+        .api_route(
+"/infra/codegen/create-list", post(codegen_create_list))
+        .api_route(
+"/infra/codegen/delete", delete(codegen_delete))
+        .api_route(
+"/infra/codegen/delete-list", delete(codegen_delete_list))
         .merge(provider::routes())
         .merge(room::routes())
         .merge(cloud_platform::routes())
@@ -323,6 +221,7 @@ pub fn routes(state: InfraState) -> Router {
         .merge(business::routes())
         .merge(ticket::routes())
         .merge(task::routes())
+        .merge(inspection::routes())
         .merge(risk::routes())
         .route_layer(from_fn(authorization::authorize))
         .with_state(state)
@@ -830,6 +729,21 @@ async fn job_log_page(
     page(&state.pool, "SELECT count(*) FROM infra_job_log WHERE deleted=0", "SELECT jsonb_build_object('id', id, 'jobId', job_id, 'handlerName', handler_name, 'handlerParam', handler_param, 'executeIndex', execute_index, 'beginTime', begin_time, 'endTime', end_time, 'duration', duration, 'status', status, 'result', result, 'createTime', create_time) FROM infra_job_log WHERE deleted=0 ORDER BY id DESC LIMIT $1 OFFSET $2", params).await
 }
 
+async fn job_log_get(
+    State(state): State<InfraState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Value>>, AppError> {
+    let value = sqlx::query_scalar::<_, Value>(
+        "SELECT jsonb_build_object('id', id, 'jobId', job_id, 'handlerName', handler_name, 'handlerParam', handler_param, 'executeIndex', execute_index, 'beginTime', begin_time, 'endTime', end_time, 'duration', duration, 'status', status, 'result', result, 'createTime', create_time) FROM infra_job_log WHERE id=$1 AND deleted=0",
+    )
+    .bind(id_param(&params)?)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| AppError::internal("failed"))?
+    .ok_or_else(|| AppError::not_found("job log not found"))?;
+    Ok(Json(ApiResponse::new(table_value(value))))
+}
+
 async fn api_access_log_page(
     State(state): State<InfraState>,
     Query(params): Query<QueryParams>,
@@ -993,26 +907,6 @@ const CODEGEN_TABLE: TableSpec = TableSpec {
 const CODEGEN_COLUMN: TableSpec = TableSpec {
     table: "infra_codegen_column",
     seq: "infra_codegen_column_seq",
-};
-const DEMO01_CONTACT: TableSpec = TableSpec {
-    table: "yudao_demo01_contact",
-    seq: "yudao_demo01_contact_seq",
-};
-const DEMO02_CATEGORY: TableSpec = TableSpec {
-    table: "yudao_demo02_category",
-    seq: "yudao_demo02_category_seq",
-};
-const DEMO03_STUDENT: TableSpec = TableSpec {
-    table: "yudao_demo03_student",
-    seq: "yudao_demo03_student_seq",
-};
-const DEMO03_COURSE: TableSpec = TableSpec {
-    table: "yudao_demo03_course",
-    seq: "yudao_demo03_course_seq",
-};
-const DEMO03_GRADE: TableSpec = TableSpec {
-    table: "yudao_demo03_grade",
-    seq: "yudao_demo03_grade_seq",
 };
 
 async fn codegen_table_list(
@@ -1295,236 +1189,36 @@ async fn insert_codegen_columns_in_tx(
     Ok(())
 }
 
-async fn demo01_contact_page(
-    State(state): State<InfraState>,
-    Query(params): Query<QueryParams>,
-) -> Result<Json<ApiResponse<Page<Value>>>, AppError> {
-    table_page(&state.pool, DEMO01_CONTACT, params).await
-}
 
-async fn demo01_contact_get(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Value>>, AppError> {
-    table_get(&state.pool, DEMO01_CONTACT, id_param(&params)?).await
-}
 
-async fn demo01_contact_create(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<String>>, AppError> {
-    table_create(&state.pool, DEMO01_CONTACT, payload).await
-}
 
-async fn demo01_contact_update(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    table_update(&state.pool, DEMO01_CONTACT, payload).await
-}
 
-async fn demo01_contact_delete(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete(&state.pool, DEMO01_CONTACT.table, id_param(&params)?).await
-}
 
-async fn demo01_contact_delete_list(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete_list(&state.pool, DEMO01_CONTACT.table, ids_param(&params)).await
-}
 
-async fn demo02_category_list(
-    State(state): State<InfraState>,
-) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
-    table_list(&state.pool, DEMO02_CATEGORY).await
-}
 
-async fn demo02_category_get(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Value>>, AppError> {
-    table_get(&state.pool, DEMO02_CATEGORY, id_param(&params)?).await
-}
 
-async fn demo02_category_create(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<String>>, AppError> {
-    table_create(&state.pool, DEMO02_CATEGORY, payload).await
-}
 
-async fn demo02_category_update(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    table_update(&state.pool, DEMO02_CATEGORY, payload).await
-}
 
-async fn demo02_category_delete(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete(&state.pool, DEMO02_CATEGORY.table, id_param(&params)?).await
-}
 
-async fn demo03_student_page(
-    State(state): State<InfraState>,
-    Query(params): Query<QueryParams>,
-) -> Result<Json<ApiResponse<Page<Value>>>, AppError> {
-    table_page(&state.pool, DEMO03_STUDENT, params).await
-}
 
-async fn demo03_student_get(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Value>>, AppError> {
-    table_get(&state.pool, DEMO03_STUDENT, id_param(&params)?).await
-}
 
-async fn demo03_student_create(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<String>>, AppError> {
-    table_create(&state.pool, DEMO03_STUDENT, payload).await
-}
 
-async fn demo03_student_update(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    table_update(&state.pool, DEMO03_STUDENT, payload).await
-}
 
-async fn demo03_student_delete(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete(&state.pool, DEMO03_STUDENT.table, id_param(&params)?).await
-}
 
-async fn demo03_student_delete_list(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete_list(&state.pool, DEMO03_STUDENT.table, ids_param(&params)).await
-}
 
-async fn demo03_course_page(
-    State(state): State<InfraState>,
-    Query(params): Query<QueryParams>,
-) -> Result<Json<ApiResponse<Page<Value>>>, AppError> {
-    table_page(&state.pool, DEMO03_COURSE, params).await
-}
 
-async fn demo03_course_get(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Value>>, AppError> {
-    table_get(&state.pool, DEMO03_COURSE, id_param(&params)?).await
-}
 
-async fn demo03_course_create(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<String>>, AppError> {
-    table_create(&state.pool, DEMO03_COURSE, payload).await
-}
 
-async fn demo03_course_update(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    table_update(&state.pool, DEMO03_COURSE, payload).await
-}
 
-async fn demo03_course_delete(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete(&state.pool, DEMO03_COURSE.table, id_param(&params)?).await
-}
 
-async fn demo03_course_delete_list(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete_list(&state.pool, DEMO03_COURSE.table, ids_param(&params)).await
-}
 
-async fn demo03_grade_page(
-    State(state): State<InfraState>,
-    Query(params): Query<QueryParams>,
-) -> Result<Json<ApiResponse<Page<Value>>>, AppError> {
-    table_page(&state.pool, DEMO03_GRADE, params).await
-}
 
-async fn demo03_grade_get(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Value>>, AppError> {
-    table_get(&state.pool, DEMO03_GRADE, id_param(&params)?).await
-}
 
-async fn demo03_grade_create(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<String>>, AppError> {
-    table_create(&state.pool, DEMO03_GRADE, payload).await
-}
 
-async fn demo03_grade_update(
-    State(state): State<InfraState>,
-    Json(payload): Json<Value>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    table_update(&state.pool, DEMO03_GRADE, payload).await
-}
 
-async fn demo03_grade_delete(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete(&state.pool, DEMO03_GRADE.table, id_param(&params)?).await
-}
 
-async fn demo03_grade_delete_list(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<()>>, AppError> {
-    soft_delete_list(&state.pool, DEMO03_GRADE.table, ids_param(&params)).await
-}
 
-async fn demo03_course_list_by_student_id(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
-    table_list_by_i64(
-        &state.pool,
-        DEMO03_COURSE,
-        "student_id",
-        id_named_param(&params, "studentId")?,
-    )
-    .await
-}
 
-async fn demo03_grade_get_by_student_id(
-    State(state): State<InfraState>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Value>>, AppError> {
-    let student_id = id_named_param(&params, "studentId")?;
-    let sql = "SELECT to_jsonb(t) FROM yudao_demo03_grade t WHERE student_id=$1 AND deleted=0 ORDER BY id DESC LIMIT 1";
-    let value = sqlx::query_scalar::<_, Value>(sql)
-        .bind(student_id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|_| AppError::internal("failed to get record"))?
-        .map(table_value)
-        .unwrap_or_else(|| json!({}));
-    Ok(Json(ApiResponse::new(value)))
-}
 
 pub(crate) async fn table_page(
     pool: &PgPool,

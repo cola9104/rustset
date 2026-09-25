@@ -1,13 +1,14 @@
 use serde::{Deserialize, Deserializer, Serialize, de};
+use schemars::JsonSchema;
 use serde_json::Value;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct SystemCapability {
     pub module: &'static str,
     pub capabilities: [&'static str; 4],
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
@@ -46,7 +47,7 @@ where
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct TokenResponse {
     pub access_token: String,
     pub refresh_token: String,
@@ -59,12 +60,12 @@ pub struct RefreshTokenRequest {
     pub refresh_token: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LogoutRequest {
     pub refresh_token: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct CurrentUserResponse {
     pub user_id: String,
     pub username: String,
@@ -142,7 +143,7 @@ pub struct PermissionSummary {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct AuditLogSummary {
     pub id: String,
     pub actor_user_id: Option<String>,

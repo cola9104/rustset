@@ -5,10 +5,12 @@ mod instance;
 mod net_zone;
 mod relation;
 
+use aide::axum::routing::{delete, get, post, put};
+use schemars::JsonSchema;
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_database::PgPool;
@@ -51,30 +53,40 @@ pub(crate) fn valid_code(code: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-pub fn routes(state: CmdbState) -> Router {
-    Router::new()
-        .route("/cmdb/model/list", get(model_list))
-        .route("/cmdb/model/page", get(model_page))
-        .route("/cmdb/model/get", get(model_get))
-        .route("/cmdb/model/create", post(model_create))
-        .route("/cmdb/model/update", put(model_update))
-        .route("/cmdb/model/delete", delete(model_delete))
-        .route("/cmdb/attribute/list-by-model", get(attribute_list))
-        .route("/cmdb/attribute/create", post(attribute_create))
-        .route("/cmdb/attribute/update", put(attribute_update))
-        .route("/cmdb/attribute/delete", delete(attribute_delete))
+pub fn routes(state: CmdbState) -> ApiRouter {
+    ApiRouter::new()
+        .api_route(
+"/cmdb/model/list", get(model_list))
+        .api_route(
+"/cmdb/model/page", get(model_page))
+        .api_route(
+"/cmdb/model/get", get(model_get))
+        .api_route(
+"/cmdb/model/create", post(model_create))
+        .api_route(
+"/cmdb/model/update", put(model_update))
+        .api_route(
+"/cmdb/model/delete", delete(model_delete))
+        .api_route(
+"/cmdb/attribute/list-by-model", get(attribute_list))
+        .api_route(
+"/cmdb/attribute/create", post(attribute_create))
+        .api_route(
+"/cmdb/attribute/update", put(attribute_update))
+        .api_route(
+"/cmdb/attribute/delete", delete(attribute_delete))
         .merge(instance_routes())
         .merge(relation_routes())
         .merge(net_zone_routes())
         .with_state(state)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct IdParams {
     id: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct ModelPageParams {
     #[serde(default)]
     page_no: Option<i64>,

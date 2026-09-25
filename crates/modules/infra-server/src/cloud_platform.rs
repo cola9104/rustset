@@ -2,10 +2,11 @@ use crate::{
     InfraState, QueryParams, TableSpec, id_param, ids_param, soft_delete, soft_delete_list,
     table_create, table_get, table_list, table_page, table_update,
 };
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_web::AppError;
@@ -25,41 +26,60 @@ const CLOUD_PROVIDER_CONFIG: TableSpec = TableSpec {
     seq: "infra_cloud_provider_config_seq",
 };
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/cloud-zone/page", get(zone_page))
-        .route("/infra/cloud-zone/list", get(zone_list))
-        .route("/infra/cloud-zone/get", get(zone_get))
-        .route("/infra/cloud-zone/create", post(zone_create))
-        .route("/infra/cloud-zone/update", put(zone_update))
-        .route("/infra/cloud-zone/delete", delete(zone_delete))
-        .route("/infra/cloud-zone/delete-list", delete(zone_delete_list))
-        .route("/infra/cloud-platform/page", get(platform_page))
-        .route("/infra/cloud-platform/list", get(platform_list))
-        .route(
-            "/infra/cloud-platform/list-by-zone",
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/cloud-zone/page", get(zone_page))
+        .api_route(
+"/infra/cloud-zone/list", get(zone_list))
+        .api_route(
+"/infra/cloud-zone/get", get(zone_get))
+        .api_route(
+"/infra/cloud-zone/create", post(zone_create))
+        .api_route(
+"/infra/cloud-zone/update", put(zone_update))
+        .api_route(
+"/infra/cloud-zone/delete", delete(zone_delete))
+        .api_route(
+"/infra/cloud-zone/delete-list", delete(zone_delete_list))
+        .api_route(
+"/infra/cloud-platform/page", get(platform_page))
+        .api_route(
+"/infra/cloud-platform/list", get(platform_list))
+        .api_route(
+"/infra/cloud-platform/list-by-zone",
             get(platform_list_by_zone),
         )
-        .route("/infra/cloud-platform/get", get(platform_get))
-        .route("/infra/cloud-platform/create", post(platform_create))
-        .route("/infra/cloud-platform/update", put(platform_update))
-        .route("/infra/cloud-platform/delete", delete(platform_delete))
-        .route(
-            "/infra/cloud-platform/delete-list",
+        .api_route(
+"/infra/cloud-platform/get", get(platform_get))
+        .api_route(
+"/infra/cloud-platform/create", post(platform_create))
+        .api_route(
+"/infra/cloud-platform/update", put(platform_update))
+        .api_route(
+"/infra/cloud-platform/delete", delete(platform_delete))
+        .api_route(
+"/infra/cloud-platform/delete-list",
             delete(platform_delete_list),
         )
-        .route("/infra/cloud-provider-config/page", get(config_page))
-        .route("/infra/cloud-provider-config/list", get(config_list))
-        .route("/infra/cloud-provider-config/get", get(config_get))
-        .route("/infra/cloud-provider-config/create", post(config_create))
-        .route("/infra/cloud-provider-config/update", put(config_update))
-        .route("/infra/cloud-provider-config/delete", delete(config_delete))
-        .route(
-            "/infra/cloud-provider-config/delete-list",
+        .api_route(
+"/infra/cloud-provider-config/page", get(config_page))
+        .api_route(
+"/infra/cloud-provider-config/list", get(config_list))
+        .api_route(
+"/infra/cloud-provider-config/get", get(config_get))
+        .api_route(
+"/infra/cloud-provider-config/create", post(config_create))
+        .api_route(
+"/infra/cloud-provider-config/update", put(config_update))
+        .api_route(
+"/infra/cloud-provider-config/delete", delete(config_delete))
+        .api_route(
+"/infra/cloud-provider-config/delete-list",
             delete(config_delete_list),
         )
-        .route(
-            "/infra/cloud-provider-config/test-connection",
+        .api_route(
+"/infra/cloud-provider-config/test-connection",
             post(config_test_connection),
         )
 }
@@ -208,9 +228,48 @@ async fn config_test_connection(
 ) -> Result<Json<ApiResponse<Value>>, AppError> {
     let id = id_param(&params)?;
     let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let _ = sqlx::query("UPDATE infra_cloud_provider_config SET last_test_time=$2::timestamp, last_test_result=$3, update_time=now() WHERE id=$1 AND deleted=0")
-        .bind(id).bind(&now).bind("Connection test not implemented").execute(&state.pool).await;
+    let config = crate::table_get_value(&state.pool, CLOUD_PROVIDER_CONFIG, id).await?;
+    let ticket = json!({"cloudPlatformId": config.get("platformId")});
+    let (target, _) = crate::ticket::load_platform_target(&state, &ticket, Some(id)).await?;
+    let template =
+        rustset_framework_tofu::render_connection_check(&target).map_err(AppError::bad_request)?;
+    let executor = rustset_framework_tofu::TofuExecutor::from_env();
+    let workspace = executor
+        .ensure_workspace(&format!("connection-{id}-{}", uuid::Uuid::new_v4()))
+        .map_err(AppError::bad_request)?;
+    rustset_framework_tofu::TofuExecutor::write_file(&workspace, "main.tf", &template)
+        .map_err(AppError::bad_request)?;
+    rustset_framework_tofu::TofuExecutor::write_file(
+        &workspace,
+        "probe.auto.tfvars.json",
+        &json!({"region": target.region}).to_string(),
+    )
+    .map_err(AppError::bad_request)?;
+    let init = executor.init(&workspace).await;
+    let (success, message) = if init.success {
+        let probe = executor
+            .run(
+                &["plan", "-input=false", "-no-color", "-lock-timeout=5s"],
+                &rustset_framework_tofu::credential_env(&target),
+                &workspace,
+            )
+            .await;
+        if probe.success {
+            (true, "连接成功：已通过云 API 查询区域/可用区")
+        } else {
+            (false, "云 API 查询失败，请检查凭据、区域、权限和网络")
+        }
+    } else {
+        (
+            false,
+            "Provider 初始化失败，请检查 OpenTofu 安装和 Provider 下载网络",
+        )
+    };
+    sqlx::query("UPDATE infra_cloud_provider_config SET last_test_time=$2::timestamp, last_test_result=$3, update_time=now() WHERE id=$1 AND deleted=0")
+        .bind(id).bind(&now).bind(message).execute(&state.pool).await.map_err(|_| AppError::internal("failed to save connection test"))?;
+    // A probe never manages resources; only its uniquely created temporary files.
+    let _ = std::fs::remove_dir_all(&workspace);
     Ok(Json(ApiResponse::new(
-        json!({"success": false, "message": "Connection test not implemented", "testedAt": now}),
+        json!({"success": success, "message": message, "testedAt": now}),
     )))
 }

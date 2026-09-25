@@ -74,3 +74,8 @@ impl Serialize for AppError {
         .serialize(serializer)
     }
 }
+
+/// 错误响应不展开建模；接口失败结构见 `ErrorBody`，由全局错误处理输出。
+impl aide::operation::OperationOutput for AppError {
+    type Inner = ();
+}

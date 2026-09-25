@@ -16,9 +16,6 @@ import {
   getAuthPermissionInfoApi,
   loginApi,
   logoutApi,
-  register,
-  smsLogin,
-  socialLogin,
 } from '#/api';
 import { $t } from '#/locales';
 
@@ -32,37 +29,18 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * 异步处理登录操作
    * Asynchronously handle the login process
-   * @param type 登录类型
    * @param params 登录表单数据
    * @param onSuccess 登录成功后的回调函数
    */
   async function authLogin(
-    type: 'mobile' | 'register' | 'social' | 'username',
     params: Recordable<any>,
     onSuccess?: () => Promise<void> | void,
   ) {
     // 异步处理用户登录操作并获取 accessToken
     let userInfo: null | UserInfo = null;
     try {
-      let loginResult: AuthApi.LoginResult;
       loginLoading.value = true;
-      switch (type) {
-        case 'mobile': {
-          loginResult = await smsLogin(params as AuthApi.SmsLoginParams);
-          break;
-        }
-        case 'register': {
-          loginResult = await register(params as AuthApi.RegisterParams);
-          break;
-        }
-        case 'social': {
-          loginResult = await socialLogin(params as AuthApi.SocialLoginParams);
-          break;
-        }
-        default: {
-          loginResult = await loginApi(params);
-        }
-      }
+      const loginResult: AuthApi.LoginResult = await loginApi(params);
       const { accessToken, refreshToken } = loginResult;
 
       // 如果成功获取到 accessToken

@@ -1,10 +1,12 @@
 use crate::{AiState, require};
+use schemars::JsonSchema;
+use aide::axum::routing::{delete, get, post};
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     body::Body,
     extract::{Query, State},
     http::{Response, header},
-    routing::{delete, get, post},
 };
 use futures_util::stream;
 use rustset_ai_api::{ChatMessage, ChatRequest};
@@ -15,13 +17,16 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tokio::sync::mpsc;
-pub fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/write/generate-stream", post(generate_stream))
-        .route("/ai/write/page", get(page))
-        .route("/ai/write/delete", delete(remove))
+pub fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/write/generate-stream", post(generate_stream))
+        .api_route(
+"/ai/write/page", get(page))
+        .api_route(
+"/ai/write/delete", delete(remove))
 }
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Generate {
     model_id: Option<i64>,
@@ -34,7 +39,7 @@ struct Generate {
     tone: Option<i32>,
     language: Option<i32>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Page {
     page_no: Option<i64>,
@@ -44,7 +49,7 @@ struct Page {
     type_: Option<i32>,
     platform: Option<String>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Id {
     id: i64,
 }

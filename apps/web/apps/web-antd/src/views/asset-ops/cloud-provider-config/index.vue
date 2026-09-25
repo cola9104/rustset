@@ -55,7 +55,7 @@ async function handleSubmit() {
 }
 async function handleTest(r:Config) {
   const hide = message.loading({content:'测试连接中...',duration:0});
-  try { const res:any = await testCloudConnection(r.id!); hide(); message.success(res?.message||'连接正常'); } catch { hide(); message.error('连接失败'); }
+  try { const res:any = await testCloudConnection(r.id!); hide(); if(res?.success){message.success(res.message||'连接正常');}else{message.error(res?.message||'连接失败');} } catch { hide(); message.error('连接失败'); }
 }
 </script>
 

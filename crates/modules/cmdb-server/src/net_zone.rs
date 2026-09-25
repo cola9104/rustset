@@ -3,10 +3,12 @@
 //! specific segment (longest prefix) to auto-fill ownership, and asset
 //! pages can jump to the network policies covering the asset's IPs.
 
+use aide::axum::routing::{delete, get, post, put};
+use schemars::JsonSchema;
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
@@ -18,20 +20,29 @@ use std::net::Ipv4Addr;
 
 use crate::{CmdbState, require};
 
-pub fn routes() -> Router<CmdbState> {
-    Router::new()
-        .route("/cmdb/net-zone/tree", get(net_zone_tree))
-        .route("/cmdb/net-zone/list", get(net_zone_list))
-        .route("/cmdb/net-zone/get", get(net_zone_get))
-        .route("/cmdb/net-zone/create", post(net_zone_create))
-        .route("/cmdb/net-zone/update", put(net_zone_update))
-        .route("/cmdb/net-zone/delete", delete(net_zone_delete))
-        .route("/cmdb/net-zone/resolve", post(net_zone_resolve))
-        .route("/cmdb/net-zone/identify-assets", post(identify_assets))
-        .route("/cmdb/net-zone/policies-by-ip", get(policies_by_ip))
+pub fn routes() -> ApiRouter<CmdbState> {
+    ApiRouter::new()
+        .api_route(
+"/cmdb/net-zone/tree", get(net_zone_tree))
+        .api_route(
+"/cmdb/net-zone/list", get(net_zone_list))
+        .api_route(
+"/cmdb/net-zone/get", get(net_zone_get))
+        .api_route(
+"/cmdb/net-zone/create", post(net_zone_create))
+        .api_route(
+"/cmdb/net-zone/update", put(net_zone_update))
+        .api_route(
+"/cmdb/net-zone/delete", delete(net_zone_delete))
+        .api_route(
+"/cmdb/net-zone/resolve", post(net_zone_resolve))
+        .api_route(
+"/cmdb/net-zone/identify-assets", post(identify_assets))
+        .api_route(
+"/cmdb/net-zone/policies-by-ip", get(policies_by_ip))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct NetZonePageParams {
     #[serde(rename = "parentId", default)]
     parent_id: Option<i64>,
@@ -202,7 +213,7 @@ async fn net_zone_list(
     )))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct IdParams {
     id: i64,
     #[serde(rename = "tenantId", default)]
@@ -551,7 +562,7 @@ async fn identify_assets(
 
 /// Network policies whose source or destination IP covers the asset IP —
 /// backing the asset-page jump (需求 D).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct PoliciesByIpParams {
     ip: String,
     #[serde(default)]

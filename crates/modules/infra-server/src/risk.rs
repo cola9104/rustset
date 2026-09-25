@@ -1,8 +1,9 @@
 use crate::{InfraState, QueryParams};
+use aide::axum::ApiRouter;
+use aide::axum::routing::{get, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{get, put},
 };
 use chrono::Utc;
 use rustset_framework_common::ApiResponse;
@@ -10,13 +11,18 @@ use rustset_framework_web::AppError;
 use serde_json::Value;
 use std::collections::HashMap;
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/risk/page", get(page))
-        .route("/infra/risk/list", get(list))
-        .route("/infra/risk/get", get(get_one))
-        .route("/infra/risk/{id}/status/{status}", put(update_status))
-        .route("/infra/risk/{id}/resolve", put(resolve))
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/risk/page", get(page))
+        .api_route(
+"/infra/risk/list", get(list))
+        .api_route(
+"/infra/risk/get", get(get_one))
+        .api_route(
+"/infra/risk/{id}/status/{status}", put(update_status))
+        .api_route(
+"/infra/risk/{id}/resolve", put(resolve))
 }
 
 async fn page(
@@ -80,7 +86,7 @@ async fn update_status(
         return Err(AppError::bad_request("Invalid status"));
     }
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    sqlx::query("UPDATE infra_risk SET status=$2, update_time=$3 WHERE id=$1 AND deleted=0")
+    sqlx::query("UPDATE infra_risk SET status=$2, update_time=$3::timestamp WHERE id=$1 AND deleted=0")
         .bind(&id)
         .bind(&status)
         .bind(&now)
@@ -96,7 +102,7 @@ async fn resolve(
 ) -> Result<Json<ApiResponse<String>>, AppError> {
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
     sqlx::query(
-        "UPDATE infra_risk SET status='resolved', update_time=$2 WHERE id=$1 AND deleted=0",
+        "UPDATE infra_risk SET status='resolved', update_time=$2::timestamp WHERE id=$1 AND deleted=0",
     )
     .bind(&id)
     .bind(&now)

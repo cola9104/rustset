@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -215,7 +216,7 @@ impl AiModelType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelConfig {
     pub id: i64,

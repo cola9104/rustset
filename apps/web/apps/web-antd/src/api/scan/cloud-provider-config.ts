@@ -18,4 +18,4 @@ export function getCloudProviderConfig(id: number) { return infraGet<ScanCloudPr
 export function createCloudProviderConfig(data: ScanCloudProviderConfigApi.CloudProviderConfig) { return infraCreate('cloud-provider-config', data); }
 export function updateCloudProviderConfig(id: number, data: ScanCloudProviderConfigApi.CloudProviderConfig) { return infraUpdate('cloud-provider-config', id, data); }
 export function deleteCloudProviderConfig(id: number) { return infraDelete('cloud-provider-config', id); }
-export function testCloudConnection(configId: number) { return requestClient.post('/infra/cloud-provider-config/test-connection', undefined, { params: { id: configId } }); }
+export function testCloudConnection(configId: number) { return requestClient.post('/infra/cloud-provider-config/test-connection', undefined, { params: { id: configId }, timeout: 600_000 }); }

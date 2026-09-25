@@ -327,5 +327,9 @@
     "esbuild",
     "lefthook",
     "vue-demi"
-  ]
+  ],
+  "resolutions": {
+    "@scalar/snippetz": "0.10.0",
+    "@scalar/json-magic": "0.15.0"
+  }
 }

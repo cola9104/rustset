@@ -1,9 +1,13 @@
-use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
+use aide::axum::{ApiRouter, routing::get};
+use aide::openapi::{Components, Info, OpenApi, ReferenceOr, SecurityScheme, Server};
+use axum::{Json, middleware::from_fn_with_state};
+use indexmap::IndexMap;
 use rustset_framework_common::{ApiResponse, ServiceConfig, health_route, init_tracing, serve};
 use rustset_framework_database::{DatabaseConfig, connect, migrate};
 use rustset_framework_redis::{RateLimitConfig, RateLimitState, RedisClient, RedisConfig};
 use rustset_framework_security::{SecurityConfig, TokenService};
 use rustset_framework_web::{AppError, WebConfig, apply_web_layers};
+use schemars::JsonSchema;
 use serde::Serialize;
 use tracing::warn;
 
@@ -12,10 +16,33 @@ mod openapi;
 
 const SERVICE_NAME: &str = "gateway";
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 struct GatewayIndex {
     service: &'static str,
     modules: [&'static str; 4],
+}
+
+/// 按路径前缀归组，供 Scalar 侧边栏分组展示。
+fn tag_for(path: &str) -> &'static str {
+    const RULES: &[(&str, &str)] = &[
+        ("/system/auth", "认证"),
+        ("/system", "系统管理"),
+        ("/infra", "资产与基础设施"),
+        ("/cmdb", "CMDB"),
+        ("/ai", "AI 大模型"),
+        ("/chat/", "AI 开放接口"),
+        ("/mj/", "AI 开放接口"),
+        ("/identity", "AI 开放接口"),
+        ("/login", "AI 开放接口"),
+        ("/health", "运维"),
+        ("/upload", "文件"),
+        ("/", "运维"),
+    ];
+    RULES
+        .iter()
+        .find(|(prefix, _)| path.starts_with(prefix))
+        .map(|(_, tag)| *tag)
+        .unwrap_or("其他")
 }
 
 #[tokio::main]
@@ -39,13 +66,74 @@ async fn main() -> anyhow::Result<()> {
     system_state.bootstrap().await?;
     let database_auth = system_state.database_auth_state();
 
-    let mut app = Router::new()
-        .route("/", get(index))
+    let mut api_doc = OpenApi {
+        info: Info {
+            title: "RustSet Gateway API".to_string(),
+            description: Some(
+                "RustSet 资产、CMDB、云资源、运维与 AI 管理接口。\
+                 文档由 aide 从路由与处理器类型推导生成，请求/响应结构以实际实现为准。"
+                    .to_string(),
+            ),
+            version: "0.1.0".to_string(),
+            ..Info::default()
+        },
+        servers: vec![Server {
+            url: "/api".to_string(),
+            ..Server::default()
+        }],
+        components: Some(Components {
+            security_schemes: {
+                let mut schemes = IndexMap::new();
+                schemes.insert(
+                    "bearerAuth".to_string(),
+                    ReferenceOr::Item(SecurityScheme::Http {
+                        scheme: "bearer".to_string(),
+                        bearer_format: Some("JWT".to_string()),
+                        description: Some("登录接口返回的访问令牌".to_string()),
+                        extensions: Default::default(),
+                    }),
+                );
+                schemes
+            },
+            ..Components::default()
+        }),
+        ..OpenApi::default()
+    };
+
+    let app = ApiRouter::new()
+        .api_route("/", get(index))
+        // 文档端点自身不进文档。
         .route("/openapi.json", get(openapi::document))
         .merge(rustset_system_server::routes(system_state))
         .merge(rustset_infra_server::routes(infra_state))
         .merge(rustset_ai_server::routes(ai_state))
         .merge(rustset_cmdb_server::routes(cmdb_state))
+        .finish_api(&mut api_doc);
+
+    // finish 之后统一补标签： aide 只登记方法与结构，不含业务分组。
+    if let Some(paths) = api_doc.paths.as_mut() {
+        for (route, reference) in paths.paths.iter_mut() {
+            let ReferenceOr::Item(item) = reference else { continue };
+            let tag = tag_for(route);
+            for operation in [
+                &mut item.get,
+                &mut item.put,
+                &mut item.post,
+                &mut item.delete,
+                &mut item.patch,
+                &mut item.head,
+                &mut item.options,
+                &mut item.trace,
+            ] {
+                if let Some(operation) = operation.as_mut() {
+                    operation.tags.push(tag.to_string());
+                }
+            }
+        }
+    }
+    openapi::publish(api_doc);
+
+    let mut app = app
         .merge(health_route(SERVICE_NAME))
         .fallback(not_found)
         .layer(from_fn_with_state(

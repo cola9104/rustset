@@ -91,24 +91,6 @@ const routes: RouteRecordRaw[] = [
           icon: 'lucide:panel-top',
         },
       },
-      {
-        path: '/infra/demo01',
-        component: () => import('#/views/infra/demo/demo01/index.vue'),
-        name: 'InfraDemo01',
-        meta: {
-          title: '示例一',
-          icon: 'lucide:flask-conical',
-        },
-      },
-      {
-        path: '/infra/demo02',
-        component: () => import('#/views/infra/demo/demo02/index.vue'),
-        name: 'InfraDemo02',
-        meta: {
-          title: '示例二',
-          icon: 'lucide:flask-round',
-        },
-      },
     ],
   },
   {
@@ -157,9 +139,9 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        path: '/infra/swagger',
-        component: () => import('#/views/infra/swagger/index.vue'),
-        name: 'InfraSwagger',
+        path: '/infra/api-docs',
+        component: () => import('#/views/infra/api-docs/index.vue'),
+        name: 'InfraApiDocs',
         meta: {
           title: '接口文档',
           icon: 'lucide:book-marked',

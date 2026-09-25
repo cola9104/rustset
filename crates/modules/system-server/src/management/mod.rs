@@ -6,10 +6,10 @@ mod notify;
 mod shared;
 mod user_relations;
 
-use axum::Router;
+use aide::axum::ApiRouter;
 
 use crate::SystemState;
 
-pub fn routes() -> Router<SystemState> {
-    Router::new().merge(compat::routes())
+pub fn routes() -> ApiRouter<SystemState> {
+    ApiRouter::new().merge(compat::routes())
 }

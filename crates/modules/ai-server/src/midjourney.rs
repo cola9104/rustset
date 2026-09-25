@@ -1,5 +1,11 @@
 use crate::{AiModelFactory, AiState};
-use axum::{Json, Router, extract::State, routing::post};
+use schemars::JsonSchema;
+use aide::axum::routing::{post};
+use aide::axum::ApiRouter;
+use axum::{
+    Json,
+    extract::State,
+};
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
 use rustset_framework_web::AppError;
@@ -7,11 +13,14 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
 
-pub(crate) fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/image/midjourney/imagine", post(imagine))
-        .route("/ai/image/midjourney/action", post(action))
-        .route("/ai/image/midjourney/poll", post(poll))
+pub(crate) fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/image/midjourney/imagine", post(imagine))
+        .api_route(
+"/ai/image/midjourney/action", post(action))
+        .api_route(
+"/ai/image/midjourney/poll", post(poll))
 }
 
 pub(crate) fn spawn_sync(pool: sqlx::PgPool, factory: AiModelFactory) {
@@ -66,7 +75,7 @@ fn buttons(value: &Value) -> Value {
         .unwrap_or_else(|| json!([]))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Imagine {
     prompt: String,
@@ -111,7 +120,7 @@ async fn imagine(
     Ok(Json(ApiResponse::new(id)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Action {
     id: i64,
@@ -185,7 +194,7 @@ async fn finish_submission(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Poll {
     #[serde(default)]
     ids: Vec<i64>,

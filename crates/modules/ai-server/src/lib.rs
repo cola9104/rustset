@@ -11,11 +11,13 @@ mod write;
 
 pub use factory::AiModelFactory;
 
+use aide::axum::routing::{delete, get, post, put};
+use schemars::JsonSchema;
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
     middleware::from_fn_with_state,
-    routing::{delete, get, post, put},
 };
 use rustset_ai_api::{
     AiModelType, AiPlatform, ChatMessage, ChatRequest, EmbeddingRequest, ImageRequest, ModelConfig,
@@ -59,17 +61,26 @@ fn require(user: &CurrentUser, code: &str) -> Result<(), AppError> {
     }
 }
 
-pub fn routes(state: AiState) -> Router {
-    let protected = Router::new()
-        .route("/ai/model/page", get(page))
-        .route("/ai/model/simple-list", get(simple_list))
-        .route("/ai/model/get", get(get_one))
-        .route("/ai/model/create", post(create))
-        .route("/ai/model/update", put(update))
-        .route("/ai/model/delete", delete(remove))
-        .route("/ai/model/test", post(test))
-        .route("/ai/model/discover", post(discover_models))
-        .route("/ai/model/platforms", get(platforms))
+pub fn routes(state: AiState) -> ApiRouter {
+    let protected = ApiRouter::new()
+        .api_route(
+"/ai/model/page", get(page))
+        .api_route(
+"/ai/model/simple-list", get(simple_list))
+        .api_route(
+"/ai/model/get", get(get_one))
+        .api_route(
+"/ai/model/create", post(create))
+        .api_route(
+"/ai/model/update", put(update))
+        .api_route(
+"/ai/model/delete", delete(remove))
+        .api_route(
+"/ai/model/test", post(test))
+        .api_route(
+"/ai/model/discover", post(discover_models))
+        .api_route(
+"/ai/model/platforms", get(platforms))
         .merge(chat::routes())
         .merge(chat_role::routes())
         .merge(midjourney::routes())
@@ -78,10 +89,10 @@ pub fn routes(state: AiState) -> Router {
         .merge(knowledge::routes())
         .merge(write::routes())
         .route_layer(from_fn_with_state(state.tokens.clone(), authenticate));
-    Router::new().merge(protected).with_state(state)
+    ApiRouter::new().merge(protected).with_state(state)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct PageQuery {
     page_no: Option<i64>,
@@ -120,7 +131,7 @@ async fn page(
     let list = rows.into_iter().map(row_model).collect::<Vec<_>>();
     Ok(Json(ApiResponse::new(json!({"list":list,"total":total}))))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct SimpleListQuery {
     #[serde(rename = "type")]
     type_: Option<String>,
@@ -155,7 +166,7 @@ fn row_model(row: sqlx::postgres::PgRow) -> ModelConfig {
         config: row.get("config"),
     }
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct IdQuery {
     id: i64,
 }
@@ -170,7 +181,7 @@ async fn get_one(
     )))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct SaveModel {
     id: Option<i64>,
@@ -284,14 +295,14 @@ async fn remove(
     }
     Ok(Json(ApiResponse::new(true)))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct TestModel {
     id: i64,
     prompt: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct DiscoverModels {
     platform: String,

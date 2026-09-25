@@ -54,16 +54,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "DELETE",
-        "/infra/business-resource/delete",
-        Some("infra:business-resource:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/business-resource/delete-list",
-        Some("infra:business-resource:delete"),
-    ),
-    (
-        "DELETE",
         "/infra/cloud-asset/delete",
         Some("infra:cloud-asset:delete"),
     ),
@@ -86,6 +76,16 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "DELETE",
         "/infra/cloud-provider-config/delete-list",
         Some("infra:cloud-provider-config:delete"),
+    ),
+    (
+        "DELETE",
+        "/infra/cloud-resource/delete",
+        Some("infra:cloud-resource:delete"),
+    ),
+    (
+        "DELETE",
+        "/infra/cloud-resource/delete-list",
+        Some("infra:cloud-resource:delete"),
     ),
     (
         "DELETE",
@@ -126,71 +126,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "DELETE",
         "/infra/data-source-config/delete-list",
         Some("infra:data-source-config:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo01-contact/delete",
-        Some("infra:demo01-contact:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo01-contact/delete-list",
-        Some("infra:demo01-contact:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo02-category/delete",
-        Some("infra:demo02-category:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-erp/delete",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-erp/delete-list",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-erp/demo03-course/delete",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-erp/demo03-course/delete-list",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-erp/demo03-grade/delete",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-erp/demo03-grade/delete-list",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-inner/delete",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-inner/delete-list",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-normal/delete",
-        Some("infra:demo03-student:delete"),
-    ),
-    (
-        "DELETE",
-        "/infra/demo03-student-normal/delete-list",
-        Some("infra:demo03-student:delete"),
     ),
     (
         "DELETE",
@@ -239,6 +174,16 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "DELETE",
         "/infra/network-zone/delete-list",
         Some("infra:network-zone:delete"),
+    ),
+    (
+        "DELETE",
+        "/infra/physical-resource/delete",
+        Some("infra:physical-resource:delete"),
+    ),
+    (
+        "DELETE",
+        "/infra/physical-resource/delete-list",
+        Some("infra:physical-resource:delete"),
     ),
     (
         "DELETE",
@@ -344,21 +289,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "/infra/business-application/page",
         Some("infra:business-application:query"),
     ),
-    (
-        "GET",
-        "/infra/business-resource/get",
-        Some("infra:business-resource:query"),
-    ),
-    (
-        "GET",
-        "/infra/business-resource/list",
-        Some("infra:business-resource:query"),
-    ),
-    (
-        "GET",
-        "/infra/business-resource/page",
-        Some("infra:business-resource:query"),
-    ),
     ("GET", "/infra/capabilities", None),
     (
         "GET",
@@ -409,6 +339,21 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "GET",
         "/infra/cloud-provider-config/page",
         Some("infra:cloud-provider-config:query"),
+    ),
+    (
+        "GET",
+        "/infra/cloud-resource/get",
+        Some("infra:cloud-resource:query"),
+    ),
+    (
+        "GET",
+        "/infra/cloud-resource/list",
+        Some("infra:cloud-resource:query"),
+    ),
+    (
+        "GET",
+        "/infra/cloud-resource/page",
+        Some("infra:cloud-resource:query"),
     ),
     (
         "GET",
@@ -471,121 +416,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "GET",
-        "/infra/demo01-contact/export-excel",
-        Some("infra:demo01-contact:export"),
-    ),
-    (
-        "GET",
-        "/infra/demo01-contact/get",
-        Some("infra:demo01-contact:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo01-contact/page",
-        Some("infra:demo01-contact:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo02-category/export-excel",
-        Some("infra:demo02-category:export"),
-    ),
-    (
-        "GET",
-        "/infra/demo02-category/get",
-        Some("infra:demo02-category:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo02-category/list",
-        Some("infra:demo02-category:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/demo03-course/get",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/demo03-course/page",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/demo03-grade/get",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/demo03-grade/page",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/export-excel",
-        Some("infra:demo03-student:export"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/get",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-erp/page",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-inner/demo03-course/list-by-student-id",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-inner/demo03-grade/get-by-student-id",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-inner/export-excel",
-        Some("infra:demo03-student:export"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-inner/get",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-inner/page",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-normal/demo03-course/list-by-student-id",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-normal/demo03-grade/get-by-student-id",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-normal/export-excel",
-        Some("infra:demo03-student:export"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-normal/get",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
-        "/infra/demo03-student-normal/page",
-        Some("infra:demo03-student:query"),
-    ),
-    (
-        "GET",
         "/infra/file-config/get",
         Some("infra:file-config:query"),
     ),
@@ -603,9 +433,21 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ("GET", "/infra/file/presigned-url", Some("infra:file:query")),
     (
         "GET",
+        "/infra/inspection/baseline",
+        Some("infra:asset:query"),
+    ),
+    ("GET", "/infra/inspection/list", Some("infra:task:query")),
+    (
+        "GET",
+        "/infra/inspection/results",
+        Some("infra:task:query"),
+    ),
+    (
+        "GET",
         "/infra/job-log/export-excel",
         Some("infra:job:export"),
     ),
+    ("GET", "/infra/job-log/get", Some("infra:job:query")),
     ("GET", "/infra/job-log/page", Some("infra:job:query")),
     ("GET", "/infra/job/export-excel", Some("infra:job:export")),
     ("GET", "/infra/job/get", Some("infra:job:query")),
@@ -658,6 +500,21 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "GET",
         "/infra/network-zone/page",
         Some("infra:network-zone:query"),
+    ),
+    (
+        "GET",
+        "/infra/physical-resource/get",
+        Some("infra:physical-resource:query"),
+    ),
+    (
+        "GET",
+        "/infra/physical-resource/list",
+        Some("infra:physical-resource:query"),
+    ),
+    (
+        "GET",
+        "/infra/physical-resource/page",
+        Some("infra:physical-resource:query"),
     ),
     (
         "GET",
@@ -734,11 +591,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "POST",
-        "/infra/business-resource/create",
-        Some("infra:business-resource:create"),
-    ),
-    (
-        "POST",
         "/infra/cloud-asset/create",
         Some("infra:cloud-asset:create"),
     ),
@@ -759,6 +611,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "POST",
+        "/infra/cloud-resource/create",
+        Some("infra:cloud-resource:create"),
+    ),
+    (
+        "POST",
         "/infra/cloud-zone/create",
         Some("infra:cloud-zone:create"),
     ),
@@ -775,46 +632,12 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "POST",
-        "/infra/demo01-contact/create",
-        Some("infra:demo01-contact:create"),
-    ),
-    (
-        "POST",
-        "/infra/demo02-category/create",
-        Some("infra:demo02-category:create"),
-    ),
-    (
-        "POST",
-        "/infra/demo03-student-erp/create",
-        Some("infra:demo03-student:create"),
-    ),
-    (
-        "POST",
-        "/infra/demo03-student-erp/demo03-course/create",
-        Some("infra:demo03-student:create"),
-    ),
-    (
-        "POST",
-        "/infra/demo03-student-erp/demo03-grade/create",
-        Some("infra:demo03-student:create"),
-    ),
-    (
-        "POST",
-        "/infra/demo03-student-inner/create",
-        Some("infra:demo03-student:create"),
-    ),
-    (
-        "POST",
-        "/infra/demo03-student-normal/create",
-        Some("infra:demo03-student:create"),
-    ),
-    (
-        "POST",
         "/infra/file-config/create",
         Some("infra:file-config:create"),
     ),
     ("POST", "/infra/file/create", Some("infra:file:create")),
     ("POST", "/infra/file/upload", None),
+    ("POST", "/infra/inspection/run", Some("infra:task:execute")),
     ("POST", "/infra/job/create", Some("infra:job:create")),
     ("POST", "/infra/job/sync", Some("infra:job:update")),
     (
@@ -831,6 +654,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "POST",
         "/infra/network-zone/create",
         Some("infra:network-zone:create"),
+    ),
+    (
+        "POST",
+        "/infra/physical-resource/create",
+        Some("infra:physical-resource:create"),
     ),
     (
         "POST",
@@ -896,11 +724,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "PUT",
-        "/infra/business-resource/update",
-        Some("infra:business-resource:update"),
-    ),
-    (
-        "PUT",
         "/infra/cloud-asset/update",
         Some("infra:cloud-asset:update"),
     ),
@@ -913,6 +736,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "PUT",
         "/infra/cloud-provider-config/update",
         Some("infra:cloud-provider-config:update"),
+    ),
+    (
+        "PUT",
+        "/infra/cloud-resource/update",
+        Some("infra:cloud-resource:update"),
     ),
     (
         "PUT",
@@ -933,41 +761,6 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
     ),
     (
         "PUT",
-        "/infra/demo01-contact/update",
-        Some("infra:demo01-contact:update"),
-    ),
-    (
-        "PUT",
-        "/infra/demo02-category/update",
-        Some("infra:demo02-category:update"),
-    ),
-    (
-        "PUT",
-        "/infra/demo03-student-erp/demo03-course/update",
-        Some("infra:demo03-student:update"),
-    ),
-    (
-        "PUT",
-        "/infra/demo03-student-erp/demo03-grade/update",
-        Some("infra:demo03-student:update"),
-    ),
-    (
-        "PUT",
-        "/infra/demo03-student-erp/update",
-        Some("infra:demo03-student:update"),
-    ),
-    (
-        "PUT",
-        "/infra/demo03-student-inner/update",
-        Some("infra:demo03-student:update"),
-    ),
-    (
-        "PUT",
-        "/infra/demo03-student-normal/update",
-        Some("infra:demo03-student:update"),
-    ),
-    (
-        "PUT",
         "/infra/file-config/update",
         Some("infra:file-config:update"),
     ),
@@ -975,6 +768,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "PUT",
         "/infra/file-config/update-master",
         Some("infra:file-config:update"),
+    ),
+    (
+        "PUT",
+        "/infra/inspection/baseline",
+        Some("infra:asset:update"),
     ),
     ("PUT", "/infra/job/trigger", Some("infra:job:trigger")),
     ("PUT", "/infra/job/update", Some("infra:job:update")),
@@ -993,6 +791,11 @@ static ROUTE_PERMISSIONS: &[(&str, &str, Option<&str>)] = &[
         "PUT",
         "/infra/network-zone/update",
         Some("infra:network-zone:update"),
+    ),
+    (
+        "PUT",
+        "/infra/physical-resource/update",
+        Some("infra:physical-resource:update"),
     ),
     (
         "PUT",
@@ -1073,7 +876,7 @@ mod tests {
 
     #[test]
     fn registry_covers_every_entry_with_sorted_keys() {
-        assert_eq!(ROUTE_PERMISSIONS.len(), 235);
+        assert_eq!(ROUTE_PERMISSIONS.len(), 198);
         for window in ROUTE_PERMISSIONS.windows(2) {
             assert!(
                 (window[0].0, window[0].1) < (window[1].0, window[1].1),
@@ -1101,6 +904,18 @@ mod tests {
         assert_eq!(
             required_permission("POST", "/infra/task/trigger-scan"),
             Some(Some("infra:task:execute"))
+        );
+        assert_eq!(
+            required_permission("POST", "/infra/inspection/run"),
+            Some(Some("infra:task:execute"))
+        );
+        assert_eq!(
+            required_permission("GET", "/infra/inspection/results"),
+            Some(Some("infra:task:query"))
+        );
+        assert_eq!(
+            required_permission("PUT", "/infra/inspection/baseline"),
+            Some(Some("infra:asset:update"))
         );
         assert_eq!(
             required_permission("GET", "/infra/network-policy/page"),

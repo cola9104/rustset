@@ -1,9 +1,11 @@
+use aide::axum::routing::{delete, get, post, put};
+use schemars::JsonSchema;
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     body::Body,
     extract::{Query, State},
     http::{Response, header},
-    routing::{delete, get, post, put},
 };
 use futures_util::stream;
 use rustset_ai_api::{ChatMessage, ChatRequest, ChatResponse};
@@ -17,36 +19,46 @@ use tokio::sync::mpsc;
 
 use crate::{AiState, require};
 
-pub fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/chat/conversation/create-my", post(create_conversation))
-        .route("/ai/chat/conversation/update-my", put(update_conversation))
-        .route("/ai/chat/conversation/my-list", get(my_conversations))
-        .route("/ai/chat/conversation/get-my", get(get_conversation))
-        .route(
-            "/ai/chat/conversation/delete-my",
+pub fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/chat/conversation/create-my", post(create_conversation))
+        .api_route(
+"/ai/chat/conversation/update-my", put(update_conversation))
+        .api_route(
+"/ai/chat/conversation/my-list", get(my_conversations))
+        .api_route(
+"/ai/chat/conversation/get-my", get(get_conversation))
+        .api_route(
+"/ai/chat/conversation/delete-my",
             delete(delete_conversation),
         )
-        .route(
-            "/ai/chat/conversation/delete-by-unpinned",
+        .api_route(
+"/ai/chat/conversation/delete-by-unpinned",
             delete(delete_unpinned),
         )
-        .route("/ai/chat/conversation/page", get(conversation_page))
-        .route(
-            "/ai/chat/conversation/delete-by-admin",
+        .api_route(
+"/ai/chat/conversation/page", get(conversation_page))
+        .api_route(
+"/ai/chat/conversation/delete-by-admin",
             delete(delete_conversation_admin),
         )
-        .route("/ai/chat/message/list-by-conversation-id", get(messages))
-        .route("/ai/chat/message/send", post(send))
-        .route("/ai/chat/message/send-stream", post(send_stream))
-        .route("/ai/chat/message/delete", delete(delete_message))
-        .route(
-            "/ai/chat/message/delete-by-conversation-id",
+        .api_route(
+"/ai/chat/message/list-by-conversation-id", get(messages))
+        .api_route(
+"/ai/chat/message/send", post(send))
+        .api_route(
+"/ai/chat/message/send-stream", post(send_stream))
+        .api_route(
+"/ai/chat/message/delete", delete(delete_message))
+        .api_route(
+"/ai/chat/message/delete-by-conversation-id",
             delete(delete_messages),
         )
-        .route("/ai/chat/message/page", get(message_page))
-        .route(
-            "/ai/chat/message/delete-by-admin",
+        .api_route(
+"/ai/chat/message/page", get(message_page))
+        .api_route(
+"/ai/chat/message/delete-by-admin",
             delete(delete_message_admin),
         )
 }
@@ -58,7 +70,7 @@ fn now() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct SaveConversation {
     id: Option<i64>,
@@ -75,16 +87,16 @@ struct SaveConversation {
     #[serde(default)]
     knowledge_ids: Vec<i64>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Id {
     id: i64,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct ConversationId {
     conversation_id: i64,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct PageQuery {
     page_no: Option<i64>,
@@ -93,7 +105,7 @@ struct PageQuery {
     title: Option<String>,
     conversation_id: Option<i64>,
 }
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct SendRequest {
     conversation_id: i64,

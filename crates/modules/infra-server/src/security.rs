@@ -2,10 +2,11 @@ use crate::{
     InfraState, QueryParams, TableSpec, id_param, ids_param, soft_delete, soft_delete_list,
     table_create, table_get, table_list, table_page, table_update,
 };
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_web::AppError;
@@ -16,15 +17,22 @@ const SECURITY: TableSpec = TableSpec {
     seq: "infra_security_product_seq",
 };
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/security-product/page", get(page))
-        .route("/infra/security-product/list", get(list))
-        .route("/infra/security-product/get", get(get_one))
-        .route("/infra/security-product/create", post(create))
-        .route("/infra/security-product/update", put(update))
-        .route("/infra/security-product/delete", delete(delete_one))
-        .route("/infra/security-product/delete-list", delete(delete_list))
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/security-product/page", get(page))
+        .api_route(
+"/infra/security-product/list", get(list))
+        .api_route(
+"/infra/security-product/get", get(get_one))
+        .api_route(
+"/infra/security-product/create", post(create))
+        .api_route(
+"/infra/security-product/update", put(update))
+        .api_route(
+"/infra/security-product/delete", delete(delete_one))
+        .api_route(
+"/infra/security-product/delete-list", delete(delete_list))
 }
 
 async fn page(

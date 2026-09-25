@@ -3,11 +3,13 @@
 //! enforcement (veops-style 唯一键) and keyword search.
 
 use std::collections::BTreeMap;
+use schemars::JsonSchema;
 
+use aide::axum::routing::{delete, get, post, put};
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_cmdb_api::AttrType;
 use rustset_framework_common::ApiResponse;
@@ -19,19 +21,27 @@ use sqlx::{PgPool, Row};
 
 use crate::{CmdbState, require};
 
-pub fn routes() -> Router<CmdbState> {
-    Router::new()
-        .route("/cmdb/instance/page", get(instance_page))
-        .route("/cmdb/instance/get", get(instance_get))
-        .route("/cmdb/instance/create", post(instance_create))
-        .route("/cmdb/instance/update", put(instance_update))
-        .route("/cmdb/instance/delete", delete(instance_delete))
-        .route("/cmdb/instance/delete-list", delete(instance_delete_list))
-        .route("/cmdb/instance/export", get(instance_export))
-        .route("/cmdb/instance/import", post(instance_import))
+pub fn routes() -> ApiRouter<CmdbState> {
+    ApiRouter::new()
+        .api_route(
+"/cmdb/instance/page", get(instance_page))
+        .api_route(
+"/cmdb/instance/get", get(instance_get))
+        .api_route(
+"/cmdb/instance/create", post(instance_create))
+        .api_route(
+"/cmdb/instance/update", put(instance_update))
+        .api_route(
+"/cmdb/instance/delete", delete(instance_delete))
+        .api_route(
+"/cmdb/instance/delete-list", delete(instance_delete_list))
+        .api_route(
+"/cmdb/instance/export", get(instance_export))
+        .api_route(
+"/cmdb/instance/import", post(instance_import))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct InstancePageParams {
     model_id: i64,
@@ -285,7 +295,7 @@ async fn instance_page(
     }))))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct InstanceIdParams {
     id: i64,
 }
@@ -416,7 +426,7 @@ async fn instance_delete(
     Ok(Json(ApiResponse::new(())))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct DeleteListParams {
     ids: String,
 }
@@ -469,7 +479,7 @@ async fn instance_delete_list(
 
 // ---------- Excel export / import ----------
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct ExportParams {
     model_id: i64,
 }

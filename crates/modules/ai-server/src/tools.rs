@@ -1,8 +1,10 @@
 use crate::{AiState, require};
+use schemars::JsonSchema;
+use aide::axum::routing::{delete, get, post, put};
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
@@ -212,7 +214,6 @@ pub(crate) async fn execute(
                 .get("resource_count")
                 .and_then(Value::as_i64)
                 .unwrap_or(1);
-            let now = chrono::Utc::now();
             let id: i64 = sqlx::query_scalar(
                 "INSERT INTO infra_resource_ticket
                      (resource_type, ecs_name, ecs_type, ecs_os, cloud_category, cloud_region,
@@ -305,16 +306,22 @@ mod tests {
     }
 }
 
-pub fn routes() -> Router<AiState> {
-    Router::new()
-        .route("/ai/tool/page", get(page))
-        .route("/ai/tool/simple-list", get(simple_list))
-        .route("/ai/tool/get", get(get_one))
-        .route("/ai/tool/create", post(create))
-        .route("/ai/tool/update", put(update))
-        .route("/ai/tool/delete", delete(remove))
+pub fn routes() -> ApiRouter<AiState> {
+    ApiRouter::new()
+        .api_route(
+"/ai/tool/page", get(page))
+        .api_route(
+"/ai/tool/simple-list", get(simple_list))
+        .api_route(
+"/ai/tool/get", get(get_one))
+        .api_route(
+"/ai/tool/create", post(create))
+        .api_route(
+"/ai/tool/update", put(update))
+        .api_route(
+"/ai/tool/delete", delete(remove))
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct PageQuery {
     page_no: Option<i64>,
@@ -322,11 +329,11 @@ struct PageQuery {
     name: Option<String>,
     status: Option<i32>,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 struct Id {
     id: i64,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct Save {
     id: Option<i64>,

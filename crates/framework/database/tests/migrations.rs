@@ -15,7 +15,81 @@ async fn applies_all_migrations_to_empty_postgres() {
         .fetch_one(&pool)
         .await
         .expect("read migration history");
-    assert_eq!(applied, 19);
+    assert_eq!(applied, 24);
+
+    // 0024 renames the API documentation page from swagger to api-docs.
+    let swagger_paths: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND (path = 'swagger' OR component = 'infra/swagger/index')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read legacy swagger menu paths");
+    assert_eq!(swagger_paths, 0, "swagger path must be renamed to api-docs");
+    let api_docs_menu: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND path = 'api-docs' AND component = 'infra/api-docs/index'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read api-docs menu");
+    assert_eq!(api_docs_menu, 1);
+
+    // 0023 retires the upstream codegen demo showcase; nothing under
+    // 代码生成案例 may stay visible or authorized.
+    let demo_menus: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0
+           AND (component LIKE 'infra/demo%'
+                OR component LIKE 'infra/testDemo%'
+                OR (parent_id = 2 AND name = '代码生成案例' AND path = 'demo'))",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read demo showcase menus");
+    assert_eq!(demo_menus, 0, "demo showcase menus must be retired");
+
+    // 0022 asset inspection: approved TCP baselines, per-target results and a
+    // dedicated page that reuses scan/risk/asset permissions.
+    for inspection_table in ["infra_inspection_baseline", "infra_inspection_result"] {
+        let exists: bool = sqlx::query_scalar(&format!(
+            "SELECT to_regclass('public.{inspection_table}') IS NOT NULL"
+        ))
+        .fetch_one(&pool)
+        .await
+        .expect("inspect inspection table");
+        assert!(exists, "expected table {inspection_table}");
+    }
+    let inspection_page: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND component = 'asset-ops/inspection/index' AND type = 2",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read inspection page");
+    assert_eq!(inspection_page, 1);
+    let inspection_page_grants: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_role_menu grant_page
+         JOIN system_menu page ON page.id = grant_page.menu_id
+              AND page.component = 'asset-ops/inspection/index' AND page.deleted = 0
+         WHERE grant_page.deleted = 0",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read inspection page grants");
+    let scan_page_grants: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_role_menu grant_page
+         JOIN system_menu page ON page.id = grant_page.menu_id
+              AND page.component = 'asset-ops/task/index' AND page.deleted = 0
+         WHERE grant_page.deleted = 0",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read scan task page grants");
+    assert!(
+        inspection_page_grants >= scan_page_grants,
+        "every role that can run scans must also see the inspection page"
+    );
 
     // 0016 removes unsupported BPM and scopes network zones by tenant;
     // 0017 removes user-visible upstream branding from baseline data;
@@ -29,6 +103,43 @@ async fn applies_all_migrations_to_empty_postgres() {
     .await
     .expect("read BPM menus");
     assert_eq!(bpm_menus, 0, "BPM must not remain visible or authorized");
+    // 0021 splits the mixed ledger table into typed cloud/physical tables.
+    for split_table in ["infra_cloud_resource", "infra_physical_resource"] {
+        let exists: bool = sqlx::query_scalar(&format!(
+            "SELECT to_regclass('public.{split_table}') IS NOT NULL"
+        ))
+        .fetch_one(&pool)
+        .await
+        .expect("inspect split resource table");
+        assert!(exists, "expected table {split_table}");
+    }
+    let old_ledger_exists: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.infra_business_resource') IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("inspect retired ledger table");
+    assert!(
+        !old_ledger_exists,
+        "infra_business_resource must be retired after the 0021 split"
+    );
+
+    // 0020 splits 业务资源 into 云资源 + 物理资源 pages.
+    let split_resource_menus: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM system_menu
+         WHERE deleted = 0 AND parent_id = 30343
+           AND path IN ('cloud-resource', 'physical-resource')
+           AND component IN (
+               'asset-ops/business-resource/cloud/index',
+               'asset-ops/business-resource/physical/index')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read split business-resource menus");
+    assert_eq!(
+        split_resource_menus, 2,
+        "业务管理 must expose separate 云资源 and 物理资源 pages"
+    );
+
     let demo_analytics_menu: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_menu
          WHERE deleted = 0 AND path = '/analytics'",
@@ -394,7 +505,8 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read Kairos asset operations pages");
-    assert_eq!(asset_ops_pages, 15);
+    // 16 pages after 0021 + the 资产核查 page from 0022.
+    assert_eq!(asset_ops_pages, 17);
 
     let asset_ops_permissions: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_menu
@@ -406,7 +518,8 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read Kairos asset operations permissions");
-    assert_eq!(asset_ops_permissions, 63);
+    // 0021 adds the four infra:physical-resource:* buttons.
+    assert_eq!(asset_ops_permissions, 67);
 
     let missing_super_admin_asset_links: i64 = sqlx::query_scalar(
         "SELECT count(*)

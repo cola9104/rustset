@@ -1,8 +1,9 @@
 use crate::{InfraState, QueryParams, i32_field, opt_i64_field, opt_str_field, str_field};
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_web::AppError;
@@ -10,15 +11,22 @@ use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/network-zone/page", get(page))
-        .route("/infra/network-zone/list", get(list))
-        .route("/infra/network-zone/get", get(get_one))
-        .route("/infra/network-zone/create", post(create))
-        .route("/infra/network-zone/update", put(update))
-        .route("/infra/network-zone/delete", delete(delete_one))
-        .route("/infra/network-zone/delete-list", delete(delete_list))
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/network-zone/page", get(page))
+        .api_route(
+"/infra/network-zone/list", get(list))
+        .api_route(
+"/infra/network-zone/get", get(get_one))
+        .api_route(
+"/infra/network-zone/create", post(create))
+        .api_route(
+"/infra/network-zone/update", put(update))
+        .api_route(
+"/infra/network-zone/delete", delete(delete_one))
+        .api_route(
+"/infra/network-zone/delete-list", delete(delete_list))
 }
 
 async fn page(

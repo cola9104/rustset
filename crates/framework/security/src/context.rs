@@ -27,3 +27,6 @@ impl CurrentUser {
         self.permissions.allows(permission)
     }
 }
+
+/// 登录态提取器不参与 OpenAPI 文档建模（鉴权统一由 bearerAuth 安全方案表达）。
+impl aide::operation::OperationInput for CurrentUser {}

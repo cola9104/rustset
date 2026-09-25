@@ -1,8 +1,9 @@
 use crate::{InfraState, QueryParams, bool_field, str_field};
+use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
-    routing::{delete, get, post, put},
 };
 use chrono::Utc;
 use rustset_framework_common::ApiResponse;
@@ -12,16 +13,24 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub fn routes() -> Router<InfraState> {
-    Router::new()
-        .route("/infra/task/page", get(page))
-        .route("/infra/task/list", get(list))
-        .route("/infra/task/get", get(get_one))
-        .route("/infra/task/create", post(create))
-        .route("/infra/task/update", put(update))
-        .route("/infra/task/delete", delete(delete_one))
-        .route("/infra/task/delete-list", delete(delete_list))
-        .route("/infra/task/trigger-scan", post(trigger_scan))
+pub fn routes() -> ApiRouter<InfraState> {
+    ApiRouter::new()
+        .api_route(
+"/infra/task/page", get(page))
+        .api_route(
+"/infra/task/list", get(list))
+        .api_route(
+"/infra/task/get", get(get_one))
+        .api_route(
+"/infra/task/create", post(create))
+        .api_route(
+"/infra/task/update", put(update))
+        .api_route(
+"/infra/task/delete", delete(delete_one))
+        .api_route(
+"/infra/task/delete-list", delete(delete_list))
+        .api_route(
+"/infra/task/trigger-scan", post(trigger_scan))
 }
 
 async fn page(

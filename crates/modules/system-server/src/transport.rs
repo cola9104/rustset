@@ -1,8 +1,10 @@
+use aide::axum::routing::{get, post};
+use schemars::JsonSchema;
+use aide::axum::ApiRouter;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
     middleware::from_fn_with_state,
-    routing::{get, post},
 };
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::{CurrentUser, DataScope, authenticate};
@@ -16,24 +18,31 @@ use serde_json::{Value, json};
 
 use crate::{SystemState, application};
 
-pub fn routes(state: SystemState) -> Router {
-    let protected = Router::new()
-        .route("/system/auth/me", get(me))
-        .route("/system/auth/get-permission-info", get(permission_info))
+pub fn routes(state: SystemState) -> ApiRouter {
+    let protected = ApiRouter::new()
+        .api_route(
+"/system/auth/me", get(me))
+        .api_route(
+"/system/auth/get-permission-info", get(permission_info))
         .merge(crate::audit::routes())
         .merge(crate::management::routes())
         .route_layer(from_fn_with_state(state.tokens.clone(), authenticate));
 
-    Router::new()
-        .route("/system/capabilities", get(capabilities))
-        .route("/system/auth/login", post(login))
-        .route("/system/tenant/simple-list", get(tenant_simple_list))
-        .route("/system/tenant/get-by-website", get(tenant_by_website))
-        .route(
-            "/system/auth/refresh-token",
+    ApiRouter::new()
+        .api_route(
+"/system/capabilities", get(capabilities))
+        .api_route(
+"/system/auth/login", post(login))
+        .api_route(
+"/system/tenant/simple-list", get(tenant_simple_list))
+        .api_route(
+"/system/tenant/get-by-website", get(tenant_by_website))
+        .api_route(
+"/system/auth/refresh-token",
             get(refresh_token).post(refresh_token),
         )
-        .route("/system/auth/logout", post(logout))
+        .api_route(
+"/system/auth/logout", post(logout))
         .merge(protected)
         .with_state(state)
 }
@@ -124,7 +133,7 @@ async fn login(
         })
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct RefreshTokenQuery {
     #[serde(alias = "refreshToken")]
     refresh_token: String,
