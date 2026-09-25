@@ -134,13 +134,27 @@ impl TofuExecutor {
             .envs(env.iter().cloned())
             .env("PATH", std::env::var("PATH").unwrap_or_default())
             // Registry access often needs the host's proxy settings.
-            .env("http_proxy", std::env::var("http_proxy").unwrap_or_default())
-            .env("https_proxy", std::env::var("https_proxy").unwrap_or_default())
-            .env("HTTP_PROXY", std::env::var("HTTP_PROXY").unwrap_or_default())
-            .env("HTTPS_PROXY", std::env::var("HTTPS_PROXY").unwrap_or_default())
+            .env(
+                "http_proxy",
+                std::env::var("http_proxy").unwrap_or_default(),
+            )
+            .env(
+                "https_proxy",
+                std::env::var("https_proxy").unwrap_or_default(),
+            )
+            .env(
+                "HTTP_PROXY",
+                std::env::var("HTTP_PROXY").unwrap_or_default(),
+            )
+            .env(
+                "HTTPS_PROXY",
+                std::env::var("HTTPS_PROXY").unwrap_or_default(),
+            )
             .env(
                 "no_proxy",
-                std::env::var("no_proxy").or_else(|_| std::env::var("NO_PROXY")).unwrap_or_default(),
+                std::env::var("no_proxy")
+                    .or_else(|_| std::env::var("NO_PROXY"))
+                    .unwrap_or_default(),
             )
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -212,11 +226,17 @@ pub fn credential_env(target: &CloudTarget) -> Vec<(String, String)> {
     match target.cloud_category.as_str() {
         "aliyun" | "alicloud" => {
             env.push(("ALICLOUD_ACCESS_KEY".into(), target.access_key_id.clone()));
-            env.push(("ALICLOUD_SECRET_KEY".into(), target.access_key_secret.clone()));
+            env.push((
+                "ALICLOUD_SECRET_KEY".into(),
+                target.access_key_secret.clone(),
+            ));
             env.push(("ALICLOUD_REGION".into(), target.region.clone()));
         }
         "tencent" | "tencentcloud" => {
-            env.push(("TENCENTCLOUD_SECRET_ID".into(), target.access_key_id.clone()));
+            env.push((
+                "TENCENTCLOUD_SECRET_ID".into(),
+                target.access_key_id.clone(),
+            ));
             env.push((
                 "TENCENTCLOUD_SECRET_KEY".into(),
                 target.access_key_secret.clone(),
@@ -320,7 +340,11 @@ output "public_ips" {{
 /// Render terraform.tfvars.json: the request spec under `spec` plus the
 /// target region, matching the curated templates' variables.
 pub fn render_tfvars(spec: &Value, region: &str) -> String {
-    let spec = if spec.is_object() { spec.clone() } else { Value::Object(Map::new()) };
+    let spec = if spec.is_object() {
+        spec.clone()
+    } else {
+        Value::Object(Map::new())
+    };
     serde_json::to_string_pretty(&json!({ "spec": spec, "region": region }))
         .unwrap_or_else(|_| "{\"spec\": {}}".into())
 }
@@ -349,7 +373,10 @@ mod tests {
         assert_eq!(provider_source("demo"), Some("hashicorp/null"));
         assert_eq!(provider_source(""), Some("hashicorp/null"));
         assert_eq!(provider_source("aliyun"), Some("aliyun/alicloud"));
-        assert_eq!(provider_source("tencentcloud"), Some("tencentcloud/tencentcloud"));
+        assert_eq!(
+            provider_source("tencentcloud"),
+            Some("tencentcloud/tencentcloud")
+        );
         assert_eq!(provider_source("huawei"), None);
     }
 
@@ -396,7 +423,10 @@ mod tests {
 
     #[test]
     fn renders_tfvars_wrapping_spec() {
-        let tfvars = render_tfvars(&json!({"ecs_name": "web-01", "cpu_cores": 8}), "cn-hangzhou");
+        let tfvars = render_tfvars(
+            &json!({"ecs_name": "web-01", "cpu_cores": 8}),
+            "cn-hangzhou",
+        );
         let parsed: Value = serde_json::from_str(&tfvars).unwrap();
         assert_eq!(parsed["spec"]["ecs_name"], json!("web-01"));
         assert_eq!(parsed["spec"]["cpu_cores"], json!(8));

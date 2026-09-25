@@ -29,14 +29,12 @@ struct InstanceIdParams {
 }
 
 async fn instance_exists(pool: &sqlx::PgPool, id: i64) -> Result<bool, AppError> {
-    sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM cmdb_instance WHERE id = $1 AND deleted = 0",
-    )
-    .bind(id)
-    .fetch_one(pool)
-    .await
-    .map(|count| count > 0)
-    .map_err(|_| AppError::internal("failed to read instance"))
+    sqlx::query_scalar::<_, i64>("SELECT count(*) FROM cmdb_instance WHERE id = $1 AND deleted = 0")
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map(|count| count > 0)
+        .map_err(|_| AppError::internal("failed to read instance"))
 }
 
 async fn relation_list(

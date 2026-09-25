@@ -87,16 +87,22 @@ pub(crate) async fn execute(
             Ok(serde_json::to_string(&json!({"models": list})).unwrap())
         }
         "cmdb_instance_query" => {
-            let model_code = args.get("model_code").and_then(Value::as_str).ok_or("model_code 不能为空")?;
+            let model_code = args
+                .get("model_code")
+                .and_then(Value::as_str)
+                .ok_or("model_code 不能为空")?;
             let keyword = args.get("keyword").and_then(Value::as_str).unwrap_or("");
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10).clamp(1, 20) as i64;
-            let model_id: Option<i64> = sqlx::query_scalar(
-                "SELECT id FROM cmdb_model WHERE code=$1 AND deleted=0",
-            )
-            .bind(model_code)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| e.to_string())?;
+            let limit = args
+                .get("limit")
+                .and_then(Value::as_i64)
+                .unwrap_or(10)
+                .clamp(1, 20) as i64;
+            let model_id: Option<i64> =
+                sqlx::query_scalar("SELECT id FROM cmdb_model WHERE code=$1 AND deleted=0")
+                    .bind(model_code)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|e| e.to_string())?;
             let Some(model_id) = model_id else {
                 return Ok(format!("模型 {model_code:?} 不存在"));
             };
@@ -120,7 +126,11 @@ pub(crate) async fn execute(
         }
         "asset_query" => {
             let keyword = args.get("keyword").and_then(Value::as_str).unwrap_or("");
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10).clamp(1, 20) as i64;
+            let limit = args
+                .get("limit")
+                .and_then(Value::as_i64)
+                .unwrap_or(10)
+                .clamp(1, 20) as i64;
             let rows = sqlx::query(
                 "SELECT name, ip, zone, device_type, os, owner, organization_name,
                         application_name, classified_protection_level, status
@@ -152,7 +162,11 @@ pub(crate) async fn execute(
         "ticket_query" => {
             let status = args.get("status").and_then(Value::as_str).unwrap_or("");
             let keyword = args.get("keyword").and_then(Value::as_str).unwrap_or("");
-            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(10).clamp(1, 20) as i64;
+            let limit = args
+                .get("limit")
+                .and_then(Value::as_i64)
+                .unwrap_or(10)
+                .clamp(1, 20) as i64;
             let rows = sqlx::query(
                 "SELECT id, resource_type, ecs_name, ecs_type, cpu_cores, memory_gb, resource_count,
                         cloud_platform_name, cloud_region, ticket_status, apply_status,
@@ -188,10 +202,16 @@ pub(crate) async fn execute(
             Ok(serde_json::to_string(&json!({"tickets": list})).unwrap())
         }
         "ticket_create" => {
-            let ecs_name = args.get("ecs_name").and_then(Value::as_str).ok_or("ecs_name 不能为空")?;
+            let ecs_name = args
+                .get("ecs_name")
+                .and_then(Value::as_str)
+                .ok_or("ecs_name 不能为空")?;
             let cpu = args.get("cpu_cores").and_then(Value::as_i64).unwrap_or(4);
             let memory = args.get("memory_gb").and_then(Value::as_i64).unwrap_or(8);
-            let count = args.get("resource_count").and_then(Value::as_i64).unwrap_or(1);
+            let count = args
+                .get("resource_count")
+                .and_then(Value::as_i64)
+                .unwrap_or(1);
             let now = chrono::Utc::now();
             let id: i64 = sqlx::query_scalar(
                 "INSERT INTO infra_resource_ticket
@@ -214,7 +234,11 @@ pub(crate) async fn execute(
             .bind(cpu as i32)
             .bind(memory as i32)
             .bind(args.get("application_name").and_then(Value::as_str))
-            .bind(args.get("applicant").and_then(Value::as_str).unwrap_or("agent"))
+            .bind(
+                args.get("applicant")
+                    .and_then(Value::as_str)
+                    .unwrap_or("agent"),
+            )
             .fetch_one(pool)
             .await
             .map_err(|e| e.to_string())?;
@@ -246,9 +270,13 @@ pub(crate) async fn execute(
                     .execute(pool)
                     .await
                     .map_err(|e| e.to_string())?;
-                    Ok(format!("{{\"ticketId\": {id}, \"status\": \"pending_provision\", \"autoApprovedBy\": \"{rule_name}\"}}"))
+                    Ok(format!(
+                        "{{\"ticketId\": {id}, \"status\": \"pending_provision\", \"autoApprovedBy\": \"{rule_name}\"}}"
+                    ))
                 }
-                None => Ok(format!("{{\"ticketId\": {id}, \"status\": \"pending_approval\"}}")),
+                None => Ok(format!(
+                    "{{\"ticketId\": {id}, \"status\": \"pending_approval\"}}"
+                )),
             }
         }
         _ => Err(format!("工具 {name} 没有已注册的 Rust 执行器")),

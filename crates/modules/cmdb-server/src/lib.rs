@@ -15,8 +15,8 @@ use rustset_framework_database::PgPool;
 use rustset_framework_security::{CurrentUser, Permission};
 use rustset_framework_web::AppError;
 use serde::Deserialize;
-use sqlx::Row;
 use serde_json::{Value, json};
+use sqlx::Row;
 
 pub use instance::routes as instance_routes;
 pub use net_zone::routes as net_zone_routes;
@@ -203,7 +203,9 @@ async fn model_page(
     for row in rows {
         list.push(load_model_row(&state.pool, row.get::<i64, _>("id")).await?);
     }
-    Ok(Json(ApiResponse::new(json!({ "list": list, "total": total }))))
+    Ok(Json(ApiResponse::new(
+        json!({ "list": list, "total": total }),
+    )))
 }
 
 async fn model_get(
@@ -247,7 +249,9 @@ async fn model_create(
         .filter(|value| !value.is_empty());
     if let Some(key) = &unique_key {
         if !valid_code(key) {
-            return Err(AppError::bad_request("uniqueKey must be a valid attribute code"));
+            return Err(AppError::bad_request(
+                "uniqueKey must be a valid attribute code",
+            ));
         }
     }
     let exists: i64 =
@@ -257,7 +261,9 @@ async fn model_create(
             .await
             .map_err(|_| AppError::internal("failed to check model code"))?;
     if exists > 0 {
-        return Err(AppError::bad_request(format!("model code {code:?} already exists")));
+        return Err(AppError::bad_request(format!(
+            "model code {code:?} already exists"
+        )));
     }
     let id: i64 = sqlx::query_scalar(
         "INSERT INTO cmdb_model (name, code, description, icon, unique_key, sort, creator, updater)
@@ -295,7 +301,9 @@ async fn model_update(
         .filter(|value| !value.is_empty());
     if let Some(key) = &unique_key {
         if !valid_code(key) {
-            return Err(AppError::bad_request("uniqueKey must be a valid attribute code"));
+            return Err(AppError::bad_request(
+                "uniqueKey must be a valid attribute code",
+            ));
         }
     }
     let result = sqlx::query(
@@ -416,8 +424,14 @@ async fn attribute_create(
     let attr_type = string_field(&payload, "attrType")?;
     let attr_type = rustset_cmdb_api::AttrType::from_code(&attr_type)
         .ok_or_else(|| AppError::bad_request(format!("unknown attrType {attr_type:?}")))?;
-    let required = payload.get("required").and_then(Value::as_bool).unwrap_or(false);
-    let show_in_list = payload.get("showInList").and_then(Value::as_bool).unwrap_or(true);
+    let required = payload
+        .get("required")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let show_in_list = payload
+        .get("showInList")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     let choices = match attr_type {
         rustset_cmdb_api::AttrType::Select | rustset_cmdb_api::AttrType::MultiSelect => {
             let choices = payload
@@ -431,7 +445,10 @@ async fn attribute_create(
         }
         _ => Value::Null,
     };
-    let default_value = payload.get("defaultValue").cloned().filter(|v| !v.is_null());
+    let default_value = payload
+        .get("defaultValue")
+        .cloned()
+        .filter(|v| !v.is_null());
     let exists: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM cmdb_attribute WHERE model_id = $1 AND code = $2 AND deleted = 0",
     )
@@ -481,8 +498,14 @@ async fn attribute_update(
     let attr_type = string_field(&payload, "attrType")?;
     let attr_type = rustset_cmdb_api::AttrType::from_code(&attr_type)
         .ok_or_else(|| AppError::bad_request(format!("unknown attrType {attr_type:?}")))?;
-    let required = payload.get("required").and_then(Value::as_bool).unwrap_or(false);
-    let show_in_list = payload.get("showInList").and_then(Value::as_bool).unwrap_or(true);
+    let required = payload
+        .get("required")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let show_in_list = payload
+        .get("showInList")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     let choices = match attr_type {
         rustset_cmdb_api::AttrType::Select | rustset_cmdb_api::AttrType::MultiSelect => {
             let choices = payload
@@ -496,7 +519,10 @@ async fn attribute_update(
         }
         _ => Value::Null,
     };
-    let default_value = payload.get("defaultValue").cloned().filter(|v| !v.is_null());
+    let default_value = payload
+        .get("defaultValue")
+        .cloned()
+        .filter(|v| !v.is_null());
     let result = sqlx::query(
         "UPDATE cmdb_attribute SET name = $2, attr_type = $3, required = $4, choices = $5,
                 default_value = $6, show_in_list = $7, sort = $8, updater = $9, update_time = now()

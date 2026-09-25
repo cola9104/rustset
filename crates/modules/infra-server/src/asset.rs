@@ -10,8 +10,8 @@ use axum::{
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
 use rustset_framework_web::AppError;
-use sqlx::Row;
 use serde_json::{Value, json};
+use sqlx::Row;
 use std::collections::HashMap;
 
 const ASSET: TableSpec = TableSpec {
@@ -48,7 +48,10 @@ pub fn routes() -> Router<InfraState> {
         .route("/infra/network-policy/get", get(network_policy_get))
         .route("/infra/network-policy/create", post(network_policy_create))
         .route("/infra/network-policy/update", put(network_policy_update))
-        .route("/infra/network-policy/delete", delete(network_policy_delete))
+        .route(
+            "/infra/network-policy/delete",
+            delete(network_policy_delete),
+        )
         .route(
             "/infra/network-policy/delete-list",
             delete(network_policy_delete_list),
@@ -156,7 +159,8 @@ pub(crate) async fn auto_attribute_ownership(pool: &sqlx::PgPool, asset_id: i64)
     )
     .bind(asset_id)
     .fetch_one(pool)
-    .await else {
+    .await
+    else {
         return;
     };
     let segments = sqlx::query(
@@ -168,16 +172,26 @@ pub(crate) async fn auto_attribute_ownership(pool: &sqlx::PgPool, asset_id: i64)
     let mut best: Option<(u8, i64)> = None;
     for row in &segments {
         let cidr: String = row.get("cidr");
-        let Some((address, prefix)) = cidr.split_once('/') else { continue };
+        let Some((address, prefix)) = cidr.split_once('/') else {
+            continue;
+        };
         let (Ok(network), Ok(prefix)) = (
             address.trim().parse::<std::net::Ipv4Addr>(),
             prefix.trim().parse::<u8>(),
-        ) else { continue };
+        ) else {
+            continue;
+        };
         if prefix > 32 {
             continue;
         }
-        let Ok(ip_addr) = ip.trim().parse::<std::net::Ipv4Addr>() else { return };
-        let mask = if prefix == 0 { 0 } else { u32::MAX << (32 - prefix as u32) };
+        let Ok(ip_addr) = ip.trim().parse::<std::net::Ipv4Addr>() else {
+            return;
+        };
+        let mask = if prefix == 0 {
+            0
+        } else {
+            u32::MAX << (32 - prefix as u32)
+        };
         if (u32::from(network) & mask) == (u32::from(ip_addr) & mask)
             && best
                 .as_ref()
@@ -222,7 +236,7 @@ async fn asset_update(
         .and_then(Value::as_i64)
         .filter(|value| *value > 0)
         .ok_or_else(|| AppError::bad_request("id is required"))?;
-    table_update(&state.pool, ASSET, p).await?;
+    let _ = table_update(&state.pool, ASSET, p).await?;
     auto_attribute_ownership(&state.pool, id).await;
     Ok(Json(ApiResponse::new(())))
 }

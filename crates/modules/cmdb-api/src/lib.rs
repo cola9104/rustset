@@ -103,8 +103,12 @@ impl AttrType {
                     .as_str()
                     .ok_or_else(|| "must be a datetime string".to_string())?;
                 let parsed = chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
-                    .or_else(|_| chrono::DateTime::parse_from_rfc3339(text).map(|dt| dt.naive_local()));
-                parsed.map(|_| ()).map_err(|_| "must be YYYY-MM-DD HH:MM:SS or RFC3339".into())
+                    .or_else(|_| {
+                        chrono::DateTime::parse_from_rfc3339(text).map(|dt| dt.naive_local())
+                    });
+                parsed
+                    .map(|_| ())
+                    .map_err(|_| "must be YYYY-MM-DD HH:MM:SS or RFC3339".into())
             }
             Self::Select => {
                 let selected = value.as_str().unwrap_or_default();
@@ -122,7 +126,9 @@ impl AttrType {
                 for item in items {
                     let text = item.as_str().unwrap_or_default();
                     if !allowed.iter().any(|candidate| candidate == text) {
-                        return Err(format!("value {text:?} is not one of the configured choices"));
+                        return Err(format!(
+                            "value {text:?} is not one of the configured choices"
+                        ));
                     }
                 }
                 Ok(())
@@ -167,8 +173,18 @@ mod tests {
     #[test]
     fn parses_all_type_codes() {
         for code in [
-            "text", "textarea", "number", "float", "bool", "date", "datetime",
-            "select", "multi_select", "link", "json", "password",
+            "text",
+            "textarea",
+            "number",
+            "float",
+            "bool",
+            "date",
+            "datetime",
+            "select",
+            "multi_select",
+            "link",
+            "json",
+            "password",
         ] {
             let parsed = AttrType::from_code(code).unwrap_or_else(|| panic!("{code}"));
             assert_eq!(parsed.code(), code);
@@ -185,8 +201,16 @@ mod tests {
         assert!(AttrType::Bool.validate(&json!("false"), None).is_err());
         assert!(AttrType::Date.validate(&json!("2026-09-25"), None).is_ok());
         assert!(AttrType::Date.validate(&json!("2026/09/25"), None).is_err());
-        assert!(AttrType::Datetime.validate(&json!("2026-09-25 10:00:00"), None).is_ok());
-        assert!(AttrType::Datetime.validate(&json!("2026-09-25T10:00:00Z"), None).is_ok());
+        assert!(
+            AttrType::Datetime
+                .validate(&json!("2026-09-25 10:00:00"), None)
+                .is_ok()
+        );
+        assert!(
+            AttrType::Datetime
+                .validate(&json!("2026-09-25T10:00:00Z"), None)
+                .is_ok()
+        );
         assert!(AttrType::Json.validate(&json!({"a":1}), None).is_ok());
         assert!(AttrType::Json.validate(&json!(42), None).is_err());
     }
@@ -194,8 +218,16 @@ mod tests {
     #[test]
     fn validates_select_against_choices() {
         let choices = choices();
-        assert!(AttrType::Select.validate(&json!("core"), Some(&choices)).is_ok());
-        assert!(AttrType::Select.validate(&json!("nope"), Some(&choices)).is_err());
+        assert!(
+            AttrType::Select
+                .validate(&json!("core"), Some(&choices))
+                .is_ok()
+        );
+        assert!(
+            AttrType::Select
+                .validate(&json!("nope"), Some(&choices))
+                .is_err()
+        );
         assert!(
             AttrType::MultiSelect
                 .validate(&json!(["core", "edge"]), Some(&choices))
@@ -206,6 +238,10 @@ mod tests {
                 .validate(&json!(["core", "nope"]), Some(&choices))
                 .is_err()
         );
-        assert!(AttrType::MultiSelect.validate(&json!("core"), Some(&choices)).is_err());
+        assert!(
+            AttrType::MultiSelect
+                .validate(&json!("core"), Some(&choices))
+                .is_err()
+        );
     }
 }

@@ -161,8 +161,7 @@ async fn validate_payload(
                         if def.required && is_create {
                             missing.push(def.code.clone());
                         }
-                    } else if let Err(reason) =
-                        def.attr_type.validate(value, def.choices.as_ref())
+                    } else if let Err(reason) = def.attr_type.validate(value, def.choices.as_ref())
                     {
                         invalid.push(format!("{}: {reason}", def.code));
                     } else {
@@ -199,7 +198,11 @@ async fn enforce_unique_key(
     let Some(key) = model.unique_key.as_deref().filter(|key| !key.is_empty()) else {
         return Ok(());
     };
-    let Some(value) = data.get(key).and_then(Value::as_str).filter(|v| !v.trim().is_empty()) else {
+    let Some(value) = data
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|v| !v.trim().is_empty())
+    else {
         return Ok(());
     };
     let duplicate: i64 = sqlx::query_scalar(
@@ -518,7 +521,10 @@ async fn instance_export(
         )
         .header(
             "content-disposition",
-            format!("attachment; filename=\"cmdb_instances_model_{}.xlsx\"", model.id),
+            format!(
+                "attachment; filename=\"cmdb_instances_model_{}.xlsx\"",
+                model.id
+            ),
         )
         .body(axum::body::Body::from(bytes))
         .map_err(|_| AppError::internal("failed to build download"))
@@ -529,11 +535,7 @@ fn cell_text(value: &Value) -> String {
         Value::String(text) => text.clone(),
         Value::Bool(flag) => flag.to_string(),
         Value::Number(_) => value.to_string(),
-        Value::Array(items) => items
-            .iter()
-            .map(cell_text)
-            .collect::<Vec<_>>()
-            .join(","),
+        Value::Array(items) => items.iter().map(cell_text).collect::<Vec<_>>().join(","),
         other => serde_json::to_string(other).unwrap_or_default(),
     }
 }
@@ -591,11 +593,7 @@ async fn instance_import(
 
     let mut reader = Xlsx::new(std::io::Cursor::new(file_bytes))
         .map_err(|_| AppError::bad_request("无法读取 xlsx 文件"))?;
-    let sheet = reader
-        .sheet_names()
-        .first()
-        .cloned()
-        .unwrap_or_default();
+    let sheet = reader.sheet_names().first().cloned().unwrap_or_default();
     let range = reader
         .worksheet_range(&sheet)
         .map_err(|_| AppError::bad_request("无法读取工作表"))?;

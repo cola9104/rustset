@@ -33,7 +33,9 @@ async fn main() -> anyhow::Result<()> {
     );
     let infra_state = rustset_infra_server::InfraState::new(database.clone());
     let ai_state = rustset_ai_server::AiState::new(database.clone(), tokens);
-    let cmdb_state = rustset_cmdb_server::CmdbState { pool: database.clone() };
+    let cmdb_state = rustset_cmdb_server::CmdbState {
+        pool: database.clone(),
+    };
     system_state.bootstrap().await?;
     let database_auth = system_state.database_auth_state();
 

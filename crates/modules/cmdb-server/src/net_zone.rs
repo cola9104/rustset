@@ -118,9 +118,11 @@ async fn net_zone_tree(
                 continue;
             }
             let child = nodes[child_index].clone();
-            let parent_children = nodes[parent_index]
-                .as_object_mut()
-                .map(|object| object.entry("children").or_insert_with(|| Value::Array(vec![])));
+            let parent_children = nodes[parent_index].as_object_mut().map(|object| {
+                object
+                    .entry("children")
+                    .or_insert_with(|| Value::Array(vec![]))
+            });
             if let Some(children) = parent_children.and_then(Value::as_array_mut) {
                 children.push(child);
                 promoted[child_index] = true;
@@ -220,7 +222,10 @@ async fn net_zone_create(
         .get("zoneType")
         .and_then(Value::as_str)
         .unwrap_or("company");
-    if !matches!(zone_type, "company" | "subsidiary" | "department" | "segment") {
+    if !matches!(
+        zone_type,
+        "company" | "subsidiary" | "department" | "segment"
+    ) {
         return Err(AppError::bad_request(
             "zoneType must be company / subsidiary / department / segment",
         ));
@@ -294,11 +299,27 @@ async fn net_zone_update(
          WHERE id = $1 AND deleted = 0",
     )
     .bind(id)
-    .bind(payload.get("name").and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()))
-    .bind(payload.get("parentId").and_then(Value::as_i64).filter(|id| *id > 0))
+    .bind(
+        payload
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|v| !v.is_empty()),
+    )
+    .bind(
+        payload
+            .get("parentId")
+            .and_then(Value::as_i64)
+            .filter(|id| *id > 0),
+    )
     .bind(payload.get("zoneType").and_then(Value::as_str))
     .bind(cidr.filter(|value| !value.is_empty()))
-    .bind(payload.get("sort").and_then(Value::as_i64).map(|sort| sort as i32))
+    .bind(
+        payload
+            .get("sort")
+            .and_then(Value::as_i64)
+            .map(|sort| sort as i32),
+    )
     .bind(payload.get("description").and_then(Value::as_str))
     .bind(&user.username)
     .execute(&state.pool)

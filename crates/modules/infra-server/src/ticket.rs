@@ -8,7 +8,6 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use chrono::Utc;
-use tracing::warn;
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
 use rustset_framework_tofu::{
@@ -19,6 +18,7 @@ use rustset_framework_web::AppError;
 use serde_json::{Map, Value, json};
 use sqlx::Row;
 use std::collections::HashMap;
+use tracing::warn;
 
 const TICKET: TableSpec = TableSpec {
     table: "infra_resource_ticket",
@@ -109,10 +109,7 @@ async fn create(
 
 /// The first enabled rule whose resource type matches (empty = any) and
 /// whose thresholds all cover the ticket.
-async fn match_approval_rule(
-    s: &InfraState,
-    ticket_id: i64,
-) -> Result<Option<Value>, AppError> {
+async fn match_approval_rule(s: &InfraState, ticket_id: i64) -> Result<Option<Value>, AppError> {
     let ticket = crate::table_get_value(&s.pool, TICKET, ticket_id).await?;
     let rows = sqlx::query(
         "SELECT id, name, resource_type, max_cpu_cores, max_memory_gb, max_resource_count, auto_provision
@@ -123,7 +120,10 @@ async fn match_approval_rule(
     .map_err(|_| AppError::internal("failed to read approval rules"))?;
     for row in rows {
         let resource_type: String = row.get("resource_type");
-        let ticket_type = ticket.get("resourceType").and_then(Value::as_str).unwrap_or("");
+        let ticket_type = ticket
+            .get("resourceType")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         if !resource_type.is_empty() && resource_type != ticket_type {
             continue;
         }
@@ -170,7 +170,11 @@ async fn apply_auto_approval(s: &InfraState, id: i64, rule: &Value) -> Result<()
     .execute(&s.pool)
     .await
     .map_err(|_| AppError::internal("failed to auto-approve"))?;
-    if rule.get("autoProvision").and_then(Value::as_bool).unwrap_or(false) {
+    if rule
+        .get("autoProvision")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         // A failed auto-provision must not fail ticket creation; the
         // ticket stays pending_provision with the failure recorded.
         if let Err(error) = run_provision(s, id, &format!("auto:{rule_name}")).await {
@@ -259,7 +263,6 @@ async fn run_provision(
         return Err(AppError::bad_request("只能配置待配置状态的工单"));
     }
 
-
     let cloud_category = ticket
         .get("cloudCategory")
         .and_then(Value::as_str)
@@ -285,8 +288,7 @@ async fn run_provision(
         match load_platform_credentials(s, &ticket).await? {
             Some(credentials) => credentials,
             None => {
-                let reason =
-                    "no enabled cloud provider config for this ticket's platform; configure one first";
+                let reason = "no enabled cloud provider config for this ticket's platform; configure one first";
                 record_failure(s, id, reason).await?;
                 return Err(AppError::bad_request(reason));
             }
@@ -330,8 +332,7 @@ async fn run_provision(
         .ensure_workspace(&workspace_name)
         .map_err(AppError::bad_request)?;
     let main_tf = render_main_tf(&target, &spec).map_err(AppError::bad_request)?;
-    TofuExecutor::write_file(&workspace, "main.tf", &main_tf)
-        .map_err(AppError::bad_request)?;
+    TofuExecutor::write_file(&workspace, "main.tf", &main_tf).map_err(AppError::bad_request)?;
     TofuExecutor::write_file(
         &workspace,
         "terraform.tfvars.json",
@@ -534,9 +535,7 @@ async fn rule_page(
 ) -> Result<Json<ApiResponse<crate::Page<Value>>>, AppError> {
     table_page(&s.pool, APPROVAL_RULE, p).await
 }
-async fn rule_list(
-    State(s): State<InfraState>,
-) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
+async fn rule_list(State(s): State<InfraState>) -> Result<Json<ApiResponse<Vec<Value>>>, AppError> {
     crate::table_list(&s.pool, APPROVAL_RULE).await
 }
 async fn rule_create(

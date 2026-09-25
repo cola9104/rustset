@@ -2,7 +2,7 @@
 //! SM4-CBC for secret-at-rest sealing, SM3 for digests. Password hashing
 //! stays bcrypt/Argon2 (framework/security) for yudao compatibility.
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use libsm::sm4::cipher_mode::{CipherMode, Sm4CipherMode};
 
 /// Prefix of values sealed with SM4-CBC + random IV (base64 of iv||ct).

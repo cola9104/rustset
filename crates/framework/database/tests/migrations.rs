@@ -48,7 +48,10 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("check reparented pages");
-    assert_eq!(orphaned_pages, 0, "every moved page must have a live parent");
+    assert_eq!(
+        orphaned_pages, 0,
+        "every moved page must have a live parent"
+    );
 
     // 0014 repaired the truncated cmdb:* codes seeded by 0009.
     let truncated: i64 = sqlx::query_scalar(
@@ -59,7 +62,10 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read truncated cmdb codes");
-    assert_eq!(truncated, 0, "truncated cmdb permission codes must be renamed");
+    assert_eq!(
+        truncated, 0,
+        "truncated cmdb permission codes must be renamed"
+    );
     let model_query: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM system_menu WHERE deleted = 0 AND permission = 'cmdb:model:query'",
     )
@@ -70,13 +76,12 @@ async fn applies_all_migrations_to_empty_postgres() {
 
     // 0013 CMDB default roles + organization net-zone tree.
     for role_code in ["cmdb_admin", "cmdb_user"] {
-        let exists: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM system_role WHERE code = $1 AND deleted = 0",
-        )
-        .bind(role_code)
-        .fetch_one(&pool)
-        .await
-        .unwrap_or_else(|_| panic!("read role {role_code}"));
+        let exists: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM system_role WHERE code = $1 AND deleted = 0")
+                .bind(role_code)
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|_| panic!("read role {role_code}"));
         assert_eq!(exists, 1, "role {role_code} must exist");
     }
     let cmdb_admin_grants: i64 = sqlx::query_scalar(
@@ -98,12 +103,11 @@ async fn applies_all_migrations_to_empty_postgres() {
         cmdb_admin_grants, cmdb_total,
         "cmdb_admin must hold every cmdb permission"
     );
-    let net_zone_table: bool = sqlx::query_scalar(
-        "SELECT to_regclass('public.cmdb_net_zone') IS NOT NULL",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("inspect net zone table");
+    let net_zone_table: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.cmdb_net_zone') IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("inspect net zone table");
     assert!(net_zone_table);
 
     // 0012 approval-rule management page.
@@ -124,7 +128,6 @@ async fn applies_all_migrations_to_empty_postgres() {
     .expect("read approval rule permissions");
     assert_eq!(approval_rule_perms, 4);
 
-
     // 0011 ops agent: five Rust-executed tools and the preset 运维助理 role.
     let ops_tools: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai.tools WHERE name IN
@@ -134,12 +137,11 @@ async fn applies_all_migrations_to_empty_postgres() {
     .await
     .expect("read ops agent tools");
     assert_eq!(ops_tools, 5);
-    let chat_models: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.model_configs WHERE type='chat'",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("read chat models");
+    let chat_models: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.model_configs WHERE type='chat'")
+            .fetch_one(&pool)
+            .await
+            .expect("read chat models");
     let agent_role: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai.chat_roles
          WHERE name='运维助理' AND public_status = true AND array_length(tool_ids, 1) = 5",
@@ -152,7 +154,6 @@ async fn applies_all_migrations_to_empty_postgres() {
         if chat_models > 0 { 1 } else { 0 },
         "agent role is preset iff a chat model row exists"
     );
-
 
     // 0010 OpenTofu provision tracking + auto-approval rules.
     let apply_status_exists: bool = sqlx::query_scalar(
@@ -167,14 +168,12 @@ async fn applies_all_migrations_to_empty_postgres() {
     .await
     .expect("inspect ticket apply tracking");
     assert!(apply_status_exists);
-    let approval_rules_table: bool = sqlx::query_scalar(
-        "SELECT to_regclass('public.infra_approval_rule') IS NOT NULL",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("inspect approval rule table");
+    let approval_rules_table: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.infra_approval_rule') IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("inspect approval rule table");
     assert!(approval_rules_table);
-
 
     // 0009 CMDB core: dynamic models, attributes, JSONB instances, relations.
     for cmdb_table in [
@@ -196,17 +195,18 @@ async fn applies_all_migrations_to_empty_postgres() {
     .fetch_one(&pool)
     .await
     .expect("read cmdb permission menus");
-    assert_eq!(cmdb_permissions, 15, "cmdb permissions = 0009 set + net-zone (0013)");
-
+    assert_eq!(
+        cmdb_permissions, 15,
+        "cmdb permissions = 0009 set + net-zone (0013)"
+    );
 
     // 0008 drops the whole Toonflow media business.
     for removed_schema in ["toonflow", "toon", "media"] {
-        let schema_exists: bool =
-            sqlx::query_scalar("SELECT to_regnamespace($1) IS NOT NULL")
-                .bind(removed_schema)
-                .fetch_one(&pool)
-                .await
-                .unwrap_or_else(|_| panic!("inspect removed schema {removed_schema}"));
+        let schema_exists: bool = sqlx::query_scalar("SELECT to_regnamespace($1) IS NOT NULL")
+            .bind(removed_schema)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|_| panic!("inspect removed schema {removed_schema}"));
         assert!(!schema_exists, "schema {removed_schema} must be dropped");
     }
     let toon_menus: i64 = sqlx::query_scalar(
@@ -218,13 +218,15 @@ async fn applies_all_migrations_to_empty_postgres() {
     .expect("read toonflow menus");
     assert_eq!(toon_menus, 0, "0008 must remove the 短剧工厂 menu subtree");
 
-    let network_policy_exists: bool = sqlx::query_scalar(
-        "SELECT to_regclass('public.infra_network_policy') IS NOT NULL",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("inspect network policy table");
-    assert!(network_policy_exists, "0007 must create infra_network_policy");
+    let network_policy_exists: bool =
+        sqlx::query_scalar("SELECT to_regclass('public.infra_network_policy') IS NOT NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("inspect network policy table");
+    assert!(
+        network_policy_exists,
+        "0007 must create infra_network_policy"
+    );
 
     let asset_inventory_column_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(
