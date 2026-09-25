@@ -56,7 +56,7 @@ const coreRouteNames = traverseTreeValues(coreRoutes, (route) => route.name);
  */
 const accessRoutes = [...staticRoutes];
 
-// add by 芋艿：from https://github.com/vbenjs/vue-vben-admin/blob/main/playground/src/router/routes/index.ts#L38-L45
+// 源自 vue-vben-admin playground：https://github.com/vbenjs/vue-vben-admin/blob/main/playground/src/router/routes/index.ts#L38-L45
 const componentKeys: string[] = Object.keys(
   import.meta.glob('../../views/**/*.vue'),
 )
