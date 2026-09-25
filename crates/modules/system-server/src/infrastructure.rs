@@ -16,13 +16,23 @@ pub struct UserAccount {
     pub locked_until: Option<DateTime<Utc>>,
 }
 
+/// SM3-derived identity UUID for a numeric user id (国密 replacement for the
+/// retired md5 mapping). Stored in `system_users.identity_uuid`; all API
+/// surfaces keep presenting this UUID as the user id.
+pub fn identity_uuid_for(user_id: i64) -> Uuid {
+    Uuid::from_bytes(rustset_framework_gm::sm3_uuid_bytes(&format!(
+        "{}{user_id}",
+        rustset_framework_gm::IDENTITY_DOMAIN
+    )))
+}
+
 pub async fn find_account_by_username(
     pool: &PgPool,
     username: &str,
     tenant_id: Option<i64>,
 ) -> anyhow::Result<Option<UserAccount>> {
     sqlx::query_as::<_, UserAccount>(
-        "SELECT md5('yudao-user:' || source.id::text)::uuid AS id,
+        "SELECT source.identity_uuid AS id,
                 source.username, source.password AS password_hash,
                 source.tenant_id::text AS tenant_id,
                 CASE source.status WHEN 0 THEN 'active' ELSE 'disabled' END AS status,
@@ -55,14 +65,14 @@ pub async fn find_account_by_id(
     user_id: Uuid,
 ) -> anyhow::Result<Option<UserAccount>> {
     sqlx::query_as::<_, UserAccount>(
-        "SELECT md5('yudao-user:' || source.id::text)::uuid AS id,
+        "SELECT source.identity_uuid AS id,
                 source.username, source.password AS password_hash,
                 source.tenant_id::text AS tenant_id,
                 CASE source.status WHEN 0 THEN 'active' ELSE 'disabled' END AS status,
                 0 AS failed_login_attempts,
                 NULL::timestamptz AS locked_until
          FROM system_users source
-         WHERE md5('yudao-user:' || source.id::text)::uuid = $1
+         WHERE source.identity_uuid = $1
            AND source.deleted = 0
          ORDER BY source.id
          LIMIT 1",
@@ -92,7 +102,7 @@ pub async fn record_successful_login(pool: &PgPool, user_id: Uuid) -> anyhow::Re
     sqlx::query(
         "UPDATE system_users source
          SET login_date = now(), update_time = now()
-         WHERE md5('yudao-user:' || source.id::text)::uuid = $1",
+         WHERE source.identity_uuid = $1",
     )
     .bind(user_id)
     .execute(pool)
@@ -141,7 +151,7 @@ pub async fn load_current_user(
                      WHERE allowed.menu_id::bigint = m.id
                  )
              )
-         WHERE md5('yudao-user:' || u.id::text)::uuid = $1
+         WHERE u.identity_uuid = $1
            AND u.deleted = 0 AND u.status = 0
          ORDER BY r.code, m.permission",
     )

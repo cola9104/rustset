@@ -1,9 +1,6 @@
 use std::fmt;
 
-use argon2::{
-    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
-    password_hash::{SaltString, rand_core::OsRng},
-};
+use rustset_framework_gm::{sm3_password_hash, sm3_password_verify};
 
 #[derive(Debug, Clone)]
 pub struct PasswordPolicy {
@@ -61,33 +58,20 @@ impl PasswordService {
         Self { policy }
     }
 
+    /// Hash a policy-compliant password with PBKDF2-HMAC-SM3.
     pub fn hash(&self, password: &str) -> Result<String, PasswordError> {
         self.policy.validate(password)?;
         self.hash_secret(password)
     }
 
+    /// Hash a secret (machine credentials, bootstrap passwords) with
+    /// PBKDF2-HMAC-SM3 without applying the interactive password policy.
     pub fn hash_secret(&self, secret: &str) -> Result<String, PasswordError> {
-        let salt = SaltString::generate(&mut OsRng);
-        Argon2::default()
-            .hash_password(secret.as_bytes(), &salt)
-            .map(|hash| hash.to_string())
-            .map_err(|_| PasswordError::HashingFailed)
-    }
-
-    pub fn hash_yudao(&self, password: &str) -> Result<String, PasswordError> {
-        self.policy.validate(password)?;
-        bcrypt::hash(password, bcrypt::DEFAULT_COST).map_err(|_| PasswordError::HashingFailed)
+        sm3_password_hash(secret).map_err(|_| PasswordError::HashingFailed)
     }
 
     pub fn verify(&self, password: &str, encoded_hash: &str) -> Result<bool, PasswordError> {
-        if encoded_hash.starts_with("$2") {
-            return bcrypt::verify(password, encoded_hash).map_err(|_| PasswordError::InvalidHash);
-        }
-        let parsed_hash =
-            PasswordHash::new(encoded_hash).map_err(|_| PasswordError::InvalidHash)?;
-        Ok(Argon2::default()
-            .verify_password(password.as_bytes(), &parsed_hash)
-            .is_ok())
+        Ok(sm3_password_verify(password, encoded_hash))
     }
 }
 
@@ -98,7 +82,6 @@ pub enum PasswordError {
     MissingLowercase,
     MissingNumber,
     MissingSymbol,
-    InvalidHash,
     HashingFailed,
 }
 
@@ -117,7 +100,6 @@ impl fmt::Display for PasswordError {
             }
             Self::MissingNumber => formatter.write_str("password must contain a number"),
             Self::MissingSymbol => formatter.write_str("password must contain a symbol"),
-            Self::InvalidHash => formatter.write_str("stored password hash is invalid"),
             Self::HashingFailed => formatter.write_str("password hashing failed"),
         }
     }
@@ -137,6 +119,7 @@ mod tests {
         assert!(service.verify("Enterprise#123", &hash).unwrap());
         assert!(!service.verify("WrongPassword#123", &hash).unwrap());
         assert_ne!(hash, "Enterprise#123");
+        assert!(hash.starts_with("$sm3$"));
     }
 
     #[test]
@@ -154,11 +137,16 @@ mod tests {
     }
 
     #[test]
-    fn verifies_yudao_bcrypt_passwords() {
+    fn rejects_legacy_non_gm_hash_formats() {
         let service = PasswordService::default();
-        let hash = bcrypt::hash("admin123", 4).unwrap();
-
-        assert!(service.verify("admin123", &hash).unwrap());
-        assert!(!service.verify("wrong", &hash).unwrap());
+        assert!(
+            !service
+                .verify(
+                    "admin123",
+                    "$2a$04$.vd8nPeLwxt6hnSzmAoAyul8BOLX7Cib6QhcxRe30rfvrIPQHH1OG"
+                )
+                .unwrap()
+        );
+        assert!(!service.verify("whatever", "plaintext").unwrap());
     }
 }

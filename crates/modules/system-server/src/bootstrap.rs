@@ -4,6 +4,7 @@ use tracing::{info, warn};
 use crate::SystemState;
 
 pub async fn initialize(state: &SystemState) -> anyhow::Result<()> {
+    ensure_identity_uuids(state).await?;
     let administrators = sqlx::query_scalar::<_, i64>(
         "SELECT count(*)
          FROM system_users u
@@ -14,7 +15,7 @@ pub async fn initialize(state: &SystemState) -> anyhow::Result<()> {
     )
     .fetch_one(&state.pool)
     .await
-    .context("failed to verify Yudao administrator")?;
+    .context("failed to verify RustSet administrator")?;
 
     if administrators == 0 {
         bootstrap_administrator(state).await?;
@@ -28,15 +29,21 @@ pub async fn initialize(state: &SystemState) -> anyhow::Result<()> {
         )
         .fetch_one(&state.pool)
         .await
-        .context("failed to re-verify Yudao administrator")?;
+        .context("failed to re-verify RustSet administrator")?;
         if administrators == 0 {
-            bail!("Yudao system_users has no enabled super administrator");
+            bail!("RustSet has no enabled super administrator");
         }
     } else {
-        info!(administrators, "Yudao administrators are ready");
+        info!(administrators, "RustSet administrators are ready");
     }
 
     initialize_admin_password(state).await?;
+    if let Err(error) = reseal_legacy_secrets(state).await {
+        warn!(
+            ?error,
+            "failed to re-seal legacy secrets; keeping existing values"
+        );
+    }
 
     Ok(())
 }
@@ -176,6 +183,14 @@ async fn bootstrap_administrator(state: &SystemState) -> anyhow::Result<()> {
     .fetch_optional(&mut *tx)
     .await
     .context("failed to insert bootstrap administrator")?;
+    if let Some(id) = inserted {
+        sqlx::query("UPDATE system_users SET identity_uuid = $2 WHERE id = $1")
+            .bind(id)
+            .bind(crate::infrastructure::identity_uuid_for(id))
+            .execute(&mut *tx)
+            .await
+            .context("failed to assign bootstrap identity uuid")?;
+    }
     let user_id = match inserted {
         Some(id) => id,
         None => sqlx::query_scalar::<_, i64>(
@@ -253,6 +268,177 @@ async fn initialize_admin_password(state: &SystemState) -> anyhow::Result<()> {
 
     if updated == 1 {
         info!(username, "bootstrap admin password initialized");
+    }
+    Ok(())
+}
+
+/// Backfill `system_users.identity_uuid` (SM3-derived, 国密) for any user the
+/// migrations could not cover — the derivation is computed in Rust, so seed
+/// literals in migrations only cover the baseline users. Idempotent.
+pub async fn ensure_identity_uuids(state: &SystemState) -> anyhow::Result<()> {
+    let missing: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM system_users WHERE identity_uuid IS NULL ORDER BY id")
+            .fetch_all(&state.pool)
+            .await
+            .context("failed to list users without identity uuid")?;
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .context("failed to begin identity uuid backfill")?;
+    for id in missing {
+        sqlx::query("UPDATE system_users SET identity_uuid = $2 WHERE id = $1")
+            .bind(id)
+            .bind(crate::infrastructure::identity_uuid_for(id))
+            .execute(&mut *tx)
+            .await
+            .context("failed to backfill identity uuid")?;
+    }
+    tx.commit()
+        .await
+        .context("failed to commit identity uuid backfill")?;
+    info!("backfilled SM3 identity uuids for users lacking one");
+    Ok(())
+}
+
+fn sealing_secret() -> String {
+    std::env::var("SECRET_ENCRYPTION_KEY")
+        .or_else(|_| std::env::var("JWT_SECRET"))
+        .unwrap_or_else(|_| "rustset-local-secret".to_owned())
+}
+
+/// One-shot startup pass: convert surviving legacy XOR `enc:v1:` sealed values
+/// to SM4-CBC. Runs on every start and does nothing once no `enc:v1:` rows
+/// remain. Values that cannot be decoded (e.g. sealed under a different key)
+/// are left untouched and counted.
+async fn reseal_legacy_secrets(state: &SystemState) -> anyhow::Result<()> {
+    use rustset_framework_gm as gm;
+
+    let secret = sealing_secret();
+    let reseal = |sealed: &str| -> Option<String> {
+        let plain = gm::legacy_v1_open(sealed, &secret)?;
+        gm::sm4_seal(&plain, &secret).ok()
+    };
+    let mut converted = 0usize;
+    let mut skipped = 0usize;
+
+    let mail_rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT id, password FROM system_mail_account WHERE password LIKE 'enc:v1:%'",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .context("failed to list legacy mail secrets")?;
+    for (id, sealed) in mail_rows {
+        match reseal(&sealed) {
+            Some(resealed) => {
+                sqlx::query("UPDATE system_mail_account SET password = $2 WHERE id = $1")
+                    .bind(id)
+                    .bind(resealed)
+                    .execute(&state.pool)
+                    .await
+                    .context("failed to re-seal mail secret")?;
+                converted += 1;
+            }
+            None => skipped += 1,
+        }
+    }
+
+    let sms_rows: Vec<(i64, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT id, api_key, api_secret FROM system_sms_channel
+         WHERE api_key LIKE 'enc:v1:%' OR api_secret LIKE 'enc:v1:%'",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .context("failed to list legacy sms secrets")?;
+    for (id, api_key, api_secret) in sms_rows {
+        let key = match api_key.as_deref() {
+            Some(value) if value.starts_with(gm::LEGACY_SEALED_PREFIX) => reseal(value),
+            other => other.map(str::to_owned),
+        };
+        let api_key = match key {
+            Some(value) => value,
+            None => {
+                skipped += 1;
+                continue;
+            }
+        };
+        let api_secret = match api_secret.as_deref() {
+            Some(value) if value.starts_with(gm::LEGACY_SEALED_PREFIX) => reseal(value),
+            other => other.map(str::to_owned),
+        }
+        .unwrap_or_default();
+        sqlx::query("UPDATE system_sms_channel SET api_key = $2, api_secret = $3 WHERE id = $1")
+            .bind(id)
+            .bind(api_key)
+            .bind(api_secret)
+            .execute(&state.pool)
+            .await
+            .context("failed to re-seal sms secret")?;
+        converted += 1;
+    }
+
+    let datasource_rows: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT id, password FROM infra_data_source_config WHERE password LIKE 'enc:v1:%'",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .context("failed to list legacy datasource secrets")?;
+    for (id, sealed) in datasource_rows {
+        match reseal(&sealed) {
+            Some(resealed) => {
+                sqlx::query("UPDATE infra_data_source_config SET password = $2 WHERE id = $1")
+                    .bind(id)
+                    .bind(resealed)
+                    .execute(&state.pool)
+                    .await
+                    .context("failed to re-seal datasource secret")?;
+                converted += 1;
+            }
+            None => skipped += 1,
+        }
+    }
+
+    let cloud_rows: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, access_key_id, access_key_secret FROM infra_cloud_provider_config
+         WHERE access_key_id LIKE 'enc:v1:%' OR access_key_secret LIKE 'enc:v1:%'",
+    )
+    .fetch_all(&state.pool)
+    .await
+    .context("failed to list legacy cloud credentials")?;
+    for (id, key_id, key_secret) in cloud_rows {
+        let key = if key_id.starts_with(gm::LEGACY_SEALED_PREFIX) {
+            reseal(&key_id)
+        } else {
+            Some(key_id)
+        };
+        let secret_value = if key_secret.starts_with(gm::LEGACY_SEALED_PREFIX) {
+            reseal(&key_secret)
+        } else {
+            Some(key_secret)
+        };
+        match (key, secret_value) {
+            (Some(key), Some(secret_value)) => {
+                sqlx::query(
+                    "UPDATE infra_cloud_provider_config
+                     SET access_key_id = $2, access_key_secret = $3 WHERE id = $1",
+                )
+                .bind(id)
+                .bind(key)
+                .bind(secret_value)
+                .execute(&state.pool)
+                .await
+                .context("failed to re-seal cloud credentials")?;
+                converted += 1;
+            }
+            _ => skipped += 1,
+        }
+    }
+
+    if converted > 0 || skipped > 0 {
+        info!(converted, skipped, "re-sealed legacy secrets to SM4");
     }
     Ok(())
 }

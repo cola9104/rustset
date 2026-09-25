@@ -476,7 +476,7 @@ async fn import_one_user(
     };
     let password_hash = state
         .passwords
-        .hash_yudao(password)
+        .hash(password)
         .map_err(|_| "密码格式不合法".to_owned())?;
     let id = sqlx::query_scalar::<_, i64>(
         "INSERT INTO system_users
@@ -500,6 +500,12 @@ async fn import_one_user(
     .fetch_one(&mut *tx)
     .await
     .map_err(|_| "创建用户失败".to_owned())?;
+    sqlx::query("UPDATE system_users SET identity_uuid = $2 WHERE id = $1")
+        .bind(id)
+        .bind(crate::infrastructure::identity_uuid_for(id))
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| "分配用户标识失败".to_owned())?;
     super::user_relations::replace_posts(&mut tx, id, &record.post_ids, &user.username, tenant_id)
         .await
         .map_err(|_| "岗位不存在".to_owned())?;

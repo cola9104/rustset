@@ -1,5 +1,7 @@
 # RustSet 切换 Kairos 前端与权限体系：详细方案及实施计划
 
+> 历史归档：本文记录 RustSet 迁移前端与权限底座时的来源、决策和阶段结果，不代表当前产品名称或功能范围。当前说明以根目录 `README.md`、`docs/technical-solution.md` 和实际代码为准。
+
 状态：P0、P1、P2、P3 以及 P4 资产运营首批迁移已于 2026-09-24 完成；P4.1“资产采集表台账化”已于 2026-09-25 完成，并继续叠加 CMDB、组织网段归属、资产策略联查、审批规则和业务菜单拆分；P5 生产切流与 P6 稳定期收尾尚未实施。调研日期：2026-09-24，资产采集表补充设计日期：2026-09-25。
 
 当前完成摘要：infra 当前 235 条路由经集中注册表强制认证和权限码校验（未注册默认拒绝）；bootstrap 管理员机制支持空密码条件更新与无管理员时的并发安全恢复创建。资产采集表的 43 字段资产台账和 17 字段网络策略台账已落库并接入页面/API/权限，资产可按 IP 联查命中的网络策略；资产域后续已扩展为 15 个业务页面和 63 个按钮权限，并拆分到独立业务模块菜单。Kairos/Vben 页面通过集中兼容层接入本地 API；扫描 Agent 等没有真实执行能力的功能不接假接口。新增迁移均通过空库与重入测试，参考快照随迁移链刷新。P1 摘要：全仓 CRLF 归一化；bun 正式工具链；上游菜单转换修正；RustSet 品牌；Dioxus 已删除。交付：`docs/migration/p0-baseline.md`、`docs/migration/upstream-diff.md`。
@@ -16,18 +18,18 @@ P0 结论摘要：工作区未提交变更为纯 LF→CRLF 行尾改写；本地
 
 默认范围如下，后续若调整，先更新本方案范围再实施：
 
-| 项目 | 默认决策 |
-| --- | --- |
-| 主前端 | 采用 Kairos 的 `apps/web` 工程及公共组件，落地到本仓库同路径 |
-| Dioxus | 在 P0 完成功能盘点和版本备份后，于 P1 删除 `apps/web-dioxus` 及专属工程配置 |
-| 权限底座 | 复用 Kairos System/Security 实现、表模型及协议；保留本项目命名与配置身份 |
-| 后端 | 保留 Rust/Axum、`rustset-*` crate、现有 gateway 与业务模块 |
-| 数据 | 保留现有用户、密码哈希、角色关系、租户及业务记录，采用增量升级 |
-| 业务页面 | System、Infra、AI、Media 保留；资产相关优先复用 Kairos 对应页面 |
-| Kairos 扩展业务 | Pent、扫描执行器、Agent、MCP 等不随前端迁移自动引入 |
-| 品牌 | 暂保留 RustSet，统一清理 Rust Toon / Kairos 的产品文案残留；保留第三方版权声明 |
-| 数据库初始化 | 坚持本仓库 AGENTS.md：SQLx 迁移为唯一初始化路径 |
-| 对上游的维护方式 | 固定提交引入源码，记录来源与本地差异，后续按模块审查更新 |
+| 项目             | 默认决策                                                                       |
+| ---------------- | ------------------------------------------------------------------------------ |
+| 主前端           | 采用 Kairos 的 `apps/web` 工程及公共组件，落地到本仓库同路径                   |
+| Dioxus           | 在 P0 完成功能盘点和版本备份后，于 P1 删除 `apps/web-dioxus` 及专属工程配置    |
+| 权限底座         | 复用 Kairos System/Security 实现、表模型及协议；保留本项目命名与配置身份       |
+| 后端             | 保留 Rust/Axum、`rustset-*` crate、现有 gateway 与业务模块                     |
+| 数据             | 保留现有用户、密码哈希、角色关系、租户及业务记录，采用增量升级                 |
+| 业务页面         | System、Infra、AI、Media 保留；资产相关优先复用 Kairos 对应页面                |
+| Kairos 扩展业务  | Pent、扫描执行器、Agent、MCP 等不随前端迁移自动引入                            |
+| 品牌             | 暂保留 RustSet，统一清理 Rust Toon / Kairos 的产品文案残留；保留第三方版权声明 |
+| 数据库初始化     | 坚持本仓库 AGENTS.md：SQLx 迁移为唯一初始化路径                                |
+| 对上游的维护方式 | 固定提交引入源码，记录来源与本地差异，后续按模块审查更新                       |
 
 不推荐直接将整个仓库替换为 Kairos：它会连带切换业务模块、数据库初始化方式和运行依赖，超出当前“前端和权限复用”的必要范围。若最终目标是完整 Kairos 产品，包括 Pent/Scan，则应另设第二期整平台迁移。
 
@@ -45,17 +47,17 @@ P0 结论摘要：工作区未提交变更为纯 LF→CRLF 行尾改写；本地
 
 ### 2.2 已确认的差异
 
-| 领域 | RustSet 现状 | Kairos 现状 | 对迁移的影响 |
-| --- | --- | --- | --- |
-| 前端入口 | 同时存在 `apps/web-dioxus`、`apps/web`；workspace 包含 Dioxus；AGENTS 与 README 指向不同前端 | `apps/web` 的 Vben 工程 | 必须统一默认入口、构建、启动脚本和部署文档 |
-| 前端权限链 | 现有 Vben 已有登录 store、后端菜单、路由守卫、请求拦截器 | 相同目录和协议，大量文件相同 | 可以直接对齐上游，避免重复实现 |
-| Security | 权限字符串、JWT、CurrentUser、密码处理均存在 | 忽略换行差异后，仅 4 个文件有差异，主要为包名、JWT 默认身份与测试示例 | 保留兼容身份，进行语义级合并 |
-| System | 用户、角色、菜单、租户、会话存储、数据权限及权限缓存均存在 | 17 个文件有差异，大部分为命名；bootstrap 新增空密码初始化 | 重点审查 bootstrap 行为，不能据文件数量推断重写规模 |
-| 菜单转换 | 已有后端菜单转换工具 | 增加分组默认跳转、无 componentName 时不启用 KeepAlive 等修正 | 将修正与配套测试一起引入 |
-| 资产页面 | Dioxus 存在资产及云平台等页面；现有 Vben 缺少上游 `asset-ops` 目录 | Vue 页面在 `views/asset-ops`，API 文件主要在 `api/scan` | 复用页面，但必须适配后端接口和业务语义 |
-| 资产 API | `/infra/asset/page`、`/infra/asset/create` 等操作式接口 | `/asset-ops/assets`、`/asset-ops/assets/{id}` 等资源式接口 | 改 URL 不足以完成迁移，还需字段、分页、错误与状态转换 |
-| 数据初始化 | gateway 调用 `migrate`，有 `0001`、`0002` | gateway 调用 `ensure_initialized`，依靠完整快照 | 不引入上游数据库启动实现及快照覆盖 |
-| 额外业务 | gateway 装配 System、Infra、AI、Media | 另外装配 Scan、Pent，并带运行时基础设施 | 不整体复制上游 workspace 或 gateway |
+| 领域       | RustSet 现状                                                                                 | Kairos 现状                                                           | 对迁移的影响                                          |
+| ---------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------- |
+| 前端入口   | 同时存在 `apps/web-dioxus`、`apps/web`；workspace 包含 Dioxus；AGENTS 与 README 指向不同前端 | `apps/web` 的 Vben 工程                                               | 必须统一默认入口、构建、启动脚本和部署文档            |
+| 前端权限链 | 现有 Vben 已有登录 store、后端菜单、路由守卫、请求拦截器                                     | 相同目录和协议，大量文件相同                                          | 可以直接对齐上游，避免重复实现                        |
+| Security   | 权限字符串、JWT、CurrentUser、密码处理均存在                                                 | 忽略换行差异后，仅 4 个文件有差异，主要为包名、JWT 默认身份与测试示例 | 保留兼容身份，进行语义级合并                          |
+| System     | 用户、角色、菜单、租户、会话存储、数据权限及权限缓存均存在                                   | 17 个文件有差异，大部分为命名；bootstrap 新增空密码初始化             | 重点审查 bootstrap 行为，不能据文件数量推断重写规模   |
+| 菜单转换   | 已有后端菜单转换工具                                                                         | 增加分组默认跳转、无 componentName 时不启用 KeepAlive 等修正          | 将修正与配套测试一起引入                              |
+| 资产页面   | Dioxus 存在资产及云平台等页面；现有 Vben 缺少上游 `asset-ops` 目录                           | Vue 页面在 `views/asset-ops`，API 文件主要在 `api/scan`               | 复用页面，但必须适配后端接口和业务语义                |
+| 资产 API   | `/infra/asset/page`、`/infra/asset/create` 等操作式接口                                      | `/asset-ops/assets`、`/asset-ops/assets/{id}` 等资源式接口            | 改 URL 不足以完成迁移，还需字段、分页、错误与状态转换 |
+| 数据初始化 | gateway 调用 `migrate`，有 `0001`、`0002`                                                    | gateway 调用 `ensure_initialized`，依靠完整快照                       | 不引入上游数据库启动实现及快照覆盖                    |
+| 额外业务   | gateway 装配 System、Infra、AI、Media                                                        | 另外装配 Scan、Pent，并带运行时基础设施                               | 不整体复制上游 workspace 或 gateway                   |
 
 主要本地证据路径：
 
@@ -140,14 +142,14 @@ P1 删除清单：整个 `apps/web-dioxus/`，根 Cargo workspace 的对应成�
 
 System 已有权限码优先原样保留。资产业务建议统一使用与现有 API 对应的 `infra:<resource>:<action>`；最终值先与现有菜单数据和上游页面逐项对照，下面是拟定规则，尚未执行：
 
-| 业务 | 拟定权限 | 约束 |
-| --- | --- | --- |
-| 资产 | `infra:asset:query/create/update/delete/export` | `query/create/...` 表示多个独立权限码，不是带斜杠的单个值 |
-| 服务商、机房、区域等 | `infra:service-provider:*`、`infra:machine-room:*` 等按动作拆分 | 普通角色按动作授予，避免直接授整个通配符 |
-| 工单 | `infra:resource-ticket:query/create/update/delete/approve/provision/deliver` | 审批与交付独立，后端校验状态转换与资源范围 |
-| 任务 | `infra:task:query/create/update/delete/execute` | 查看和执行分离 |
-| 风险 | `infra:risk:query/update/resolve` | 处理状态变更必须授权 |
-| 云凭据 | 独立配置、测试连接、同步权限 | 敏感字段不随普通列表响应返回 |
+| 业务                 | 拟定权限                                                                     | 约束                                                      |
+| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 资产                 | `infra:asset:query/create/update/delete/export`                              | `query/create/...` 表示多个独立权限码，不是带斜杠的单个值 |
+| 服务商、机房、区域等 | `infra:service-provider:*`、`infra:machine-room:*` 等按动作拆分              | 普通角色按动作授予，避免直接授整个通配符                  |
+| 工单                 | `infra:resource-ticket:query/create/update/delete/approve/provision/deliver` | 审批与交付独立，后端校验状态转换与资源范围                |
+| 任务                 | `infra:task:query/create/update/delete/execute`                              | 查看和执行分离                                            |
+| 风险                 | `infra:risk:query/update/resolve`                                            | 处理状态变更必须授权                                      |
+| 云凭据               | 独立配置、测试连接、同步权限                                                 | 敏感字段不随普通列表响应返回                              |
 
 定义权限清单：HTTP 方法、路由、handler、权限码、数据边界、审计事件、测试编号。每个受保护入口都必须覆盖；别名路由与批量接口不得漏配。未知或未配置的业务操作默认拒绝。
 
@@ -168,8 +170,13 @@ System 数据范围保留数据库的 1=全部、2=自定义部门、3=本部门
 
 ### 4.4 会话、缓存及密码
 
-- 保留当前 bigint 用户 ID 与认证 UUID 的确定性映射 `md5('yudao-user:' || id)::uuid`，避免破坏用户与 AI/Media 所有权引用。
-- 保留 bcrypt/Argon2 兼容验证，不批量重置密码，不从上游快照导入用户或 token。
+> 2026-09 更新：按“内部密码学全部国密化、不做旧格式兼容”的决定，本节前三条的
+> 兼容保留条款已被 0018 迁移取代，见下方国密条目。
+
+- 认证 UUID 映射改为 `system_users.identity_uuid` 列，取值 `SM3('rustset-user:' || id)` 前 16 字节（Rust 侧派生）；原 `md5('yudao-user:' || id)::uuid` 已全部移除。基线用户由 0018 字面量回填，运行时新建用户由网关写入，启动时兜底回填。
+- 密码哈希统一为 PBKDF2-HMAC-SM3（`$sm3$<iter>$<salt>$<digest>`，16384 轮）；bcrypt/Argon2 不再可验证，基线 admin 密码由 0018 重置为同口令的国密哈希。静默密文（邮件/短信/数据源/云凭据）统一 SM4-CBC `enc:sm4:v2:`，XOR `enc:v1:` 仅保留一次性启动重封通道。
+- 访问令牌为 HMAC-SM3 签名的紧凑 JWS（`alg=HMAC-SM3`），签发/校验都在网关内闭环；JWT_SECRET 语义不变，全体旧令牌随格式切换失效，需重新登录。
+- sqlx 迁移 checksum 的 SHA-256 是 sqlx 框架自身的校验格式，不属于应用密码学，予以保留。
 - 正常升级保留 JWT 配置；必要的全体重新登录只能作为明确发布策略，不能因前端重命名偶然触发。
 - 现有 CurrentUser 缓存 TTL 为 300 秒。角色、菜单、用户角色、租户套餐及禁用状态变更必须失效相关用户缓存，不能把等待 TTL 当作权限撤销机制。
 - 对缓存失效失败、多实例、Redis 不可用进行验证；必要时用版本号或数据库回查避免继续使用旧授权。
@@ -181,38 +188,38 @@ System 数据范围保留数据库的 1=全部、2=自定义部门、3=本部门
 
 以下为实际源码中已存在的协议，应优先保持兼容：
 
-| 接口/规则 | 当前行为与实施要求 |
-| --- | --- |
-| `POST /system/auth/login` | 原始 token 使用 snake_case；Vben API 层转为 accessToken/refreshToken/expiresIn |
-| `POST /system/auth/refresh-token` | 核实并保留 query `refreshToken` 的兼容路径，与后端接受的请求结构一致 |
-| `POST /system/auth/logout` | JSON 使用 `refresh_token`；核实实际请求是否携带该接口需要的认证信息 |
-| `GET /system/auth/me` | 保持用户身份字段及 ID 映射 |
-| `GET /system/auth/get-permission-info` | 保留 user / roles / permissions / menus 结构，核对嵌套菜单字段 |
-| 普通 JSON 响应 | Vben 按 `code=0`、`data` 解包；业务错误与 HTTP 401/403 都要正确呈现 |
-| 上传、下载、SSE | 分别验证 multipart、Blob 错误及流式响应，不强行套普通 JSON 解包 |
-| 浏览器 API 前缀 | 浏览器调用 `/api/*`，Vite/Nginx 去掉 `/api` 后转发给 gateway |
+| 接口/规则                              | 当前行为与实施要求                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| `POST /system/auth/login`              | 原始 token 使用 snake_case；Vben API 层转为 accessToken/refreshToken/expiresIn |
+| `POST /system/auth/refresh-token`      | 核实并保留 query `refreshToken` 的兼容路径，与后端接受的请求结构一致           |
+| `POST /system/auth/logout`             | JSON 使用 `refresh_token`；核实实际请求是否携带该接口需要的认证信息            |
+| `GET /system/auth/me`                  | 保持用户身份字段及 ID 映射                                                     |
+| `GET /system/auth/get-permission-info` | 保留 user / roles / permissions / menus 结构，核对嵌套菜单字段                 |
+| 普通 JSON 响应                         | Vben 按 `code=0`、`data` 解包；业务错误与 HTTP 401/403 都要正确呈现            |
+| 上传、下载、SSE                        | 分别验证 multipart、Blob 错误及流式响应，不强行套普通 JSON 解包                |
+| 浏览器 API 前缀                        | 浏览器调用 `/api/*`，Vite/Nginx 去掉 `/api` 后转发给 gateway                   |
 
 使用真实脱敏响应固定契约样例，覆盖成功、未认证、权限不足、参数错误、空列表与大整数 ID。不要在页面中零散添加 `response.data?.data` 兜底掩盖协议差异。
 
 ### 5.2 业务页面映射
 
-| 当前 Dioxus 路由（含部分别名） | Kairos 可复用页面/目录 | 本地后端入口 | 处理重点 |
-| --- | --- | --- | --- |
-| `/system/*` | `views/system/*` | `/system/*` | 用户、角色、菜单、部门、租户及数据权限闭环 |
-| `/infra/*` | `views/infra/*` | `/infra/*` | 通用管理页面逐项确认支持情况 |
-| `/ai/*` | `views/ai/*` | `/ai/*` | 保留现有能力、SSE、知识库、模型；上游新增能力单独核实 |
-| `/asset/provider`、`/provider` | `asset-ops/service-provider` | `/infra/service-provider/*` | 列表、字段及创建/更新请求转换 |
-| `/asset/room`、`/room` | `asset-ops/machine-room` | `/infra/machine-room/*` | 服务商关联；机柜等新功能不自动承诺 |
-| `/asset/cloud`、`/cloud` | `asset-ops/cloud-platform` 等 | `/infra/cloud-zone/*`、`cloud-platform/*`、`cloud-provider-config/*` | 多页面拆分、凭据及真实连接能力 |
-| `/asset/zone`、`/zone` | `asset-ops/zone` | `/infra/network-zone/*` | 本地 zone ID 为字符串，不能统一转 number |
-| `/asset/security`、`/security` | `asset-ops/security-product` | `/infra/security-product/*` | 字典与关联资源 |
-| `/asset/list` | `asset-ops/asset` | `/infra/asset/*` | ports 数组/存储文本转换、筛选分页及端口操作 |
-| `/asset/business-app`、`/business` | `asset-ops/business-application` | `/infra/business-application/*`、`application-endpoint/*` | 应用与端点关系 |
-| `/asset/business-resource` | `asset-ops/business-resource` | `/infra/business-resource/*` | 字段差异、归属、资源凭据脱敏 |
-| `/asset/ticket`、`/ticket` | `asset-ops/resource-ticket` | `/infra/resource-ticket/*` | 分页列表、审批/开通/交付状态机 |
-| `/asset/task`、`/task` | `asset-ops/task` | `/infra/task/*` | 本地任务与上游扫描任务语义需逐项比对，不直接等同 |
-| `/asset/risk`、`/risk` | `asset-ops/risk` | `/infra/risk/*` | 状态值、处理流程、关联信息 |
-| Dashboard 与其他旧地址 | `views/dashboard/*` 或本地补充 | 按实际接口 | 首页面板、深链接、书签兼容 |
+| 当前 Dioxus 路由（含部分别名）     | Kairos 可复用页面/目录           | 本地后端入口                                                         | 处理重点                                              |
+| ---------------------------------- | -------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- |
+| `/system/*`                        | `views/system/*`                 | `/system/*`                                                          | 用户、角色、菜单、部门、租户及数据权限闭环            |
+| `/infra/*`                         | `views/infra/*`                  | `/infra/*`                                                           | 通用管理页面逐项确认支持情况                          |
+| `/ai/*`                            | `views/ai/*`                     | `/ai/*`                                                              | 保留现有能力、SSE、知识库、模型；上游新增能力单独核实 |
+| `/asset/provider`、`/provider`     | `asset-ops/service-provider`     | `/infra/service-provider/*`                                          | 列表、字段及创建/更新请求转换                         |
+| `/asset/room`、`/room`             | `asset-ops/machine-room`         | `/infra/machine-room/*`                                              | 服务商关联；机柜等新功能不自动承诺                    |
+| `/asset/cloud`、`/cloud`           | `asset-ops/cloud-platform` 等    | `/infra/cloud-zone/*`、`cloud-platform/*`、`cloud-provider-config/*` | 多页面拆分、凭据及真实连接能力                        |
+| `/asset/zone`、`/zone`             | `asset-ops/zone`                 | `/infra/network-zone/*`                                              | 本地 zone ID 为字符串，不能统一转 number              |
+| `/asset/security`、`/security`     | `asset-ops/security-product`     | `/infra/security-product/*`                                          | 字典与关联资源                                        |
+| `/asset/list`                      | `asset-ops/asset`                | `/infra/asset/*`                                                     | ports 数组/存储文本转换、筛选分页及端口操作           |
+| `/asset/business-app`、`/business` | `asset-ops/business-application` | `/infra/business-application/*`、`application-endpoint/*`            | 应用与端点关系                                        |
+| `/asset/business-resource`         | `asset-ops/business-resource`    | `/infra/business-resource/*`                                         | 字段差异、归属、资源凭据脱敏                          |
+| `/asset/ticket`、`/ticket`         | `asset-ops/resource-ticket`      | `/infra/resource-ticket/*`                                           | 分页列表、审批/开通/交付状态机                        |
+| `/asset/task`、`/task`             | `asset-ops/task`                 | `/infra/task/*`                                                      | 本地任务与上游扫描任务语义需逐项比对，不直接等同      |
+| `/asset/risk`、`/risk`             | `asset-ops/risk`                 | `/infra/risk/*`                                                      | 状态值、处理流程、关联信息                            |
+| Dashboard 与其他旧地址             | `views/dashboard/*` 或本地补充   | 按实际接口                                                           | 首页面板、深链接、书签兼容                            |
 
 实施 P0 从完整 Route 枚举和导航生成全量清单；此表是迁移主干，不代表所有页面已经逐一验证。每个页面记录“复用原样 / 适配 / 补建 / 不在当前业务范围”的状态和验收结果。
 
@@ -269,16 +276,16 @@ System 数据范围保留数据库的 1=全部、2=自定义部门、3=本部门
 
 下列工期为最初估算；当前 P0–P3 已完成，P4 已完成资产运营首批迁移，生产切流仍须完成 P5 的部署与浏览器联调。第一阶段登录演示不代表整个迁移完成。
 
-| 阶段 | 依赖 / 估时 | 实施内容 | 交付与通过标准 |
-| --- | --- | --- | --- |
-| P0 基线和清单 | 起点；1–2 日 | 保存当前工作区，固定上游提交；运行基线检查；梳理页面/API/表/权限；核实数据库及租户用途 | 变更清单、现有失败清单、完整功能映射；当前业务与数据可恢复 |
-| P1 前端基线 | P0；2–3 日 | 引入 Kairos 前端公共差异，启用登录、布局、工作台；处理品牌、代理、依赖与缓存版本；删除 Dioxus 源码及专属配置 | 新前端能独立构建、登录、退出；仓库只保留 Vben 前端工程 |
-| P2 权限闭环 | P0/P1；3–5 日 | 合并 System/Security 必要差异；修复 bootstrap；梳理强制认证、操作授权、会话和缓存 | 管理员/只读/无权限账号行为正确；直接 API 越权被拒绝 |
-| P3 迁移和菜单 | P0/P2；2–4 日 | 修复迁移机制问题；增量菜单/权限/必要字段；旧数据映射及参考快照 | 空库初始化、旧库升级、重复启动通过；角色关系可核对 |
-| P4 业务页面迁移 | P1/P2/P3；4–8 日 | 按业务批次迁入资产页面，完成适配、数据边界、动作权限、旧地址兼容；回归 AI/Media/Infra | 全量业务矩阵有结果，保留功能全部由 Vben 承担 |
-| P4.1 资产采集表台账化 | P4；2026-09-25 完成 | 以 `docs/资产采集表.xlsx` 为依据扩展 43 字段资产台账，新增 17 字段网络策略台账及页面、API、权限、迁移 | 字段往返、CRUD、401/403、空库迁移重入、前端类型检查均已通过；后续 CMDB 能力继续复用该台账 |
-| P5 联调与切流 | P4；2–3 日 | 部署演练、回滚演练、浏览器验收、构建与启动入口切换、更新文档 | 新前端正式主入口；权限与数据验收通过；可执行回退 |
-| P6 收尾 | P5 稳定观察后；1–2 日 | 检查残留引用、更新上游差异清单、关闭临时预览入口及观察事项 | 没有 Dioxus 工程、构建或运行依赖；来源与运维记录齐全 |
+| 阶段                  | 依赖 / 估时           | 实施内容                                                                                                     | 交付与通过标准                                                                            |
+| --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| P0 基线和清单         | 起点；1–2 日          | 保存当前工作区，固定上游提交；运行基线检查；梳理页面/API/表/权限；核实数据库及租户用途                       | 变更清单、现有失败清单、完整功能映射；当前业务与数据可恢复                                |
+| P1 前端基线           | P0；2–3 日            | 引入 Kairos 前端公共差异，启用登录、布局、工作台；处理品牌、代理、依赖与缓存版本；删除 Dioxus 源码及专属配置 | 新前端能独立构建、登录、退出；仓库只保留 Vben 前端工程                                    |
+| P2 权限闭环           | P0/P1；3–5 日         | 合并 System/Security 必要差异；修复 bootstrap；梳理强制认证、操作授权、会话和缓存                            | 管理员/只读/无权限账号行为正确；直接 API 越权被拒绝                                       |
+| P3 迁移和菜单         | P0/P2；2–4 日         | 修复迁移机制问题；增量菜单/权限/必要字段；旧数据映射及参考快照                                               | 空库初始化、旧库升级、重复启动通过；角色关系可核对                                        |
+| P4 业务页面迁移       | P1/P2/P3；4–8 日      | 按业务批次迁入资产页面，完成适配、数据边界、动作权限、旧地址兼容；回归 AI/Media/Infra                        | 全量业务矩阵有结果，保留功能全部由 Vben 承担                                              |
+| P4.1 资产采集表台账化 | P4；2026-09-25 完成   | 以 `docs/资产采集表.xlsx` 为依据扩展 43 字段资产台账，新增 17 字段网络策略台账及页面、API、权限、迁移        | 字段往返、CRUD、401/403、空库迁移重入、前端类型检查均已通过；后续 CMDB 能力继续复用该台账 |
+| P5 联调与切流         | P4；2–3 日            | 部署演练、回滚演练、浏览器验收、构建与启动入口切换、更新文档                                                 | 新前端正式主入口；权限与数据验收通过；可执行回退                                          |
+| P6 收尾               | P5 稳定观察后；1–2 日 | 检查残留引用、更新上游差异清单、关闭临时预览入口及观察事项                                                   | 没有 Dioxus 工程、构建或运行依赖；来源与运维记录齐全                                      |
 
 P4 建议批次：System 与公共 Infra → 服务商/机房/区域/安全产品 → 云平台/资产 → 应用/资源/工单 → 任务/风险 → AI/Media 回归。每批均包含页面、API、权限、菜单及验证，不积累到最后统一补权限。
 
@@ -314,18 +321,18 @@ curl -fsS http://127.0.0.1:8080/health
 
 ### 8.2 权限验收矩阵
 
-| 场景 | 预期 |
-| --- | --- |
-| 未登录直接访问资产读取、创建、删除及下载接口 | 受保护接口返回 401，不执行业务变更 |
-| 已登录无操作权限，手工调用隐藏按钮的 API | 403；敏感资源存在性按统一策略处理 |
-| 只读角色 | 可查看授权范围列表和详情，不可创建/修改/删除/导出或执行未授权动作 |
-| 相同租户、不同部门/所有者 | 列表、详情、批量、导出使用一致范围 |
-| 跨租户伪造 header、ID、父资源关系 | 无数据泄露或跨租户写入 |
-| 撤销角色、停用账号、调整套餐 | 在定义的生效时限内阻断后续请求；不能继续依赖旧缓存授权 |
-| 退出、过期、refresh token 重用 | 符合会话策略，失败后清理身份及动态路由 |
-| Redis 不可用或失效失败 | 仍有正确权限判断，不能失效失败后继续使用旧授权 |
-| 工单审批、开通、交付 | 操作权限与状态机同时生效，重复请求不产生重复副作用 |
-| 管理员管理用户 | 不能通过普通写接口授予自身未被允许授予的角色或切换资源租户 |
+| 场景                                         | 预期                                                              |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| 未登录直接访问资产读取、创建、删除及下载接口 | 受保护接口返回 401，不执行业务变更                                |
+| 已登录无操作权限，手工调用隐藏按钮的 API     | 403；敏感资源存在性按统一策略处理                                 |
+| 只读角色                                     | 可查看授权范围列表和详情，不可创建/修改/删除/导出或执行未授权动作 |
+| 相同租户、不同部门/所有者                    | 列表、详情、批量、导出使用一致范围                                |
+| 跨租户伪造 header、ID、父资源关系            | 无数据泄露或跨租户写入                                            |
+| 撤销角色、停用账号、调整套餐                 | 在定义的生效时限内阻断后续请求；不能继续依赖旧缓存授权            |
+| 退出、过期、refresh token 重用               | 符合会话策略，失败后清理身份及动态路由                            |
+| Redis 不可用或失效失败                       | 仍有正确权限判断，不能失效失败后继续使用旧授权                    |
+| 工单审批、开通、交付                         | 操作权限与状态机同时生效，重复请求不产生重复副作用                |
+| 管理员管理用户                               | 不能通过普通写接口授予自身未被允许授予的角色或切换资源租户        |
 
 ### 8.3 页面与数据验收
 
@@ -358,15 +365,15 @@ P5 前先在预发布环境准备独立静态资源目录，API 使用同一协�
 
 不阻碍本轮方案完成，但影响实施分支的事项：
 
-| 待核实项 | 当前规划默认值 | 最迟核实阶段 |
-| --- | --- | --- |
-| 是否希望完整导入 Kairos Pent/Scan 产品 | 本期仅前端、权限及现有业务页面 | P0 |
-| 数据库是否有真实数据、已应用迁移版本 | 按必须保留处理，不重建 | P0 |
-| 资产是否供多个租户同时使用 | 先服务端限制单业务租户；若已多租户则必须先补归属隔离 | P0 |
-| 当前必须保留的完整功能清单 | 以实际路由、handler 和业务数据为准；Toonflow 等 README 残留不当作已实现功能 | P0 |
-| 上游新增资产字段与页面是否纳入本期 | 先保证现有功能不丢失，其余单列扩展 | P0/P4 |
-| 品牌与产品名称 | RustSet | P1 |
-| 正式入口、停机窗口与旧地址保留时间 | 预发布演练后明确，切流前固定 | P5 |
+| 待核实项                               | 当前规划默认值                                                              | 最迟核实阶段 |
+| -------------------------------------- | --------------------------------------------------------------------------- | ------------ |
+| 是否希望完整导入 Kairos Pent/Scan 产品 | 本期仅前端、权限及现有业务页面                                              | P0           |
+| 数据库是否有真实数据、已应用迁移版本   | 按必须保留处理，不重建                                                      | P0           |
+| 资产是否供多个租户同时使用             | 先服务端限制单业务租户；若已多租户则必须先补归属隔离                        | P0           |
+| 当前必须保留的完整功能清单             | 以实际路由、handler 和业务数据为准；Toonflow 等 README 残留不当作已实现功能 | P0           |
+| 上游新增资产字段与页面是否纳入本期     | 先保证现有功能不丢失，其余单列扩展                                          | P0/P4        |
+| 品牌与产品名称                         | RustSet                                                                     | P1           |
+| 正式入口、停机窗口与旧地址保留时间     | 预发布演练后明确，切流前固定                                                | P5           |
 
 整个迁移完成须同时满足：正式前端基于 Kairos；Dioxus 源码及专属依赖、启动、构建、部署入口已删除；System 权限链与全部保留业务接通；服务端能拒绝越权；用户及业务数据完整；空库初始化和已有库升级通过；保留功能全部有验收结果；部署与回退演练通过；文档与实际入口一致；仅维护一个正式前端。
 

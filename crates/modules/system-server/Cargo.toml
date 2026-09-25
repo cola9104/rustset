@@ -13,6 +13,7 @@ calamine.workspace = true
 chrono.workspace = true
 rustset-framework-common.workspace = true
 rustset-framework-database.workspace = true
+rustset-framework-gm.workspace = true
 rustset-framework-redis.workspace = true
 rustset-framework-security.workspace = true
 rustset-framework-web.workspace = true

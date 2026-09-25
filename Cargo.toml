@@ -31,13 +31,10 @@ repository = "https://example.com/rustset"
 [workspace.dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
-argon2 = "0.5"
 base64 = "0.22"
-bcrypt = "0.17"
 axum = { version = "0.8", features = ["multipart"] }
 calamine = "0.36"
 chrono = { version = "0.4", features = ["serde"] }
-jsonwebtoken = "9.3"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 futures-util = "0.3"
 hex = "0.4"

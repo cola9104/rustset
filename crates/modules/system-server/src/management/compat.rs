@@ -8,7 +8,6 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::{DateTime, Utc};
 use rustset_framework_common::ApiResponse;
 use rustset_framework_security::CurrentUser;
@@ -919,8 +918,8 @@ fn current_tenant_id(user: &CurrentUser) -> Result<i64, AppError> {
         .ok_or_else(|| AppError::forbidden("tenant is required"))
 }
 
-async fn uuid_for_yudao_user_id(pool: &PgPool, user_id: i64) -> Result<Uuid, AppError> {
-    sqlx::query_scalar("SELECT md5('yudao-user:' || $1::text)::uuid")
+async fn identity_uuid_for_user(pool: &PgPool, user_id: i64) -> Result<Uuid, AppError> {
+    sqlx::query_scalar("SELECT identity_uuid FROM system_users WHERE id = $1 AND deleted = 0")
         .bind(user_id)
         .fetch_one(pool)
         .await
@@ -1330,20 +1329,15 @@ fn mask_secret_value(value: Value) -> Value {
 }
 
 fn seal_secret(value: &str) -> String {
-    if value.starts_with("enc:v1:") {
+    if value.is_empty() || rustset_framework_gm::is_sm4_sealed(value) {
         return value.to_owned();
     }
-    let key = env::var("SECRET_ENCRYPTION_KEY")
+    let secret = env::var("SECRET_ENCRYPTION_KEY")
         .or_else(|_| env::var("JWT_SECRET"))
         .unwrap_or_else(|_| "rustset-local-secret".to_owned());
-    let key = key.as_bytes();
-    let sealed = value
-        .as_bytes()
-        .iter()
-        .enumerate()
-        .map(|(index, byte)| byte ^ key[index % key.len()])
-        .collect::<Vec<_>>();
-    format!("enc:v1:{}", BASE64.encode(sealed))
+    // SM4-CBC with a random IV (国密); legacy XOR values only survive until the
+    // startup re-seal pass rewrites them.
+    rustset_framework_gm::sm4_seal(value, &secret).unwrap_or_else(|_| value.to_owned())
 }
 
 fn snake_to_camel(value: &str) -> String {
@@ -1902,7 +1896,7 @@ async fn user_create(
     let password = payload["password"].as_str().unwrap_or("Admin#123456");
     let password_hash = state
         .passwords
-        .hash_yudao(password)
+        .hash(password)
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let post_ids = i64_vec_field(&payload, "postIds");
     let role_ids = i64_vec_field(&payload, "roleIds");
@@ -1939,6 +1933,12 @@ async fn user_create(
     .fetch_one(&mut *transaction)
     .await
     .map_err(|_| AppError::internal("failed to create user"))?;
+    sqlx::query("UPDATE system_users SET identity_uuid = $2 WHERE id = $1")
+        .bind(id)
+        .bind(crate::infrastructure::identity_uuid_for(id))
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| AppError::internal("failed to assign user identity"))?;
     super::user_relations::replace_posts(
         &mut transaction,
         id,
@@ -2090,7 +2090,7 @@ async fn user_update_password(
         .ok_or_else(|| AppError::bad_request("password is required"))?;
     let password_hash = state
         .passwords
-        .hash_yudao(password)
+        .hash(password)
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let mut transaction = state
         .pool
@@ -2409,7 +2409,7 @@ async fn permission_assign_user_roles(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to assign roles"))?;
-    if let Ok(cache_user_id) = uuid_for_yudao_user_id(&state.pool, user_id).await {
+    if let Ok(cache_user_id) = identity_uuid_for_user(&state.pool, user_id).await {
         crate::cache::invalidate_current_user(&state, cache_user_id).await;
     }
     Ok(Json(ApiResponse::new(())))
@@ -2709,7 +2709,7 @@ async fn profile_password(
         .ok_or_else(|| AppError::bad_request("password is required"))?;
     let password_hash = state
         .passwords
-        .hash_yudao(password)
+        .hash(password)
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let mut transaction = state
         .pool

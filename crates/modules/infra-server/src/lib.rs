@@ -1921,12 +1921,12 @@ fn seal_secret(value: &str) -> String {
     let secret = env::var("SECRET_ENCRYPTION_KEY")
         .or_else(|_| env::var("JWT_SECRET"))
         .unwrap_or_else(|_| "rustset-local-secret".to_owned());
-    // SM4-CBC with a random IV (国密). Legacy enc:v1 XOR values are still
-    // opened by open_secret; re-sealing happens on the next write.
+    // SM4-CBC with a random IV (国密). The startup re-seal pass in
+    // system-server bootstrap converts any surviving enc:v1 XOR rows.
     sm4_seal(value, &secret).unwrap_or_else(|_| value.to_owned())
 }
 
-/// Open a sealed secret for use (SM4 v2, legacy XOR v1, or plain).
+/// Open a sealed secret for use (SM4 v2, or plain passthrough).
 pub(crate) fn open_secret(sealed: &str) -> String {
     use rustset_framework_gm::sm4_open;
     if sealed.is_empty() {

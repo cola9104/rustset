@@ -20,7 +20,7 @@ impl DatabaseAuthState {
     }
 }
 
-/// Validates bearer tokens against Yudao storage and replaces JWT-embedded
+/// Validates bearer tokens against RustSet system storage and replaces JWT-embedded
 /// authorization data with the user's current roles and permissions.
 /// Requests without a bearer token continue so public routes remain public;
 /// their route-level authentication still rejects missing credentials where required.
@@ -47,9 +47,8 @@ pub async fn authenticate_from_database(
              SELECT 1
              FROM system_oauth2_access_token access
              JOIN system_users users ON users.id = access.user_id
-             WHERE md5(access.access_token) = md5($1)
-               AND access.access_token = $1
-               AND md5('yudao-user:' || access.user_id::text)::uuid = $2
+             WHERE access.access_token = $1
+               AND users.identity_uuid = $2
                AND access.deleted = 0
                AND access.expires_time > now()
                AND users.deleted = 0
