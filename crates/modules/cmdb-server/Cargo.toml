@@ -20,3 +20,6 @@ rustset-framework-common.workspace = true
 rustset-framework-database.workspace = true
 rustset-framework-security.workspace = true
 rustset-framework-web.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

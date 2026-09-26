@@ -5,6 +5,21 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Stable envelopes; attribute names remain defined by the owning CMDB model.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateInstanceRequest {
+    pub model_id: i64,
+    pub attributes: serde_json::Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInstanceRequest {
+    pub id: i64,
+    pub attributes: serde_json::Map<String, Value>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AttrType {

@@ -2,12 +2,12 @@
 //! relations in `relation.rs`.
 
 mod instance;
+mod instance_service;
 mod net_zone;
 mod relation;
 
-use aide::axum::routing::{delete, get, post, put};
-use schemars::JsonSchema;
 use aide::axum::ApiRouter;
+use aide::axum::routing::{delete, get, post, put};
 use axum::{
     Json,
     extract::{Query, State},
@@ -16,6 +16,7 @@ use rustset_framework_common::ApiResponse;
 use rustset_framework_database::PgPool;
 use rustset_framework_security::{CurrentUser, Permission};
 use rustset_framework_web::AppError;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -55,26 +56,16 @@ pub(crate) fn valid_code(code: &str) -> bool {
 
 pub fn routes(state: CmdbState) -> ApiRouter {
     ApiRouter::new()
-        .api_route(
-"/cmdb/model/list", get(model_list))
-        .api_route(
-"/cmdb/model/page", get(model_page))
-        .api_route(
-"/cmdb/model/get", get(model_get))
-        .api_route(
-"/cmdb/model/create", post(model_create))
-        .api_route(
-"/cmdb/model/update", put(model_update))
-        .api_route(
-"/cmdb/model/delete", delete(model_delete))
-        .api_route(
-"/cmdb/attribute/list-by-model", get(attribute_list))
-        .api_route(
-"/cmdb/attribute/create", post(attribute_create))
-        .api_route(
-"/cmdb/attribute/update", put(attribute_update))
-        .api_route(
-"/cmdb/attribute/delete", delete(attribute_delete))
+        .api_route("/cmdb/model/list", get(model_list))
+        .api_route("/cmdb/model/page", get(model_page))
+        .api_route("/cmdb/model/get", get(model_get))
+        .api_route("/cmdb/model/create", post(model_create))
+        .api_route("/cmdb/model/update", put(model_update))
+        .api_route("/cmdb/model/delete", delete(model_delete))
+        .api_route("/cmdb/attribute/list-by-model", get(attribute_list))
+        .api_route("/cmdb/attribute/create", post(attribute_create))
+        .api_route("/cmdb/attribute/update", put(attribute_update))
+        .api_route("/cmdb/attribute/delete", delete(attribute_delete))
         .merge(instance_routes())
         .merge(relation_routes())
         .merge(net_zone_routes())
@@ -266,10 +257,21 @@ async fn model_create(
             ));
         }
     }
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start model create"))?;
+    // Shared with Infra's provisioning writer: model codes have no unique index yet.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("cmdb:model:{code}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to lock model code"))?;
     let exists: i64 =
         sqlx::query_scalar("SELECT count(*) FROM cmdb_model WHERE code = $1 AND deleted = 0")
             .bind(&code)
-            .fetch_one(&state.pool)
+            .fetch_one(&mut *tx)
             .await
             .map_err(|_| AppError::internal("failed to check model code"))?;
     if exists > 0 {
@@ -288,9 +290,12 @@ async fn model_create(
     .bind(&unique_key)
     .bind(payload.get("sort").and_then(Value::as_i64).unwrap_or(0) as i32)
     .bind(&user.username)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to create model"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit model create"))?;
     Ok(Json(ApiResponse::new(id.to_string())))
 }
 
@@ -318,6 +323,15 @@ async fn model_update(
             ));
         }
     }
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start model update"))?;
+    let model = instance_service::lock_model(&mut tx, id).await?;
+    if model.unique_key.as_deref() != unique_key {
+        instance_service::validate_unique_key_change(&mut tx, id, unique_key).await?;
+    }
     let result = sqlx::query(
         "UPDATE cmdb_model SET name = $2, description = $3, icon = $4, unique_key = $5,
                 sort = $6, updater = $7, update_time = now()
@@ -330,12 +344,15 @@ async fn model_update(
     .bind(&unique_key)
     .bind(payload.get("sort").and_then(Value::as_i64).unwrap_or(0) as i32)
     .bind(&user.username)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to update model"))?;
     if result.rows_affected() == 0 {
         return Err(AppError::not_found("model not found"));
     }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit model update"))?;
     Ok(Json(ApiResponse::new(())))
 }
 
@@ -345,7 +362,19 @@ async fn model_delete(
     Query(params): Query<IdParams>,
 ) -> Result<Json<ApiResponse<()>>, AppError> {
     require(&user, "cmdb:model:delete")?;
-    let instances = model_count(&state.pool, params.id).await;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start model delete"))?;
+    instance_service::lock_model(&mut tx, params.id).await?;
+    let instances: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM cmdb_instance WHERE model_id = $1 AND deleted = 0",
+    )
+    .bind(params.id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to count instances"))?;
     if instances > 0 {
         return Err(AppError::bad_request(format!(
             "model still has {instances} instances; delete them first"
@@ -357,7 +386,7 @@ async fn model_delete(
     )
     .bind(params.id)
     .bind(&user.username)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to delete model"))?;
     if result.rows_affected() == 0 {
@@ -368,9 +397,12 @@ async fn model_delete(
     )
     .bind(params.id)
     .bind(&user.username)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to delete model attributes"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit model delete"))?;
     Ok(Json(ApiResponse::new(())))
 }
 

@@ -1,65 +1,82 @@
 <script lang="ts" setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onActivated, onDeactivated, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
 import { useAppConfig } from '@vben/hooks';
 
-// 相对路径深引用：包 exports 未暴露 standalone 子路径，?url 资产加载可绕过。
+// The package does not export its standalone asset as a subpath.
 import standaloneUrl from '../../../../node_modules/@scalar/api-reference/dist/browser/standalone.js?url';
 
-// Scalar 官方浏览器独立包：注册 <scalar-api-reference> web component。
-// 不走 Vue 组件入口——文档渲染的任何错误都隔离在自定义元素内，
-// 不会拖垮宿主 SPA（此前 Vue 组件集成在运行时抛错导致整站白屏）。
-// 相对路径深引用：exports 表未暴露该子路径，?url 资产加载可绕过。
+import { buildApiDocsDocument } from './frame';
 
 defineOptions({ name: 'InfraApiDocs' });
 
 const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
+const active = ref(true);
+const frameKey = ref(0);
+const documentUrl = new URL(
+  `${apiURL.replace(/\/$/, '')}/openapi.json`,
+  window.location.href,
+).href;
+const frameDocument = buildApiDocsDocument(
+  documentUrl,
+  new URL(standaloneUrl, window.location.href).href,
+);
 
-const container = ref<HTMLDivElement>();
-let loader: HTMLScriptElement | null = null;
-let bootstrap: HTMLScriptElement | null = null;
-
-onMounted(() => {
-  container.value?.replaceChildren();
-  // Scalar 约定：容器内 <script id="api-reference" data-url="...">，
-  // standalone 脚本加载后自动把该元素升级为文档界面。
-  bootstrap = document.createElement('script');
-  bootstrap.id = 'api-reference';
-  bootstrap.dataset.url = `${apiURL}/openapi.json`;
-  container.value?.appendChild(bootstrap);
-  loader = document.createElement('script');
-  loader.src = standaloneUrl;
-  loader.async = true;
-  container.value?.appendChild(loader);
+// A cached route must release the embedded app while it is inactive.
+onActivated(() => {
+  active.value = true;
 });
-
-onUnmounted(() => {
-  loader?.remove();
-  loader = null;
-  bootstrap?.remove();
-  bootstrap = null;
-  container.value?.replaceChildren();
+onDeactivated(() => {
+  active.value = false;
 });
 </script>
 
 <template>
   <Page auto-content-height>
     <div class="api-docs-wrapper">
-      <div ref="container" class="scalar-container" />
+      <div class="api-docs-toolbar">
+        <span>接口文档</span>
+        <button type="button" @click="frameKey++">重新加载</button>
+      </div>
+      <iframe
+        v-if="active"
+        :key="frameKey"
+        class="api-docs-frame"
+        title="RustSet API 接口文档"
+        :srcdoc="frameDocument"
+      />
     </div>
   </Page>
 </template>
 
 <style scoped>
 .api-docs-wrapper {
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  padding: 12px;
+  min-height: 560px;
+  overflow: hidden;
   background: var(--ant-color-bg-container);
   border-radius: 8px;
 }
 
-.scalar-container {
-  height: 100%;
+.api-docs-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.api-docs-toolbar button {
+  color: var(--ant-color-primary, #1677ff);
+  cursor: pointer;
+}
+
+.api-docs-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 500px;
+  border: 0;
 }
 </style>

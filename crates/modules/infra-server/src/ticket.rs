@@ -33,34 +33,20 @@ const APPROVAL_RULE: TableSpec = TableSpec {
 
 pub fn routes() -> ApiRouter<InfraState> {
     ApiRouter::new()
-        .api_route(
-"/infra/resource-ticket/page", get(page))
-        .api_route(
-"/infra/resource-ticket/get", get(get_one))
-        .api_route(
-"/infra/resource-ticket/create", post(create))
-        .api_route(
-"/infra/resource-ticket/update", put(update))
-        .api_route(
-"/infra/resource-ticket/delete", delete(delete_one))
-        .api_route(
-"/infra/resource-ticket/delete-list", delete(delete_list))
-        .api_route(
-"/infra/resource-ticket/{id}/approve", post(approve))
-        .api_route(
-"/infra/resource-ticket/{id}/provision", post(provision))
-        .api_route(
-"/infra/resource-ticket/{id}/deliver", post(deliver))
-        .api_route(
-"/infra/approval-rule/page", get(rule_page))
-        .api_route(
-"/infra/approval-rule/list", get(rule_list))
-        .api_route(
-"/infra/approval-rule/create", post(rule_create))
-        .api_route(
-"/infra/approval-rule/update", put(rule_update))
-        .api_route(
-"/infra/approval-rule/delete", delete(rule_delete))
+        .api_route("/infra/resource-ticket/page", get(page))
+        .api_route("/infra/resource-ticket/get", get(get_one))
+        .api_route("/infra/resource-ticket/create", post(create))
+        .api_route("/infra/resource-ticket/update", put(update))
+        .api_route("/infra/resource-ticket/delete", delete(delete_one))
+        .api_route("/infra/resource-ticket/delete-list", delete(delete_list))
+        .api_route("/infra/resource-ticket/{id}/approve", post(approve))
+        .api_route("/infra/resource-ticket/{id}/provision", post(provision))
+        .api_route("/infra/resource-ticket/{id}/deliver", post(deliver))
+        .api_route("/infra/approval-rule/page", get(rule_page))
+        .api_route("/infra/approval-rule/list", get(rule_list))
+        .api_route("/infra/approval-rule/create", post(rule_create))
+        .api_route("/infra/approval-rule/update", put(rule_update))
+        .api_route("/infra/approval-rule/delete", delete(rule_delete))
 }
 
 async fn page(
@@ -675,33 +661,39 @@ async fn upsert_cmdb_instance(
         .filter(|value| !value.is_empty())
         .unwrap_or("ecs");
     let model_code = format!("cloud_{resource_type}");
-    let result = sqlx::query(
-        "INSERT INTO cmdb_model (name, code, unique_key, creator, updater)
-         VALUES ($1, $2, 'ticket_id', 'tofu', 'tofu')
-         ON CONFLICT DO NOTHING RETURNING id",
-    )
-    .bind(format!("{resource_type}（云资源）"))
-    .bind(&model_code)
-    .fetch_optional(&s.pool)
-    .await;
-    let model_id: i64 = match result {
-        Ok(Some(row)) => row.get("id"),
-        Ok(None) => match sqlx::query_scalar::<_, i64>(
-            "SELECT id FROM cmdb_model WHERE code=$1 AND deleted=0",
-        )
-        .bind(&model_code)
-        .fetch_one(&s.pool)
+    let mut tx = s
+        .pool
+        .begin()
         .await
-        {
-            Ok(id) => id,
-            Err(_) => return Err(AppError::internal("failed to find provisioned CMDB model")),
-        },
-        Err(_) => {
-            return Err(AppError::internal(
-                "failed to create provisioned CMDB model",
-            ));
-        }
+        .map_err(|_| AppError::internal("failed to start CMDB upsert"))?;
+    // Match CMDB model creation's transaction lock. ON CONFLICT cannot protect
+    // model codes because their current index is not unique.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("cmdb:model:{model_code}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to lock provisioned model code"))?;
+    let existing: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM cmdb_model WHERE code=$1 AND deleted=0 ORDER BY id LIMIT 1",
+    )
+    .bind(&model_code)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to find provisioned CMDB model"))?;
+    let model_id: i64 = match existing {
+        Some(id) => id,
+        None => sqlx::query_scalar("INSERT INTO cmdb_model (name, code, unique_key, creator, updater) VALUES ($1, $2, 'ticket_id', 'tofu', 'tofu') RETURNING id")
+            .bind(format!("{resource_type}（云资源）")).bind(&model_code).fetch_one(&mut *tx).await
+            .map_err(|_| AppError::internal("failed to create provisioned CMDB model"))?,
     };
+    // Model first, then instance: same lock order as CMDB create/update/import.
+    let model =
+        sqlx::query("SELECT unique_key FROM cmdb_model WHERE id=$1 AND deleted=0 FOR UPDATE")
+            .bind(model_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|_| AppError::internal("failed to lock provisioned CMDB model"))?
+            .ok_or_else(|| AppError::not_found("provisioned CMDB model not found"))?;
 
     let mut attributes = Map::new();
     attributes.insert("ticket_id".to_string(), json!(ticket_id.to_string()));
@@ -720,6 +712,24 @@ async fn upsert_cmdb_instance(
     }
     attributes.insert("cloud_category".to_string(), json!(cloud_category));
     attributes.insert("tf_outputs".to_string(), tf_outputs.clone());
+    let unique_key: Option<String> = model.get("unique_key");
+    if let Some(key) = unique_key.as_deref().filter(|key| !key.is_empty()) {
+        if let Some(value) = attributes.get(key).filter(|value| {
+            !value.is_null()
+                && !value.as_str().is_some_and(|s| s.trim().is_empty())
+                && !value.as_array().is_some_and(|a| a.is_empty())
+        }) {
+            let duplicate: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM cmdb_instance WHERE model_id=$1 AND deleted=0 AND attributes->>'ticket_id' IS DISTINCT FROM $2 AND attributes->$3 = $4::jsonb)"
+            ).bind(model_id).bind(ticket_id.to_string()).bind(key).bind(value)
+                .fetch_one(&mut *tx).await.map_err(|_| AppError::internal("failed to check provisioned CMDB unique key"))?;
+            if duplicate {
+                return Err(AppError::bad_request(
+                    "provisioned resource conflicts with the CMDB unique key",
+                ));
+            }
+        }
+    }
     let payload = Value::Object(attributes);
 
     let updated = sqlx::query(
@@ -729,7 +739,7 @@ async fn upsert_cmdb_instance(
     .bind(model_id)
     .bind(ticket_id.to_string())
     .bind(&payload)
-    .execute(&s.pool)
+    .execute(&mut *tx)
     .await
     .map(|result| result.rows_affected())
     .map_err(|_| AppError::internal("failed to update provisioned CMDB instance"))?;
@@ -740,10 +750,13 @@ async fn upsert_cmdb_instance(
         )
         .bind(model_id)
         .bind(&payload)
-        .execute(&s.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|_| AppError::internal("failed to insert provisioned CMDB instance"))?;
     }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit CMDB upsert"))?;
     Ok(())
 }
 
@@ -762,6 +775,77 @@ fn truncate_log(log: &str) -> String {
 #[cfg(test)]
 mod provision_tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "requires TEST_DATABASE_URL pointing at PostgreSQL"]
+    async fn concurrent_cmdb_upserts_reuse_model_and_instance() {
+        use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+        use std::str::FromStr;
+
+        let url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL is required");
+        let admin = sqlx::PgPool::connect(&url).await.unwrap();
+        let schema = format!("cmdb_provision_test_{}", uuid::Uuid::new_v4().simple());
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let options = PgConnectOptions::from_str(&url)
+            .unwrap()
+            .options([("search_path", schema.as_str())]);
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect_with(options)
+            .await
+            .unwrap();
+        let ddl = include_str!("../../../../sql/postgresql/0009_cmdb_core.sql")
+            .split("-- Menus:")
+            .next()
+            .unwrap()
+            .replace("public.", "");
+        sqlx::raw_sql(&ddl).execute(&pool).await.unwrap();
+        let state = InfraState::new(pool.clone());
+        let ticket = json!({"resourceType": "ecs", "ecsName": "test"});
+        let outputs = json!({"id": "test-instance"});
+        let (first, second) = tokio::join!(
+            upsert_cmdb_instance(&state, 1, &ticket, "demo", &outputs),
+            upsert_cmdb_instance(&state, 1, &ticket, "demo", &outputs),
+        );
+        first.unwrap();
+        second.unwrap();
+        let models: i64 = sqlx::query_scalar("SELECT count(*) FROM cmdb_model")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let instances: i64 = sqlx::query_scalar("SELECT count(*) FROM cmdb_instance")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(models, 1);
+        assert_eq!(instances, 1);
+        sqlx::query("UPDATE cmdb_model SET unique_key='cloud_category'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(
+            upsert_cmdb_instance(&state, 2, &ticket, "demo", &outputs)
+                .await
+                .is_err()
+        );
+        let instances: i64 = sqlx::query_scalar("SELECT count(*) FROM cmdb_instance")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            instances, 1,
+            "unique-key conflict must roll back the upsert"
+        );
+        pool.close().await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        admin.close().await;
+    }
 
     #[test]
     fn merges_only_allowed_parameters_and_keeps_approved_quantity() {
